@@ -28,7 +28,8 @@ libtirpc_la_SOURCES += xdr.c xdr_rec.c xdr_array.c xdr_float.c xdr_mem.c xdr_ref
 
 ## Secure-RPC
 if GSS
-    libtirpc_la_SOURCES += auth_gss.c authgss_prot.c svc_auth_gss.c
+    libtirpc_la_SOURCES += auth_gss.c authgss_prot.c svc_auth_gss.c \
+		svc_auth_none.c
     libtirpc_la_LDFLAGS += $(GSSAPI_LIBS)
     libtirpc_la_CFLAGS = -DHAVE_RPCSEC_GSS $(GSSAPI_CFLAGS)
 endif
@@ -49,7 +50,7 @@ $(libtirpc_la_OBJECTS) :auth_none.c auth_unix.c authunix_prot.c bindresvport.c c
         svc_raw.c svc_run.c svc_simple.c svc_vc.c \
 	xdr.c xdr_rec.c xdr_array.c xdr_float.c xdr_mem.c xdr_reference.c xdr_stdio.c \
 	auth_gss.c authgss_prot.c svc_auth_gss.c getpeereid.c \
-	auth_time.c auth_des.c authdes_prot.c
+	auth_time.c auth_des.c authdes_prot.c svc_auth_none.c
         
 else
 $(libtirpc_la_OBJECTS) :auth_none.c auth_unix.c authunix_prot.c bindresvport.c clnt_bcast.c \
