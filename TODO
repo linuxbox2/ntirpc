@@ -1,0 +1,4 @@
+* Support of DES & other security part
+* Update and install man pages
+* Provide tests
+* rpcgen command missing
