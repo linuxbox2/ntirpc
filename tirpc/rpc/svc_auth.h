@@ -54,6 +54,9 @@ typedef struct {
 	caddr_t svc_ah_private;
 } SVCAUTH;
 
+#define SVCAUTH_DESTROY(cred)		((*(cred)->svc_ah_ops->svc_ah_destroy)())
+#define svcauth_destroy(cred)		((*(cred)->svc_ah_ops->svc_ah_destroy)())
+
 /*
  * Server side authenticator
  */
