@@ -669,6 +669,8 @@ xdr_string(xdrs, cpp, maxsize)
 		}
 		/* FALLTHROUGH */
 	case XDR_ENCODE:
+		if (sp == NULL)
+			return FALSE;
 		size = strlen(sp);
 		break;
 	case XDR_DECODE:
@@ -681,6 +683,13 @@ xdr_string(xdrs, cpp, maxsize)
 		return (FALSE);
 	}
 	nodesize = size + 1;
+	if (nodesize == 0) {
+		/* This means an overflow.  It a bug in the caller which
+		 * provided a too large maxsize but nevertheless catch it
+		 * here.
+		 */
+		return FALSE;
+	}
 
 	/*
 	 * now deal with the actual bytes
@@ -688,9 +697,6 @@ xdr_string(xdrs, cpp, maxsize)
 	switch (xdrs->x_op) {
 
 	case XDR_DECODE:
-		if (nodesize == 0) {
-			return (TRUE);
-		}
 		if (sp == NULL)
 			*cpp = sp = mem_alloc(nodesize);
 		if (sp == NULL) {
