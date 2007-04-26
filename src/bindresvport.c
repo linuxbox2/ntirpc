@@ -62,6 +62,7 @@ bindresvport(sd, sin)
 #ifdef __linux__
 
 #define STARTPORT 600
+#define LOWPORT 512
 #define ENDPORT (IPPORT_RESERVED - 1)
 #define NPORTS  (ENDPORT - STARTPORT + 1)
 
@@ -76,10 +77,13 @@ bindresvport_sa(sd, sa)
 #ifdef INET6
 	struct sockaddr_in6 *sin6;
 #endif
-	u_int16_t port;
 	u_int16_t *portp;
+	static u_int16_t port;
+	static short startport = STARTPORT;
 	socklen_t salen;
-        int i;
+	int nports = ENDPORT - startport + 1;
+	int endport = ENDPORT;
+	int i;
 
         if (sa == NULL) {
                 salen = sizeof(myaddr);
@@ -119,13 +123,22 @@ bindresvport_sa(sd, sa)
         }
         res = -1;
         errno = EADDRINUSE;
-        for (i = 0; i < NPORTS && res < 0 && errno == EADDRINUSE; i++) {
+		again:
+        for (i = 0; i < nports; ++i) {
                 *portp = htons(port++);
-                if (port > ENDPORT) {
-                        port = STARTPORT;
-                }
+                 if (port > endport) 
+                        port = startport;
                 res = bind(sd, sa, salen);
+		if (res >= 0 || errno != EADDRINUSE)
+	                break;
         }
+	if (i == nports && startport != LOWPORT) {
+	    startport = LOWPORT;
+	    endport = STARTPORT - 1;
+	    nports = STARTPORT - LOWPORT;
+	    port = LOWPORT + port % (STARTPORT - LOWPORT);
+	    goto again;
+	}
         return (res);
 }
 #else
