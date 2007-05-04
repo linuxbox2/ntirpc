@@ -55,6 +55,13 @@
 #include <err.h>
 #include "rpc_com.h"
 
+#ifdef IP_RECVERR
+#include <asm/types.h>
+#include <linux/errqueue.h>
+#include <sys/uio.h>
+#endif
+
+
 #define MAX_DEFAULT_FDS                 20000
 
 static struct clnt_ops *clnt_dg_ops(void);
@@ -246,6 +253,12 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 #if 0
 	(void)bindresvport_sa(fd, (struct sockaddr *)svcaddr->buf);
 #endif
+#ifdef IP_RECVERR
+	{
+	int on = 1;
+	setsockopt(fd, SOL_IP, IP_RECVERR, &on, sizeof(on));
+	}
+#endif
 	ioctl(fd, FIONBIO, (char *)(void *)&one);
 	/*
 	 * By default, closeit is always FALSE. It is users responsibility
@@ -352,7 +365,7 @@ call_again:
 	xid++;
 	*(u_int32_t *)(void *)(cu->cu_outbuf) = htonl(xid);
 
-	if ((! XDR_PUTINT32(xdrs, &proc)) ||
+	if ((! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
 	    (! AUTH_MARSHALL(cl->cl_auth, xdrs)) ||
 	    (! (*xargs)(xdrs, argsp))) {
 		cu->cu_error.re_status = RPC_CANTENCODEARGS;
@@ -404,6 +417,48 @@ get_reply:
                 }
                 break;
         }
+#ifdef IP_RECVERR
+      if (fd.revents & POLLERR)
+	{
+	  struct msghdr msg;
+	  struct cmsghdr *cmsg;
+	  struct sock_extended_err *e;
+	  struct sockaddr_in err_addr;
+	  struct sockaddr_in *sin = (struct sockaddr_in *)&cu->cu_raddr;
+	  struct iovec iov;
+	  char *cbuf = (char *) alloca (outlen + 256);
+	  int ret;
+
+	  iov.iov_base = cbuf + 256;
+	  iov.iov_len = outlen;
+	  msg.msg_name = (void *) &err_addr;
+	  msg.msg_namelen = sizeof (err_addr);
+	  msg.msg_iov = &iov;
+	  msg.msg_iovlen = 1;
+	  msg.msg_flags = 0;
+	  msg.msg_control = cbuf;
+	  msg.msg_controllen = 256;
+	  ret = recvmsg (cu->cu_fd, &msg, MSG_ERRQUEUE);
+	  if (ret >= 0
+	      && memcmp (cbuf + 256, cu->cu_outbuf, ret) == 0
+	      && (msg.msg_flags & MSG_ERRQUEUE)
+	      && ((msg.msg_namelen == 0
+		   && ret >= 12)
+		  || (msg.msg_namelen == sizeof (err_addr)
+		      && err_addr.sin_family == AF_INET
+		      && memcmp (&err_addr.sin_addr, &sin->sin_addr,
+				 sizeof (err_addr.sin_addr)) == 0
+		      && err_addr.sin_port == sin->sin_port)))
+	    for (cmsg = CMSG_FIRSTHDR (&msg); cmsg;
+		 cmsg = CMSG_NXTHDR (&msg, cmsg))
+	      if (cmsg->cmsg_level == SOL_IP && cmsg->cmsg_type == IP_RECVERR)
+		{
+		  e = (struct sock_extended_err *) CMSG_DATA(cmsg);
+		  cu->cu_error.re_errno = e->ee_errno;
+		  return (cu->cu_error.re_status = RPC_CANTRECV);
+		}
+	}
+#endif
 
 	/* We have some data now */
 	do {
