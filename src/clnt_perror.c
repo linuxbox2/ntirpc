@@ -36,7 +36,6 @@
  * Copyright (C) 1984, Sun Microsystems, Inc.
  *
  */
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,8 +74,8 @@ clnt_sperror(rpch, s)
 	char *strstart;
 	size_t len, i;
 
-	assert(rpch != NULL);
-	assert(s != NULL);
+	if (rpch == NULL || s == NULL)
+		return(0);
 
 	str = _buf(); /* side effect: sets CLNT_PERROR_BUFLEN */
 	if (str == 0)
@@ -85,7 +84,8 @@ clnt_sperror(rpch, s)
 	strstart = str;
 	CLNT_GETERR(rpch, &e);
 
-	if ((i = snprintf(str, len, "%s: ", s)) > 0) {
+	if (snprintf(str, len, "%s: ", s) > 0) {
+		i = strlen(str);
 		str += i;
 		len -= i;
 	}
@@ -113,7 +113,8 @@ clnt_sperror(rpch, s)
 
 	case RPC_CANTSEND:
 	case RPC_CANTRECV:
-		i = snprintf(str, len, "; errno = %s", strerror(e.re_errno)); 
+		snprintf(str, len, "; errno = %s", strerror(e.re_errno)); 
+		i = strlen(str);
 		if (i > 0) {
 			str += i;
 			len -= i;
@@ -121,8 +122,9 @@ clnt_sperror(rpch, s)
 		break;
 
 	case RPC_VERSMISMATCH:
-		i = snprintf(str, len, "; low version = %u, high version = %u", 
+		snprintf(str, len, "; low version = %u, high version = %u", 
 			e.re_vers.low, e.re_vers.high);
+		i = strlen(str);
 		if (i > 0) {
 			str += i;
 			len -= i;
@@ -131,18 +133,20 @@ clnt_sperror(rpch, s)
 
 	case RPC_AUTHERROR:
 		err = auth_errmsg(e.re_why);
-		i = snprintf(str, len, "; why = ");
+		snprintf(str, len, "; why = ");
+		i = strlen(str);
 		if (i > 0) {
 			str += i;
 			len -= i;
 		}
 		if (err != NULL) {
-			i = snprintf(str, len, "%s",err);
+			snprintf(str, len, "%s",err);
 		} else {
-			i = snprintf(str, len,
+			snprintf(str, len,
 				"(unknown authentication error - %d)",
 				(int) e.re_why);
 		}
+		i = strlen(str);
 		if (i > 0) {
 			str += i;
 			len -= i;
@@ -150,8 +154,9 @@ clnt_sperror(rpch, s)
 		break;
 
 	case RPC_PROGVERSMISMATCH:
-		i = snprintf(str, len, "; low version = %u, high version = %u", 
+		snprintf(str, len, "; low version = %u, high version = %u", 
 			e.re_vers.low, e.re_vers.high);
+		i = strlen(str);
 		if (i > 0) {
 			str += i;
 			len -= i;
@@ -159,8 +164,9 @@ clnt_sperror(rpch, s)
 		break;
 
 	default:	/* unknown */
-		i = snprintf(str, len, "; s1 = %u, s2 = %u", 
+		snprintf(str, len, "; s1 = %u, s2 = %u", 
 			e.re_lb.s1, e.re_lb.s2);
+		i = strlen(str);
 		if (i > 0) {
 			str += i;
 			len -= i;
@@ -177,8 +183,8 @@ clnt_perror(rpch, s)
 	const char *s;
 {
 
-	assert(rpch != NULL);
-	assert(s != NULL);
+	if (rpch == NULL || s == NULL)
+		return;
 
 	(void) fprintf(stderr, "%s\n", clnt_sperror(rpch,s));
 }
@@ -236,13 +242,15 @@ clnt_spcreateerror(s)
 	char *str;
 	size_t len, i;
 
-	assert(s != NULL);
+	if (s == NULL)
+		return(0);
 
 	str = _buf(); /* side effect: sets CLNT_PERROR_BUFLEN */
 	if (str == 0)
 		return(0);
 	len = CLNT_PERROR_BUFLEN;
-	i = snprintf(str, len, "%s: ", s);
+	snprintf(str, len, "%s: ", s);
+	i = strlen(str);
 	if (i > 0)
 		len -= i;
 	(void)strncat(str, clnt_sperrno(rpc_createerr.cf_stat), len - 1);
@@ -287,7 +295,8 @@ clnt_pcreateerror(s)
 	const char *s;
 {
 
-	assert(s != NULL);
+	if (s == NULL)
+		return;
 
 	(void) fprintf(stderr, "%s\n", clnt_spcreateerror(s));
 }
