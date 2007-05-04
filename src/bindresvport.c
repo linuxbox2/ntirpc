@@ -101,14 +101,14 @@ bindresvport_sa(sd, sa)
         case AF_INET:
 		sin = (struct sockaddr_in *)sa;
                 salen = sizeof(struct sockaddr_in);
-                port = sin->sin_port;
+                port = ntohs(sin->sin_port);
 		portp = &sin->sin_port;
 		break;
 #ifdef INET6
         case AF_INET6:
 		sin6 = (struct sockaddr_in6 *)sa;
                 salen = sizeof(struct sockaddr_in6);
-                port = sin6->sin6_port;
+                port = ntohs(sin6->sin6_port);
                 portp = &sin6->sin6_port;
                 break;
 #endif
