@@ -239,7 +239,10 @@ svc_fd_create(fd, sendsize, recvsize)
 		warnx("svc_fd_create: no mem for local addr");
 		goto freedata;
 	}
-	memcpy(ret->xp_rtaddr.buf, &sin6, (size_t)sizeof(ss));
+	if (ss.ss_family == AF_INET)
+		memcpy(ret->xp_rtaddr.buf, &ss, (size_t)sizeof(ss));
+	else
+		memcpy(ret->xp_rtaddr.buf, &sin6, (size_t)sizeof(ss));
 #ifdef PORTMAP
 	if (sin6.sin6_family == AF_INET6 || sin6.sin6_family == AF_LOCAL) {
 		memcpy(&ret->xp_raddr, ret->xp_rtaddr.buf,
@@ -343,20 +346,23 @@ again:
 	newxprt = makefd_xprt(sock, r->sendsize, r->recvsize);
 	if (addr.ss_family == AF_INET) {
 		map_ipv4_to_ipv6((struct sockaddr_in *)&addr, &sin6);
-		len = sizeof(struct sockaddr_in6);
 	} else {
 		memcpy(&sin6, &addr, len);
 	}
 	newxprt->xp_rtaddr.buf = mem_alloc(len);
 	if (newxprt->xp_rtaddr.buf == NULL)
 		return (FALSE);
-	memcpy(newxprt->xp_rtaddr.buf, &sin6, len);
+
+	if (addr.ss_family == AF_INET)
+		memcpy(newxprt->xp_rtaddr.buf, &addr, len);
+	else
+		memcpy(newxprt->xp_rtaddr.buf, &sin6, len);
 	newxprt->xp_rtaddr.maxlen = newxprt->xp_rtaddr.len = len;
 #ifdef PORTMAP
 	if (sin6.sin6_family == AF_INET6 || sin6.sin6_family == AF_LOCAL) {
 		memcpy(&newxprt->xp_raddr, newxprt->xp_rtaddr.buf,
 			sizeof(struct sockaddr_in6));
-		newxprt->xp_addrlen = len;
+		newxprt->xp_addrlen = sizeof(struct sockaddr_in6);
 	}
 #endif				/* PORTMAP */
 	if (__rpc_fd2sockinfo(sock, &si) && si.si_proto == IPPROTO_TCP) {
