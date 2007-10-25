@@ -59,7 +59,7 @@
     defined(__mips__) || defined(__ns32k__) || defined(__alpha__) || \
     defined(__arm32__) || defined(__ppc__) || defined(__ia64__) || \
     defined(__arm26__) || defined(__sparc64__) || defined(__amd64__) || \
-    defined(__powerpc__) || defined(__s390__)
+    defined(__powerpc__) || defined(__s390__) || defined(__arm__)
 #include <bits/endian.h>
 #define IEEEFP
 #endif
