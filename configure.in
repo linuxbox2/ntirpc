@@ -27,4 +27,4 @@ AC_CHECK_LIB([pthread], [pthread_create])
 
 
 AC_CONFIG_FILES([Makefile src/Makefile])
-AC_OUTPUT()
+AC_OUTPUT(libtirpc.pc)

@@ -43,6 +43,9 @@ nobase_include_HEADERS = tirpc/un-namespace.h \
 			 tirpc/rpc/auth_gss.h \
 			 tirpc/rpc/auth_des.h
     
+pkgconfigdir=$(libdir)/pkgconfig
+pkgconfig_DATA = libtirpc.pc
+
 install-exec-local:
 	cp -p ./doc/etc_netconfig /etc/netconfig
 	chmod 0644 /etc/netconfig
