@@ -1,4 +1,4 @@
-SUBDIRS = src
+SUBDIRS = src man
 
 nobase_include_HEADERS = tirpc/un-namespace.h \
 			 tirpc/spinlock.h \
