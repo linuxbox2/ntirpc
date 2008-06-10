@@ -11,7 +11,7 @@ INCLUDES = -I../tirpc -DPORTMAP -DINET6 -DVERSION="\"$(VERSION)\"" \
 
 lib_LTLIBRARIES = libtirpc.la
 
-libtirpc_la_LDFLAGS = -lnsl -lpthread
+libtirpc_la_LDFLAGS = -lnsl -lpthread -version-info 1:8:0
 
 libtirpc_la_SOURCES = auth_none.c auth_unix.c authunix_prot.c bindresvport.c clnt_bcast.c \
         clnt_dg.c clnt_generic.c clnt_perror.c clnt_raw.c clnt_simple.c \
