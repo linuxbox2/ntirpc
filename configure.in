@@ -1,6 +1,6 @@
                                                                                                                              
-AC_INIT(libtirpc, 0.1.8)
-AM_INIT_AUTOMAKE(libtirpc, 0.1.8)
+AC_INIT(libtirpc, 0.1.9)
+AM_INIT_AUTOMAKE(libtirpc, 0.1.9)
 AM_MAINTAINER_MODE
 AC_CONFIG_SRCDIR([src/auth_des.c])
 
