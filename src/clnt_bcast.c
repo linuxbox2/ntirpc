@@ -163,7 +163,7 @@ __rpc_getbroadifs(int af, int proto, int socktype, broadlist_t *list)
 		  /*	memcpy(&bip->broadaddr, ifap->ifa_broadaddr,
 			(size_t)ifap->ifa_broadaddr->sa_len);*/
 			memcpy(&bip->broadaddr, ifap->ifa_broadaddr,
-			(size_t)sizeof(ifap->ifa_broadaddr));
+					sizeof(bip->broadaddr));
 			sin = (struct sockaddr_in *)(void *)&bip->broadaddr;
 			sin->sin_port =
 			    ((struct sockaddr_in *)
