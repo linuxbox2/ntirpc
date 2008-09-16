@@ -629,7 +629,7 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 		/*	if (asprintf(&ret, "%.*s", (int)(sun->sun_len -
 		    offsetof(struct sockaddr_un, sun_path)),
 		    sun->sun_path) < 0)*/
-		if (asprintf(&ret, "%.*s", (int)(sizeof(sun) -
+		if (asprintf(&ret, "%.*s", (int)(sizeof(*sun) -
 						 offsetof(struct sockaddr_un, sun_path)),
 			     sun->sun_path) < 0)
 
