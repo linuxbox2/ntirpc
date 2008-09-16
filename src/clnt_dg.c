@@ -306,7 +306,7 @@ clnt_dg_call(cl, proc, xargs, argsp, xresults, resultsp, utimeout)
 	int nrefreshes = 2;		/* number of times to refresh cred */
 	struct timeval timeout;
         struct pollfd fd;
-	int total_time, nextsend_time, tv;
+	int total_time, nextsend_time, tv=0;
 	struct sockaddr *sa;
 	sigset_t mask;
 	sigset_t newmask;

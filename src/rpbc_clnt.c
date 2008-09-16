@@ -109,7 +109,9 @@ static void delete_cache(struct netbuf *);
 static void add_cache(const char *, const char *, struct netbuf *, char *);
 static CLIENT *getclnthandle(const char *, const struct netconfig *, char **);
 static CLIENT *local_rpcb(void);
+#if NOTUSED
 static struct netbuf *got_entry(rpcb_entry_list_ptr, const struct netconfig *);
+#endif
 
 /*
  * This routine adjusts the timeout used for calls to the remote rpcbind.
@@ -625,7 +627,7 @@ rpcb_unset(program, version, nconf)
 	CLNT_DESTROY(client);
 	return (rslt);
 }
-
+#ifdef NOTUSED
 /*
  * From the merged list, find the appropriate entry
  */
@@ -657,7 +659,7 @@ got_entry(relp, nconf)
 	}
 	return (na);
 }
-
+#endif
 /*
  * Quick check to see if rpcbind is up.  Tries to connect over
  * local transport.
@@ -725,7 +727,9 @@ __rpcb_findaddr_timed(program, version, nconf, host, clpp, tp)
 	CLIENT **clpp;
 	struct timeval *tp;
 {
+#ifdef NOTUSED
 	static bool_t check_rpcbind = TRUE;
+#endif
 	CLIENT *client = NULL;
 	RPCB parms;
 	enum clnt_stat clnt_st;
