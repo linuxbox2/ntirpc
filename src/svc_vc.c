@@ -103,19 +103,6 @@ struct cf_conn {  /* kept in xprt->xp_p1 for actual connection */
 	struct timeval last_recv_time;
 };
 
-static void
-map_ipv4_to_ipv6(sin, sin6)
-	struct sockaddr_in *sin;
-	struct sockaddr_in6 *sin6;
-{
-	sin6->sin6_family = AF_INET6;
-	sin6->sin6_port = sin->sin_port;
-	sin6->sin6_addr.s6_addr32[0] = 0;
-	sin6->sin6_addr.s6_addr32[1] = 0;
-	sin6->sin6_addr.s6_addr32[2] = htonl(0xffff);
-	sin6->sin6_addr.s6_addr32[3] = *(uint32_t *)&sin->sin_addr;
-}
-
 /*
  * This is used to set xprt->xp_raddr in a way legacy
  * apps can deal with
