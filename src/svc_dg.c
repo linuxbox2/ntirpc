@@ -140,10 +140,7 @@ svc_dg_create(fd, sendsize, recvsize)
 	slen = sizeof ss;
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0)
 		goto freedata;
-	xprt->xp_ltaddr.buf = mem_alloc(sizeof (struct sockaddr_storage));
-	xprt->xp_ltaddr.maxlen = sizeof (struct sockaddr_storage);
-	xprt->xp_ltaddr.len = slen;
-	memcpy(xprt->xp_ltaddr.buf, &ss, slen);
+	__rpc_set_netbuf(&xprt->xp_ltaddr, &ss, slen);
 
 	xprt_register(xprt);
 	return (xprt);
@@ -186,13 +183,8 @@ again:
 		goto again;
 	if (rlen == -1 || (rlen < (ssize_t)(4 * sizeof (u_int32_t))))
 		return (FALSE);
-	if (xprt->xp_rtaddr.len < alen) {
-		if (xprt->xp_rtaddr.len != 0)
-			mem_free(xprt->xp_rtaddr.buf, xprt->xp_rtaddr.len);
-		xprt->xp_rtaddr.buf = mem_alloc(alen);
-		xprt->xp_rtaddr.len = alen;
-	}
-	memcpy(xprt->xp_rtaddr.buf, &ss, alen);
+	__rpc_set_netbuf(&xprt->xp_rtaddr, &ss, alen);
+
 	__xprt_set_raddr(xprt, &ss);
 	xdrs->x_op = XDR_DECODE;
 	XDR_SETPOS(xdrs, 0);

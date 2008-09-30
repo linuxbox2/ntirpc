@@ -184,14 +184,10 @@ svc_vc_create(fd, sendsize, recvsize)
 		goto cleanup_svc_vc_create;
 	}
 
-	xprt->xp_ltaddr.maxlen = xprt->xp_ltaddr.len = sizeof(sslocal);
-	xprt->xp_ltaddr.buf = mem_alloc((size_t)sizeof(sslocal));
-	if (xprt->xp_ltaddr.buf == NULL) {
+	if (!__rpc_set_netbuf(&xprt->xp_ltaddr, &sslocal, sizeof(sslocal))) {
 		warnx("svc_vc_create: no mem for local addr");
 		goto cleanup_svc_vc_create;
 	}
-	memcpy(xprt->xp_ltaddr.buf, &sslocal, (size_t)sizeof(sslocal));
-	xprt->xp_rtaddr.maxlen = sizeof (struct sockaddr_storage);
 	xprt_register(xprt);
 	return (xprt);
 cleanup_svc_vc_create:
@@ -225,25 +221,20 @@ svc_fd_create(fd, sendsize, recvsize)
 		warnx("svc_fd_create: could not retrieve local addr");
 		goto freedata;
 	}
-	ret->xp_ltaddr.maxlen = ret->xp_ltaddr.len = sizeof(ss);
-	ret->xp_ltaddr.buf = mem_alloc((size_t)sizeof(ss));
-	if (ret->xp_ltaddr.buf == NULL) {
+	if (!__rpc_set_netbuf(&ret->xp_ltaddr, &ss, sizeof(ss))) {
 		warnx("svc_fd_create: no mem for local addr");
 		goto freedata;
 	}
-	memcpy(ret->xp_ltaddr.buf, &ss, (size_t)sizeof(ss));
+
 	slen = sizeof (struct sockaddr_storage);
 	if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
 		warnx("svc_fd_create: could not retrieve remote addr");
 		goto freedata;
 	}
-	ret->xp_rtaddr.maxlen = ret->xp_rtaddr.len = sizeof(ss);
-	ret->xp_rtaddr.buf = mem_alloc((size_t)sizeof(ss));
-	if (ret->xp_rtaddr.buf == NULL) {
+	if (!__rpc_set_netbuf(&ret->xp_rtaddr, &ss, sizeof(ss))) {
 		warnx("svc_fd_create: no mem for local addr");
 		goto freedata;
 	}
-	memcpy(ret->xp_rtaddr.buf, &ss, (size_t)sizeof(ss));
 
 	/* Set xp_raddr for compatibility */
 	__xprt_set_raddr(ret, &ss);
@@ -340,12 +331,9 @@ again:
 	 */
 
 	newxprt = makefd_xprt(sock, r->sendsize, r->recvsize);
-	newxprt->xp_rtaddr.buf = mem_alloc(len);
-	if (newxprt->xp_rtaddr.buf == NULL)
-		return (FALSE);
 
-	memcpy(newxprt->xp_rtaddr.buf, &addr, len);
-	newxprt->xp_rtaddr.maxlen = newxprt->xp_rtaddr.len = len;
+	if (!__rpc_set_netbuf(&newxprt->xp_rtaddr, &addr, len))
+		return (FALSE);
 
 	__xprt_set_raddr(newxprt, &addr);
 

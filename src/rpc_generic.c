@@ -833,3 +833,22 @@ __rpc_sockisbound(int fd)
 
 	return 0;
 }
+
+/*
+ * Helper function to set up a netbuf
+ */
+struct netbuf *
+__rpc_set_netbuf(struct netbuf *nb, const void *ptr, size_t len)
+{
+	if (nb->len != len) {
+		if (nb->len)
+			mem_free(nb->buf, nb->len);
+		nb->buf = mem_alloc(len);
+		if (nb->buf == NULL)
+			return NULL;
+
+		nb->maxlen = nb->len = len;
+	}
+	memcpy(nb->buf, ptr, len);
+	return nb;
+}
