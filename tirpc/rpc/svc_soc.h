@@ -54,7 +54,7 @@
  */
 #define svc_getcaller(x) (&(x)->xp_raddr)
 /* Getting address of a caller using netbuf xp_rtaddr */ 
-#define svc_getcaller_netbuf(x) (&(x)->xp_fd)
+#define svc_getcaller_netbuf(x) (&(x)->xp_rtaddr)
 /*
  * Service registration
  *
