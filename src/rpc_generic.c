@@ -254,12 +254,14 @@ __rpc_getconfip(nettype)
 		while ((nconf = getnetconfig(confighandle)) != NULL) {
 			if (strcmp(nconf->nc_protofmly, NC_INET) == 0 ||
 			    strcmp(nconf->nc_protofmly, NC_INET6) == 0) {
-				if (strcmp(nconf->nc_proto, NC_TCP) == 0) {
+				if (strcmp(nconf->nc_proto, NC_TCP) == 0 &&
+						netid_tcp == NULL) {
 					netid_tcp = strdup(nconf->nc_netid);
 					thr_setspecific(tcp_key,
 							(void *) netid_tcp);
 				} else
-				if (strcmp(nconf->nc_proto, NC_UDP) == 0) {
+				if (strcmp(nconf->nc_proto, NC_UDP) == 0 &&
+						netid_udp == NULL) {
 					netid_udp = strdup(nconf->nc_netid);
 					thr_setspecific(udp_key,
 						(void *) netid_udp);
