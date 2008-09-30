@@ -85,6 +85,8 @@ bool_t __svc_clean_idle(fd_set *, int, bool_t);
 bool_t __xdrrec_setnonblock(XDR *, int);
 bool_t __xdrrec_getrec(XDR *, enum xprt_stat *, bool_t);
 void __xprt_unregister_unlocked(SVCXPRT *);
+void __xprt_set_raddr(SVCXPRT *, const struct sockaddr_storage *);
+
 
 SVCXPRT **__svc_xports;
 int __svc_maxrec;

@@ -117,6 +117,29 @@ map_ipv4_to_ipv6(sin, sin6)
 }
 
 /*
+ * This is used to set xprt->xp_raddr in a way legacy
+ * apps can deal with
+ */
+void
+__xprt_set_raddr(SVCXPRT *xprt, const struct sockaddr_storage *ss)
+{
+	switch (ss->ss_family) {
+	case AF_INET6:
+		memcpy(&xprt->xp_raddr, ss, sizeof(struct sockaddr_in6));
+		xprt->xp_addrlen = sizeof (struct sockaddr_in6);
+		break;
+	case AF_INET:
+		memcpy(&xprt->xp_raddr, ss, sizeof(struct sockaddr_in));
+		xprt->xp_addrlen = sizeof (struct sockaddr_in);
+		break;
+	default:
+		xprt->xp_raddr.sin6_family = AF_UNSPEC;
+		xprt->xp_addrlen = sizeof (struct sockaddr);
+		break;
+	}
+}
+
+/*
  * Usage:
  *	xprt = svc_vc_create(sock, send_buf_size, recv_buf_size);
  *
@@ -201,7 +224,6 @@ svc_fd_create(fd, sendsize, recvsize)
 	u_int recvsize;
 {
 	struct sockaddr_storage ss;
-	struct sockaddr_in6 sin6;
 	socklen_t slen;
 	SVCXPRT *ret;
 
@@ -228,28 +250,16 @@ svc_fd_create(fd, sendsize, recvsize)
 		warnx("svc_fd_create: could not retrieve remote addr");
 		goto freedata;
 	}
-	if (ss.ss_family == AF_INET) {
-		map_ipv4_to_ipv6((struct sockaddr_in *)&ss, &sin6);
-	} else {
-		memcpy(&sin6, &ss, sizeof(ss));
-	}
 	ret->xp_rtaddr.maxlen = ret->xp_rtaddr.len = sizeof(ss);
 	ret->xp_rtaddr.buf = mem_alloc((size_t)sizeof(ss));
 	if (ret->xp_rtaddr.buf == NULL) {
 		warnx("svc_fd_create: no mem for local addr");
 		goto freedata;
 	}
-	if (ss.ss_family == AF_INET)
-		memcpy(ret->xp_rtaddr.buf, &ss, (size_t)sizeof(ss));
-	else
-		memcpy(ret->xp_rtaddr.buf, &sin6, (size_t)sizeof(ss));
-#ifdef PORTMAP
-	if (sin6.sin6_family == AF_INET6 || sin6.sin6_family == AF_LOCAL) {
-		memcpy(&ret->xp_raddr, ret->xp_rtaddr.buf,
-			sizeof(struct sockaddr_in6));
-		ret->xp_addrlen = sizeof (struct sockaddr_in6);
-	}
-#endif				/* PORTMAP */
+	memcpy(ret->xp_rtaddr.buf, &ss, (size_t)sizeof(ss));
+
+	/* Set xp_raddr for compatibility */
+	__xprt_set_raddr(ret, &ss);
 
 	return ret;
 
@@ -312,7 +322,6 @@ rendezvous_request(xprt, msg)
 	struct cf_rendezvous *r;
 	struct cf_conn *cd;
 	struct sockaddr_storage addr;
-	struct sockaddr_in6 sin6;
 	socklen_t len;
 	struct __rpc_sockinfo si;
 	SVCXPRT *newxprt;
@@ -344,27 +353,15 @@ again:
 	 */
 
 	newxprt = makefd_xprt(sock, r->sendsize, r->recvsize);
-	if (addr.ss_family == AF_INET) {
-		map_ipv4_to_ipv6((struct sockaddr_in *)&addr, &sin6);
-	} else {
-		memcpy(&sin6, &addr, len);
-	}
 	newxprt->xp_rtaddr.buf = mem_alloc(len);
 	if (newxprt->xp_rtaddr.buf == NULL)
 		return (FALSE);
 
-	if (addr.ss_family == AF_INET)
-		memcpy(newxprt->xp_rtaddr.buf, &addr, len);
-	else
-		memcpy(newxprt->xp_rtaddr.buf, &sin6, len);
+	memcpy(newxprt->xp_rtaddr.buf, &addr, len);
 	newxprt->xp_rtaddr.maxlen = newxprt->xp_rtaddr.len = len;
-#ifdef PORTMAP
-	if (sin6.sin6_family == AF_INET6 || sin6.sin6_family == AF_LOCAL) {
-		memcpy(&newxprt->xp_raddr, newxprt->xp_rtaddr.buf,
-			sizeof(struct sockaddr_in6));
-		newxprt->xp_addrlen = sizeof(struct sockaddr_in6);
-	}
-#endif				/* PORTMAP */
+
+	__xprt_set_raddr(newxprt, &addr);
+
 	if (__rpc_fd2sockinfo(sock, &si) && si.si_proto == IPPROTO_TCP) {
 		len = 1;
 		/* XXX fvdl - is this useful? */

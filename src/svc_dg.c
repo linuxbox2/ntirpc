@@ -193,12 +193,7 @@ again:
 		xprt->xp_rtaddr.len = alen;
 	}
 	memcpy(xprt->xp_rtaddr.buf, &ss, alen);
-#ifdef PORTMAP
-	if (ss.ss_family == AF_INET6) {
-		xprt->xp_raddr = *(struct sockaddr_in6 *)xprt->xp_rtaddr.buf;
-		xprt->xp_addrlen = sizeof (struct sockaddr_in6);
-	}
-#endif				/* PORTMAP */
+	__xprt_set_raddr(xprt, &ss);
 	xdrs->x_op = XDR_DECODE;
 	XDR_SETPOS(xdrs, 0);
 	if (! xdr_callmsg(xdrs, msg)) {
