@@ -603,6 +603,9 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 #endif
 	u_int16_t port;
 
+	if (nbuf->len <= 0)
+		return NULL;
+
 	switch (af) {
 	case AF_INET:
 		sin = nbuf->buf;
