@@ -363,7 +363,7 @@ call_again:
 	x_id = ntohl(--(*msg_x_id));
 
 	if ((! XDR_PUTBYTES(xdrs, ct->ct_u.ct_mcallc, ct->ct_mpos)) ||
-	    (! XDR_PUTINT32(xdrs, &proc)) ||
+	    (! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
 	    (! AUTH_MARSHALL(cl->cl_auth, xdrs)) ||
 	    (! (*xdr_args)(xdrs, args_ptr))) {
 		if (ct->ct_error.re_status == RPC_SUCCESS)

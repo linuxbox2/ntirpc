@@ -165,7 +165,7 @@ call_again:
 	XDR_SETPOS(xdrs, 0);
 	clp->u.mashl_rpcmsg.rm_xid ++ ;
 	if ((! XDR_PUTBYTES(xdrs, clp->u.mashl_callmsg, clp->mcnt)) ||
-	    (! XDR_PUTINT32(xdrs, &proc)) ||
+	    (! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
 	    (! AUTH_MARSHALL(h->cl_auth, xdrs)) ||
 	    (! (*xargs)(xdrs, argsp))) {
 		return (RPC_CANTENCODEARGS);

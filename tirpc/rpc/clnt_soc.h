@@ -112,9 +112,9 @@ extern CLIENT *clntudp_create(struct sockaddr_in *, u_long, u_long,
 extern CLIENT *clntudp_bufcreate(struct sockaddr_in *, u_long, u_long,
 				 struct timeval, int *, u_int, u_int);
 #ifdef INET6
-extern CLIENT *clntudp6_create(struct sockaddr_in *, u_long, u_long, 
+extern CLIENT *clntudp6_create(struct sockaddr_in6 *, u_long, u_long, 
 			      struct timeval, int *);
-extern CLIENT *clntudp6_bufcreate(struct sockaddr_in *, u_long, u_long,
+extern CLIENT *clntudp6_bufcreate(struct sockaddr_in6 *, u_long, u_long,
 				 struct timeval, int *, u_int, u_int);
 #endif
 __END_DECLS
