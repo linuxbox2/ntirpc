@@ -402,6 +402,7 @@ get_reply:
 
         fd.fd = cu->cu_fd;
         fd.events = POLLIN;
+        fd.revents = 0;
 	while (total_time > 0) {
 		tv = total_time < nextsend_time ? total_time : nextsend_time;
                 switch (poll(&fd, 1, tv)) {
@@ -455,6 +456,7 @@ get_reply:
 		{
 		  e = (struct sock_extended_err *) CMSG_DATA(cmsg);
 		  cu->cu_error.re_errno = e->ee_errno;
+		  release_fd_lock(cu->cu_fd, mask);
 		  return (cu->cu_error.re_status = RPC_CANTRECV);
 		}
 	}
