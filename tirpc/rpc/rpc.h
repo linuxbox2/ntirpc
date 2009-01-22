@@ -83,7 +83,7 @@
 
 __BEGIN_DECLS
 extern int get_myaddress(struct sockaddr_in *);
-extern int bindresvport(int, struct sockaddr_in *);
+extern int bindresvport(int, struct sockaddr_in *) __THROW;
 extern int registerrpc(int, int, int, char *(*)(char [UDPMSGSIZE]),
     xdrproc_t, xdrproc_t);
 extern int callrpc(const char *, int, int, int, xdrproc_t, void *,

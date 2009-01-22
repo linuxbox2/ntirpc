@@ -62,8 +62,8 @@ __BEGIN_DECLS
 //extern struct rpcent *getrpcbyname(char *);
 //extern struct rpcent *getrpcbynumber(int);
 //extern struct rpcent *getrpcent(void);
-extern void setrpcent(int);
-extern void endrpcent(void);
+extern void setrpcent(int) __THROW;
+extern void endrpcent(void) __THROW;
 __END_DECLS
 
 #endif /* !_RPC_CENT_H */
