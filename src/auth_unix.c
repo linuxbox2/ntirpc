@@ -84,10 +84,10 @@ struct audata {
 AUTH *
 authunix_create(machname, uid, gid, len, aup_gids)
 	char *machname;
-	int uid;
-	int gid;
+	uid_t uid;
+	gid_t gid;
 	int len;
-	int *aup_gids;
+	gid_t *aup_gids;
 {
 	struct authunix_parms aup;
 	char mymem[MAX_AUTH_BYTES];
@@ -189,8 +189,7 @@ authunix_create_default()
 	if ((len = getgroups(NGRPS, gids)) < 0)
 		abort();
 	/* XXX: interface problem; those should all have been unsigned */
-	return (authunix_create(machname, (int)uid, (int)gid, len,
-	    (int *)gids));
+	return (authunix_create(machname, uid, gid, len, gids));
 }
 
 /*

@@ -279,8 +279,7 @@ int authany_wrap(void), authany_unwrap(void);
  *	int *aup_gids;
  */
 __BEGIN_DECLS
-extern AUTH *authunix_create(char *, int, int, int,
-    int *);
+extern AUTH *authunix_create(char *, uid_t, uid_t, int, uid_t *);
 extern AUTH *authunix_create_default(void);	/* takes no parameters */
 extern AUTH *authnone_create(void);		/* takes no parameters */
 __END_DECLS
