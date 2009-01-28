@@ -131,14 +131,17 @@ typedef struct __rpc_svcxprt {
  * Service request
  */
 struct svc_req {
+	/* ORDER: compatibility with legacy RPC */
 	u_int32_t	rq_prog;	/* service program number */
 	u_int32_t	rq_vers;	/* service protocol version */
 	u_int32_t	rq_proc;	/* the desired procedure */
 	struct opaque_auth rq_cred;	/* raw creds from the wire */
 	void		*rq_clntcred;	/* read only cooked cred */
+	SVCXPRT		*rq_xprt;	/* associated transport */
+
+	/* New with TI-RPC */
 	caddr_t		rq_clntname;	/* read only client name */
 	caddr_t		rq_svcname;	/* read only cooked service cred */
-	SVCXPRT		*rq_xprt;	/* associated transport */
 };
 
 /*
