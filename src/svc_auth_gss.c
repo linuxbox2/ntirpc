@@ -190,7 +190,7 @@ svcauth_gss_accept_sec_context(struct svc_req *rqst,
 	/* Deserialize arguments. */
 	memset(&recv_tok, 0, sizeof(recv_tok));
 
-	if (!svc_getargs(rqst->rq_xprt, xdr_rpc_gss_init_args,
+	if (!svc_getargs(rqst->rq_xprt, (xdrproc_t)xdr_rpc_gss_init_args,
 			 (caddr_t)&recv_tok))
 		return (FALSE);
 
@@ -469,8 +469,8 @@ _svcauth_gss(struct svc_req *rqst, struct rpc_msg *msg, bool_t *no_dispatch)
 
 		*no_dispatch = TRUE;
 
-		call_stat = svc_sendreply(rqst->rq_xprt, xdr_rpc_gss_init_res,
-					  (caddr_t)&gr);
+		call_stat = svc_sendreply(rqst->rq_xprt, 
+			(xdrproc_t)xdr_rpc_gss_init_res, (caddr_t)&gr);
 
 		if (!call_stat)
 			return (AUTH_FAILED);

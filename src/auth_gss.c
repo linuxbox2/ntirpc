@@ -221,7 +221,7 @@ authgss_create_default(CLIENT *clnt, char *service, struct rpc_gss_sec *sec)
 	sname.length = strlen(service);
 
 	maj_stat = gss_import_name(&min_stat, &sname,
-		GSS_C_NT_HOSTBASED_SERVICE,
+		(gss_OID)GSS_C_NT_HOSTBASED_SERVICE,
 		&name);
 
 	if (maj_stat != GSS_S_COMPLETE) {

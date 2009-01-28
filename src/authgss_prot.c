@@ -176,10 +176,11 @@ xdr_rpc_gss_unwrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	XDR		tmpxdrs;
 	gss_buffer_desc	databuf, wrapbuf;
 	OM_uint32	maj_stat, min_stat;
-	u_int		seq_num, conf_state, qop_state;
+	u_int		seq_num, qop_state;
+	int			conf_state;
 	bool_t		xdr_stat;
 
-	if (xdr_func == xdr_void || xdr_ptr == NULL)
+	if (xdr_func == (xdrproc_t)xdr_void || xdr_ptr == NULL)
 		return (TRUE);
 
 	memset(&databuf, 0, sizeof(databuf));
