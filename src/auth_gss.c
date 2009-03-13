@@ -567,6 +567,12 @@ authgss_destroy_context(AUTH *auth)
 		gss_delete_sec_context(&min_stat, &gd->ctx, NULL);
 		gd->ctx = GSS_C_NO_CONTEXT;
 	}
+
+	/* free saved wire verifier (if any) */
+	mem_free(gd->gc_wire_verf.value, gd->gc_wire_verf.length);
+	gd->gc_wire_verf.value = NULL;
+	gd->gc_wire_verf.length = 0;
+
 	gd->established = FALSE;
 }
 
