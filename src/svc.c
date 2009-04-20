@@ -78,6 +78,7 @@ static struct svc_callout
 
 extern rwlock_t svc_lock;
 extern rwlock_t svc_fd_lock;
+extern struct svc_auth_ops svc_auth_gss_ops;
 
 static struct svc_callout *svc_find (rpcprog_t, rpcvers_t,
 				     struct svc_callout **, char *);
@@ -714,6 +715,11 @@ svc_getreq_common (fd)
 	{
 	  SVC_DESTROY (xprt);
 	  break;
+	}
+      else if ((xprt->xp_auth != NULL) &&
+	       (xprt->xp_auth->svc_ah_ops != &svc_auth_gss_ops))
+	{
+	  xprt->xp_auth = NULL;
 	}
     }
   while (stat == XPRT_MOREREQS);
