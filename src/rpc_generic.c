@@ -226,7 +226,7 @@ __rpc_getconfip(nettype)
 	char *netid_tcp = (char *) NULL;
 	char *netid_udp = (char *) NULL;
 	struct netconfig *dummy;
-	static thread_key_t tcp_key = -1, udp_key = -1;
+	extern thread_key_t tcp_key, udp_key;
 	extern mutex_t tsd_lock;
 
 	if (tcp_key == -1) {

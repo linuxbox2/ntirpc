@@ -77,6 +77,14 @@ pthread_mutex_t	svcraw_lock = PTHREAD_MUTEX_INITIALIZER;
 /* protects TSD key creation */
 pthread_mutex_t	tsd_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/* Library global tsd keys */
+thread_key_t clnt_broadcast_key;
+thread_key_t rpc_call_key = -1;
+thread_key_t tcp_key = -1;
+thread_key_t udp_key = -1;
+thread_key_t nc_key = -1;
+thread_key_t rce_key = -1;
+
 /* xprtlist (svc_generic.c) */
 pthread_mutex_t	xprtlist_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -90,7 +98,6 @@ struct rpc_createerr rpc_createerr;
 struct rpc_createerr *
 __rpc_createerr()
 {
-	static thread_key_t rce_key = -1;
 	struct rpc_createerr *rce_addr;
 
 	mutex_lock(&tsd_lock);
@@ -112,3 +119,21 @@ __rpc_createerr()
 	}
 	return (rce_addr);
 }
+
+void __attribute ((descructor)) tsd_key_delete(void)
+{
+	if (clnt_broadcast_key != -1)
+		thr_keydelete(clnt_broadcast_key);
+	if (rpc_call_key != -1)
+		thr_keydelete(rpc_call_key);
+	if (tcp_key != -1)
+		thr_keydelete(tcp_key);
+	if (udp_key != -1)
+		thr_keydelete(udp_key);
+	if (nc_key != -1)
+		thr_keydelete(nc_key);
+	if (rce_key != -1)
+		thr_keydelete(rce_key);
+	return;
+}
+

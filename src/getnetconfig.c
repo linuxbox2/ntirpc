@@ -129,7 +129,7 @@ static int *
 __nc_error()
 {
 	static pthread_mutex_t nc_lock = PTHREAD_MUTEX_INITIALIZER;
-	static thread_key_t nc_key = -1;
+	extern thread_key_t nc_key;
 	static int nc_error = 0;
 	int error, *nc_addr;
 

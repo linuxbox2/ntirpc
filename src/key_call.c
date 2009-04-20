@@ -303,7 +303,7 @@ int	vers;
 	struct timeval wait_time;
 	struct utsname u;
 	int fd;
-	static thread_key_t key_call_key = -1;
+	extern thread_key_t key_call_key;
 	extern mutex_t tsd_lock;
 
 #define	TOTAL_TIMEOUT	30	/* total timeout talking to keyserver */

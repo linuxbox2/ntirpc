@@ -430,7 +430,7 @@ registerrpc(prognum, versnum, procnum, progname, inproc, outproc)
  * All the following clnt_broadcast stuff is convulated; it supports
  * the earlier calling style of the callback function
  */
-static thread_key_t	clnt_broadcast_key = -1;
+extern thread_key_t	clnt_broadcast_key;
 
 /*
  * Need to translate the netbuf address into sockaddr_in address.

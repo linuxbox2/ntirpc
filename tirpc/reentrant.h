@@ -116,6 +116,7 @@
 #define rwlock_unlock(l)	 pthread_rwlock_unlock(l)
 
 #define thr_keycreate(k, d)	 pthread_key_create(k, d)
+#define thr_keydelete(k)	 pthread_key_delete(k)
 #define thr_setspecific(k, p)	 pthread_setspecific(k, p)
 #define thr_getspecific(k)	 pthread_getspecific(k)
 #define thr_sigsetmask(f, n, o)	 pthread_sigmask(f, n, o)

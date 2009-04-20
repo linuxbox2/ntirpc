@@ -102,7 +102,7 @@ rpc_call(host, prognum, versnum, procnum, inproc, in, outproc, out, nettype)
   	struct rpc_call_private *rcp = (struct rpc_call_private *) 0;
 	enum clnt_stat clnt_stat;
 	struct timeval timeout, tottimeout;
-	static thread_key_t rpc_call_key = -1;
+	extern thread_key_t rpc_call_key;
 	extern mutex_t tsd_lock;
 
 	if (rpc_call_key == -1) {
