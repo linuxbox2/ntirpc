@@ -261,6 +261,12 @@ makefd_xprt(fd, sendsize, recvsize)
  
 	assert(fd != -1);
 
+        if (fd >= FD_SETSIZE) {
+                warnx("svc_vc: makefd_xprt: fd too high\n");
+                xprt = NULL;
+                goto done;
+        }
+
 	xprt = mem_alloc(sizeof(SVCXPRT));
 	if (xprt == NULL) {
 		warnx("svc_vc: makefd_xprt: out of memory");
