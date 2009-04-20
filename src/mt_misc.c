@@ -91,27 +91,24 @@ struct rpc_createerr *
 __rpc_createerr()
 {
 	static thread_key_t rce_key = -1;
-	struct rpc_createerr *rce_addr = 0;
+	struct rpc_createerr *rce_addr;
 
-	if ((rce_addr = (struct rpc_createerr *)thr_getspecific(rce_key))
-		       	!= (struct rpc_createerr *)-1) {
-		mutex_lock(&tsd_lock);
-		if (thr_keycreate(&rce_key, free) != -1) {
-			mutex_unlock(&tsd_lock);
-			return (&rpc_createerr);
-		}
-		mutex_unlock(&tsd_lock);
-	}
+	mutex_lock(&tsd_lock);
+	if (rce_key == -1)
+		thr_keycreate(&rce_key, free);
+	mutex_unlock(&tsd_lock);
+
+	rce_addr = (struct rpc_createerr *)thr_getspecific(rce_key);
 	if (!rce_addr) {
 		rce_addr = (struct rpc_createerr *)
 			malloc(sizeof (struct rpc_createerr));
-		if (thr_setspecific(rce_key, (void *) rce_addr) != 0) {
+		if (!rce_addr ||
+		    thr_setspecific(rce_key, (void *) rce_addr) != 0) {
 			if (rce_addr)
 				free(rce_addr);
 			return (&rpc_createerr);
 		}
 		memset(rce_addr, 0, sizeof (struct rpc_createerr));
-		return (rce_addr);
 	}
 	return (rce_addr);
 }
