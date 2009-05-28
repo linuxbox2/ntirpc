@@ -85,6 +85,8 @@ extern bool_t xdr_wrapstring(XDR *, char **);
 
 static const char nullstring[] = "\000";
 
+#define RPCB_OWNER_STRING "libtirpc"
+
 #define	CACHESIZE 6
 
 struct address_cache {
@@ -752,10 +754,11 @@ __rpcb_findaddr_timed(program, version, nconf, host, clpp, tp)
 	parms.r_netid = nconf->nc_netid;
 
 	/*
-	 * According to wire captures, the reference implementation
-	 * (OpenSolaris) sends a blank string here too.
+	 * rpcbind ignores the r_owner field in GETADDR requests, but we
+	 * need to give xdr_rpcb something to gnaw on. Might as well make
+	 * it something human readable for when we see these in captures.
 	 */
-	parms.r_owner = "";
+	parms.r_owner = RPCB_OWNER_STRING;
 
 	/*
 	 * Use default total timeout if no timeout is specified.
