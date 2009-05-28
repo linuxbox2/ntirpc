@@ -1,19 +1,8 @@
 SUBDIRS = src man
 
-nobase_include_HEADERS = tirpc/un-namespace.h \
-			 tirpc/spinlock.h \
-			 tirpc/reentrant.h \
-			 tirpc/nss_tls.h \
-			 tirpc/netconfig.h \
-			 tirpc/namespace.h \
-			 tirpc/libc_private.h \
-			 tirpc/getpeereid.h \
-			 tirpc/fpmath.h \
+nobase_include_HEADERS = tirpc/netconfig.h \
 			 tirpc/rpcsvc/crypt.x \
 			 tirpc/rpcsvc/crypt.h \
-			 tirpc/misc/event.h \
-			 tirpc/misc/socket.h \
-			 tirpc/misc/queue.h \
 			 tirpc/rpc/xdr.h \
 			 tirpc/rpc/types.h \
 			 tirpc/rpc/svc_soc.h \
