@@ -34,7 +34,3 @@ nobase_include_HEADERS = tirpc/netconfig.h \
     
 pkgconfigdir=$(libdir)/pkgconfig
 pkgconfig_DATA = libtirpc.pc
-
-install-exec-local:
-	cp -p ./doc/etc_netconfig $(DESTDIR)/etc/netconfig
-	chmod 0644 $(DESTDIR)/etc/netconfig
