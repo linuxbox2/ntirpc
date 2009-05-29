@@ -1,4 +1,4 @@
-SUBDIRS = src man
+SUBDIRS = src man doc
 
 nobase_include_HEADERS = tirpc/netconfig.h \
 			 tirpc/rpcsvc/crypt.x \
