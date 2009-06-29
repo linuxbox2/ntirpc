@@ -781,7 +781,7 @@ __rpcb_findaddr_timed(program, version, nconf, host, clpp, tp)
 			if ((ua == NULL) || (ua[0] == 0)) {
 				/* address unknown */
 				rpc_createerr.cf_stat = RPC_PROGNOTREGISTERED;
-				continue; /* try other versions */
+				goto error;
 			}
 			address = uaddr2taddr(nconf, ua);
 #ifdef ND_DEBUG
