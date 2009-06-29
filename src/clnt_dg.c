@@ -381,6 +381,10 @@ call_again:
 	}
 
 send_again:
+	if (total_time <= 0) {
+		cu->cu_error.re_status = RPC_TIMEDOUT;
+		goto out;
+	}
 	nextsend_time = cu->cu_wait.tv_sec * 1000 + cu->cu_wait.tv_usec / 1000;
 	if (sendto(cu->cu_fd, cu->cu_outbuf, outlen, 0, sa, salen) != outlen) {
 		cu->cu_error.re_errno = errno;
