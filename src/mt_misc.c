@@ -120,7 +120,7 @@ __rpc_createerr()
 	return (rce_addr);
 }
 
-void __attribute ((descructor)) tsd_key_delete(void)
+void tsd_key_delete(void)
 {
 	if (clnt_broadcast_key != -1)
 		thr_keydelete(clnt_broadcast_key);

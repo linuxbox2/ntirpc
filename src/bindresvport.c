@@ -88,11 +88,10 @@ bindresvport_sa(sd, sa)
                 salen = sizeof(myaddr);
                 sa = (struct sockaddr *)&myaddr;
 
-                if (getsockname(sd, sa, &salen) == -1)
+                if (getsockname(sd, (struct sockaddr *)&myaddr, &salen) == -1)
                         return -1;      /* errno is correctly set */
 
-                af = sa->sa_family;
-                memset(sa, 0, salen);
+                af = myaddr.ss_family;
         } else
                 af = sa->sa_family;
 

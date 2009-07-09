@@ -312,7 +312,7 @@ clnt_dg_call(cl, proc, xargs, argsp, xresults, resultsp, utimeout)
 	socklen_t inlen, salen;
 	ssize_t recvlen = 0;
 	int rpc_lock_value;
-	u_int32_t xid;
+	u_int32_t xid, inval, outval;
 
 	outlen = 0;
 	sigfillset(&newmask);
@@ -475,15 +475,23 @@ get_reply:
 		cu->cu_error.re_status = RPC_CANTRECV;
 		goto out;
 	}
-	if (recvlen >= sizeof(u_int32_t) &&
-	    (cu->cu_async == TRUE ||
-	    *((u_int32_t *)(void *)(cu->cu_inbuf)) ==
-	    *((u_int32_t *)(void *)(cu->cu_outbuf))))
-                inlen = (socklen_t)recvlen;
-        else {
-                total_time -= tv;
-                goto send_again;
-        }
+
+	if (recvlen < sizeof(u_int32_t)) {
+		total_time -= tv;
+		goto send_again;
+	}
+
+	if (cu->cu_async == TRUE)
+		inlen = (socklen_t)recvlen;
+	else {
+		memcpy(&inval, cu->cu_inbuf, sizeof(u_int32_t));
+		memcpy(&outval, cu->cu_outbuf, sizeof(u_int32_t));
+		if (inval != outval) {
+			total_time -= tv;
+			goto send_again;
+		}
+		inlen = (socklen_t)recvlen;
+	}
 
 	/*
 	 * now decode and validate the response

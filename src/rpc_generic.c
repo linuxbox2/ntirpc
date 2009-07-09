@@ -812,6 +812,11 @@ int
 __rpc_sockisbound(int fd)
 {
 	struct sockaddr_storage ss;
+	union {
+		struct sockaddr_in  sin;
+		struct sockaddr_in6 sin6;
+		struct sockaddr_un  usin;
+	} u_addr;
 	socklen_t slen;
 
 	slen = sizeof (struct sockaddr_storage);
@@ -820,17 +825,17 @@ __rpc_sockisbound(int fd)
 
 	switch (ss.ss_family) {
 		case AF_INET:
-			return (((struct sockaddr_in *)
-			    (void *)&ss)->sin_port != 0);
+			memcpy(&u_addr.sin, &ss, sizeof(u_addr.sin)); 
+			return (u_addr.sin.sin_port != 0);
 #ifdef INET6
 		case AF_INET6:
-			return (((struct sockaddr_in6 *)
-			    (void *)&ss)->sin6_port != 0);
+			memcpy(&u_addr.sin6, &ss, sizeof(u_addr.sin6)); 
+			return (u_addr.sin6.sin6_port != 0);
 #endif
 		case AF_LOCAL:
 			/* XXX check this */
-			return (((struct sockaddr_un *)
-			    (void *)&ss)->sun_path[0] != '\0');
+			memcpy(&u_addr.usin, &ss, sizeof(u_addr.usin)); 
+			return (u_addr.usin.sun_path[0] != 0);
 		default:
 			break;
 	}

@@ -586,13 +586,12 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 					struct netbuf *np;
 #ifdef PORTMAP
 					struct netbuf taddr;
-					struct sockaddr_in *sin;
+					struct sockaddr_in sin;
 
 					if (pmap_flag && pmap_reply_flag) {
-						sin = (struct sockaddr_in *)
-						    (void *)&fdlist[i].raddr;
-						sin->sin_port =
-						    htons((u_short)port);
+						memcpy(&sin, &fdlist[i].raddr, sizeof(sin)); 
+						sin.sin_port = htons((u_short)port);
+						memcpy(&fdlist[i].raddr, &sin, sizeof(sin)); 
 						taddr.len = taddr.maxlen = 
 						    sizeof(fdlist[i].raddr);
 						taddr.buf = &fdlist[i].raddr;
