@@ -10,6 +10,7 @@ AC_ARG_ENABLE(gss,[  --enable-gss            Turn on gss api], [case "${enableva
       esac],[gss=false])
 AM_CONDITIONAL(GSS, test x$gss = xtrue)
 if test x$gss = xtrue; then
+	AC_DEFINE(HAVE_LIBGSSAPI, 1, [])
 	PKG_CHECK_MODULES(GSSGLUE, libgssglue, [],
 	AC_MSG_ERROR([Unable to locate information required to use libgssglue.]))
 fi

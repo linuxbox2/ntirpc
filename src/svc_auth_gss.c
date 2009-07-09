@@ -121,7 +121,7 @@ svcauth_gss_import_name(char *service)
 	namebuf.length = strlen(service);
 
 	maj_stat = gss_import_name(&min_stat, &namebuf,
-				   GSS_C_NT_HOSTBASED_SERVICE, &name);
+				   (gss_OID)GSS_C_NT_HOSTBASED_SERVICE, &name);
 
 	if (maj_stat != GSS_S_COMPLETE) {
 		log_status("gss_import_name", maj_stat, min_stat);
