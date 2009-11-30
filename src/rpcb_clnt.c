@@ -731,6 +731,91 @@ __rpcb_findaddr_timed(program, version, nconf, host, clpp, tp)
 	}
 
 	parms.r_addr = NULL;
+
+	/*
+	 * Use default total timeout if no timeout is specified.
+	 */
+	if (tp == NULL)
+		tp = &tottimeout;
+	
+#ifdef PORTMAP
+	/* Try version 2 for TCP or UDP */
+	if (strcmp(nconf->nc_protofmly, NC_INET) == 0) {
+		u_short port = 0;
+		struct netbuf remote;
+		rpcvers_t pmapvers = 2;
+		struct pmap pmapparms;
+
+		/*
+		 * Try UDP only - there are some portmappers out
+		 * there that use UDP only.
+		 */
+		if (strcmp(nconf->nc_proto, NC_TCP) == 0) {
+			struct netconfig *newnconf;
+
+			if ((newnconf = getnetconfigent("udp")) == NULL) {
+				rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
+				return (NULL);
+			}
+			client = getclnthandle(host, newnconf, &parms.r_addr);
+			freenetconfigent(newnconf);
+		} else {
+			client = getclnthandle(host, nconf, &parms.r_addr);
+		}
+		if (client == NULL)
+			return (NULL);
+
+		/*
+		 * Set version and retry timeout.
+		 */
+		CLNT_CONTROL(client, CLSET_RETRY_TIMEOUT, (char *)&rpcbrmttime);
+		CLNT_CONTROL(client, CLSET_VERS, (char *)&pmapvers);
+
+		pmapparms.pm_prog = program;
+		pmapparms.pm_vers = version;
+		pmapparms.pm_prot = strcmp(nconf->nc_proto, NC_TCP) ?
+					IPPROTO_UDP : IPPROTO_TCP;
+		pmapparms.pm_port = 0;	/* not needed */
+		clnt_st = CLNT_CALL(client, (rpcproc_t)PMAPPROC_GETPORT,
+		    (xdrproc_t) xdr_pmap, (caddr_t)(void *)&pmapparms,
+		    (xdrproc_t) xdr_u_short, (caddr_t)(void *)&port,
+		    *tp);
+		if (clnt_st != RPC_SUCCESS) {
+			if ((clnt_st == RPC_PROGVERSMISMATCH) ||
+				(clnt_st == RPC_PROGUNAVAIL))
+				goto try_rpcbind;
+			rpc_createerr.cf_stat = RPC_PMAPFAILURE;
+			clnt_geterr(client, &rpc_createerr.cf_error);
+			goto error;
+		} else if (port == 0) {
+			address = NULL;
+			rpc_createerr.cf_stat = RPC_PROGNOTREGISTERED;
+			goto error;
+		}
+		port = htons(port);
+		CLNT_CONTROL(client, CLGET_SVC_ADDR, (char *)&remote);
+		if (((address = (struct netbuf *)
+			malloc(sizeof (struct netbuf))) == NULL) ||
+		    ((address->buf = (char *)
+			malloc(remote.len)) == NULL)) {
+			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+			clnt_geterr(client, &rpc_createerr.cf_error);
+			if (address) {
+				free(address);
+				address = NULL;
+			}
+			goto error;
+		}
+		memcpy(address->buf, remote.buf, remote.len);
+		memcpy(&((char *)address->buf)[sizeof (short)],
+				(char *)(void *)&port, sizeof (short));
+		address->len = address->maxlen = remote.len;
+		goto done;
+	}
+
+try_rpcbind:
+#endif				/* PORTMAP */
+
 	parms.r_prog = program;
 	parms.r_vers = version;
 	parms.r_netid = nconf->nc_netid;
@@ -742,19 +827,14 @@ __rpcb_findaddr_timed(program, version, nconf, host, clpp, tp)
 	 */
 	parms.r_owner = RPCB_OWNER_STRING;
 
-	/*
-	 * Use default total timeout if no timeout is specified.
-	 */
-	if (tp == NULL)
-		tp = &tottimeout;
-	
-	/* try rpcbind */
 	/* Now the same transport is to be used to get the address */
 	if (client && ((nconf->nc_semantics == NC_TPI_COTS_ORD) ||
 			(nconf->nc_semantics == NC_TPI_COTS))) {
 		/* A CLTS type of client - destroy it */
 		CLNT_DESTROY(client);
 		client = NULL;
+		free(parms.r_addr);
+		parms.r_addr = NULL;
 	}
 
 	if (client == NULL) {
@@ -814,85 +894,6 @@ __rpcb_findaddr_timed(program, version, nconf, host, clpp, tp)
 			goto error;
 		}
 	}
-	/* if rpcbind requests failed -> try portmapper version 2 */
-#ifdef PORTMAP
-	/* Try version 2 for TCP or UDP */
-	if (strcmp(nconf->nc_protofmly, NC_INET) == 0) {
-		u_short port = 0;
-		struct netbuf remote;
-		rpcvers_t pmapvers = 2;
-		struct pmap pmapparms;
-
-		/*
-		 * Try UDP only - there are some portmappers out
-		 * there that use UDP only.
-		 */
-		if (strcmp(nconf->nc_proto, NC_TCP) == 0) {
-			struct netconfig *newnconf;
-
-			if ((newnconf = getnetconfigent("udp")) == NULL) {
-				rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
-				return (NULL);
-			}
-			client = getclnthandle(host, newnconf, &parms.r_addr);
-			freenetconfigent(newnconf);
-		} else {
-			client = getclnthandle(host, nconf, &parms.r_addr);
-		}
-		if (client == NULL)
-			return (NULL);
-
-		/*
-		 * Set version and retry timeout.
-		 */
-		CLNT_CONTROL(client, CLSET_RETRY_TIMEOUT, (char *)&rpcbrmttime);
-		CLNT_CONTROL(client, CLSET_VERS, (char *)&pmapvers);
-
-		pmapparms.pm_prog = program;
-		pmapparms.pm_vers = version;
-		pmapparms.pm_prot = strcmp(nconf->nc_proto, NC_TCP) ?
-					IPPROTO_UDP : IPPROTO_TCP;
-		pmapparms.pm_port = 0;	/* not needed */
-		clnt_st = CLNT_CALL(client, (rpcproc_t)PMAPPROC_GETPORT,
-		    (xdrproc_t) xdr_pmap, (caddr_t)(void *)&pmapparms,
-		    (xdrproc_t) xdr_u_short, (caddr_t)(void *)&port,
-		    *tp);
-		if (clnt_st != RPC_SUCCESS) {
-			if ((clnt_st == RPC_PROGVERSMISMATCH) ||
-				(clnt_st == RPC_PROGUNAVAIL))
-				goto error; /* All portmap/rpcbind versions failed */
-			rpc_createerr.cf_stat = RPC_PMAPFAILURE;
-			clnt_geterr(client, &rpc_createerr.cf_error);
-			goto error;
-		} else if (port == 0) {
-			address = NULL;
-			rpc_createerr.cf_stat = RPC_PROGNOTREGISTERED;
-			goto error;
-		}
-		port = htons(port);
-		CLNT_CONTROL(client, CLGET_SVC_ADDR, (char *)&remote);
-		if (((address = (struct netbuf *)
-			malloc(sizeof (struct netbuf))) == NULL) ||
-		    ((address->buf = (char *)
-			malloc(remote.len)) == NULL)) {
-			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-			clnt_geterr(client, &rpc_createerr.cf_error);
-			if (address) {
-				free(address);
-				address = NULL;
-			}
-			goto error;
-		}
-		memcpy(address->buf, remote.buf, remote.len);
-		memcpy(&((char *)address->buf)[sizeof (short)],
-				(char *)(void *)&port, sizeof (short));
-		address->len = address->maxlen = remote.len;
-		goto done;
-	}
-
-
-	//try_rpcbind:
-#endif				/* PORTMAP */
 
 	if ((address == NULL) || (address->len == 0)) {
 	  rpc_createerr.cf_stat = RPC_PROGNOTREGISTERED;
