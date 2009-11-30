@@ -759,9 +759,10 @@ __rpcb_findaddr_timed(program, version, nconf, host, clpp, tp)
 			}
 			client = getclnthandle(host, newnconf, &parms.r_addr);
 			freenetconfigent(newnconf);
-		} else {
+		} else if (strcmp(nconf->nc_proto, NC_UDP) == 0)
 			client = getclnthandle(host, nconf, &parms.r_addr);
-		}
+		else
+			goto try_rpcbind;
 		if (client == NULL)
 			return (NULL);
 
