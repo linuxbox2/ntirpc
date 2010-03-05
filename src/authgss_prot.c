@@ -44,6 +44,34 @@
 #include <rpc/rpc.h>
 #include <gssapi/gssapi.h>
 
+/* additional space needed for encoding */
+#define RPC_SLACK_SPACE 1024
+
+bool_t
+xdr_rpc_gss_buf(XDR *xdrs, gss_buffer_t buf, u_int maxsize)
+{
+	bool_t xdr_stat;
+	u_int tmplen;
+
+	if (xdrs->x_op != XDR_DECODE) {
+		if (buf->length > UINT_MAX)
+			return FALSE;
+		else
+			tmplen = buf->length;
+	}
+	xdr_stat = xdr_bytes(xdrs, (char **)&buf->value, &tmplen, maxsize);
+
+	if (xdr_stat && xdrs->x_op == XDR_DECODE)
+		buf->length = tmplen;
+
+	log_debug("xdr_rpc_gss_buf: %s %s (%p:%d)",
+		  (xdrs->x_op == XDR_ENCODE) ? "encode" : "decode",
+		  (xdr_stat == TRUE) ? "success" : "failure",
+		  buf->value, buf->length);
+
+	return xdr_stat;
+}
+
 bool_t
 xdr_rpc_gss_cred(XDR *xdrs, struct rpc_gss_cred *p)
 {
@@ -53,8 +81,7 @@ xdr_rpc_gss_cred(XDR *xdrs, struct rpc_gss_cred *p)
 		    xdr_enum(xdrs, (enum_t *)&p->gc_proc) &&
 		    xdr_u_int(xdrs, &p->gc_seq) &&
 		    xdr_enum(xdrs, (enum_t *)&p->gc_svc) &&
-		    xdr_bytes(xdrs, (char **)&p->gc_ctx.value,
-			      (u_int *)&p->gc_ctx.length, MAX_AUTH_BYTES));
+		    xdr_rpc_gss_buf(xdrs, &p->gc_ctx, MAX_AUTH_BYTES));
 
 	log_debug("xdr_rpc_gss_cred: %s %s "
 		  "(v %d, proc %d, seq %d, svc %d, ctx %p:%d)",
@@ -70,9 +97,9 @@ bool_t
 xdr_rpc_gss_init_args(XDR *xdrs, gss_buffer_desc *p)
 {
 	bool_t xdr_stat;
+	u_int maxlen = (u_int)(p->length + RPC_SLACK_SPACE);
 
-	xdr_stat = xdr_bytes(xdrs, (char **)&p->value,
-			      (u_int *)&p->length, MAX_NETOBJ_SZ);
+	xdr_stat = xdr_rpc_gss_buf(xdrs, p, maxlen);
 
 	log_debug("xdr_rpc_gss_init_args: %s %s (token %p:%d)",
 		  (xdrs->x_op == XDR_ENCODE) ? "encode" : "decode",
@@ -87,13 +114,14 @@ xdr_rpc_gss_init_res(XDR *xdrs, struct rpc_gss_init_res *p)
 {
 	bool_t xdr_stat;
 
-	xdr_stat = (xdr_bytes(xdrs, (char **)&p->gr_ctx.value,
-			      (u_int *)&p->gr_ctx.length, MAX_NETOBJ_SZ) &&
+	u_int ctx_maxlen = (u_int)(p->gr_ctx.length + RPC_SLACK_SPACE);
+	u_int tok_maxlen = (u_int)(p->gr_token.length + RPC_SLACK_SPACE);
+
+	xdr_stat = (xdr_rpc_gss_buf(xdrs, &p->gr_ctx, ctx_maxlen) &&
 		    xdr_u_int(xdrs, &p->gr_major) &&
 		    xdr_u_int(xdrs, &p->gr_minor) &&
 		    xdr_u_int(xdrs, &p->gr_win) &&
-		    xdr_bytes(xdrs, (char **)&p->gr_token.value,
-			      (u_int *)&p->gr_token.length, MAX_NETOBJ_SZ));
+		    xdr_rpc_gss_buf(xdrs, &p->gr_token, tok_maxlen));
 
 	log_debug("xdr_rpc_gss_init_res %s %s "
 		  "(ctx %p:%d, maj %d, min %d, win %d, token %p:%d)",
@@ -115,10 +143,14 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	OM_uint32	maj_stat, min_stat;
 	int		start, end, conf_state;
 	bool_t		xdr_stat;
+	u_int		databuflen, maxwrapsz;
 
 	/* Skip databody length. */
 	start = XDR_GETPOS(xdrs);
 	XDR_SETPOS(xdrs, start + 4);
+
+	memset(&databuf, 0, sizeof(databuf));
+	memset(&wrapbuf, 0, sizeof(wrapbuf));
 
 	/* Marshal rpc_gss_data_t (sequence number + arguments). */
 	if (!xdr_u_int(xdrs, &seq) || !(*xdr_func)(xdrs, xdr_ptr))
@@ -126,17 +158,18 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	end = XDR_GETPOS(xdrs);
 
 	/* Set databuf to marshalled rpc_gss_data_t. */
-	databuf.length = end - start - 4;
+	databuflen = end - start - 4;
 	XDR_SETPOS(xdrs, start + 4);
-	databuf.value = XDR_INLINE(xdrs, databuf.length);
+	databuf.value = XDR_INLINE(xdrs, databuflen);
 
 	xdr_stat = FALSE;
 
 	if (svc == RPCSEC_GSS_SVC_INTEGRITY) {
 		/* Marshal databody_integ length. */
 		XDR_SETPOS(xdrs, start);
-		if (!xdr_u_int(xdrs, (u_int *)&databuf.length))
+		if (!xdr_u_int(xdrs, (u_int *)&databuflen))
 			return (FALSE);
+		databuf.length = databuflen;
 
 		/* Checksum rpc_gss_data_t. */
 		maj_stat = gss_get_mic(&min_stat, ctx, qop,
@@ -147,8 +180,8 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 		}
 		/* Marshal checksum. */
 		XDR_SETPOS(xdrs, end);
-		xdr_stat = xdr_bytes(xdrs, (char **)&wrapbuf.value,
-				     (u_int *)&wrapbuf.length, MAX_NETOBJ_SZ);
+		maxwrapsz = (u_int)(wrapbuf.length + RPC_SLACK_SPACE);
+		xdr_stat = xdr_rpc_gss_buf(xdrs, &wrapbuf, maxwrapsz);
 		gss_release_buffer(&min_stat, &wrapbuf);
 	}
 	else if (svc == RPCSEC_GSS_SVC_PRIVACY) {
@@ -161,8 +194,8 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 		}
 		/* Marshal databody_priv. */
 		XDR_SETPOS(xdrs, start);
-		xdr_stat = xdr_bytes(xdrs, (char **)&wrapbuf.value,
-				     (u_int *)&wrapbuf.length, MAX_NETOBJ_SZ);
+		maxwrapsz = (u_int)(wrapbuf.length + RPC_SLACK_SPACE);
+		xdr_stat = xdr_rpc_gss_buf(xdrs, &wrapbuf, maxwrapsz);
 		gss_release_buffer(&min_stat, &wrapbuf);
 	}
 	return (xdr_stat);
@@ -188,14 +221,12 @@ xdr_rpc_gss_unwrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 
 	if (svc == RPCSEC_GSS_SVC_INTEGRITY) {
 		/* Decode databody_integ. */
-		if (!xdr_bytes(xdrs, (char **)&databuf.value, (u_int *)&databuf.length,
-			       MAX_NETOBJ_SZ)) {
+		if (!xdr_rpc_gss_buf(xdrs, &databuf, (u_int)-1)) {
 			log_debug("xdr decode databody_integ failed");
 			return (FALSE);
 		}
 		/* Decode checksum. */
-		if (!xdr_bytes(xdrs, (char **)&wrapbuf.value, (u_int *)&wrapbuf.length,
-			       MAX_NETOBJ_SZ)) {
+		if (!xdr_rpc_gss_buf(xdrs, &wrapbuf, (u_int)-1)) {
 			gss_release_buffer(&min_stat, &databuf);
 			log_debug("xdr decode checksum failed");
 			return (FALSE);
@@ -213,8 +244,7 @@ xdr_rpc_gss_unwrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	}
 	else if (svc == RPCSEC_GSS_SVC_PRIVACY) {
 		/* Decode databody_priv. */
-		if (!xdr_bytes(xdrs, (char **)&wrapbuf.value, (u_int *)&wrapbuf.length,
-			       MAX_NETOBJ_SZ)) {
+		if (!xdr_rpc_gss_buf(xdrs, &wrapbuf, (u_int)-1)) {
 			log_debug("xdr decode databody_priv failed");
 			return (FALSE);
 		}
