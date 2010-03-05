@@ -49,7 +49,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 
+#include <rpc/clnt.h>
 #include <rpc/types.h>
 #include <rpc/xdr.h>
 #include <rpc/auth.h>
@@ -95,6 +97,8 @@ authunix_create(machname, uid, gid, len, aup_gids)
 	AUTH *auth;
 	struct audata *au;
 
+	memset(&rpc_createerr, 0, sizeof(rpc_createerr));
+
 	/*
 	 * Allocate and set up auth handle
 	 */
@@ -102,14 +106,16 @@ authunix_create(machname, uid, gid, len, aup_gids)
 	auth = mem_alloc(sizeof(*auth));
 #ifndef _KERNEL
 	if (auth == NULL) {
-		warnx("authunix_create: out of memory");
+		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+		rpc_createerr.cf_error.re_errno = ENOMEM;
 		goto cleanup_authunix_create;
 	}
 #endif
 	au = mem_alloc(sizeof(*au));
 #ifndef _KERNEL
 	if (au == NULL) {
-		warnx("authunix_create: out of memory");
+		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+		rpc_createerr.cf_error.re_errno = ENOMEM;
 		goto cleanup_authunix_create;
 	}
 #endif
@@ -134,15 +140,18 @@ authunix_create(machname, uid, gid, len, aup_gids)
 	 * Serialize the parameters into origcred
 	 */
 	xdrmem_create(&xdrs, mymem, MAX_AUTH_BYTES, XDR_ENCODE);
-	if (! xdr_authunix_parms(&xdrs, &aup)) 
-		abort();
+	if (!xdr_authunix_parms(&xdrs, &aup)) {
+		rpc_createerr.cf_stat = RPC_CANTENCODEARGS;
+		goto cleanup_authunix_create;
+	}
 	au->au_origcred.oa_length = len = XDR_GETPOS(&xdrs);
 	au->au_origcred.oa_flavor = AUTH_UNIX;
 #ifdef _KERNEL
 	au->au_origcred.oa_base = mem_alloc((u_int) len);
 #else
 	if ((au->au_origcred.oa_base = mem_alloc((u_int) len)) == NULL) {
-		warnx("authunix_create: out of memory");
+		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+		rpc_createerr.cf_error.re_errno = ENOMEM;
 		goto cleanup_authunix_create;
 	}
 #endif
@@ -180,13 +189,22 @@ authunix_create_default()
 	gid_t gid;
 	gid_t gids[NGRPS];
 
-	if (gethostname(machname, sizeof machname) == -1)
-		abort();
+	memset(&rpc_createerr, 0, sizeof(rpc_createerr));
+
+	if (gethostname(machname, sizeof machname) == -1) {
+		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+		rpc_createerr.cf_error.re_errno = errno;
+		return NULL;
+	}
 	machname[sizeof(machname) - 1] = 0;
 	uid = geteuid();
 	gid = getegid();
-	if ((len = getgroups(NGRPS, gids)) < 0)
-		abort();
+	len = getgroups(NGRPS, gids);
+	if (len < 0) {
+		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+		rpc_createerr.cf_error.re_errno = errno;
+		return NULL;
+	}
 	/* XXX: interface problem; those should all have been unsigned */
 	return (authunix_create(machname, uid, gid, len, gids));
 }
