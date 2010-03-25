@@ -748,6 +748,10 @@ __rpc_get_local_uid(SVCXPRT *transp, uid_t *uid) {
  * Destroy xprts that have not have had any activity in 'timeout' seconds.
  * If 'cleanblock' is true, blocking connections (the default) are also
  * cleaned. If timeout is 0, the least active connection is picked.
+ *
+ * Though this is not a publicly documented interface, some versions of
+ * rpcbind are known to call this function.  Do not alter or remove this
+ * API without changing the library's sonum.
  */
 bool_t
 __svc_clean_idle(fd_set *fds, int timeout, bool_t cleanblock)
