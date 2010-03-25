@@ -615,7 +615,7 @@ svc_getreqset (readfds)
   maskp = readfds->fds_bits;
   for (sock = 0; sock < FD_SETSIZE; sock += NFDBITS)
     {
-      for (mask = *maskp++; (bit = ffs (mask)) != 0; mask ^= (1 << (bit - 1)))
+      for (mask = *maskp++; (bit = ffsl(mask)) != 0; mask ^= (1L << (bit - 1)))
 	{
 	  /* sock has input waiting */
 	  fd = sock + bit - 1;
