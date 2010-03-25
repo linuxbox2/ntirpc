@@ -212,14 +212,12 @@ add_cache(host, netid, taddr, uaddr)
 	ad_cache->ac_uaddr = uaddr ? strdup(uaddr) : NULL;
 	ad_cache->ac_taddr = (struct netbuf *)malloc(sizeof (struct netbuf));
 	if (!ad_cache->ac_host || !ad_cache->ac_netid || !ad_cache->ac_taddr ||
-		(uaddr && !ad_cache->ac_uaddr)) {
-		return;
-	}
+			(uaddr && !ad_cache->ac_uaddr))
+		goto out_free;
 	ad_cache->ac_taddr->len = ad_cache->ac_taddr->maxlen = taddr->len;
 	ad_cache->ac_taddr->buf = (char *) malloc(taddr->len);
-	if (ad_cache->ac_taddr->buf == NULL) {
-		return;
-	}
+	if (ad_cache->ac_taddr->buf == NULL)
+		goto out_free;
 	memcpy(ad_cache->ac_taddr->buf, taddr->buf, taddr->len);
 #ifdef ND_DEBUG
 	fprintf(stderr, "Added to cache: %s : %s\n", host, netid);
@@ -263,6 +261,14 @@ add_cache(host, netid, taddr, uaddr)
 		free(cptr);
 	}
 	rwlock_unlock(&rpcbaddr_cache_lock);
+	return;
+
+out_free:
+	free(ad_cache->ac_host);
+	free(ad_cache->ac_netid);
+	free(ad_cache->ac_uaddr);
+	free(ad_cache->ac_taddr);
+	free(ad_cache);
 }
 
 /*
