@@ -56,6 +56,7 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <syslog.h>
+#include <assert.h>
 
 #include "rpc_com.h"
 
@@ -289,6 +290,8 @@ getclnthandle(host, nconf, targaddr)
 
 	/* Get the address of the rpcbind.  Check cache first */
 	client = NULL;
+	if (targaddr)
+		*targaddr = NULL;
 	addr_to_delete.len = 0;
 	rwlock_rdlock(&rpcbaddr_cache_lock);
 	ad_cache = NULL;
@@ -325,7 +328,8 @@ getclnthandle(host, nconf, targaddr)
 	}
 	if (!__rpc_nconf2sockinfo(nconf, &si)) {
 		rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
-		return NULL;
+		assert(client == NULL);
+		goto out_err;
 	}
 
 	memset(&hints, 0, sizeof hints);
@@ -344,7 +348,7 @@ getclnthandle(host, nconf, targaddr)
 #ifdef ND_DEBUG
 			clnt_pcreateerror("rpcbind clnt interface");
 #endif
-			return (NULL);
+			goto out_err;
 		} else {
 			struct sockaddr_un sun;
 
@@ -356,7 +360,8 @@ getclnthandle(host, nconf, targaddr)
 	} else {
 		if (getaddrinfo(host, "sunrpc", &hints, &res) != 0) {
 			rpc_createerr.cf_stat = RPC_UNKNOWNHOST;
-			return NULL;
+			assert(client == NULL);
+			goto out_err;
 		}
 	}
 
@@ -404,6 +409,9 @@ getclnthandle(host, nconf, targaddr)
 	}
 	if (res)
 		freeaddrinfo(res);
+out_err:
+	if (!client && targaddr)
+		free(*targaddr);
 	return (client);
 }
 
