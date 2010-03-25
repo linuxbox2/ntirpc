@@ -1,4 +1,5 @@
 SUBDIRS = src man doc
+ACLOCAL_AMFLAGS = -I m4
 
 nobase_include_HEADERS = tirpc/netconfig.h \
 			 tirpc/rpcsvc/crypt.x \

@@ -2,6 +2,7 @@ AC_INIT(libtirpc, 0.2.1)
 AM_INIT_AUTOMAKE(libtirpc, 0.2.1)
 AM_MAINTAINER_MODE
 AC_CONFIG_SRCDIR([src/auth_des.c])
+AC_CONFIG_MACRO_DIR([m4])
 
 AC_ARG_ENABLE(gss,[  --enable-gss            Turn on gss api], [case "${enableval}" in
         yes) gss=true ; AC_CHECK_LIB([gssapi],[gss_init_sec_context]) ;;
@@ -18,7 +19,6 @@ fi
 AC_PROG_CC
 AM_CONFIG_HEADER(config.h)
 AC_PROG_LIBTOOL
-##AC_PROG_RANLIB
 AC_HEADER_DIRENT
 AC_PREFIX_DEFAULT(/usr)
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h libintl.h limits.h locale.h netdb.h netinet/in.h stddef.h stdint.h stdlib.h string.h sys/ioctl.h sys/param.h sys/socket.h sys/time.h syslog.h unistd.h])
