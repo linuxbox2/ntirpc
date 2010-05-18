@@ -60,13 +60,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "rpc_com.h"
 
 extern mutex_t	rpcsoc_lock;
 
 static CLIENT *clnt_com_create(struct sockaddr_in *, rpcprog_t, rpcvers_t,
-    int *, u_int, u_int, char *);
+    int *, u_int, u_int, char *, int);
 static SVCXPRT *svc_com_create(int, u_int, u_int, char *);
 static bool_t rpc_wrap_bcast(char *, struct netbuf *, struct netconfig *);
 
@@ -78,7 +79,7 @@ static bool_t rpc_wrap_bcast(char *, struct netbuf *, struct netconfig *);
  * A common clnt create routine
  */
 static CLIENT *
-clnt_com_create(raddr, prog, vers, sockp, sendsz, recvsz, tp)
+clnt_com_create(raddr, prog, vers, sockp, sendsz, recvsz, tp, flags)
 	struct sockaddr_in *raddr;
 	rpcprog_t prog;
 	rpcvers_t vers;
@@ -86,6 +87,7 @@ clnt_com_create(raddr, prog, vers, sockp, sendsz, recvsz, tp)
 	u_int sendsz;
 	u_int recvsz;
 	char *tp;
+	int flags;
 {
 	CLIENT *cl;
 	int madefd = FALSE;
@@ -100,9 +102,21 @@ clnt_com_create(raddr, prog, vers, sockp, sendsz, recvsz, tp)
 		return (NULL);
 	}
 	if (fd == RPC_ANYSOCK) {
-		fd = __rpc_nconf2fd(nconf);
-		if (fd == -1)
-			goto syserror;
+		static int have_cloexec;
+		fd = __rpc_nconf2fd_flags(nconf, flags);
+		if (fd == -1) {
+			if ((flags & SOCK_CLOEXEC) && have_cloexec <= 0) {
+				fd = __rpc_nconf2fd(nconf);
+				if (fd == -1)
+					goto syserror;
+				if (flags & SOCK_CLOEXEC) {
+					have_cloexec = -1;
+					fcntl(fd, F_SETFD, FD_CLOEXEC);
+				}
+			} else
+				goto syserror;
+		} else if (flags & SOCK_CLOEXEC)
+			have_cloexec = 1;
 		madefd = TRUE;
 	}
 
@@ -154,6 +168,28 @@ err:	if (madefd == TRUE)
 }
 
 CLIENT *
+__libc_clntudp_bufcreate(raddr, prog, vers, wait, sockp, sendsz, recvsz, flags)
+	struct sockaddr_in *raddr;
+	u_long prog;
+	u_long vers;
+	struct timeval wait;
+	int *sockp;
+	u_int sendsz;
+	u_int recvsz;
+	int flags;
+{
+	CLIENT *cl;
+
+	cl = clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
+	    sendsz, recvsz, "udp", flags);
+	if (cl == NULL) {
+		return (NULL);
+	}
+	(void) CLNT_CONTROL(cl, CLSET_RETRY_TIMEOUT, &wait);
+	return (cl);
+}
+
+CLIENT *
 clntudp_bufcreate(raddr, prog, vers, wait, sockp, sendsz, recvsz)
 	struct sockaddr_in *raddr;
 	u_long prog;
@@ -166,7 +202,7 @@ clntudp_bufcreate(raddr, prog, vers, wait, sockp, sendsz, recvsz)
 	CLIENT *cl;
 
 	cl = clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
-	    sendsz, recvsz, "udp");
+	    sendsz, recvsz, "udp", 0);
 	if (cl == NULL) {
 		return (NULL);
 	}
@@ -195,7 +231,7 @@ clnttcp_create(raddr, prog, vers, sockp, sendsz, recvsz)
 	u_int recvsz;
 {
 	return clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
-	    sendsz, recvsz, "tcp");
+	    sendsz, recvsz, "tcp", 0);
 }
 
 /* IPv6 version of clnt*_*create */
@@ -215,7 +251,7 @@ clntudp6_bufcreate(raddr, prog, vers, wait, sockp, sendsz, recvsz)
 	CLIENT *cl;
 
 	cl = clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
-	    sendsz, recvsz, "udp6");
+	    sendsz, recvsz, "udp6", 0);
 	if (cl == NULL) {
 		return (NULL);
 	}
@@ -244,7 +280,7 @@ clnttcp6_create(raddr, prog, vers, sockp, sendsz, recvsz)
 	u_int recvsz;
 {
 	return clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
-	    sendsz, recvsz, "tcp6");
+	    sendsz, recvsz, "tcp6", 0);
 }
 
 #endif
