@@ -84,7 +84,7 @@ struct authdes_verf {
 		struct timeval adv_ctime;	/* clear time */
 	  	des_block adv_xtime;		/* crypt time */
 	} adv_time_u;
-  //u_long adv_int_u;
+  /*u_long adv_int_u;*/
   u_int32_t adv_int_u;
 };
 

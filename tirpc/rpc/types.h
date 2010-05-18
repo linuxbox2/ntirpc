@@ -39,7 +39,6 @@
 #define _TIRPC_TYPES_H
 
 #include <sys/types.h>
-//#include <sys/_null.h>
 
 typedef int32_t bool_t;
 typedef int32_t enum_t;

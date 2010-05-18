@@ -43,7 +43,7 @@
 #include <sys/cdefs.h>
 #include <stdio.h>
 #include <netinet/in.h>
-// Rajout pour la définition des types
+
 #include <rpc/types.h>
 
 /*

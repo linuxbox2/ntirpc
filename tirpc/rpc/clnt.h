@@ -42,8 +42,7 @@
 #ifndef _TIRPC_CLNT_H_
 #define _TIRPC_CLNT_H_
 
-//#include <rpc/clnt_stat.h>
-#include "clnt_stat.h"
+#include <rpc/clnt_stat.h>
 #include <rpc/auth.h>
 
 #include <sys/cdefs.h>

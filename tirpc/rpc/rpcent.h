@@ -44,23 +44,27 @@
 /*	#pragma ident "@(#)rpcent.h   1.13    94/04/25 SMI"	*/
 /*      @(#)rpcent.h 1.1 88/12/06 SMI   */
 
-
-//struct rpcent {
-//      char    *r_name;        /* name of server for this rpc program */
-//      char    **r_aliases;    /* alias list */
-//      int     r_number;       /* rpc program number */
-//};
-
 __BEGIN_DECLS
-//extern struct rpcent *getrpcbyname_r(const char *, struct rpcent *,
-//				     char *, int);
-//extern struct rpcent *getrpcbynumber_r(int, struct rpcent *, char *, int);
-//extern struct rpcent *getrpcent_r(struct rpcent *, char *, int);
+
+/* These are defined in /usr/include/rpc/netdb.h */
+#if 0
+struct rpcent {
+	char	*r_name;	/* name of server for this rpc program */
+	char	**r_aliases;	/* alias list */
+	int	r_number;	/* rpc program number */
+};
+
+extern struct rpcent *getrpcbyname_r(const char *, struct rpcent *,
+					char *, int);
+extern struct rpcent *getrpcbynumber_r(int, struct rpcent *, char *, int);
+extern struct rpcent *getrpcent_r(struct rpcent *, char *, int);
 
 /* Old interfaces that return a pointer to a static area;  MT-unsafe */
-//extern struct rpcent *getrpcbyname(char *);
-//extern struct rpcent *getrpcbynumber(int);
-//extern struct rpcent *getrpcent(void);
+extern struct rpcent *getrpcbyname(char *);
+extern struct rpcent *getrpcbynumber(int);
+extern struct rpcent *getrpcent(void);
+#endif
+
 extern void setrpcent(int) __THROW;
 extern void endrpcent(void) __THROW;
 __END_DECLS
