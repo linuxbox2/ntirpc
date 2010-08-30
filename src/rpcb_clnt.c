@@ -1,18 +1,5 @@
 /*
- * The contents of this file are subject to the Sun Standards
- * License Version 1.0 the (the "License";) You may not use
- * this file except in compliance with the License.  You may
- * obtain a copy of the License at lib/libc/rpc/LICENSE
- *
- * Software distributed under the License is distributed on
- * an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either
- * express or implied.  See the License for the specific
- * language governing rights and limitations under the License.
- *
- * In addition,	this file contains code	from Sun RPC which is
- * subject to the below terms:
- *
- * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2010, Oracle America, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -22,7 +9,7 @@
  * - Redistributions in binary form must reproduce the above copyright notice,
  *   this list of conditions and the following disclaimer in the documentation
  *   and/or other materials provided with the distribution.
- * - Neither the name of Sun Microsystems, Inc. nor the names of its
+ * - Neither the name of the "Oracle America, Inc." nor the names of its
  *   contributors may be used to endorse or promote products derived
  *   from this software without specific prior written permission.
  *
@@ -38,15 +25,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-/*
- * Copyright (c) 1986-1991 by Sun Microsystems Inc. 
- */
 
 /*
  * rpcb_clnt.c
  * interface to rpcbind rpc service.
- *
- * Copyright (C) 1988, Sun Microsystems, Inc.
  */
 #include <pthread.h>
 #include <reentrant.h>
