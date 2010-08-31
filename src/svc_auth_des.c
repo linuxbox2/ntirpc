@@ -60,7 +60,9 @@
 #include <rpc/svc.h>
 #include <rpc/rpc_msg.h>
 #include <rpc/svc_auth.h>
+#if defined(__FreeBSD__) || defined(__NetBSD__)
 #include <libc_private.h>
+#endif
 
 extern int key_decryptsession_pk(const char *, netobj *, des_block *);
 
