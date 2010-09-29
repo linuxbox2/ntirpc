@@ -46,6 +46,7 @@
 
 #include <rpc/types.h>
 #include <rpc/xdr.h>
+#include <rpc/rpc.h>
 #include "libc_private.h"
 
 /*
@@ -75,7 +76,7 @@ xdr_reference(xdrs, pp, size, proc)
 		case XDR_DECODE:
 			*pp = loc = (caddr_t) mem_alloc(size);
 			if (loc == NULL) {
-				warnx("xdr_reference: out of memory");
+				__warnx("xdr_reference: out of memory");
 				return (FALSE);
 			}
 			memset(loc, 0, size);

@@ -1,6 +1,3 @@
-/*	$NetBSD: rpc_com.h,v 1.3 2000/12/10 04:10:08 christos Exp $	*/
-/*	$FreeBSD: src/include/rpc/rpc_com.h,v 1.6 2003/01/16 07:13:51 mbr Exp $ */
-
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
  * All rights reserved.
@@ -33,50 +30,36 @@
  */
 
 /*
- * rpc_com.h, Common definitions for both the server and client side.
- * All for the topmost layer of rpc
- *
+ * clnt_internal.h  Internal client structures needed by some async
+ * svc routines
  */
 
-#ifndef _RPC_RPCCOM_H
-#define	_RPC_RPCCOM_H
+#ifndef _CLNT_INTERNAL_H
+#define	_CLNT_INTERNAL_H
 
-#include <sys/cdefs.h>
+struct ct_wait_entry {
+    mutex_t mtx;
+    cond_t  cv;
+};
 
-/* #pragma ident	"@(#)rpc_com.h	1.11	93/07/05 SMI" */
+#define MCALL_MSG_SIZE 24
 
-/*
- * The max size of the transport, if the size cannot be determined
- * by other means.
- */
-#define	RPC_MAXDATASIZE 9000
-#define	RPC_MAXADDRSIZE 1024
+struct ct_data {
+	int		ct_fd;		/* connection's fd */
+	bool_t		ct_closeit;	/* close it on destroy */
+	struct timeval	ct_wait;	/* wait interval in milliseconds */
+	bool_t          ct_waitset;	/* wait set by clnt_control? */
+	struct netbuf	ct_addr;	/* remote addr */
+	struct rpc_err	ct_error;
+	union {
+		char	ct_mcallc[MCALL_MSG_SIZE];	/* marshalled callmsg */
+		u_int32_t ct_mcalli;
+	} ct_u;
+	u_int		ct_mpos;	/* pos after marshal */
+	XDR		ct_xdrs;	/* XDR stream */
+	uint32_t	ct_xid;
+	struct rpc_msg	ct_reply;       /* async reply */
+	struct ct_wait_entry ct_sync;   /* wait for completion */
+};
 
-#define __RPC_GETXID(now) ((u_int32_t)getpid() ^ (u_int32_t)(now)->tv_sec ^ \
-    (u_int32_t)(now)->tv_usec)
-
-__BEGIN_DECLS
-extern u_int __rpc_get_a_size(int);
-extern int __rpc_dtbsize(void);
-extern int _rpc_dtablesize(void);
-extern struct netconfig * __rpcgettp(int);
-extern  int  __rpc_get_default_domain(char **);
-char *__rpc_taddr2uaddr_af(int, const struct netbuf *);
-struct netbuf *__rpc_uaddr2taddr_af(int, const char *);
-int __rpc_fixup_addr(struct netbuf *, const struct netbuf *);
-int __rpc_sockinfo2netid(struct __rpc_sockinfo *, const char **);
-int __rpc_seman2socktype(int);
-int __rpc_socktype2seman(int);
-void *rpc_nullproc(CLIENT *);
-int __rpc_sockisbound(int);
-struct netbuf *__rpc_set_netbuf(struct netbuf *, const void *, size_t);
-
-struct netbuf *__rpcb_findaddr(rpcprog_t, rpcvers_t, const struct netconfig *,
-			       const char *, CLIENT **);
-bool_t rpc_control(int,void *);
-
-char *_get_next_token(char *, int);
-
-__END_DECLS
-
-#endif /* _RPC_RPCCOM_H */
+#endif /* _CLNT_INTERNAL_H */

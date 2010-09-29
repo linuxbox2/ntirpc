@@ -40,7 +40,6 @@
 #include <unistd.h>
 #include <sys/cdefs.h>
 #include <rpc/des_crypt.h>
-#include <syslog.h>
 #include <rpc/types.h>
 #include <rpc/auth.h>
 #include <rpc/auth_des.h>
@@ -126,9 +125,8 @@ authdes_seccreate(const char *servername, const u_int win,
 	AUTH    *dummy;
 
 	if (! getpublickey(servername, (char *) pkey_data)) {
-		syslog(LOG_ERR,
-		    "authdes_seccreate: no public key found for %s",
-		    servername);
+	    __warnx("authdes_seccreate: no public key found for %s",
+			servername);
 		return (NULL);
 	}
 
@@ -157,13 +155,13 @@ authdes_pk_seccreate(const char *servername, netobj *pkey, u_int window,
 	 */
 	auth = ALLOC(AUTH);
 	if (auth == NULL) {
-		syslog(LOG_ERR, "authdes_pk_seccreate: out of memory");
-		return (NULL);
+	    __warnx("authdes_pk_seccreate: out of memory");
+	    return (NULL);
 	}
 	ad = ALLOC(struct ad_private);
 	if (ad == NULL) {
-		syslog(LOG_ERR, "authdes_pk_seccreate: out of memory");
-		goto failed;
+	    __warnx("authdes_pk_seccreate: out of memory");
+	    goto failed;
 	}
 	ad->ad_fullname = ad->ad_servername = NULL; /* Sanity reasons */
 	ad->ad_timehost = NULL;
@@ -181,14 +179,14 @@ authdes_pk_seccreate(const char *servername, netobj *pkey, u_int window,
 	ad->ad_servername = (char *)mem_alloc(ad->ad_servernamelen + 1);
 
 	if (ad->ad_fullname == NULL || ad->ad_servername == NULL) {
-		syslog(LOG_ERR, "authdes_seccreate: out of memory");
+		__warnx("authdes_seccreate: out of memory");
 		goto failed;
 	}
 	if (timehost != NULL) {
 		ad->ad_timehost = (char *)mem_alloc(strlen(timehost) + 1);
 		if (ad->ad_timehost == NULL) {
-			syslog(LOG_ERR, "authdes_seccreate: out of memory");
-			goto failed;
+		    __warnx("authdes_seccreate: out of memory");
+		    goto failed;
 		}
 		memcpy(ad->ad_timehost, timehost, strlen(timehost) + 1);
 		ad->ad_dosync = TRUE;
@@ -203,9 +201,8 @@ authdes_pk_seccreate(const char *servername, netobj *pkey, u_int window,
 	ad->ad_window = window;
 	if (ckey == NULL) {
 		if (key_gendes(&auth->ah_key) < 0) {
-			syslog(LOG_ERR,
-	    "authdes_seccreate: keyserv(1m) is unable to generate session key");
-			goto failed;
+		    __warnx("authdes_seccreate: keyserv(1m) is unable to generate session key");
+		    goto failed;
 		}
 	} else {
 		auth->ah_key = *ckey;
@@ -308,7 +305,7 @@ authdes_marshal(AUTH *auth, XDR *xdrs)
 			DES_ENCRYPT | DES_HW);
 	}
 	if (DES_FAILED(status)) {
-		syslog(LOG_ERR, "authdes_marshal: DES encryption failure");
+		__warnx("authdes_marshal: DES encryption failure");
 		return (FALSE);
 	}
 	ad->ad_verf.adv_xtimestamp = cryptbuf[0];
@@ -381,7 +378,7 @@ authdes_validate(AUTH *auth, struct opaque_auth *rverf)
 		(u_int)sizeof (des_block), DES_DECRYPT | DES_HW);
 
 	if (DES_FAILED(status)) {
-		syslog(LOG_ERR, "authdes_validate: DES decryption failure");
+		__warnx("authdes_validate: DES decryption failure");
 		return (FALSE);
 	}
 
@@ -398,7 +395,7 @@ authdes_validate(AUTH *auth, struct opaque_auth *rverf)
 	 */
 	if (bcmp((char *)&ad->ad_timestamp, (char *)&verf.adv_timestamp,
 		 sizeof(struct timeval)) != 0) {
-		syslog(LOG_DEBUG, "authdes_validate: verifier mismatch");
+		__warnx("authdes_validate: verifier mismatch");
 		return (FALSE);
 	}
 
@@ -432,17 +429,15 @@ authdes_refresh(AUTH *auth, void *dummy)
 			 * Hope the clocks are synced!
 			 */
 			ad->ad_dosync = 0;
-			syslog(LOG_DEBUG,
-			    "authdes_refresh: unable to synchronize clock");
+			__warnx("authdes_refresh: unable to synchronize clock");
 		 }
 	}
 	ad->ad_xkey = auth->ah_key;
 	pkey.n_bytes = (char *)(ad->ad_pkey);
 	pkey.n_len = (u_int)strlen((char *)ad->ad_pkey) + 1;
 	if (key_encryptsession_pk(ad->ad_servername, &pkey, &ad->ad_xkey) < 0) {
-		syslog(LOG_INFO,
-		    "authdes_refresh: keyserv(1m) is unable to encrypt session key");
-		return (FALSE);
+	    __warnx("authdes_refresh: keyserv(1m) is unable to encrypt session key");
+	    return (FALSE);
 	}
 	cred->adc_fullname.key = ad->ad_xkey;
 	cred->adc_namekind = ADN_FULLNAME;

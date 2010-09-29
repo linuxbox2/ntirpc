@@ -51,11 +51,62 @@
 #include <stdio.h>
 #include <netdb.h>
 #include <netconfig.h>
+#include <err.h>
 #include <stdlib.h>
 #include <string.h>
-#include <syslog.h>
 #include <rpc/nettype.h>
+
 #include "rpc_com.h"
+    
+tirpc_pkg_params __pkg_params = {
+    TIRPC_FLAGS_NONE,
+    TIRPC_DEBUG_FLAGS_NONE,
+    __mem_alloc,
+    __mem_free,
+    warnx
+};
+
+bool_t
+tirpc_control(rq, in)
+	const u_int rq;
+	void *in;
+{
+	switch (rq) {
+	case TIRPC_GET_MALLOC:
+		*(mem_alloc_t *)in = __pkg_params.mem_alloc;
+		break;
+	case TIRPC_SET_MALLOC:
+		__pkg_params.mem_alloc = *(mem_alloc_t)in;
+		break;
+	case TIRPC_GET_FREE:
+		*(mem_free_t *)in = __pkg_params.mem_free;
+		break;
+	case TIRPC_SET_FREE:
+		__pkg_params.mem_free = *(mem_free_t)in;
+		break;
+	case TIRPC_GET_FLAGS:
+	    *(u_int *)in = __pkg_params.flags;
+	    break;
+	case TIRPC_SET_FLAGS:
+	    __pkg_params.flags = *(int *)in;
+	    break;
+	case TIRPC_GET_DEBUG_FLAGS:
+	    *(u_int *)in = __pkg_params.debug_flags;
+	    break;
+	case TIRPC_SET_DEBUG_FLAGS:
+	    __pkg_params.debug_flags = *(int *)in;
+	    break;
+	case TIRPC_GET_WARNX:
+		*(warnx_t *)in = __pkg_params.warnx;
+		break;
+	case TIRPC_SET_WARNX:
+		__pkg_params.warnx = *(warnx_t)in;
+		break;
+	default:
+		return (FALSE);
+	}
+	return (TRUE);
+}
 
 struct handle {
 	NCONF_HANDLE *nhandle;
@@ -93,6 +144,21 @@ static const struct netid_af na_cvt[] = {
 #endif
 	{ "local", AF_LOCAL, 0 }
 };
+
+void *
+__mem_alloc(size)
+	size_t size;
+{
+    return (calloc(1, size));
+}
+
+void
+__mem_free(ptr, bsize)
+	void *ptr;
+	size_t bsize;
+{
+    free(ptr);
+}
 
 #if 0
 static char *strlocase(char *);
@@ -247,8 +313,8 @@ __rpc_getconfip(nettype)
 		void *confighandle;
 
 		if (!(confighandle = setnetconfig())) {
-			syslog (LOG_ERR, "rpc: failed to open " NETCONFIG);
-			return (NULL);
+		    __warnx ("rpc: failed to open %s", NETCONFIG);
+		    return (NULL);
 		}
 		while ((nconf = getnetconfig(confighandle)) != NULL) {
 			if (strcmp(nconf->nc_protofmly, NC_INET) == 0 ||
@@ -313,9 +379,9 @@ __rpc_setconf(nettype)
 	case _RPC_TCP:
 	case _RPC_UDP:
 		if (!(handle->nhandle = setnetconfig())) {
-		        syslog (LOG_ERR, "rpc: failed to open " NETCONFIG);
-			free(handle);
-			return (NULL);
+		    __warnx("rpc: failed to open %s", NETCONFIG);
+		    free(handle);
+		    return (NULL);
 		}
 		handle->nflag = FALSE;
 		break;

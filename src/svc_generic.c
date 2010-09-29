@@ -84,7 +84,7 @@ svc_create(dispatch, prognum, versnum, nettype)
 /* VARIABLES PROTECTED BY xprtlist_lock: xprtlist */
 
 	if ((handle = __rpc_setconf(nettype)) == NULL) {
-		warnx("svc_create: unknown protocol");
+		__warnx("svc_create: unknown protocol");
 		return (0);
 	}
 	while ((nconf = __rpc_getconf(handle)) != NULL) {
@@ -95,7 +95,7 @@ svc_create(dispatch, prognum, versnum, nettype)
 				(void) rpcb_unset(prognum, versnum, nconf);
 				if (svc_reg(l->xprt, prognum, versnum,
 					dispatch, nconf) == FALSE)
-					warnx(
+					__warnx(
 		"svc_create: could not register prog %u vers %u on %s",
 					(unsigned)prognum, (unsigned)versnum,
 					 nconf->nc_netid);
@@ -110,7 +110,7 @@ svc_create(dispatch, prognum, versnum, nettype)
 			if (xprt) {
 				l = (struct xlist *)malloc(sizeof (*l));
 				if (l == NULL) {
-					warnx("svc_create: no memory");
+					__warnx("svc_create: no memory");
 					mutex_unlock(&xprtlist_lock);
 					return (0);
 				}
@@ -145,7 +145,7 @@ svc_tp_create(dispatch, prognum, versnum, nconf)
 	SVCXPRT *xprt;
 
 	if (nconf == NULL) {
-		warnx(
+		__warnx(
 	"svc_tp_create: invalid netconfig structure for prog %u vers %u",
 				(unsigned)prognum, (unsigned)versnum);
 		return (NULL);
@@ -157,7 +157,7 @@ svc_tp_create(dispatch, prognum, versnum, nconf)
 	/*LINTED const castaway*/
 	(void) rpcb_unset(prognum, versnum, (struct netconfig *) nconf);
 	if (svc_reg(xprt, prognum, versnum, dispatch, nconf) == FALSE) {
-		warnx(
+		__warnx(
 		"svc_tp_create: Could not register prog %u vers %u on %s",
 				(unsigned)prognum, (unsigned)versnum,
 				nconf->nc_netid);
@@ -192,12 +192,12 @@ svc_tli_create(fd, nconf, bindaddr, sendsz, recvsz)
 
 	if (fd == RPC_ANYFD) {
 		if (nconf == NULL) {
-			warnx("svc_tli_create: invalid netconfig");
+			__warnx("svc_tli_create: invalid netconfig");
 			return (NULL);
 		}
 		fd = __rpc_nconf2fd(nconf);
 		if (fd == -1) {
-			warnx(
+			__warnx(
 			    "svc_tli_create: could not open connection for %s",
 					nconf->nc_netid);
 			return (NULL);
@@ -209,7 +209,7 @@ svc_tli_create(fd, nconf, bindaddr, sendsz, recvsz)
 		 * It is an open descriptor. Get the transport info.
 		 */
 		if (!__rpc_fd2sockinfo(fd, &si)) {
-			warnx(
+			__warnx(
 		"svc_tli_create: could not get transport information");
 			return (NULL);
 		}
@@ -225,7 +225,7 @@ svc_tli_create(fd, nconf, bindaddr, sendsz, recvsz)
 				ss.ss_family = si.si_af;
 				if (bind(fd, (struct sockaddr *)(void *)&ss,
 				    (socklen_t)si.si_alen) < 0) {
-					warnx(
+					__warnx(
 			"svc_tli_create: could not bind to anonymous port");
 					goto freedata;
 				}
@@ -235,7 +235,7 @@ svc_tli_create(fd, nconf, bindaddr, sendsz, recvsz)
 			if (bind(fd,
 			    (struct sockaddr *)bindaddr->addr.buf,
 			    (socklen_t)si.si_alen) < 0) {
-				warnx(
+				__warnx(
 		"svc_tli_create: could not bind to requested address");
 				goto freedata;
 			}
@@ -268,7 +268,7 @@ svc_tli_create(fd, nconf, bindaddr, sendsz, recvsz)
 			xprt = svc_dg_create(fd, sendsz, recvsz);
 			break;
 		default:
-			warnx("svc_tli_create: bad service type");
+			__warnx("svc_tli_create: bad service type");
 			goto freedata;
 	}
 

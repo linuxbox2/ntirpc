@@ -70,7 +70,8 @@
 struct rpc_err {
 	enum clnt_stat re_status;
 	union {
-		int RE_errno;		/* related system error */
+	    int RE_errno;		/* related system error */
+		uint32_t RE_flags;
 		enum auth_stat RE_why;	/* why the auth error occurred */
 		struct {
 			rpcvers_t low;	/* lowest version supported */
@@ -85,8 +86,11 @@ struct rpc_err {
 #define	re_why		ru.RE_why
 #define	re_vers		ru.RE_vers
 #define	re_lb		ru.RE_lb
+#define	re_flags       	ru.RE_flags
 };
 
+#define RPC_ERR_FLAGS_NONE             0x0000
+#define RPC_ERR_FLAGS_ASYNC_REPLYFAIL  0x0001
 
 /*
  * Client rpc handle.
@@ -100,6 +104,10 @@ typedef struct __rpc_client {
 		enum clnt_stat	(*cl_call)(struct __rpc_client *,
 				    rpcproc_t, xdrproc_t, void *, xdrproc_t,
 				        void *, struct timeval);
+
+		/* XXX return pointer to private XDRS */
+		void *(*cl_xdrs)(struct __rpc_client *);
+
 		/* abort a call */
 		void		(*cl_abort)(struct __rpc_client *);
 		/* get specific error code */
@@ -166,6 +174,23 @@ struct rpc_timers {
 #define	clnt_call(rh, proc, xargs, argsp, xres, resp, secs) \
 	((*(rh)->cl_ops->cl_call)(rh, proc, xargs, \
 		argsp, xres, resp, secs))
+
+/*
+ * enum clnt_stat
+ * CLNT_SEND(rh, proc, xargs, argsp)
+ * 	CLIENT *rh;
+ *	rpcproc_t proc;
+ *	xdrproc_t xargs;
+ *	void *argsp;
+ *
+ * This macro, and the cl_send operation signature, are that of clnt_call and
+ * cl_call with reply processing arguments stripped off.  The implementation has * been based on extrapolation from code in libtirpc, and not with reference
+ * to more recent Solaris or OpenSolaris files.
+ */
+#define	CLNT_SEND(rh, proc, xargs, argsp) \
+	((*(rh)->cl_ops->cl_send)(rh, proc, xargs, argsp))
+#define	clnt_send(rh, proc, xargs, argsp) \
+	((*(rh)->cl_ops->cl_call)(rh, proc, xargs, argsp))
 
 /*
  * void
@@ -371,11 +396,20 @@ extern CLIENT *clnt_tli_create(const int, const struct netconfig *,
  */
 
 /*
- * Low level clnt create routine for connectionful transports, e.g. tcp.
+ * Low level clnt create routines for connectionful transports, e.g. tcp.
  */
+
+#define CLNT_CREATE_FLAG_NONE           0x0000
+#define CLNT_CREATE_FLAG_CONNECT        0x0001
+#define CLNT_CREATE_FLAG_SVCXPRT        0x0002
+
 extern CLIENT *clnt_vc_create(const int, const struct netbuf *,
 			      const rpcprog_t, const rpcvers_t,
 			      u_int, u_int);
+
+extern CLIENT *clnt_vc_create2(const int, const struct netbuf *,
+			       const rpcprog_t, const rpcvers_t,
+			       u_int, u_int, u_int);
 /*
  * Added for compatibility to old rpc 4.0. Obsoleted by clnt_vc_create().
  */
@@ -440,7 +474,6 @@ __BEGIN_DECLS
 extern void clnt_perror(CLIENT *, const char *);	 	/* stderr */
 extern char *clnt_sperror(CLIENT *, const char *);		/* string */
 __END_DECLS
-
 
 /*
  * If a creation fails, the following allows the user to figure out why.

@@ -67,8 +67,6 @@
 #include <rpc/rpc.h>
 #include "rpc_com.h"
 
-#define MCALL_MSG_SIZE 24
-
 #define CMGROUP_MAX    16
 #define SCM_CREDS      0x03            /* process creds (struct cmsgcred) */
 
@@ -99,26 +97,13 @@ static void clnt_vc_geterr(CLIENT *, struct rpc_err *);
 static bool_t clnt_vc_freeres(CLIENT *, xdrproc_t, void *);
 static void clnt_vc_abort(CLIENT *);
 static bool_t clnt_vc_control(CLIENT *, u_int, void *);
-static void clnt_vc_destroy(CLIENT *);
+void clnt_vc_destroy(CLIENT *);
 static struct clnt_ops *clnt_vc_ops(void);
 static bool_t time_not_ok(struct timeval *);
 static int read_vc(void *, void *, int);
 static int write_vc(void *, void *, int);
 
-struct ct_data {
-	int		ct_fd;		/* connection's fd */
-	bool_t		ct_closeit;	/* close it on destroy */
-	struct timeval	ct_wait;	/* wait interval in milliseconds */
-	bool_t          ct_waitset;	/* wait set by clnt_control? */
-	struct netbuf	ct_addr;	/* remote addr */
-	struct rpc_err	ct_error;
-	union {
-		char	ct_mcallc[MCALL_MSG_SIZE];	/* marshalled callmsg */
-		u_int32_t ct_mcalli;
-	} ct_u;
-	u_int		ct_mpos;	/* pos after marshal */
-	XDR		ct_xdrs;	/* XDR stream */
-};
+#include "clnt_internal.h"
 
 /*
  *      This machinery implements per-fd locks for MT-safety.  It is not
@@ -168,8 +153,22 @@ clnt_vc_create(fd, raddr, prog, vers, sendsz, recvsz)
 	u_int sendsz;			/* buffer recv size */
 	u_int recvsz;			/* buffer send size */
 {
+    return (clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz,
+			    CLNT_CREATE_FLAG_CONNECT));
+}
+
+CLIENT *
+clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
+	int fd;				/* open file descriptor */
+	const struct netbuf *raddr;	/* servers address */
+	const rpcprog_t prog;			/* program number */
+	const rpcvers_t vers;			/* version number */
+	u_int sendsz;			/* buffer recv size */
+	u_int recvsz;			/* buffer send size */
+	u_int flags;
+{
 	CLIENT *cl;			/* client handle */
-	struct ct_data *ct = NULL;	/* client handle */
+	struct ct_data *ct = NULL;
 	struct timeval now;
 	struct rpc_msg call_msg;
 	static u_int32_t disrupt;
@@ -229,23 +228,26 @@ clnt_vc_create(fd, raddr, prog, vers, sendsz, recvsz)
 	/*
 	 * XXX - fvdl connecting while holding a mutex?
 	 */
-	slen = sizeof ss;
-	if (getpeername(fd, (struct sockaddr *)&ss, &slen) < 0) {
+	if (flags & CLNT_CREATE_FLAG_CONNECT) {
+	    slen = sizeof ss;
+	    if (getpeername(fd, (struct sockaddr *)&ss, &slen) < 0) {
 		if (errno != ENOTCONN) {
-			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-			rpc_createerr.cf_error.re_errno = errno;
-			mutex_unlock(&clnt_fd_lock);
-			thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
-			goto err;
+		    rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+		    rpc_createerr.cf_error.re_errno = errno;
+		    mutex_unlock(&clnt_fd_lock);
+		    thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
+		    goto err;
 		}
 		if (connect(fd, (struct sockaddr *)raddr->buf, raddr->len) < 0){
-			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-			rpc_createerr.cf_error.re_errno = errno;
-			mutex_unlock(&clnt_fd_lock);
-			thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
-			goto err;
+		    rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+		    rpc_createerr.cf_error.re_errno = errno;
+		    mutex_unlock(&clnt_fd_lock);
+		    thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
+		    goto err;
 		}
-	}
+	    }
+	} /* FLAG_CONNECT */
+
 	mutex_unlock(&clnt_fd_lock);
 	if (!__rpc_fd2sockinfo(fd, &si))
 		goto err;
@@ -620,7 +622,7 @@ clnt_vc_control(cl, request, info)
 }
 
 
-static void
+void
 clnt_vc_destroy(cl)
 	CLIENT *cl;
 {
@@ -732,6 +734,14 @@ write_vc(ctp, buf, len)
 	return (len);
 }
 
+static void *
+clnt_vc_xdrs(cl)
+	CLIENT *cl;
+{
+	struct ct_data *ct = (struct ct_data *) cl->cl_private;
+	return ((void *) & ct->ct_xdrs);
+}
+
 static struct clnt_ops *
 clnt_vc_ops()
 {
@@ -746,6 +756,7 @@ clnt_vc_ops()
 	mutex_lock(&ops_lock);
 	if (ops.cl_call == NULL) {
 		ops.cl_call = clnt_vc_call;
+		ops.cl_xdrs = clnt_vc_xdrs;
 		ops.cl_abort = clnt_vc_abort;
 		ops.cl_geterr = clnt_vc_geterr;
 		ops.cl_freeres = clnt_vc_freeres;

@@ -274,7 +274,7 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 	
 	return (cl);
 err1:
-	warnx(mem_err_clnt_dg);
+	__warnx(mem_err_clnt_dg);
 	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 	rpc_createerr.cf_error.re_errno = errno;
 err2:

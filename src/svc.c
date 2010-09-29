@@ -42,6 +42,7 @@
 #include <sys/types.h>
 #include <sys/poll.h>
 #include <assert.h>
+#include <err.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,6 +60,8 @@
 #define version_keepquiet(xp) ((u_long)(xp)->xp_p3 & SVC_VERSQUIET)
 
 #define max(a, b) (a > b ? a : b)
+
+extern tirpc_pkg_params __pkg_params;
 
 /*
  * The services list
@@ -85,7 +88,57 @@ static struct svc_callout *svc_find (rpcprog_t, rpcvers_t,
 				     struct svc_callout **, char *);
 static void __xprt_do_unregister (SVCXPRT * xprt, bool_t dolock);
 
+/* Package init function.
+ * It is intended that applications which must make use of global state
+ * will call svc_init() before accessing such state and before executing
+ * any svc exported functions.   Traditional TI-RPC programs need not
+ * call the function as presently integrated. */
+void
+svc_init (flags)
+     u_int flags;
+{
+    FD_ZERO(&svc_fdset);
+
+    __pkg_params.warnx = warnx;
+
+    if (flags & SVC_INIT_XPORTS) {
+	if (__svc_xports == NULL) {
+	    __svc_xports = (SVCXPRT **) mem_alloc (FD_SETSIZE * sizeof (SVCXPRT *));
+	    if (__svc_xports == NULL) {
+		__warnx("xprt_register: __svc_xports allocation failure");
+		return;
+	    }
+	    memset (__svc_xports, 0, FD_SETSIZE * sizeof (SVCXPRT *));
+	} /* !__svc_xports */   
+    } /* SVC_INIT_XPORTS */
+
+    return;
+}
+
 /* ***************  SVCXPRT related stuff **************** */
+
+/*
+ * This is used to set xprt->xp_raddr in a way legacy
+ * apps can deal with
+ */
+void
+__xprt_set_raddr(SVCXPRT *xprt, const struct sockaddr_storage *ss)
+{
+	switch (ss->ss_family) {
+	case AF_INET6:
+		memcpy(&xprt->xp_raddr, ss, sizeof(struct sockaddr_in6));
+		xprt->xp_addrlen = sizeof (struct sockaddr_in6);
+		break;
+	case AF_INET:
+		memcpy(&xprt->xp_raddr, ss, sizeof(struct sockaddr_in));
+		xprt->xp_addrlen = sizeof (struct sockaddr_in);
+		break;
+	default:
+		xprt->xp_raddr.sin6_family = AF_UNSPEC;
+		xprt->xp_addrlen = sizeof (struct sockaddr);
+		break;
+	}
+}
 
 /*
  * Activate a transport handle.
@@ -104,9 +157,11 @@ xprt_register (xprt)
   if (__svc_xports == NULL)
     {
       __svc_xports = (SVCXPRT **) mem_alloc (FD_SETSIZE * sizeof (SVCXPRT *));
-      if (__svc_xports == NULL)
-	return;
-      memset (__svc_xports, '\0', FD_SETSIZE * sizeof (SVCXPRT *));
+      if (__svc_xports == NULL) {
+	  __warnx("xprt_register: __svc_xports allocation failure");
+	  return;
+      }
+      memset (__svc_xports, 0, FD_SETSIZE * sizeof (SVCXPRT *));
     }
   if (sock < FD_SETSIZE)
     {
@@ -302,7 +357,7 @@ svc_register (xprt, prog, vers, dispatch, protocol)
       NULL)
     {
       if (s->sc_dispatch == dispatch)
-	goto pmap_it;		/* he is registering another xptr */
+	goto pmap_it;		/* he is registering another xprt */
       return (FALSE);
     }
   s = mem_alloc (sizeof (struct svc_callout));
@@ -773,19 +828,34 @@ rpc_control (int what, void *arg)
 {
   int val;
 
-  switch (what)
-    {
-    case RPC_SVC_CONNMAXREC_SET:
+  switch (what) {
+  case RPC_SVC_FDSET_GET:
+      rwlock_rdlock(&svc_fd_lock);
+      *(fd_set *)arg = svc_fdset;
+      rwlock_unlock(&svc_fd_lock);
+      break;
+  case RPC_SVC_FDSET_SET:
+      rwlock_wrlock(&svc_fd_lock);
+      svc_fdset = *(fd_set *)arg;
+      rwlock_unlock(&svc_fd_lock);
+      break;
+  case RPC_SVC_XPRTS_GET:
+      *(SVCXPRT ***)arg = __svc_xports;
+      break;
+  case RPC_SVC_XPRTS_SET:
+      __svc_xports = (SVCXPRT **)arg;
+      break;
+  case RPC_SVC_CONNMAXREC_SET:
       val = *(int *) arg;
       if (val <= 0)
-	return FALSE;
+	  return FALSE;
       __svc_maxrec = val;
-      return TRUE;
-    case RPC_SVC_CONNMAXREC_GET:
-      *(int *) arg = __svc_maxrec;
-      return TRUE;
-    default:
       break;
-    }
-  return FALSE;
+  case RPC_SVC_CONNMAXREC_GET:
+      *(int *) arg = __svc_maxrec;
+      break;
+  default:
+      return (FALSE);
+  }
+  return (TRUE);
 }

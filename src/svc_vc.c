@@ -60,13 +60,13 @@
 #include <rpc/rpc.h>
 
 #include "rpc_com.h"
+#include "clnt_internal.h"
 
 #include <getpeereid.h>
 
 
 extern rwlock_t svc_fd_lock;
 
-static SVCXPRT *makefd_xprt(int, u_int, u_int);
 static bool_t rendezvous_request(SVCXPRT *, struct rpc_msg *);
 static enum xprt_stat rendezvous_stat(SVCXPRT *);
 static void svc_vc_destroy(SVCXPRT *);
@@ -83,46 +83,18 @@ static void svc_vc_ops(SVCXPRT *);
 static bool_t svc_vc_control(SVCXPRT *xprt, const u_int rq, void *in);
 static bool_t svc_vc_rendezvous_control (SVCXPRT *xprt, const u_int rq,
 				   	     void *in);
+void clnt_vc_destroy(CLIENT *);
 
-struct cf_rendezvous { /* kept in xprt->xp_p1 for rendezvouser */
-	u_int sendsize;
-	u_int recvsize;
-	int maxrec;
-};
-
-struct cf_conn {  /* kept in xprt->xp_p1 for actual connection */
-	enum xprt_stat strm_stat;
-	u_int32_t x_id;
-	XDR xdrs;
-	char verf_body[MAX_AUTH_BYTES];
-	u_int sendsize;
-	u_int recvsize;
-	int maxrec;
-	bool_t nonblock;
-	struct timeval last_recv_time;
-};
-
-/*
- * This is used to set xprt->xp_raddr in a way legacy
- * apps can deal with
- */
-void
-__xprt_set_raddr(SVCXPRT *xprt, const struct sockaddr_storage *ss)
+static void map_ipv4_to_ipv6(sin, sin6)
+struct sockaddr_in *sin;
+struct sockaddr_in6 *sin6;
 {
-	switch (ss->ss_family) {
-	case AF_INET6:
-		memcpy(&xprt->xp_raddr, ss, sizeof(struct sockaddr_in6));
-		xprt->xp_addrlen = sizeof (struct sockaddr_in6);
-		break;
-	case AF_INET:
-		memcpy(&xprt->xp_raddr, ss, sizeof(struct sockaddr_in));
-		xprt->xp_addrlen = sizeof (struct sockaddr_in);
-		break;
-	default:
-		xprt->xp_raddr.sin6_family = AF_UNSPEC;
-		xprt->xp_addrlen = sizeof (struct sockaddr);
-		break;
-	}
+  sin6->sin6_family = AF_INET6;
+  sin6->sin6_port = sin->sin_port;
+  sin6->sin6_addr.s6_addr32[0] = 0;
+  sin6->sin6_addr.s6_addr32[1] = 0;
+  sin6->sin6_addr.s6_addr32[2] = htonl(0xffff);
+  sin6->sin6_addr.s6_addr32[3] = *(uint32_t *) & sin->sin_addr;
 }
 
 /*
@@ -155,7 +127,7 @@ svc_vc_create(fd, sendsize, recvsize)
 
 	r = mem_alloc(sizeof(*r));
 	if (r == NULL) {
-		warnx("svc_vc_create: out of memory");
+		__warnx("svc_vc_create: out of memory");
 		goto cleanup_svc_vc_create;
 	}
 	if (!__rpc_fd2sockinfo(fd, &si))
@@ -165,9 +137,10 @@ svc_vc_create(fd, sendsize, recvsize)
 	r->maxrec = __svc_maxrec;
 	xprt = mem_alloc(sizeof(SVCXPRT));
 	if (xprt == NULL) {
-		warnx("svc_vc_create: out of memory");
+		__warnx("svc_vc_create: out of memory");
 		goto cleanup_svc_vc_create;
 	}
+	xprt->xp_flags = SVC_XPORT_FLAG_NONE;
 	xprt->xp_tp = NULL;
 	xprt->xp_p1 = r;
 	xprt->xp_p2 = NULL;
@@ -179,12 +152,12 @@ svc_vc_create(fd, sendsize, recvsize)
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&sslocal, &slen) < 0) {
-		warnx("svc_vc_create: could not retrieve local addr");
+		__warnx("svc_vc_create: could not retrieve local addr");
 		goto cleanup_svc_vc_create;
 	}
 
 	if (!__rpc_set_netbuf(&xprt->xp_ltaddr, &sslocal, sizeof(sslocal))) {
-		warnx("svc_vc_create: no mem for local addr");
+		__warnx("svc_vc_create: no mem for local addr");
 		goto cleanup_svc_vc_create;
 	}
 	xprt_register(xprt);
@@ -217,21 +190,21 @@ svc_fd_create(fd, sendsize, recvsize)
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		warnx("svc_fd_create: could not retrieve local addr");
+		__warnx("svc_fd_create: could not retrieve local addr");
 		goto freedata;
 	}
 	if (!__rpc_set_netbuf(&ret->xp_ltaddr, &ss, sizeof(ss))) {
-		warnx("svc_fd_create: no mem for local addr");
+		__warnx("svc_fd_create: no mem for local addr");
 		goto freedata;
 	}
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		warnx("svc_fd_create: could not retrieve remote addr");
+		__warnx("svc_fd_create: could not retrieve remote addr");
 		goto freedata;
 	}
 	if (!__rpc_set_netbuf(&ret->xp_rtaddr, &ss, sizeof(ss))) {
-		warnx("svc_fd_create: no mem for local addr");
+		__warnx("svc_fd_create: no mem for local addr");
 		goto freedata;
 	}
 
@@ -242,12 +215,100 @@ svc_fd_create(fd, sendsize, recvsize)
 
 freedata:
 	if (ret->xp_ltaddr.buf != NULL)
-		mem_free(ret->xp_ltaddr.buf, rep->xp_ltaddr.maxlen);
+		mem_free(ret->xp_ltaddr.buf, ret->xp_ltaddr.maxlen);
 
 	return NULL;
 }
 
-static SVCXPRT *
+/*
+ * Like sv_fd_create(), except export flags for additional control.  Add
+ * special handling for AF_INET and AFS_INET6.  Possibly not needed,
+ * because no longer called in Ganesha.
+ */
+SVCXPRT *
+svc_fd_create2(fd, sendsize, recvsize, flags)
+	int fd;
+	u_int sendsize;
+	u_int recvsize;
+	u_int flags;
+{
+	struct sockaddr_storage ss;
+	struct sockaddr_in6 sin6;
+	struct netbuf *addr;
+	socklen_t slen;
+	SVCXPRT *ret;
+	int af;
+
+	assert(fd != -1);
+
+	ret = makefd_xprt(fd, sendsize, recvsize);
+	if (ret == NULL)
+		return NULL;
+
+	slen = sizeof (struct sockaddr_storage);
+	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
+		__warnx("svc_fd_create: could not retrieve local addr");
+		goto freedata;
+	}
+	if (!__rpc_set_netbuf(&ret->xp_ltaddr, &ss, sizeof(ss))) {
+		__warnx("svc_fd_create: no mem for local addr");
+		goto freedata;
+	}
+
+	slen = sizeof (struct sockaddr_storage);
+	if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
+		__warnx("svc_fd_create: could not retrieve remote addr");
+		goto freedata;
+	}
+	af = ss.ss_family;
+
+	/* XXX Ganesha concepts, and apparently no longer used, check */
+	if (flags & SVC_VCCR_MAP6_V1) {
+	    if (af == AF_INET) {
+		map_ipv4_to_ipv6((struct sockaddr_in *)&ss, &sin6);
+		addr = __rpc_set_netbuf(&ret->xp_rtaddr, &ss, sizeof(ss));
+	    }
+	    else
+		addr = __rpc_set_netbuf(&ret->xp_rtaddr, &sin6, sizeof(ss));
+	} else
+	    addr = __rpc_set_netbuf(&ret->xp_rtaddr, &ss, sizeof(ss));
+	if (!addr) {
+		__warnx("svc_fd_create: no mem for local addr");
+		goto freedata;
+	}
+
+	/* XXX Ganesha concepts, check */
+	if (flags & SVC_VCCR_RADDR) {
+	    switch (af) {
+	    case AF_INET:
+		if (! (flags & SVC_VCCR_RADDR_INET))
+		    goto out;
+		break;
+	    case AF_INET6:
+		if (! (flags & SVC_VCCR_RADDR_INET6))
+		    goto out;
+		break;
+	    case AF_LOCAL:
+		if (! (flags & SVC_VCCR_RADDR_LOCAL))
+		    goto out;
+		break;
+	    default:
+		break;
+	    }
+	    /* Set xp_raddr for compatibility */
+	    __xprt_set_raddr(ret, &ss);
+	}
+out:
+	return ret;
+
+freedata:
+	if (ret->xp_ltaddr.buf != NULL)
+		mem_free(ret->xp_ltaddr.buf, ret->xp_ltaddr.maxlen);
+
+	return NULL;
+}
+
+SVCXPRT *
 makefd_xprt(fd, sendsize, recvsize)
 	int fd;
 	u_int sendsize;
@@ -261,20 +322,21 @@ makefd_xprt(fd, sendsize, recvsize)
 	assert(fd != -1);
 
         if (fd >= FD_SETSIZE) {
-                warnx("svc_vc: makefd_xprt: fd too high\n");
+                __warnx("svc_vc: makefd_xprt: fd too high\n");
                 xprt = NULL;
                 goto done;
         }
 
 	xprt = mem_alloc(sizeof(SVCXPRT));
 	if (xprt == NULL) {
-		warnx("svc_vc: makefd_xprt: out of memory");
+		__warnx("svc_vc: makefd_xprt: out of memory");
 		goto done;
 	}
 	memset(xprt, 0, sizeof *xprt);
+	rwlock_init(&xprt->lock, NULL);
 	cd = mem_alloc(sizeof(struct cf_conn));
 	if (cd == NULL) {
-		warnx("svc_tcp: makefd_xprt: out of memory");
+		__warnx("svc_tcp: makefd_xprt: out of memory");
 		mem_free(xprt, sizeof(SVCXPRT));
 		xprt = NULL;
 		goto done;
@@ -284,7 +346,10 @@ makefd_xprt(fd, sendsize, recvsize)
 	    xprt, read_vc, write_vc);
 	xprt->xp_p1 = cd;
 	xprt->xp_verf.oa_base = cd->verf_body;
-	svc_vc_ops(xprt);  /* truely deals with calls */
+	/* the SVCXPRT created in svc_vc_create accepts new connections
+	 * in its xp_recv op, the rendezvous_request method, but xprt is
+	 * a call channel */
+	svc_vc_ops(xprt);
 	xprt->xp_port = 0;  /* this is a connection, not a rendezvouser */
 	xprt->xp_fd = fd;
         if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
@@ -400,8 +465,12 @@ __svc_vc_dodestroy(xprt)
 
 	cd = (struct cf_conn *)xprt->xp_p1;
 
-	if (xprt->xp_fd != RPC_ANYFD)
-		(void)close(xprt->xp_fd);
+	/* Omit close in cases such as donation of the connection
+	 * to a client transport handle */
+	if ((xprt->xp_fd != RPC_ANYFD) &&
+	    (!(xprt->xp_flags & SVC_XPORT_FLAG_DONTCLOSE)))
+	    (void)close(xprt->xp_fd);
+
 	if (xprt->xp_port != 0) {
 		/* a rendezvouser socket */
 		r = (struct cf_rendezvous *)xprt->xp_p1;
@@ -412,14 +481,18 @@ __svc_vc_dodestroy(xprt)
 		XDR_DESTROY(&(cd->xdrs));
 		mem_free(cd, sizeof(struct cf_conn));
 	}
+
 	if (xprt->xp_rtaddr.buf)
 		mem_free(xprt->xp_rtaddr.buf, xprt->xp_rtaddr.maxlen);
 	if (xprt->xp_ltaddr.buf)
 		mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
+
 	if (xprt->xp_tp)
-		free(xprt->xp_tp);
+		free(xprt->xp_tp); /* XXX check why not mem_alloc/free */
+
 	if (xprt->xp_netid)
-		free(xprt->xp_netid);
+		free(xprt->xp_netid); /* XXX check why not mem_alloc/free */
+
 	mem_free(xprt, sizeof(SVCXPRT));
 }
 
@@ -430,7 +503,23 @@ svc_vc_control(xprt, rq, in)
 	const u_int rq;
 	void *in;
 {
-	return (FALSE);
+	switch (rq) {
+	case SVCGET_XP_FLAGS:
+	    *(u_int *)in = xprt->xp_flags;
+	    break;
+	case SVCSET_XP_FLAGS:
+	    xprt->xp_flags = *(u_int *)in;
+	    break;
+	case SVCGET_XP_RECV:
+	    *(xp_recv_t *)in = xprt->xp_ops->xp_recv;
+	    break;
+	case SVCSET_XP_RECV:
+	    xprt->xp_ops->xp_recv = *(xp_recv_t)in;
+	    break;
+	default:
+	    return (FALSE);
+	}
+	return (TRUE);
 }
 
 static bool_t
@@ -451,14 +540,20 @@ svc_vc_rendezvous_control(xprt, rq, in)
 		case SVCSET_CONNMAXREC:
 			cfp->maxrec = *(int *)in;
 			break;
-		default:
+		case SVCGET_XP_RECV:
+			*(xp_recv_t *)in = xprt->xp_ops->xp_recv;
+			break;
+		case SVCSET_XP_RECV:
+			xprt->xp_ops->xp_recv = *(xp_recv_t)in;
+			break;
+	default:
 			return (FALSE);
 	}
 	return (TRUE);
 }
 
 /*
- * reads data from the tcp or uip connection.
+ * reads data from the tcp or udp connection.
  * any error is fatal and the connection is closed.
  * (And a read of zero bytes is a half closed stream => error.)
  * All read operations timeout after 35 seconds.  A timeout is
@@ -472,7 +567,7 @@ read_vc(xprtp, buf, len)
 {
 	SVCXPRT *xprt;
 	int sock;
-	int milliseconds = 35 * 1000;
+	int milliseconds = 35 * 1000; /* XXX shouldn't this be configurable? */
 	struct pollfd pollfd;
 	struct cf_conn *cfp;
 
@@ -766,8 +861,8 @@ __svc_clean_idle(fd_set *fds, int timeout, bool_t cleanblock)
 	least_active = NULL;
 	rwlock_wrlock(&svc_fd_lock);
 	for (i = ncleaned = 0; i <= svc_maxfd; i++) {
-		if (FD_ISSET(i, fds)) {
-			xprt = __svc_xports[i];
+		xprt = __svc_xports[i];
+		if (FD_ISSET(i, fds)) {			
 			if (xprt == NULL || xprt->xp_ops == NULL ||
 			    xprt->xp_ops->xp_recv != svc_vc_recv)
 				continue;
@@ -787,8 +882,23 @@ __svc_clean_idle(fd_set *fds, int timeout, bool_t cleanblock)
 				__svc_vc_dodestroy(xprt);
 				ncleaned++;
 			}
-		}
-	}
+		} else {
+		    /* clean up xprts marked for gc;  if xprt->xp_fd was donated
+		     * to a clnt handle then it will be collected but xp_fd will
+		     * not be closed */
+		    if (xprt) {
+			if (xprt->xp_flags & SVC_XPORT_FLAG_CLEANIDLE) {
+			    cd = (struct cf_conn *)xprt->xp_p1;
+			    /* dont rely on timeout */
+			    if (tv.tv_sec - cd->last_recv_time.tv_sec > 120) {
+				__xprt_unregister_unlocked(xprt);
+				__svc_vc_dodestroy(xprt);
+				ncleaned++;
+			    } /* delay */
+			} /* marked */
+		    } /* xprt */
+		} /* ! FD_ISSET */
+	} /* loop */
 	if (timeout == 0 && least_active != NULL) {
 		__xprt_unregister_unlocked(least_active);
 		__svc_vc_dodestroy(least_active);
@@ -796,4 +906,132 @@ __svc_clean_idle(fd_set *fds, int timeout, bool_t cleanblock)
 	}
 	rwlock_unlock(&svc_fd_lock);
 	return ncleaned > 0 ? TRUE : FALSE;
+}
+
+/*
+ * Create an RPC client handle from an active service transport
+ * handle, i.e., to issue calls on the channel.
+ *
+ * If flags & SVC_VC_CLNT_CREATE_DEDICATED, the supplied xprt will be
+ * safely collected by the library some time in the future.
+ */
+CLIENT *
+svc_vc_clnt_create(xprt, prog, vers, flags)
+	SVCXPRT *xprt;
+	const rpcprog_t prog;
+	const rpcvers_t vers;
+	const uint32_t flags;
+{
+	CLIENT *cl;
+	struct cf_conn *cd;
+
+	rwlock_wrlock (&xprt->lock);
+
+	/* Once */
+	if (xprt->xp_p4) {
+	    cl = (CLIENT *) xprt->xp_p4;
+	    goto unlock;
+	}
+
+	/* Create a client transport handle.  The endpoint is already
+	 * connected. */
+	cd = (struct cf_conn *) xprt->xp_p1;
+	cl  = clnt_vc_create2(xprt->xp_fd,
+			      &xprt->xp_rtaddr,
+			      prog,
+			      vers,
+			      cd->recvsize,
+			      cd->sendsize,
+			      CLNT_CREATE_FLAG_SVCXPRT);
+	xprt->xp_p4 = cl;
+
+	/* Warn cleanup routines not to close xp_fd */
+	xprt->xp_flags |= SVC_XPORT_FLAG_DONTCLOSE;
+
+	/* xprt_unregister_lite:  Clear the connected file descriptor so REPLY
+	 * messages wont be dispatched, but for future GC dont clear
+	 * __svc_xprts[xp_fd] */
+	if (flags & SVC_VC_CLNT_CREATE_DEDICATED) {
+	    xprt->xp_flags |= SVC_XPORT_FLAG_CLEANIDLE;
+	    FD_CLR (xprt->xp_fd, &svc_fdset);
+	}
+
+unlock:
+	rwlock_unlock (&xprt->lock);
+
+	return (cl);
+}
+
+/*
+ * Create an RPC SVCXPRT handle from an active client transport
+ * handle, i.e., to service RPC requests.
+ *
+ * If flags & SVC_VC_CREATE_CL_FLAG_DEDICATED, then cl is also
+ * deallocated without closing cl->cl_private->ct_fd.
+ */
+SVCXPRT *
+svc_vc_create_cl(cl, sendsize, recvsize, flags)
+	CLIENT *cl;
+	const u_int sendsize;
+	const u_int recvsize;
+	const uint32_t flags;
+{
+
+    int fd, fflags;
+    socklen_t len;
+    struct cf_conn *cd;
+    struct ct_data *ct;
+    struct sockaddr_storage addr;
+    struct __rpc_sockinfo si;
+    SVCXPRT *xprt;
+
+    ct = (struct ct_data *) cl->cl_private;
+    fd = ct->ct_fd;
+
+    /*
+     * make a new transport
+     */
+
+    xprt = makefd_xprt(fd, sendsize, recvsize);
+
+    if (!__rpc_set_netbuf(&xprt->xp_rtaddr, &addr, len))
+		return (FALSE);
+
+    __xprt_set_raddr(xprt, &addr);
+    
+    if (__rpc_fd2sockinfo(fd, &si) && si.si_proto == IPPROTO_TCP) {
+	len = 1;
+	setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &len, sizeof (len));
+    }
+
+    cd = (struct cf_conn *) xprt->xp_p1;
+
+    cd->recvsize = recvsize;
+    cd->sendsize = sendsize;
+    cd->maxrec = __svc_maxrec;
+
+    if (cd->maxrec != 0) {
+	fflags = fcntl(fd, F_GETFL, 0);
+	if (fflags  == -1)
+	    return (FALSE);
+	if (fcntl(fd, F_SETFL, fflags | O_NONBLOCK) == -1)
+	    return (FALSE);
+	if (cd->recvsize > cd->maxrec)
+	    cd->recvsize = cd->maxrec;
+	cd->nonblock = TRUE;
+	__xdrrec_setnonblock(&cd->xdrs, cd->maxrec);
+    } else
+	cd->nonblock = FALSE;
+
+    gettimeofday(&cd->last_recv_time, NULL);
+
+    /* If creating a dedicated channel collect the supplied client
+     * without closing fd */
+    if (flags & SVC_VC_CREATE_CL_FLAG_DEDICATED) {
+	ct->ct_closeit = FALSE; /* must not close */
+	/* clean up immediately */
+	clnt_vc_destroy(cl);
+    }
+
+    return (xprt);
 }

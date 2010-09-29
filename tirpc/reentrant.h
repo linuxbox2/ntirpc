@@ -109,6 +109,7 @@
 #define cond_signal(m)		 pthread_cond_signal(m)
 #define cond_broadcast(m)	 pthread_cond_broadcast(m)
 #define cond_wait(c, m)		 pthread_cond_wait(c, m)
+#define cond_timedwait(c, m, a)	 pthread_cond_timedwait(c, m, a)
 
 #define rwlock_init(l, a)        pthread_rwlock_init(l, a)
 #define rwlock_rdlock(l)	 pthread_rwlock_rdlock(l)

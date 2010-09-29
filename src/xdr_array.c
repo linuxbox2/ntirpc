@@ -47,6 +47,7 @@
 
 #include <rpc/types.h>
 #include <rpc/xdr.h>
+#include <rpc/rpc.h>
 #include "un-namespace.h"
 
 /*
@@ -93,7 +94,7 @@ xdr_array(xdrs, addrp, sizep, maxsize, elsize, elproc)
 				return (TRUE);
 			*addrp = target = mem_alloc(nodesize);
 			if (target == NULL) {
-				warnx("xdr_array: out of memory");
+				__warnx("xdr_array: out of memory");
 				return (FALSE);
 			}
 			memset(target, 0, nodesize);

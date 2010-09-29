@@ -37,7 +37,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <netdb.h>
-#include <syslog.h>
+#include <err.h>
 #include <rpc/rpc.h>
 #include <rpc/nettype.h>
 #include <string.h>
@@ -425,9 +425,8 @@ __rpc_raise_fd(int fd)
 	}
 
 	if (close(fd) == -1) {
-		/* this is okay, we will syslog an error, then use the new fd */
-		(void) syslog(LOG_ERR,
-			"could not close() fd %d; mem & fd leak", fd);
+	    /* this is okay, we will log an error, then use the new fd */
+	    __warnx("could not close() fd %d; mem & fd leak", fd);
 	}
 
 	return (nfd);

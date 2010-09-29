@@ -45,6 +45,7 @@
 
 #include <rpc/types.h>
 #include <rpc/xdr.h>
+#include <rpc/rpc.h>
 
 typedef quad_t          longlong_t;     /* ANSI long long type */
 typedef u_quad_t        u_longlong_t;   /* ANSI unsigned long long type */
@@ -253,6 +254,36 @@ xdr_u_int32_t(xdrs, u_int32_p)
 	return (FALSE);
 }
 
+/*
+ * XDR unsigned 32-bit integers
+ * same as xdr_int32_t - open coded to save a proc call!
+ */
+bool_t
+xdr_uint32_t(xdrs, uint32_p)
+	XDR *xdrs;
+	u_int32_t *uint32_p;
+{
+	u_long l;
+
+	switch (xdrs->x_op) {
+
+	case XDR_ENCODE:
+		l = (u_long) *uint32_p;
+		return (XDR_PUTLONG(xdrs, (long *)&l));
+
+	case XDR_DECODE:
+		if (!XDR_GETLONG(xdrs, (long *)&l)) {
+			return (FALSE);
+		}
+		*uint32_p = (uint32_t) l;
+		return (TRUE);
+
+	case XDR_FREE:
+		return (TRUE);
+	}
+	/* NOTREACHED */
+	return (FALSE);
+}
 
 /*
  * XDR short integers
@@ -557,7 +588,7 @@ xdr_bytes(xdrs, cpp, sizep, maxsize)
 			*cpp = sp = mem_alloc(nodesize);
 		}
 		if (sp == NULL) {
-			warnx("xdr_bytes: out of memory");
+			__warnx("xdr_bytes: out of memory");
 			return (FALSE);
 		}
 		/* FALLTHROUGH */
@@ -699,7 +730,7 @@ xdr_string(xdrs, cpp, maxsize)
 		if (sp == NULL)
 			*cpp = sp = mem_alloc(nodesize);
 		if (sp == NULL) {
-			warnx("xdr_string: out of memory");
+			__warnx("xdr_string: out of memory");
 			return (FALSE);
 		}
 		sp[size] = 0;
@@ -802,6 +833,37 @@ xdr_u_int64_t(xdrs, ullp)
 	return (FALSE);
 }
 
+/*
+ * XDR unsigned 64-bit integers
+ */
+bool_t
+xdr_uint64_t(xdrs, ullp)
+	XDR *xdrs;
+	uint64_t *ullp;
+{
+	u_long ul[2];
+
+	switch (xdrs->x_op) {
+	case XDR_ENCODE:
+		ul[0] = (u_long)(*ullp >> 32) & 0xffffffff;
+		ul[1] = (u_long)(*ullp) & 0xffffffff;
+		if (XDR_PUTLONG(xdrs, (long *)&ul[0]) == FALSE)
+			return (FALSE);
+		return (XDR_PUTLONG(xdrs, (long *)&ul[1]));
+	case XDR_DECODE:
+		if (XDR_GETLONG(xdrs, (long *)&ul[0]) == FALSE)
+			return (FALSE);
+		if (XDR_GETLONG(xdrs, (long *)&ul[1]) == FALSE)
+			return (FALSE);
+		*ullp = (uint64_t)
+		    (((uint64_t)ul[0] << 32) | ((uint64_t)ul[1]));
+		return (TRUE);
+	case XDR_FREE:
+		return (TRUE);
+	}
+	/* NOTREACHED */
+	return (FALSE);
+}
 
 /*
  * XDR hypers

@@ -62,7 +62,7 @@ _des_crypt_call(buf, len, dparms)
 			break;
 	}
 	if (nconf == NULL) {
-		warnx("getnetconfig: %s", nc_sperror());
+		__warnx("getnetconfig: %s", nc_sperror());
 		return(DESERR_HWERROR);
 	}
 	clnt = clnt_tp_create(NULL, CRYPT_PROG, CRYPT_VERS, nconf);

@@ -27,7 +27,6 @@
 
 #include <sys/cdefs.h>
 #include <stdio.h>
-#include <syslog.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -37,6 +36,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <err.h>
 #include <rpc/rpc.h>
 #include <rpc/rpc_com.h>
 #include <rpc/rpcb_prot.h>
@@ -47,8 +47,7 @@
 
 
 #ifdef TESTING
-#define	msg(x)	printf("ERROR: %s\n", x)
-/* #define msg(x) syslog(LOG_ERR, "%s", x) */
+#define	msg(x)	__warnx("ERROR: %s\n", x)
 #else
 #define	msg(x)
 #endif

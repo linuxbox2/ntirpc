@@ -43,6 +43,7 @@
 #include <errno.h>
 #include <rpc/types.h>
 #include <rpc/xdr.h>
+#include <rpc/rpc.h>
 #include <rpc/auth.h>
 #include <rpc/auth_gss.h>
 #include <rpc/clnt.h>

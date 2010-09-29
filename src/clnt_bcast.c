@@ -460,7 +460,7 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 #ifdef RPC_DEBUG
 						perror("sendto");
 #endif
-						warnx("clnt_bcast: cannot send"
+						__warnx("clnt_bcast: cannot send"
 						      "broadcast packet");
 						stat = RPC_CANTSEND;
 						continue;
@@ -482,7 +482,7 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 					    outlen_pmap, 0, addr,
 					    (size_t)fdlist[i].asize) !=
 						outlen_pmap) {
-						warnx("clnt_bcast: "
+						__warnx("clnt_bcast: "
 						    "Cannot send broadcast packet");
 						stat = RPC_CANTSEND;
 						continue;
@@ -546,7 +546,7 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 			if (inlen < 0) {
 				if (errno == EINTR)
 					goto try_again;
-				warnx("clnt_bcast: Cannot receive reply to "
+				__warnx("clnt_bcast: Cannot receive reply to "
 					"broadcast");
 				stat = RPC_CANTRECV;
 				continue;

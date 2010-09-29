@@ -180,7 +180,6 @@ xdr_replymsg(xdrs, rmsg)
 	return (FALSE);
 }
 
-
 /*
  * Serializes the "static part" of a call message header.
  * The fields include: rm_xid, rm_direction, rpcvers, prog, and vers.

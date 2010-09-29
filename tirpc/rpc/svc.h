@@ -41,6 +41,7 @@
 #ifndef _TIRPC_SVC_H
 #define _TIRPC_SVC_H
 #include <sys/cdefs.h>
+#include "reentrant.h"
 
 /*
  * This interface must manage two items concerning remote procedure calling:
@@ -64,6 +65,10 @@
  * parameters, struct svc_req * and SVCXPRT *, defined below.
  */
 
+/* Package init flags */
+#define SVC_INIT_DEFAULT        0x0000
+#define SVC_INIT_XPORTS         0x0001
+
 /*
  *      Service control requests
  */
@@ -71,17 +76,63 @@
 #define SVCSET_VERSQUIET	2
 #define SVCGET_CONNMAXREC	3
 #define SVCSET_CONNMAXREC	4
+#define SVCGET_XP_RECV		5
+#define SVCSET_XP_RECV		6
+#define SVCGET_XP_FLAGS		7
+#define SVCSET_XP_FLAGS		8
 
 /*
  * Operations for rpc_control().
  */
 #define RPC_SVC_CONNMAXREC_SET  0	/* set max rec size, enable nonblock */
 #define RPC_SVC_CONNMAXREC_GET  1
+#define RPC_SVC_XPRTS_GET       2
+#define RPC_SVC_XPRTS_SET       3
+#define RPC_SVC_FDSET_GET       4
+#define RPC_SVC_FDSET_SET       5
+
+/*
+ * Flags for svc_fd_create2
+ */
+
+#define SVC_VCCR_NONE             0x0000
+#define SVC_VCCR_RADDR            0x0001
+#define SVC_VCCR_RADDR_INET       0x0002
+#define SVC_VCCR_RADDR_INET6      0x0004
+#define SVC_VCCR_RADDR_LOCAL      0x0008
+#define SVC_VCCR_MAP6_V1          0x0010
+
+/*
+ * SVCXPRT xp_flags
+ */
+
+#define SVC_XPORT_FLAG_NONE       0x0000
+#define SVC_XPORT_FLAG_SETNEWFDS  0x0001
+#define SVC_XPORT_FLAG_DONTCLOSE  0x0002
+#define SVC_XPORT_FLAG_CLEANIDLE  0x0004
 
 enum xprt_stat {
 	XPRT_DIED,
 	XPRT_MOREREQS,
 	XPRT_IDLE
+};
+
+struct cf_rendezvous { /* kept in xprt->xp_p1 for rendezvouser */
+	u_int sendsize;
+	u_int recvsize;
+	int maxrec;
+};
+
+struct cf_conn {  /* kept in xprt->xp_p1 for actual connection */
+	enum xprt_stat strm_stat;
+	u_int32_t x_id;
+	XDR xdrs;
+	char verf_body[MAX_AUTH_BYTES];
+	u_int sendsize;
+	u_int recvsize;
+	int maxrec;
+	bool_t nonblock;
+	struct timeval last_recv_time;
 };
 
 /*
@@ -90,7 +141,7 @@ enum xprt_stat {
 typedef struct __rpc_svcxprt {
 	int		xp_fd;
 	u_short		xp_port;	 /* associated port number */
-	const struct xp_ops {
+	struct xp_ops {
 	    /* receive incoming requests */
 	    bool_t	(*xp_recv)(struct __rpc_svcxprt *, struct rpc_msg *);
 	    /* get transport status */
@@ -109,7 +160,7 @@ typedef struct __rpc_svcxprt {
 	int		xp_addrlen;	 /* length of remote address */
 	struct sockaddr_in6 xp_raddr;	 /* remote addr. (backward ABI compat) */
 	/* XXX - fvdl stick this here for ABI backward compat reasons */
-	const struct xp_ops2 {
+	struct xp_ops2 {
 		/* catch-all function */
 		bool_t  (*xp_control)(struct __rpc_svcxprt *, const u_int,
 				void *);
@@ -123,8 +174,15 @@ typedef struct __rpc_svcxprt {
 	void		*xp_p1;		 /* private: for use by svc ops */
 	void		*xp_p2;		 /* private: for use by svc ops */
 	void		*xp_p3;		 /* private: for use by svc lib */
+	void		*xp_p4;		 /* private: for use by svc lib */
 	int		xp_type;	 /* transport type */
+	u_int		xp_flags;	 /* flags */
+	rwlock_t lock;                   /* xprt lock */
 } SVCXPRT;
+
+/* functions which can be installed using a control function, e.g., 
+ * xp_ops2->xp_control */
+typedef bool_t (*xp_recv_t)(struct __rpc_svcxprt *, struct rpc_msg *);
 
 /*
  * Service request
@@ -190,6 +248,16 @@ struct svc_req {
 	(*(xprt)->xp_ops2->xp_control)((xprt), (rq), (in))
 
 /*
+ * Service init (optional).
+ */
+
+__BEGIN_DECLS
+void
+svc_init (u_int flags);
+__END_DECLS
+
+
+/*
  * Service registration
  *
  * svc_reg(xprt, prog, vers, dispatch, nconf)
@@ -238,6 +306,29 @@ __BEGIN_DECLS
 extern void	xprt_unregister(SVCXPRT *);
 __END_DECLS
 
+/*
+ * Create transport from file descriptor
+ *
+ * makefd_xprt(fd, sendsize, recvsize)
+ *	int fd;
+ *	u_int sendsize;
+ *	u_int recvsize;
+ */
+__BEGIN_DECLS
+SVCXPRT *makefd_xprt(int, u_int, u_int);
+__END_DECLS
+
+/*
+ * This is used to set xprt->xp_raddr in a way legacy
+ * apps can deal with
+ *
+ * __xprt_set_raddr(xprt, ss)
+ *	SVCXPRT *xprt;
+ *      const struct sockaddr_storage *ss;
+ */
+__BEGIN_DECLS
+extern void __xprt_set_raddr(SVCXPRT *, const struct sockaddr_storage *);
+__END_DECLS
 
 /*
  * When the service routine is called, it must first check to see if it
@@ -386,6 +477,44 @@ extern SVCXPRT *svc_vc_create(const int, const u_int, const u_int);
  *      const u_int recvsize;                   -- max recv size
  */
 
+__END_DECLS
+
+#define SVC_VC_CLNT_CREATE_NONE           0x0000
+#define SVC_VC_CLNT_CREATE_DEDICATED      0x0001
+
+__BEGIN_DECLS
+
+/*
+ * Create a client handle from an active service transport handle.
+ */
+extern CLIENT *svc_vc_clnt_create(SVCXPRT *, const rpcprog_t, const rpcvers_t,
+				  const uint32_t);
+/*
+ *      SVCXPRT *xprt;                          -- active service xprt
+ *      const rpcprog_t prog;                   -- RPC program number
+ *      const rpcvers_t vers;                   -- RPC program version
+ */
+
+__END_DECLS
+
+#define SVC_VC_CREATE_CL_FLAG_NONE        0x0000
+#define SVC_VC_CREATE_CL_FLAG_DEDICATED   0x0001
+
+__BEGIN_DECLS
+
+/*
+ * Create an RPC SVCXPRT handle from an active client transport
+ * handle, i.e., to service RPC requests 
+ */
+extern SVCXPRT *svc_vc_create_cl(CLIENT *, u_int, u_int, const uint32_t);
+        /*
+	 * 
+         * CLIENT *cl;                                  -- connected client
+         * const u_int sendsize;                        -- max send size
+         * const u_int recvsize;                        -- max recv size
+         * const uint32_t flags;                        -- flags
+         */
+
 /*
  * Added for compatibility to old rpc 4.0. Obsoleted by svc_vc_create().
  */
@@ -419,6 +548,17 @@ extern SVCXPRT *svcunixfd_create(int, u_int, u_int);
  * Memory based rpc (for speed check and testing)
  */
 extern SVCXPRT *svc_raw_create(void);
+
+/*
+ * Search for an entry in the reply cache
+ */
+int svc_dg_cache_get(SVCXPRT *, struct rpc_msg *, char **, size_t *);
+
+/*
+ * Set an entry in the reply cache
+ */
+
+void svc_dg_cache_set(SVCXPRT *, size_t);
 
 /*
  * svc_dg_enable_cache() enables the cache on dg transports.

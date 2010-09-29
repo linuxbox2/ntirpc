@@ -93,6 +93,11 @@ struct netbuf *uaddr2taddr(const struct netconfig *, const char *);
 
 struct sockaddr;
 extern int bindresvport_sa(int, struct sockaddr *);
+
+extern bool_t tirpc_control(const u_int, void *);
+extern void *__mem_alloc(size_t);
+extern void __mem_free(void *, size_t);
+
 __END_DECLS
 
 /*

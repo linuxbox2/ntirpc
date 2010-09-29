@@ -58,6 +58,7 @@
 
 #include <rpc/types.h>
 #include <rpc/xdr.h>
+#include <rpc/rpc.h>
 #include <rpc/auth.h>
 #include <rpc/svc_auth.h>
 #include <rpc/svc.h>
@@ -167,7 +168,7 @@ xdrrec_create(xdrs, sendsize, recvsize, tcp_handle, readit, writeit)
 	RECSTREAM *rstrm = mem_alloc(sizeof(RECSTREAM));
 
 	if (rstrm == NULL) {
-		warnx("xdrrec_create: out of memory");
+		__warnx("xdrrec_create: out of memory");
 		/* 
 		 *  This is bad.  Should rework xdrrec_create to 
 		 *  return a handle, and in this case return NULL
@@ -177,14 +178,14 @@ xdrrec_create(xdrs, sendsize, recvsize, tcp_handle, readit, writeit)
 	rstrm->sendsize = sendsize = fix_buf_size(sendsize);
 	rstrm->out_base = mem_alloc(rstrm->sendsize);
 	if (rstrm->out_base == NULL) {
-		warnx("xdrrec_create: out of memory");
+		__warnx("xdrrec_create: out of memory");
 		mem_free(rstrm, sizeof(RECSTREAM));
 		return;
 	}
 	rstrm->recvsize = recvsize = fix_buf_size(recvsize);
 	rstrm->in_base = mem_alloc(recvsize);
 	if (rstrm->in_base == NULL) {
-		warnx("xdrrec_create: out of memory");
+		__warnx("xdrrec_create: out of memory");
 		mem_free(rstrm->out_base, sendsize);
 		mem_free(rstrm, sizeof(RECSTREAM));
 		return;
