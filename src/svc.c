@@ -843,7 +843,7 @@ rpc_control (int what, void *arg)
       *(SVCXPRT ***)arg = __svc_xports;
       break;
   case RPC_SVC_XPRTS_SET:
-      __svc_xports = (SVCXPRT **)arg;
+      __svc_xports = *(SVCXPRT ***)arg;
       break;
   case RPC_SVC_CONNMAXREC_SET:
       val = *(int *) arg;
