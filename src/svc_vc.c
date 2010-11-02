@@ -1035,3 +1035,70 @@ svc_vc_create_cl(cl, sendsize, recvsize, flags)
 
     return (xprt);
 }
+
+/*
+ * Destroy a transport handle.  Do not alter connected transport state.
+ */
+void svc_vc_destroy_xprt(SVCXPRT * xprt)
+{
+    struct cf_conn *cd = NULL;
+
+    if(xprt == NULL)
+	return;
+
+    cd = (struct cf_conn *) xprt->xp_p1;
+    if(cd == NULL)
+	return;
+    
+    XDR_DESTROY(&(cd->xdrs));
+    mem_free(cd, sizeof(struct cf_conn));
+    mem_free(xprt, sizeof(SVCXPRT));
+}
+
+/*
+ * Construct a service transport, unassociated with any transport
+ * connection.
+ */
+SVCXPRT *svc_vc_create_xprt(u_long sendsz, u_long recvsz)
+{
+    SVCXPRT *xprt;
+    struct cf_conn *cd;
+
+    xprt = (SVCXPRT *) mem_alloc(sizeof(SVCXPRT));
+    if(xprt == NULL) {
+	goto done;
+    }
+
+    cd = (struct cf_conn *) mem_alloc(sizeof(struct cf_conn));
+    if(cd == NULL) {
+	mem_free(xprt, sizeof(SVCXPRT));
+	xprt = NULL;
+	goto done;
+    }
+
+    cd->strm_stat = XPRT_IDLE;
+    xdrrec_create(&(cd->xdrs), sendsz, recvsz, xprt, read_vc, write_vc);
+    
+    xprt->xp_p1 = cd;
+    xprt->xp_verf.oa_base = cd->verf_body;
+
+done:
+    return (xprt);
+ }
+
+/*
+ * Duplicate xprt from original to copy.
+ */
+void svc_vc_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig)
+{
+    struct cf_conn *cd_copy = (struct cf_conn *)(xprt_copy->xp_p1);
+    struct cf_conn *cd_orig = (struct cf_conn *)(xprt_orig->xp_p1);
+
+    memcpy(xprt_copy, xprt_orig, sizeof(SVCXPRT));
+    xprt_copy->xp_p1 = cd_copy;
+    xprt_copy->xp_verf.oa_base = cd_copy->verf_body;
+
+    cd_copy->strm_stat = cd_orig->strm_stat;
+    cd_copy->x_id = cd_orig->x_id;
+    memcpy(cd_copy->verf_body, cd_orig->verf_body, MAX_AUTH_BYTES);
+}
