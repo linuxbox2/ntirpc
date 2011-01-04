@@ -186,27 +186,64 @@ authunix_create_default()
 	int len;
 	char machname[MAXHOSTNAMELEN + 1];
 	uid_t uid;
-	gid_t gid;
-	gid_t gids[NGRPS];
+	gid_t gid, *gids;
+	AUTH *result;
 
 	memset(&rpc_createerr, 0, sizeof(rpc_createerr));
 
 	if (gethostname(machname, sizeof machname) == -1) {
-		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 		rpc_createerr.cf_error.re_errno = errno;
-		return NULL;
+		goto out_err;
 	}
 	machname[sizeof(machname) - 1] = 0;
 	uid = geteuid();
 	gid = getegid();
-	len = getgroups(NGRPS, gids);
-	if (len < 0) {
-		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+
+	/* According to glibc comments, an intervening setgroups(2)
+	 * call can increase the number of supplemental groups between
+	 * these two getgroups(2) calls. */
+retry:
+	len = getgroups(0, NULL);
+	if (len == -1) {
 		rpc_createerr.cf_error.re_errno = errno;
-		return NULL;
+		goto out_err;
 	}
+
+	/* Bump allocation size.  A zero allocation size may result in a
+	 * NULL calloc(3) result, which is not reliably distinguishable
+	 * from a memory allocation error. */
+	gids = calloc(len + 1, sizeof(gid_t));
+	if (gids == NULL) {
+		rpc_createerr.cf_error.re_errno = ENOMEM;
+		goto out_err;
+	}
+
+	len = getgroups(len, gids);
+	if (len == -1) {
+		rpc_createerr.cf_error.re_errno = errno;
+		free(gids);
+		if (rpc_createerr.cf_error.re_errno == EINVAL) {
+			rpc_createerr.cf_error.re_errno = 0;
+			goto retry;
+		}
+		goto out_err;
+	}
+
+	/*
+	 * AUTH_UNIX sends on the wire only the first NGRPS groups in the
+	 * supplemental groups list.
+	 */
+	if (len > NGRPS)
+		len = NGRPS;
+
 	/* XXX: interface problem; those should all have been unsigned */
-	return (authunix_create(machname, uid, gid, len, gids));
+	result = authunix_create(machname, uid, gid, len, gids);
+	free(gids);
+	return result;
+
+out_err:
+	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+	return NULL;
 }
 
 /*
