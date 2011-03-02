@@ -45,6 +45,9 @@ struct svc_dg_data {
 	XDR		su_xdrs;			/* XDR handle */
 	char		su_verfbody[MAX_AUTH_BYTES];	/* verifier body */
 	void		*su_cache;		/* cached data, NULL if none */
+
+	struct msghdr	su_msghdr;		/* msghdr received from clnt */
+	unsigned char	su_cmsg[64];		/* cmsghdr received from clnt */
 };
 
 #define __rpcb_get_dg_xidp(x)	(&((struct svc_dg_data *)(x)->xp_p2)->su_xid)

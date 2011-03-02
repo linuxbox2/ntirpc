@@ -75,6 +75,8 @@ static bool_t svc_dg_control(SVCXPRT *, const u_int, void *);
 static int cache_get(SVCXPRT *, struct rpc_msg *, char **, size_t *);
 static void cache_set(SVCXPRT *, size_t);
 int svc_dg_enablecache(SVCXPRT *, u_int);
+static void svc_dg_enable_pktinfo(int, const struct __rpc_sockinfo *);
+static int svc_dg_valid_pktinfo(struct msghdr *);
 
 /*
  * Usage:
@@ -141,6 +143,9 @@ svc_dg_create(fd, sendsize, recvsize)
 		goto freedata;
 	__rpc_set_netbuf(&xprt->xp_ltaddr, &ss, slen);
 
+	/* Enable reception of IP*_PKTINFO control msgs */
+	svc_dg_enable_pktinfo(fd, &si);
+
 	xprt_register(xprt);
 	return (xprt);
 freedata:
@@ -170,19 +175,36 @@ svc_dg_recv(xprt, msg)
 	XDR *xdrs = &(su->su_xdrs);
 	char *reply;
 	struct sockaddr_storage ss;
-	socklen_t alen;
+	struct msghdr *mesgp;
+	struct iovec iov;
 	size_t replylen;
 	ssize_t rlen;
 
 again:
-	alen = sizeof (struct sockaddr_storage);
-	rlen = recvfrom(xprt->xp_fd, rpc_buffer(xprt), su->su_iosz, 0,
-	    (struct sockaddr *)(void *)&ss, &alen);
+	iov.iov_base = rpc_buffer(xprt);
+	iov.iov_len = su->su_iosz;
+	mesgp = &su->su_msghdr;
+	memset(mesgp, 0, sizeof(*mesgp));
+	mesgp->msg_iov = &iov;
+	mesgp->msg_iovlen = 1;
+	mesgp->msg_name = (struct sockaddr *)(void *) &ss;
+	mesgp->msg_namelen = sizeof (struct sockaddr_storage);
+	mesgp->msg_control = su->su_cmsg;
+	mesgp->msg_controllen = sizeof(su->su_cmsg);
+
+	rlen = recvmsg(xprt->xp_fd, mesgp, 0);
 	if (rlen == -1 && errno == EINTR)
 		goto again;
 	if (rlen == -1 || (rlen < (ssize_t)(4 * sizeof (u_int32_t))))
 		return (FALSE);
-	__rpc_set_netbuf(&xprt->xp_rtaddr, &ss, alen);
+	__rpc_set_netbuf(&xprt->xp_rtaddr, &ss, mesgp->msg_namelen);
+
+	/* Check whether there's an IP_PKTINFO or IP6_PKTINFO control message.
+	 * If yes, preserve it for svc_dg_reply; otherwise just zap any cmsgs */
+	if (!svc_dg_valid_pktinfo(mesgp)) {
+		mesgp->msg_control = NULL;
+		mesgp->msg_controllen = 0;
+	}
 
 	__xprt_set_raddr(xprt, &ss);
 	xdrs->x_op = XDR_DECODE;
@@ -193,8 +215,9 @@ again:
 	su->su_xid = msg->rm_xid;
 	if (su->su_cache != NULL) {
 		if (cache_get(xprt, msg, &reply, &replylen)) {
-			(void)sendto(xprt->xp_fd, reply, replylen, 0,
-			    (struct sockaddr *)(void *)&ss, alen);
+			iov.iov_base = reply;
+			iov.iov_len = replylen;
+			(void) sendmsg(xprt->xp_fd, mesgp, 0);
 			return (FALSE);
 		}
 	}
@@ -215,10 +238,18 @@ svc_dg_reply(xprt, msg)
 	XDR_SETPOS(xdrs, 0);
 	msg->rm_xid = su->su_xid;
 	if (xdr_replymsg(xdrs, msg)) {
-		slen = XDR_GETPOS(xdrs);
-		if (sendto(xprt->xp_fd, rpc_buffer(xprt), slen, 0,
-		    (struct sockaddr *)xprt->xp_rtaddr.buf,
-		    (socklen_t)xprt->xp_rtaddr.len) == (ssize_t) slen) {
+		struct msghdr *msg = &su->su_msghdr;
+		struct iovec iov;
+
+		iov.iov_base = rpc_buffer(xprt);
+		iov.iov_len = slen = XDR_GETPOS(xdrs);
+		msg->msg_iov = &iov;
+		msg->msg_iovlen = 1;
+		msg->msg_name = (struct sockaddr *)(void *) xprt->xp_rtaddr.buf;
+		msg->msg_namelen = xprt->xp_rtaddr.len;
+		/* cmsg already set in svc_dg_recv */
+
+		if (sendmsg(xprt->xp_fd, msg, 0) == (ssize_t) slen) {
 			stat = TRUE;
 			if (su->su_cache)
 				cache_set(xprt, slen);
@@ -581,4 +612,77 @@ cache_get(xprt, msg, replyp, replylenp)
 	uc->uc_prog = msg->rm_call.cb_prog;
 	mutex_unlock(&dupreq_lock);
 	return (0);
+}
+
+/*
+ * Enable reception of PKTINFO control messages
+ */
+void
+svc_dg_enable_pktinfo(int fd, const struct __rpc_sockinfo *si)
+{
+	int val = 1;
+
+	switch (si->si_af) {
+	case AF_INET:
+		(void) setsockopt(fd, SOL_IP, IP_PKTINFO, &val, sizeof(val));
+		break;
+
+	case AF_INET6:
+		(void) setsockopt(fd, SOL_IPV6, IPV6_PKTINFO, &val, sizeof(val));
+		break;
+	}
+}
+
+/*
+ * When given a control message received from the socket
+ * layer, check whether it contains valid PKTINFO data matching
+ * the address family of the peer address.
+ */
+int
+svc_dg_valid_pktinfo(struct msghdr *msg)
+{
+	struct cmsghdr *cmsg;
+
+	if (!msg->msg_name)
+		return 0;
+
+	if (msg->msg_flags & MSG_CTRUNC)
+		return 0;
+
+	cmsg = CMSG_FIRSTHDR(msg);
+	if (cmsg == NULL || CMSG_NXTHDR(msg, cmsg) != NULL)
+		return 0;
+
+	switch (((struct sockaddr *) msg->msg_name)->sa_family) {
+	case AF_INET:
+		if (cmsg->cmsg_level != SOL_IP
+		 || cmsg->cmsg_type != IP_PKTINFO
+		 || cmsg->cmsg_len < CMSG_LEN(sizeof (struct in_pktinfo))) {
+			return 0;
+		} else {
+			struct in_pktinfo *pkti;
+			
+			pkti = (struct in_pktinfo *) CMSG_DATA (cmsg);
+			pkti->ipi_ifindex = 0;
+		}
+		break;
+
+	case AF_INET6:
+		if (cmsg->cmsg_level != SOL_IPV6
+		 || cmsg->cmsg_type != IPV6_PKTINFO
+		 || cmsg->cmsg_len < CMSG_LEN(sizeof (struct in6_pktinfo))) {
+			return 0;
+		} else {
+			struct in6_pktinfo *pkti;
+			
+			pkti = (struct in6_pktinfo *) CMSG_DATA (cmsg);
+			pkti->ipi6_ifindex = 0;
+		}
+		break;
+
+	default:
+		return 0;
+	}
+
+	return 1;
 }
