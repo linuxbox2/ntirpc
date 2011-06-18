@@ -610,7 +610,11 @@ svc_vc_recv(xprt, msg)
 	}
 
 	xdrs->x_op = XDR_DECODE;
-	(void)xdrrec_skiprecord(xdrs);
+	/*
+	 * No need skip records with nonblocking connections
+	 */
+	if (cd->nonblock == FALSE)
+		(void)xdrrec_skiprecord(xdrs);
 	if (xdr_callmsg(xdrs, msg)) {
 		cd->x_id = msg->rm_xid;
 		return (TRUE);
