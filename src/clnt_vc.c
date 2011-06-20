@@ -364,7 +364,7 @@ call_again:
 	if ((! XDR_PUTBYTES(xdrs, ct->ct_u.ct_mcallc, ct->ct_mpos)) ||
 	    (! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
 	    (! AUTH_MARSHALL(cl->cl_auth, xdrs)) ||
-	    (! (*xdr_args)(xdrs, args_ptr))) {
+	    (! AUTH_WRAP(cl->cl_auth, xdrs, xdr_args, args_ptr))) {
 		if (ct->ct_error.re_status == RPC_SUCCESS)
 			ct->ct_error.re_status = RPC_CANTENCODEARGS;
 		(void)xdrrec_endofrecord(xdrs, TRUE);
@@ -420,7 +420,8 @@ call_again:
 		    &reply_msg.acpted_rply.ar_verf)) {
 			ct->ct_error.re_status = RPC_AUTHERROR;
 			ct->ct_error.re_why = AUTH_INVALIDRESP;
-		} else if (! (*xdr_results)(xdrs, results_ptr)) {
+		} else if (! AUTH_UNWRAP(cl->cl_auth, xdrs,
+					 xdr_results, results_ptr)) {
 			if (ct->ct_error.re_status == RPC_SUCCESS)
 				ct->ct_error.re_status = RPC_CANTDECODERES;
 		}

@@ -366,7 +366,7 @@ call_again:
 
 	if ((! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
 	    (! AUTH_MARSHALL(cl->cl_auth, xdrs)) ||
-	    (! (*xargs)(xdrs, argsp))) {
+	    (! AUTH_WRAP(cl->cl_auth, xdrs, xargs, argsp))) {
 		cu->cu_error.re_status = RPC_CANTENCODEARGS;
 		goto out;
 	}
@@ -400,8 +400,8 @@ get_reply:
 	 * (We assume that this is actually only executed once.)
 	 */
 	reply_msg.acpted_rply.ar_verf = _null_auth;
-	reply_msg.acpted_rply.ar_results.where = resultsp;
-	reply_msg.acpted_rply.ar_results.proc = xresults;
+	reply_msg.acpted_rply.ar_results.where = NULL;
+	reply_msg.acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
 
         fd.fd = cu->cu_fd;
         fd.events = POLLIN;
@@ -512,6 +512,10 @@ get_reply:
 					    &reply_msg.acpted_rply.ar_verf)) {
 				cu->cu_error.re_status = RPC_AUTHERROR;
 				cu->cu_error.re_why = AUTH_INVALIDRESP;
+			} else if (! AUTH_UNWRAP(cl->cl_auth, &reply_xdrs,
+						 xresults, resultsp)) {
+				if (cu->cu_error.re_status == RPC_SUCCESS)
+				     cu->cu_error.re_status = RPC_CANTDECODERES;
 			}
 			if (reply_msg.acpted_rply.ar_verf.oa_base != NULL) {
 				xdrs->x_op = XDR_FREE;
