@@ -200,6 +200,8 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 
 	if (!authgss_refresh(auth))
 		auth = NULL;
+	else
+		auth_get(auth); /* Reference for caller */
 
 	clnt->cl_auth = save_auth;
 

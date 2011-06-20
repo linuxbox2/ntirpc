@@ -223,6 +223,7 @@ authdes_pk_seccreate(const char *servername, netobj *pkey, u_int window,
 		goto failed;
 	}
 	ad->ad_nis_srvr = NULL; /* not needed any longer */
+	auth_get(auth);		/* Reference for caller */
 	return (auth);
 
 failed:

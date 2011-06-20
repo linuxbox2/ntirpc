@@ -162,6 +162,7 @@ authunix_create(machname, uid, gid, len, aup_gids)
 	 */
 	auth->ah_cred = au->au_origcred;
 	marshal_new_auth(auth);
+	auth_get(auth);		/* Reference for caller */
 	return (auth);
 #ifndef _KERNEL
  cleanup_authunix_create:
