@@ -373,7 +373,7 @@ __END_DECLS
 __BEGIN_DECLS
 struct svc_req;
 struct rpc_msg;
-enum auth_stat _svcauth_null (struct svc_req *, struct rpc_msg *);
+enum auth_stat _svcauth_none (struct svc_req *, struct rpc_msg *);
 enum auth_stat _svcauth_short (struct svc_req *, struct rpc_msg *);
 enum auth_stat _svcauth_unix (struct svc_req *, struct rpc_msg *);
 __END_DECLS
