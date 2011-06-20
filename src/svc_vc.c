@@ -172,6 +172,7 @@ svc_vc_create(fd, sendsize, recvsize)
 	xprt->xp_p1 = r;
 	xprt->xp_p2 = NULL;
 	xprt->xp_p3 = NULL;
+	xprt->xp_auth = NULL;
 	xprt->xp_verf = _null_auth;
 	svc_vc_rendezvous_ops(xprt);
 	xprt->xp_port = (u_short)-1;	/* It is the rendezvouser */
@@ -283,6 +284,7 @@ makefd_xprt(fd, sendsize, recvsize)
 	xdrrec_create(&(cd->xdrs), sendsize, recvsize,
 	    xprt, read_vc, write_vc);
 	xprt->xp_p1 = cd;
+	xprt->xp_auth = NULL;
 	xprt->xp_verf.oa_base = cd->verf_body;
 	svc_vc_ops(xprt);  /* truely deals with calls */
 	xprt->xp_port = 0;  /* this is a connection, not a rendezvouser */
@@ -411,6 +413,10 @@ __svc_vc_dodestroy(xprt)
 		/* an actual connection socket */
 		XDR_DESTROY(&(cd->xdrs));
 		mem_free(cd, sizeof(struct cf_conn));
+	}
+	if (xprt->xp_auth != NULL) {
+		SVCAUTH_DESTROY(xprt->xp_auth);
+		xprt->xp_auth = NULL;
 	}
 	if (xprt->xp_rtaddr.buf)
 		mem_free(xprt->xp_rtaddr.buf, xprt->xp_rtaddr.maxlen);
@@ -632,8 +638,13 @@ svc_vc_getargs(xprt, xdr_args, args_ptr)
 
 	assert(xprt != NULL);
 	/* args_ptr may be NULL */
-	return ((*xdr_args)(&(((struct cf_conn *)(xprt->xp_p1))->xdrs),
-	    args_ptr));
+
+	if (! SVCAUTH_UNWRAP(xprt->xp_auth,
+			     &(((struct cf_conn *)(xprt->xp_p1))->xdrs),
+			     xdr_args, args_ptr)) {
+		return FALSE;  
+	}
+	return TRUE;
 }
 
 static bool_t
@@ -662,15 +673,35 @@ svc_vc_reply(xprt, msg)
 	XDR *xdrs;
 	bool_t rstat;
 
+	xdrproc_t xdr_results;
+	caddr_t xdr_location;
+	bool_t has_args;
+
 	assert(xprt != NULL);
 	assert(msg != NULL);
 
 	cd = (struct cf_conn *)(xprt->xp_p1);
 	xdrs = &(cd->xdrs);
 
+	if (msg->rm_reply.rp_stat == MSG_ACCEPTED &&
+	    msg->rm_reply.rp_acpt.ar_stat == SUCCESS) {
+		has_args = TRUE;
+		xdr_results = msg->acpted_rply.ar_results.proc;
+		xdr_location = msg->acpted_rply.ar_results.where;
+
+		msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
+		msg->acpted_rply.ar_results.where = NULL;
+	} else
+		has_args = FALSE;
+
 	xdrs->x_op = XDR_ENCODE;
 	msg->rm_xid = cd->x_id;
-	rstat = xdr_replymsg(xdrs, msg);
+	rstat = FALSE;
+	if (xdr_replymsg(xdrs, msg) &&
+	    (!has_args ||
+	     (SVCAUTH_WRAP(xprt->xp_auth, xdrs, xdr_results, xdr_location)))) {
+		rstat = TRUE;
+	}
 	(void)xdrrec_endofrecord(xdrs, TRUE);
 	return (rstat);
 }
