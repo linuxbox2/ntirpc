@@ -698,8 +698,8 @@ svc_vc_reply(xprt, msg)
 	msg->rm_xid = cd->x_id;
 	rstat = FALSE;
 	if (xdr_replymsg(xdrs, msg) &&
-	    (!has_args ||
-	     (SVCAUTH_WRAP(xprt->xp_auth, xdrs, xdr_results, xdr_location)))) {
+	    (!has_args || (xprt->xp_auth &&
+	     SVCAUTH_WRAP(xprt->xp_auth, xdrs, xdr_results, xdr_location)))) {
 		rstat = TRUE;
 	}
 	(void)xdrrec_endofrecord(xdrs, TRUE);

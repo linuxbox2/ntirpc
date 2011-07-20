@@ -254,8 +254,8 @@ svc_dg_reply(xprt, msg)
 	XDR_SETPOS(xdrs, 0);
 	msg->rm_xid = su->su_xid;
 	if (xdr_replymsg(xdrs, msg) &&
-	    (!has_args ||
-	     (SVCAUTH_WRAP(xprt->xp_auth, xdrs, xdr_results, xdr_location)))) {
+	    (!has_args || (xprt->xp_auth &&
+	     SVCAUTH_WRAP(xprt->xp_auth, xdrs, xdr_results, xdr_location)))) {
 		struct msghdr *msg = &su->su_msghdr;
 		struct iovec iov;
 
