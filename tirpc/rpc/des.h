@@ -33,6 +33,9 @@
  * Copyright (c) 1986 by Sun Microsystems, Inc.
  */
 
+#ifndef _RPC_DES_H_
+#define _RPC_DES_H_
+
 #define DES_MAXLEN 	65536	/* maximum # of bytes to encrypt  */
 #define DES_QUICKLEN	16	/* maximum # of bytes to encrypt quickly */
 
@@ -80,3 +83,5 @@ struct desparams {
  * Software DES.
  */
 extern int _des_crypt( char *, int, struct desparams * );
+
+#endif

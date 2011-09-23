@@ -98,8 +98,8 @@ _authenticate(rqst, msg)
 	rqst->rq_xprt->xp_verf.oa_length = 0;
 	cred_flavor = rqst->rq_cred.oa_flavor;
 	switch (cred_flavor) {
-	case AUTH_NULL:
-		dummy = _svcauth_null(rqst, msg);
+	case AUTH_NONE:
+		dummy = _svcauth_none(rqst, msg);
 		return (dummy);
 	case AUTH_SYS:
 		dummy = _svcauth_unix(rqst, msg);
@@ -130,15 +130,6 @@ _authenticate(rqst, msg)
 	mutex_unlock(&authsvc_lock);
 
 	return (AUTH_REJECTEDCRED);
-}
-
-/*ARGSUSED*/
-enum auth_stat
-_svcauth_null(rqst, msg)
-	struct svc_req *rqst;
-	struct rpc_msg *msg;
-{
-	return (AUTH_OK);
 }
 
 /*

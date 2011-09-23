@@ -220,6 +220,7 @@ authdes_pk_seccreate(const char *servername, netobj *pkey, u_int window,
 		goto failed;
 	}
 	ad->ad_nis_srvr = NULL; /* not needed any longer */
+	auth_get(auth);		/* Reference for caller */
 	return (auth);
 
 failed:
@@ -467,6 +468,12 @@ authdes_destroy(AUTH *auth)
 	FREE(auth, sizeof(AUTH));
 }
 
+static bool_t
+authdes_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xfunc, caddr_t xwhere)
+{
+	return ((*xfunc)(xdrs, xwhere));
+}
+
 static struct auth_ops *
 authdes_ops(void)
 {
@@ -482,6 +489,8 @@ authdes_ops(void)
 		ops.ah_validate = authdes_validate;
 		ops.ah_refresh = authdes_refresh;
 		ops.ah_destroy = authdes_destroy;
+		ops.ah_wrap = authdes_wrap;
+		ops.ah_unwrap = authdes_wrap;
         }
 	mutex_unlock(&authdes_ops_lock);
 	return (&ops);

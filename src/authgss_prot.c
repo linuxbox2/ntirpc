@@ -161,6 +161,7 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	databuflen = end - start - 4;
 	XDR_SETPOS(xdrs, start + 4);
 	databuf.value = XDR_INLINE(xdrs, databuflen);
+	databuf.length = databuflen;
 
 	xdr_stat = FALSE;
 
@@ -169,7 +170,6 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 		XDR_SETPOS(xdrs, start);
 		if (!xdr_u_int(xdrs, (u_int *)&databuflen))
 			return (FALSE);
-		databuf.length = databuflen;
 
 		/* Checksum rpc_gss_data_t. */
 		maj_stat = gss_get_mic(&min_stat, ctx, qop,

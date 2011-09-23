@@ -201,6 +201,8 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 
 	if (!authgss_refresh(auth))
 		auth = NULL;
+	else
+		auth_get(auth); /* Reference for caller */
 
 	clnt->cl_auth = save_auth;
 
@@ -556,9 +558,20 @@ authgss_destroy_context(AUTH *auth)
 
 	if (gd->gc.gc_ctx.length != 0) {
 		if (gd->established) {
+			AUTH *save_auth = NULL;
+
+			/* Make sure we use the right auth_ops */
+			if (gd->clnt->cl_auth != auth) {
+				save_auth = gd->clnt->cl_auth;
+				gd->clnt->cl_auth = auth;
+			}
+
 			gd->gc.gc_proc = RPCSEC_GSS_DESTROY;
 			clnt_call(gd->clnt, NULLPROC, (xdrproc_t)xdr_void, NULL,
 				  (xdrproc_t)xdr_void, NULL, AUTH_TIMEOUT);
+			
+			if (save_auth != NULL)
+				gd->clnt->cl_auth = save_auth;
 		}
 		gss_release_buffer(&min_stat, &gd->gc.gc_ctx);
 		/* XXX ANDROS check size of context  - should be 8 */

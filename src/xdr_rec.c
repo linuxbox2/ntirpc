@@ -65,7 +65,6 @@
 #include <rpc/clnt.h>
 #include <stddef.h>
 #include "rpc_com.h"
-#include <unistd.h>
 static bool_t	xdrrec_getlong(XDR *, long *);
 static bool_t	xdrrec_putlong(XDR *, const long *);
 static bool_t	xdrrec_getbytes(XDR *, char *, u_int);
@@ -331,22 +330,22 @@ xdrrec_getpos(xdrs)
 	RECSTREAM *rstrm = (RECSTREAM *)xdrs->x_private;
 	off_t pos;
 
-	pos = lseek((int)(u_long)rstrm->tcp_handle, (off_t)0, 1);
-	if (pos != -1)
-		switch (xdrs->x_op) {
+	switch (xdrs->x_op) {
 
-		case XDR_ENCODE:
-			pos += rstrm->out_finger - rstrm->out_base;
-			break;
+	case XDR_ENCODE:
+		pos = rstrm->out_finger - rstrm->out_base
+			- BYTES_PER_XDR_UNIT;
+		break;
 
-		case XDR_DECODE:
-			pos -= rstrm->in_boundry - rstrm->in_finger;
-			break;
+	case XDR_DECODE:
+		pos = rstrm->in_boundry - rstrm->in_finger
+			- BYTES_PER_XDR_UNIT;
+		break;
 
-		default:
-			pos = (off_t) -1;
-			break;
-		}
+	default:
+		pos = (off_t) -1;
+		break;
+	}
 	return ((u_int) pos);
 }
 

@@ -123,17 +123,17 @@ __rpc_createerr()
 void tsd_key_delete(void)
 {
 	if (clnt_broadcast_key != -1)
-		thr_keydelete(clnt_broadcast_key);
+		pthread_key_delete(clnt_broadcast_key);
 	if (rpc_call_key != -1)
-		thr_keydelete(rpc_call_key);
+		pthread_key_delete(rpc_call_key);
 	if (tcp_key != -1)
-		thr_keydelete(tcp_key);
+		pthread_key_delete(tcp_key);
 	if (udp_key != -1)
-		thr_keydelete(udp_key);
+		pthread_key_delete(udp_key);
 	if (nc_key != -1)
-		thr_keydelete(nc_key);
+		pthread_key_delete(nc_key);
 	if (rce_key != -1)
-		thr_keydelete(rce_key);
+		pthread_key_delete(rce_key);
 	return;
 }
 

@@ -203,7 +203,21 @@ typedef struct __auth {
 
 	} *ah_ops;
 	void *ah_private;
+	int ah_refcnt;
 } AUTH;
+
+static __inline int
+auth_get(AUTH *auth)
+{
+	return __sync_add_and_fetch(&auth->ah_refcnt, 1);
+}
+
+static __inline int
+auth_put(AUTH *auth)
+{
+	return __sync_sub_and_fetch(&auth->ah_refcnt, 1);
+}
+
 
 
 /*
@@ -234,10 +248,23 @@ typedef struct __auth {
 #define auth_refresh(auth, msg)		\
 		((*((auth)->ah_ops->ah_refresh))(auth, msg))
 
-#define AUTH_DESTROY(auth)		\
-		((*((auth)->ah_ops->ah_destroy))(auth))
-#define auth_destroy(auth)		\
-		((*((auth)->ah_ops->ah_destroy))(auth))
+#define AUTH_DESTROY(auth)						\
+		do {							\
+			int refs;					\
+			if ((refs = auth_put((auth))) == 0)		\
+				((*((auth)->ah_ops->ah_destroy))(auth));\
+			log_debug("%s: auth_put(), refs %d\n",		\
+				__func__, refs);			\
+		} while (0)
+
+#define auth_destroy(auth)						\
+		do {							\
+			int refs;					\
+			if ((refs = auth_put((auth))) == 0)		\
+				((*((auth)->ah_ops->ah_destroy))(auth));\
+			log_debug("%s: auth_put(), refs %d\n",		\
+				__func__, refs);			\
+		} while (0)
 
 #define AUTH_WRAP(auth, xdrs, xfunc, xwhere)            \
 		((*((auth)->ah_ops->ah_wrap))(auth, xdrs, \
@@ -373,7 +400,7 @@ __END_DECLS
 __BEGIN_DECLS
 struct svc_req;
 struct rpc_msg;
-enum auth_stat _svcauth_null (struct svc_req *, struct rpc_msg *);
+enum auth_stat _svcauth_none (struct svc_req *, struct rpc_msg *);
 enum auth_stat _svcauth_short (struct svc_req *, struct rpc_msg *);
 enum auth_stat _svcauth_unix (struct svc_req *, struct rpc_msg *);
 __END_DECLS
