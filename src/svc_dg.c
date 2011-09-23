@@ -71,6 +71,8 @@ static bool_t svc_dg_getargs(SVCXPRT *, xdrproc_t, void *);
 static bool_t svc_dg_freeargs(SVCXPRT *, xdrproc_t, void *);
 static void svc_dg_destroy(SVCXPRT *);
 static bool_t svc_dg_control(SVCXPRT *, const u_int, void *);
+static int svc_dg_cache_get(SVCXPRT *, struct rpc_msg *, char **, size_t *);
+static void svc_dg_cache_set(SVCXPRT *, size_t);
 int svc_dg_enablecache(SVCXPRT *, u_int);
 static void svc_dg_enable_pktinfo(int, const struct __rpc_sockinfo *);
 static int svc_dg_valid_pktinfo(struct msghdr *);
@@ -213,7 +215,7 @@ again:
 	}
 	su->su_xid = msg->rm_xid;
 	if (su->su_cache != NULL) {
-		if (cache_get(xprt, msg, &reply, &replylen)) {
+            if (svc_dg_cache_get(xprt, msg, &reply, &replylen)) {
 			iov.iov_base = reply;
 			iov.iov_len = replylen;
 			(void) sendmsg(xprt->xp_fd, mesgp, 0);
@@ -510,7 +512,7 @@ static const char cache_set_err1[] = "victim not found";
 static const char cache_set_err2[] = "victim alloc failed";
 static const char cache_set_err3[] = "could not allocate new rpc buffer";
 
-void
+static void
 svc_dg_cache_set(xprt, replylen)
 	SVCXPRT *xprt;
 	size_t replylen;
@@ -599,7 +601,7 @@ svc_dg_cache_set(xprt, replylen)
  * Try to get an entry from the cache
  * return 1 if found, 0 if not found and set the stage for svc_dg_cache_set()
  */
-int
+static int
 svc_dg_cache_get(xprt, msg, replyp, replylenp)
 	SVCXPRT *xprt;
 	struct rpc_msg *msg;

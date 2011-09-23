@@ -570,13 +570,13 @@ extern SVCXPRT *svc_raw_create(void);
 /*
  * Search for an entry in the reply cache
  */
-int svc_dg_cache_get(SVCXPRT *, struct rpc_msg *, char **, size_t *);
+static int svc_dg_cache_get(SVCXPRT *, struct rpc_msg *, char **, size_t *);
 
 /*
  * Set an entry in the reply cache
  */
 
-void svc_dg_cache_set(SVCXPRT *, size_t);
+static void svc_dg_cache_set(SVCXPRT *, size_t);
 
 /*
  * svc_dg_enable_cache() enables the cache on dg transports.

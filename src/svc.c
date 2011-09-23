@@ -36,11 +36,15 @@
  *
  * Copyright (C) 1984, Sun Microsystems, Inc.
  */
-#include <pthread.h>
+#include <config.h>
 
+#include <pthread.h>
 #include <reentrant.h>
 #include <sys/types.h>
 #include <sys/poll.h>
+#if defined(TIRPC_EPOLL)
+#include <sys/epoll.h>
+#endif
 #include <assert.h>
 #include <err.h>
 #include <errno.h>
@@ -675,6 +679,30 @@ svc_getreqset (readfds)
 	}
     }
 }
+
+#if defined(TIRPC_EPOLL)
+void
+svc_getreqset_epoll (readfds)
+     fd_set *readfds;
+{
+  int bit, fd;
+  fd_mask mask, *maskp;
+  int sock;
+
+  assert (readfds != NULL);
+
+  maskp = readfds->fds_bits;
+  for (sock = 0; sock < FD_SETSIZE; sock += NFDBITS)
+    {
+      for (mask = *maskp++; (bit = ffsl(mask)) != 0; mask ^= (1L << (bit - 1)))
+	{
+	  /* sock has input waiting */
+	  fd = sock + bit - 1;
+	  svc_getreq_common (fd);
+	}
+    }
+}
+#endif /* TIRPC_EPOLL */
 
 void
 svc_getreq_common (fd)

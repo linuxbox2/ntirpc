@@ -253,7 +253,7 @@ auth_put(AUTH *auth)
 			int refs;					\
 			if ((refs = auth_put((auth))) == 0)		\
 				((*((auth)->ah_ops->ah_destroy))(auth));\
-			log_debug("%s: auth_put(), refs %d\n",		\
+			        __warnx("%s: auth_put(), refs %d\n",	\
 				__func__, refs);			\
 		} while (0)
 
@@ -262,7 +262,7 @@ auth_put(AUTH *auth)
 			int refs;					\
 			if ((refs = auth_put((auth))) == 0)		\
 				((*((auth)->ah_ops->ah_destroy))(auth));\
-			log_debug("%s: auth_put(), refs %d\n",		\
+			        __warnx("%s: auth_put(), refs %d\n",	\
 				__func__, refs);			\
 		} while (0)
 

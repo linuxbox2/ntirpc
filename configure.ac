@@ -16,6 +16,16 @@ if test x$gss = xtrue; then
 	AC_MSG_ERROR([Unable to locate information required to use libgssglue.]))
 fi
 
+AC_ARG_ENABLE(epoll,[  --enable-epoll          Support Linux EPOLL notifications], [case "${enableval}" in
+        yes) epoll=true ;;
+        no)  epoll=false ;;
+        *) AC_MSG_ERROR(bad value ${enableval} for --enable-epoll) ;;
+      esac],[epll=false])
+AM_CONDITIONAL(EPOLL, test x$gss = xtrue)
+if test x$epoll = xtrue; then
+	AC_DEFINE(TIRPC_EPOLL, 1, [Linux EPOLL notifications])
+fi
+
 AC_PROG_CC
 AM_CONFIG_HEADER(config.h)
 AC_PROG_LIBTOOL

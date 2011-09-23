@@ -30,6 +30,8 @@
  * This is the rpc server side idle loop
  * Wait for input, call server program.
  */
+#include <config.h>
+
 #include <pthread.h>
 #include <reentrant.h>
 #include <err.h>
@@ -42,6 +44,9 @@
 #include <rpc/rpc.h>
 #include "rpc_com.h"
 #include <sys/select.h>
+#if defined(TIRPC_EPOLL)
+#include <sys/epoll.h>
+#endif
 
 void
 svc_run()
@@ -74,6 +79,41 @@ svc_run()
 		}
 	}
 }
+
+#if defined(TIRPC_EPOLL)
+void
+svc_run_epoll()
+{
+	fd_set readfds, cleanfds;
+	struct timeval timeout;
+	extern rwlock_t svc_fd_lock;
+
+        struct epoll_event ev;
+
+	for (;;) {
+		rwlock_rdlock(&svc_fd_lock);
+		readfds = svc_fdset;
+		cleanfds = svc_fdset;
+		rwlock_unlock(&svc_fd_lock);
+		timeout.tv_sec = 30;
+		timeout.tv_usec = 0;
+		switch (select(svc_maxfd+1, &readfds, NULL, NULL, &timeout)) {
+		case -1:
+			FD_ZERO(&readfds);
+			if (errno == EINTR) {
+				continue;
+			}
+			warn("svc_run: - select failed");
+			return;
+		case 0:
+			__svc_clean_idle(&cleanfds, 30, FALSE);
+			continue;
+		default:
+			svc_getreqset(&readfds);
+		}
+	}
+}
+#endif /* TIRPC_EPOLL */
 
 /*
  *      This function causes svc_run() to exit by telling it that it has no

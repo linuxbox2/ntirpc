@@ -27,7 +27,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
+#include <config.h>
 
 /*
  * svc_vc.c, Server side for Connection Oriented based RPC. 
@@ -36,6 +36,7 @@
  * a tcp rendezvouser (a listner and connection establisher)
  * and a record/tcp stream.
  */
+#include <sys/cdefs.h>
 #include <pthread.h>
 #include <reentrant.h>
 #include <sys/socket.h>
