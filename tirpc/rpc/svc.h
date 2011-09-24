@@ -68,6 +68,8 @@
 /* Package init flags */
 #define SVC_INIT_DEFAULT        0x0000
 #define SVC_INIT_XPORTS         0x0001
+#define SVC_INIT_EPOLL          0x0002
+#define SVC_INIT_WARNX          0x0004
 
 /*
  *      Service control requests
@@ -102,6 +104,49 @@
 #define SVC_VCCR_RADDR_LOCAL      0x0008
 #define SVC_VCCR_MAP6_V1          0x0010
 
+
+/* Svc event strategy */
+enum svc_event_type {
+    SVC_EVENT_FDSET /* trad. using select and poll */,
+    SVC_EVENT_EPOLL /* Linux epoll interface */ 
+};
+
+typedef struct svc_init_params
+{
+    u_int version;
+    u_long flags;
+    u_int max_connections; /* xprts */
+    u_int max_events;      /* epoll events */
+    warnx_t warnx;
+} svc_init_params;
+
+/* this won't work yet.  threading fdsets around is annoying */
+typedef struct svc_params
+{
+    enum svc_event_type ev_type;
+    union {
+        struct {
+            int epoll_fd;
+            struct epoll_event *events;
+            u_int max_events;      /* epoll events */
+        } epoll;
+        struct {
+            fd_set set; /* XXX future svc_fdset */
+        } fd;
+    } ev_u;
+
+    u_int max_connections;
+    
+    struct __svc_ops {
+        bool_t (*svc_clean_idle)(fd_set *fds, int timeout, bool_t cleanblock);
+        void (*svc_run)(void);
+        void (*svc_getreq)(int rdfds);
+        void (*svc_getreqset)(fd_set *readfds);
+        void (*svc_exit)(void);
+    } *svc_ops;
+
+} svc_params;
+
 /*
  * SVCXPRT xp_flags
  */
@@ -109,7 +154,6 @@
 #define SVC_XPORT_FLAG_NONE       0x0000
 #define SVC_XPORT_FLAG_SETNEWFDS  0x0001
 #define SVC_XPORT_FLAG_DONTCLOSE  0x0002
-#define SVC_XPORT_FLAG_CLEANIDLE  0x0004
 
 enum xprt_stat {
 	XPRT_DIED,
@@ -171,6 +215,9 @@ typedef struct __rpc_svcxprt {
 	struct netbuf	xp_rtaddr;	 /* remote transport address */
 	struct opaque_auth xp_verf;	 /* raw response verifier */
 	SVCAUTH		*xp_auth;	 /* auth handle of current req */
+#if defined(TIRPC_EPOLL)
+        struct epoll_event xp_epoll_ev;  /* event handle */
+#endif
 	void		*xp_p1;		 /* private: for use by svc ops */
 	void		*xp_p2;		 /* private: for use by svc ops */
 	void		*xp_p3;		 /* private: for use by svc lib */
@@ -253,7 +300,7 @@ struct svc_req {
 
 __BEGIN_DECLS
 void
-svc_init (u_int flags);
+svc_init (struct svc_init_params *);
 __END_DECLS
 
 
@@ -566,17 +613,6 @@ extern SVCXPRT *svcunixfd_create(int, u_int, u_int);
  * Memory based rpc (for speed check and testing)
  */
 extern SVCXPRT *svc_raw_create(void);
-
-/*
- * Search for an entry in the reply cache
- */
-static int svc_dg_cache_get(SVCXPRT *, struct rpc_msg *, char **, size_t *);
-
-/*
- * Set an entry in the reply cache
- */
-
-static void svc_dg_cache_set(SVCXPRT *, size_t);
 
 /*
  * svc_dg_enable_cache() enables the cache on dg transports.

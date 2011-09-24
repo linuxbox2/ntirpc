@@ -43,6 +43,9 @@
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/poll.h>
+#if defined(TIRPC_EPOLL)
+#include <sys/epoll.h> /* before rpc.h */
+#endif
 #include <sys/un.h>
 #include <sys/time.h>
 #include <sys/uio.h>
@@ -65,7 +68,7 @@
 
 #include <getpeereid.h>
 
-
+extern svc_params __svc_params[1];
 extern rwlock_t svc_fd_lock;
 
 static bool_t rendezvous_request(SVCXPRT *, struct rpc_msg *);
@@ -323,7 +326,11 @@ makefd_xprt(fd, sendsize, recvsize)
  
 	assert(fd != -1);
 
-        if (fd >= FD_SETSIZE) {
+        /* XXX an ordering inelegance, at best */
+        if (! __svc_params->max_connections)
+            __svc_params->max_connections = FD_SETSIZE;
+
+        if (fd >= __svc_params->max_connections) {
                 __warnx("svc_vc: makefd_xprt: fd too high\n");
                 xprt = NULL;
                 goto done;
@@ -393,9 +400,18 @@ again:
 		 * running out.
 		 */
 		if (errno == EMFILE || errno == ENFILE) {
+                    switch (__svc_params->ev_type) {
+#if defined(TIRPC_EPOLL)
+                    case SVC_EVENT_EPOLL:
+                        
+                        break;
+#endif
+                    default:
 			cleanfds = svc_fdset;
-			__svc_clean_idle(&cleanfds, 0, FALSE);
-			goto again;
+			__svc_clean_idle2(0, FALSE);
+                        break;
+                    } /* switch */
+                    goto again;
 		}
 		return (FALSE);
 	}
@@ -883,6 +899,7 @@ __rpc_get_local_uid(SVCXPRT *transp, uid_t *uid) {
  * rpcbind are known to call this function.  Do not alter or remove this
  * API without changing the library's sonum.
  */
+
 bool_t
 __svc_clean_idle(fd_set *fds, int timeout, bool_t cleanblock)
 {
@@ -917,21 +934,6 @@ __svc_clean_idle(fd_set *fds, int timeout, bool_t cleanblock)
 				__svc_vc_dodestroy(xprt);
 				ncleaned++;
 			}
-		} else {
-		    /* clean up xprts marked for gc;  if xprt->xp_fd was donated
-		     * to a clnt handle then it will be collected but xp_fd will
-		     * not be closed */
-		    if (xprt) {
-			if (xprt->xp_flags & SVC_XPORT_FLAG_CLEANIDLE) {
-			    cd = (struct cf_conn *)xprt->xp_p1;
-			    /* dont rely on timeout */
-			    if (tv.tv_sec - cd->last_recv_time.tv_sec > 120) {
-				__xprt_unregister_unlocked(xprt);
-				__svc_vc_dodestroy(xprt);
-				ncleaned++;
-			    } /* delay */
-			} /* marked */
-		    } /* xprt */
 		} /* ! FD_ISSET */
 	} /* loop */
 	if (timeout == 0 && least_active != NULL) {
@@ -941,14 +943,62 @@ __svc_clean_idle(fd_set *fds, int timeout, bool_t cleanblock)
 	}
 	rwlock_unlock(&svc_fd_lock);
 	return ncleaned > 0 ? TRUE : FALSE;
-}
+} /* __svc_clean_idle */
+
+/*
+ * Like __svc_clean_idle but event-type independent.  For now no cleanfds.
+ */
+bool_t
+__svc_clean_idle2(int timeout, bool_t cleanblock)
+{
+	int i, ncleaned;
+	SVCXPRT *xprt, *least_active;
+	struct timeval tv, tdiff, tmax;
+	struct cf_conn *cd;
+
+	gettimeofday(&tv, NULL);
+	tmax.tv_sec = tmax.tv_usec = 0;
+	least_active = NULL;
+	rwlock_wrlock(&svc_fd_lock);
+	for (i = ncleaned = 0; i <= svc_maxfd; i++) {
+		xprt = __svc_xports[i];
+		if (TRUE) { /* flag in__svc_params->ev_u.epoll? */
+			if (xprt == NULL || xprt->xp_ops == NULL ||
+			    xprt->xp_ops->xp_recv != svc_vc_recv)
+				continue;
+			cd = (struct cf_conn *)xprt->xp_p1;
+			if (!cleanblock && !cd->nonblock)
+				continue;
+			if (timeout == 0) {
+				timersub(&tv, &cd->last_recv_time, &tdiff);
+				if (timercmp(&tdiff, &tmax, >)) {
+					tmax = tdiff;
+					least_active = xprt;
+				}
+				continue;
+			}
+			if (tv.tv_sec - cd->last_recv_time.tv_sec > timeout) {
+				__xprt_unregister_unlocked(xprt);
+				__svc_vc_dodestroy(xprt);
+				ncleaned++;
+			}
+		} /* TRUE */
+	} /* loop */
+	if (timeout == 0 && least_active != NULL) {
+		__xprt_unregister_unlocked(least_active);
+		__svc_vc_dodestroy(least_active);
+		ncleaned++;
+	}
+	rwlock_unlock(&svc_fd_lock);
+	return ncleaned > 0 ? TRUE : FALSE;
+} /* __svc_clean_idle2 */
 
 /*
  * Create an RPC client handle from an active service transport
  * handle, i.e., to issue calls on the channel.
  *
  * If flags & SVC_VC_CLNT_CREATE_DEDICATED, the supplied xprt will be
- * safely collected by the library some time in the future.
+ * unregistered and disposed inline.
  */
 CLIENT *
 svc_vc_clnt_create(xprt, prog, vers, flags)
@@ -965,7 +1015,8 @@ svc_vc_clnt_create(xprt, prog, vers, flags)
 	/* Once */
 	if (xprt->xp_p4) {
 	    cl = (CLIENT *) xprt->xp_p4;
-	    goto unlock;
+            rwlock_unlock (&xprt->lock);
+	    goto out;
 	}
 
 	/* Create a client transport handle.  The endpoint is already
@@ -983,17 +1034,10 @@ svc_vc_clnt_create(xprt, prog, vers, flags)
 	/* Warn cleanup routines not to close xp_fd */
 	xprt->xp_flags |= SVC_XPORT_FLAG_DONTCLOSE;
 
-	/* xprt_unregister_lite:  Clear the connected file descriptor so REPLY
-	 * messages wont be dispatched, but for future GC dont clear
-	 * __svc_xprts[xp_fd] */
-	if (flags & SVC_VC_CLNT_CREATE_DEDICATED) {
-	    xprt->xp_flags |= SVC_XPORT_FLAG_CLEANIDLE;
-	    FD_CLR (xprt->xp_fd, &svc_fdset);
-	}
-
-unlock:
-	rwlock_unlock (&xprt->lock);
-
+        /* In this case, unregister and free xprt */
+	if (flags & SVC_VC_CLNT_CREATE_DEDICATED)
+            svc_vc_destroy(xprt);
+out:
 	return (cl);
 }
 

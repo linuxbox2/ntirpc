@@ -36,84 +36,106 @@
 #include <reentrant.h>
 #include <err.h>
 #include <errno.h>
-#include <rpc/rpc.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
+#if defined(TIRPC_EPOLL)
+#include <sys/epoll.h> /* before rpc.h */
+#endif
 #include <rpc/rpc.h>
 #include "rpc_com.h"
 #include <sys/select.h>
+
+extern svc_params __svc_params[1];
+
+static void
+svc_run_select()
+{
+	fd_set readfds, cleanfds;
+	struct timeval timeout;
+	extern rwlock_t svc_fd_lock;
+
+
+	for (;;) {
+		rwlock_rdlock(&svc_fd_lock);
+		readfds = svc_fdset;
+		cleanfds = svc_fdset;
+		rwlock_unlock(&svc_fd_lock);
+		timeout.tv_sec = 30;
+		timeout.tv_usec = 0;
+		switch (select(svc_maxfd+1, &readfds, NULL, NULL, &timeout)) {
+		case -1:
+			FD_ZERO(&readfds);
+			if (errno == EINTR) {
+				continue;
+			}
+			warn("svc_run: - select failed");
+			return;
+		case 0:
+			__svc_clean_idle(&cleanfds, 30, FALSE);
+			continue;
+		default:
+			svc_getreqset(&readfds);
+		}
+	}
+}
+
 #if defined(TIRPC_EPOLL)
-#include <sys/epoll.h>
-#endif
+
+/* static */ void
+svc_run_epoll()
+{
+    int nfds;
+    int timeout_s = 30;
+    fd_set cleanfds; /* XXX adapt for epoll */
+    extern rwlock_t svc_fd_lock;
+
+    if (! __svc_params->ev_u.epoll.events)
+        __svc_params->ev_u.epoll.events =
+            (struct epoll_event *) mem_alloc(
+                __svc_params->ev_u.epoll.max_events * 
+                sizeof(struct epoll_event));
+
+    for (;;) {
+        rwlock_rdlock(&svc_fd_lock);
+        cleanfds = svc_fdset;
+        rwlock_unlock(&svc_fd_lock);
+        switch (nfds = epoll_wait(
+                    __svc_params->ev_u.epoll.epoll_fd,
+                    __svc_params->ev_u.epoll.events, 
+                    __svc_params->ev_u.epoll.max_events, 
+                    timeout_s)) {
+        case -1:
+            if (errno == EINTR)
+                continue;
+            /* XXX epoll_ctl del all events ? */
+            __pkg_params.warnx("svc_run: epoll_wait failed %d", nfds);
+            return;
+        case 0:
+            __svc_clean_idle2(30, FALSE);
+            continue;
+        default:
+            svc_getreqset_epoll(__svc_params->ev_u.epoll.events, nfds);
+        } /* switch */
+    } /* ;; */
+}
+#endif /* TIRPC_EPOLL */
 
 void
 svc_run()
 {
-	fd_set readfds, cleanfds;
-	struct timeval timeout;
-	extern rwlock_t svc_fd_lock;
-
-
-	for (;;) {
-		rwlock_rdlock(&svc_fd_lock);
-		readfds = svc_fdset;
-		cleanfds = svc_fdset;
-		rwlock_unlock(&svc_fd_lock);
-		timeout.tv_sec = 30;
-		timeout.tv_usec = 0;
-		switch (select(svc_maxfd+1, &readfds, NULL, NULL, &timeout)) {
-		case -1:
-			FD_ZERO(&readfds);
-			if (errno == EINTR) {
-				continue;
-			}
-			warn("svc_run: - select failed");
-			return;
-		case 0:
-			__svc_clean_idle(&cleanfds, 30, FALSE);
-			continue;
-		default:
-			svc_getreqset(&readfds);
-		}
-	}
-}
-
+    switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
-void
-svc_run_epoll()
-{
-	fd_set readfds, cleanfds;
-	struct timeval timeout;
-	extern rwlock_t svc_fd_lock;
-
-        struct epoll_event ev;
-
-	for (;;) {
-		rwlock_rdlock(&svc_fd_lock);
-		readfds = svc_fdset;
-		cleanfds = svc_fdset;
-		rwlock_unlock(&svc_fd_lock);
-		timeout.tv_sec = 30;
-		timeout.tv_usec = 0;
-		switch (select(svc_maxfd+1, &readfds, NULL, NULL, &timeout)) {
-		case -1:
-			FD_ZERO(&readfds);
-			if (errno == EINTR) {
-				continue;
-			}
-			warn("svc_run: - select failed");
-			return;
-		case 0:
-			__svc_clean_idle(&cleanfds, 30, FALSE);
-			continue;
-		default:
-			svc_getreqset(&readfds);
-		}
-	}
+    case SVC_EVENT_EPOLL:
+        return (svc_run_epoll());
+        break;
+#endif
+    default:
+        return (svc_run_select());
+        break;
+    } /* switch */
 }
-#endif /* TIRPC_EPOLL */
 
 /*
  *      This function causes svc_run() to exit by telling it that it has no
@@ -122,9 +144,19 @@ svc_run_epoll()
 void
 svc_exit()
 {
-	extern rwlock_t svc_fd_lock;
+    extern rwlock_t svc_fd_lock;
 
-	rwlock_wrlock(&svc_fd_lock);
+    rwlock_wrlock(&svc_fd_lock);
+    switch (__svc_params->ev_type) {
+#if defined(TIRPC_EPOLL)
+    case SVC_EVENT_EPOLL:
+        /* XXXX need to actually signal svc_run */
+        close(__svc_params->ev_u.epoll.epoll_fd);
+        break;
+#endif
+    default:
 	FD_ZERO(&svc_fdset);
-	rwlock_unlock(&svc_fd_lock);
+        break;
+    } /* switch */
+    rwlock_unlock(&svc_fd_lock);
 }

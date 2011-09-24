@@ -58,6 +58,8 @@
 
 #include "rpc_com.h"
 
+#include <rpc/svc.h>
+
 #define	RQCRED_SIZE	400	/* this size is excessive */
 
 #define SVC_VERSQUIET 0x0001	/* keep quiet about vers mismatch */
@@ -66,6 +68,7 @@
 #define max(a, b) (a > b ? a : b)
 
 extern tirpc_pkg_params __pkg_params;
+svc_params __svc_params[1];
 
 /*
  * The services list
@@ -95,21 +98,40 @@ static void __xprt_do_unregister (SVCXPRT * xprt, bool_t dolock);
  * any svc exported functions.   Traditional TI-RPC programs need not
  * call the function as presently integrated. */
 void
-svc_init (flags)
-     u_int flags;
+svc_init (svc_init_params * params)
 {
-    FD_ZERO(&svc_fdset);
+    __svc_params->max_connections = FD_SETSIZE;
 
-    __pkg_params.warnx = warnx;
+    if (params->flags & SVC_INIT_WARNX)
+        __pkg_params.warnx = params->warnx;
+    else
+        __pkg_params.warnx = warnx;
 
-    if (flags & SVC_INIT_XPORTS) {
+    if (params->flags & SVC_INIT_EPOLL) {
+        __svc_params->ev_type = SVC_EVENT_EPOLL;
+        __svc_params->max_connections = params->max_connections;
+        __svc_params->ev_u.epoll.max_events = params->max_events;
+        __svc_params->ev_u.epoll.epoll_fd = epoll_create1(EPOLL_CLOEXEC);
+        if (__svc_params->ev_u.epoll.epoll_fd == -1) {
+            warnx("svc_init:  epoll_create failed");
+            return;
+        }
+    } else {
+        __svc_params->ev_type = SVC_EVENT_FDSET;
+        FD_ZERO(&svc_fdset);
+    }
+
+    if (params->flags & SVC_INIT_XPORTS) {
 	if (__svc_xports == NULL) {
-	    __svc_xports = (SVCXPRT **) mem_alloc (FD_SETSIZE * sizeof (SVCXPRT *));
+	    __svc_xports = (SVCXPRT **) mem_alloc (
+                __svc_params->max_connections * sizeof (SVCXPRT *));
 	    if (__svc_xports == NULL) {
-		__warnx("xprt_register: __svc_xports allocation failure");
+		warnx(
+                    "svc_init: __svc_xports allocation failure");
 		return;
 	    }
-	    memset (__svc_xports, 0, FD_SETSIZE * sizeof (SVCXPRT *));
+	    memset (__svc_xports, 0,
+                    __svc_params->max_connections * sizeof (SVCXPRT *));
 	} /* !__svc_xports */   
     } /* SVC_INIT_XPORTS */
 
@@ -145,33 +167,49 @@ __xprt_set_raddr(SVCXPRT *xprt, const struct sockaddr_storage *ss)
  * Activate a transport handle.
  */
 void
-xprt_register (xprt)
-     SVCXPRT *xprt;
+xprt_register (SVCXPRT * xprt)
 {
-  int sock;
+    int code, sock;
 
-  assert (xprt != NULL);
+    assert (xprt != NULL);
 
-  sock = xprt->xp_fd;
+    sock = xprt->xp_fd;
 
-  rwlock_wrlock (&svc_fd_lock);
-  if (__svc_xports == NULL)
-    {
-      __svc_xports = (SVCXPRT **) mem_alloc (FD_SETSIZE * sizeof (SVCXPRT *));
-      if (__svc_xports == NULL) {
-	  __warnx("xprt_register: __svc_xports allocation failure");
-	  return;
-      }
-      memset (__svc_xports, 0, FD_SETSIZE * sizeof (SVCXPRT *));
+    rwlock_wrlock (&svc_fd_lock);
+    if (__svc_xports == NULL) {
+        __svc_params->max_connections = FD_SETSIZE;
+        __svc_xports = (SVCXPRT **) mem_alloc (FD_SETSIZE * sizeof (SVCXPRT *));
+        if (__svc_xports == NULL) {
+            __warnx("xprt_register: __svc_xports allocation failure");
+            rwlock_unlock (&svc_fd_lock);
+            return;
+        }
+        memset (__svc_xports, 0, FD_SETSIZE * sizeof (SVCXPRT *));
     }
-  if (sock < FD_SETSIZE)
-    {
-      __svc_xports[sock] = xprt;
-      FD_SET (sock, &svc_fdset);
+    if (sock < __svc_params->max_connections) {
+        __svc_xports[sock] = xprt;
+        switch (__svc_params->ev_type) {
+#if defined(TIRPC_EPOLL)
+        case SVC_EVENT_EPOLL:
+            /* set up epoll user data */
+            xprt->xp_epoll_ev.data.fd = sock;
+            /* wait for read events, level triggered */
+            xprt->xp_epoll_ev.events = EPOLLIN;
+            /* add to epoll vector */
+            code = epoll_ctl(__svc_params->ev_u.epoll.epoll_fd,
+                             EPOLL_CTL_ADD,
+                             sock,
+                             &xprt->xp_epoll_ev);
+            break;
+#endif
+        default:
+            FD_SET (sock, &svc_fdset);
+            break;
+        } /* switch */
       svc_maxfd = max (svc_maxfd, sock);
     }
-  rwlock_unlock (&svc_fd_lock);
-}
+    rwlock_unlock (&svc_fd_lock);
+} /* xprt_register */
 
 void
 xprt_unregister (SVCXPRT * xprt)
@@ -189,31 +227,43 @@ __xprt_unregister_unlocked (SVCXPRT * xprt)
  * De-activate a transport handle.
  */
 static void
-__xprt_do_unregister (xprt, dolock)
-     SVCXPRT *xprt;
-     bool_t dolock;
+__xprt_do_unregister (SVCXPRT *xprt, bool_t dolock)
 {
-  int sock;
+    int code, sock;
 
-  assert (xprt != NULL);
+    assert (xprt != NULL);
 
-  sock = xprt->xp_fd;
+    sock = xprt->xp_fd;
 
-  if (dolock)
-    rwlock_wrlock (&svc_fd_lock);
-  if ((sock < FD_SETSIZE) && (__svc_xports[sock] == xprt))
-    {
-      __svc_xports[sock] = NULL;
-      FD_CLR (sock, &svc_fdset);
-      if (sock >= svc_maxfd)
-	{
-	  for (svc_maxfd--; svc_maxfd >= 0; svc_maxfd--)
-	    if (__svc_xports[svc_maxfd])
-	      break;
-	}
-    }
-  if (dolock)
-    rwlock_unlock (&svc_fd_lock);
+    if (dolock)
+        rwlock_wrlock (&svc_fd_lock);
+
+    if ((sock < __svc_params->max_connections) && 
+        (__svc_xports[sock] == xprt)) {
+        __svc_xports[sock] = NULL;
+        switch (__svc_params->ev_type) {
+#if defined(TIRPC_EPOLL)
+        case SVC_EVENT_EPOLL:
+            code = epoll_ctl(__svc_params->ev_u.epoll.epoll_fd,
+                             EPOLL_CTL_DEL,
+                             sock,
+                             &xprt->xp_epoll_ev);
+          break;
+#endif
+        default:
+            FD_CLR (sock, &svc_fdset);
+            break;
+        } /* switch */
+
+        if (sock >= svc_maxfd) {
+            for (svc_maxfd--; svc_maxfd >= 0; svc_maxfd--)
+                if (__svc_xports[svc_maxfd])
+                    break;
+        }
+    } /* sock */
+
+    if (dolock)
+        rwlock_unlock (&svc_fd_lock);
 }
 
 /*
@@ -682,25 +732,16 @@ svc_getreqset (readfds)
 
 #if defined(TIRPC_EPOLL)
 void
-svc_getreqset_epoll (readfds)
-     fd_set *readfds;
+svc_getreqset_epoll (struct epoll_event *events, int nfds)
 {
-  int bit, fd;
-  fd_mask mask, *maskp;
-  int sock;
+  int ix;
 
-  assert (readfds != NULL);
+  assert (events != NULL);
 
-  maskp = readfds->fds_bits;
-  for (sock = 0; sock < FD_SETSIZE; sock += NFDBITS)
-    {
-      for (mask = *maskp++; (bit = ffsl(mask)) != 0; mask ^= (1L << (bit - 1)))
-	{
-	  /* sock has input waiting */
-	  fd = sock + bit - 1;
-	  svc_getreq_common (fd);
-	}
-    }
+  for (ix = 0; ix < nfds; ++ix) {
+        svc_getreq_common (events[ix].data.fd);
+  }
+
 }
 #endif /* TIRPC_EPOLL */
 
