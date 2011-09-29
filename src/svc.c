@@ -107,6 +107,7 @@ svc_init (svc_init_params * params)
     else
         __pkg_params.warnx = warnx;
 
+#if defined(TIRPC_EPOLL)
     if (params->flags & SVC_INIT_EPOLL) {
         __svc_params->ev_type = SVC_EVENT_EPOLL;
         __svc_params->max_connections = params->max_connections;
@@ -117,6 +118,9 @@ svc_init (svc_init_params * params)
             return;
         }
     } else {
+#else
+    if (TRUE) {
+#endif
         __svc_params->ev_type = SVC_EVENT_FDSET;
         FD_ZERO(&svc_fdset);
     }
