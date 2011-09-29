@@ -57,8 +57,7 @@ libtirpc_la_SOURCES += xdr.c xdr_rec.c xdr_array.c xdr_float.c xdr_mem.c xdr_ref
 
 ## Secure-RPC
 if GSS
-    libtirpc_la_SOURCES += auth_gss.c authgss_prot.c svc_auth_gss.c \
-		svc_auth_none.c
+    libtirpc_la_SOURCES += auth_gss.c authgss_prot.c svc_auth_gss.c
     libtirpc_la_LDFLAGS += $(GSSGLUE_LIBS)
     libtirpc_la_CFLAGS = -DHAVE_RPCSEC_GSS $(GSSGLUE_CFLAGS)
 endif
