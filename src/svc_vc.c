@@ -1067,6 +1067,9 @@ svc_vc_create_cl(cl, sendsize, recvsize, flags)
     ct = (struct ct_data *) cl->cl_private;
     fd = ct->ct_fd;
 
+    /* TODO:  if flag passed, set send and receive
+     * size from client? */
+
     /*
      * make a new transport
      */
@@ -1103,6 +1106,9 @@ svc_vc_create_cl(cl, sendsize, recvsize, flags)
 	cd->nonblock = FALSE;
 
     gettimeofday(&cd->last_recv_time, NULL);
+
+    /* remember where we came from */
+    xprt->xp_p4 = cl;
 
     /* If creating a dedicated channel collect the supplied client
      * without closing fd */

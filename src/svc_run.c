@@ -88,7 +88,6 @@ svc_run_epoll()
 {
     int nfds;
     int timeout_s = 30;
-    fd_set cleanfds; /* XXX adapt for epoll */
     extern rwlock_t svc_fd_lock;
 
     if (! __svc_params->ev_u.epoll.events)
@@ -99,7 +98,6 @@ svc_run_epoll()
 
     for (;;) {
         rwlock_rdlock(&svc_fd_lock);
-        cleanfds = svc_fdset;
         rwlock_unlock(&svc_fd_lock);
         switch (nfds = epoll_wait(
                     __svc_params->ev_u.epoll.epoll_fd,
