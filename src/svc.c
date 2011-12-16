@@ -60,6 +60,8 @@
 
 #include <rpc/svc.h>
 
+#include "clnt_internal.h"
+
 #define	RQCRED_SIZE	400	/* this size is excessive */
 
 #define SVC_VERSQUIET 0x0001	/* keep quiet about vers mismatch */
@@ -761,6 +763,10 @@ svc_getreq_common (fd)
   rpcvers_t high_vers;
   enum xprt_stat stat;
   char cred_area[2 * MAX_AUTH_BYTES + RQCRED_SIZE];
+  sigset_t mask, newmask; /* XXX check */
+
+  CLIENT *cl;
+  struct ct_data *ct;
 
   msg.rm_call.cb_cred.oa_base = cred_area;
   msg.rm_call.cb_verf.oa_base = &(cred_area[MAX_AUTH_BYTES]);
@@ -769,9 +775,14 @@ svc_getreq_common (fd)
   rwlock_rdlock (&svc_fd_lock);
   xprt = __svc_xports[fd];
   rwlock_unlock (&svc_fd_lock);
+
   if (xprt == NULL)
     /* But do we control sock? */
     return;
+
+  /* XXX call/reply mutex */
+  clnt_vc_fd_lock(xprt, &mask, &newmask);
+
   /* now receive msgs from xprtprt (support batch calls) */
   do
     {
@@ -849,6 +860,9 @@ svc_getreq_common (fd)
 	}
     }
   while (stat == XPRT_MOREREQS);
+
+  /* XXX */
+  clnt_vc_fd_unlock(xprt, &mask);
 }
 
 

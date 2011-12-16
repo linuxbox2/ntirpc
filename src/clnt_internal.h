@@ -44,6 +44,9 @@ struct ct_wait_entry {
 
 #define MCALL_MSG_SIZE 24
 
+#define CT_FLAG_NONE 0x0
+#define CT_FLAG_DUPLEX 0x0001
+
 struct ct_data {
 	int		ct_fd;		/* connection's fd */
 	bool_t		ct_closeit;	/* close it on destroy */
@@ -60,6 +63,14 @@ struct ct_data {
 	uint32_t	ct_xid;
 	struct rpc_msg	ct_reply;       /* async reply */
 	struct ct_wait_entry ct_sync;   /* wait for completion */
+	struct ct_duplex {
+		void *ct_xprt; /* duplex integration */
+		u_int ct_flags;
+	} ct_duplex;
 };
+
+/* internal client fd locking */
+extern void clnt_vc_fd_lock(SVCXPRT *xprt, sigset_t *mask, sigset_t *newmask);
+extern void  clnt_vc_fd_unlock(SVCXPRT *xprt, sigset_t *mask);
 
 #endif /* _CLNT_INTERNAL_H */

@@ -1109,6 +1109,8 @@ svc_vc_create_cl(cl, sendsize, recvsize, flags)
 
     /* remember where we came from */
     xprt->xp_p4 = cl;
+    ct->ct_duplex.ct_flags = CT_FLAG_DUPLEX;
+    ct->ct_duplex.ct_xprt = xprt;
 
     /* If creating a dedicated channel collect the supplied client
      * without closing fd */

@@ -133,6 +133,36 @@ static const char clnt_vc_str[] = "clnt_vc_create";
 static const char clnt_read_vc_str[] = "read_vc";
 static const char __no_mem_str[] = "out of memory";
 
+
+void
+clnt_vc_fd_lock(SVCXPRT *xprt, sigset_t *mask, sigset_t *newmask)
+{
+    static int rpc_lock_value = 1;
+
+    if (xprt->xp_p4) {
+        CLIENT *cl = (CLIENT *) xprt->xp_p4;
+        struct ct_data *ct = (struct ct_data *) cl->cl_private;
+        /* this is way overdone */
+        mutex_lock(&clnt_fd_lock);
+        while (vc_fd_locks[ct->ct_fd])
+            cond_wait(&vc_cv[ct->ct_fd], &clnt_fd_lock);
+        rpc_lock_value = 1;
+        vc_fd_locks[ct->ct_fd] = rpc_lock_value;
+        mutex_unlock(&clnt_fd_lock);
+    }
+}
+
+void 
+clnt_vc_fd_unlock(SVCXPRT *xprt, sigset_t *mask)
+{
+    if (xprt->xp_p4) {
+        CLIENT *cl = (CLIENT *) xprt->xp_p4;
+        struct ct_data *ct = (struct ct_data *) cl->cl_private;
+        release_fd_lock(ct->ct_fd, *mask);
+    }
+}
+
+
 /*
  * Create a client handle for a connection.
  * Default options are set, which the user can change using clnt_control()'s.
