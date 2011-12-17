@@ -113,9 +113,20 @@ static int write_vc(void *, void *, int);
  *      by the clnt_fd_lock mutex, and an array (vc_cv) of condition variables
  *      similarly protected.  Vc_fd_lock[fd] == 1 => a call is active on some
  *      CLIENT handle created for that fd.
+ *
  *      The current implementation holds locks across the entire RPC and reply.
  *      Yes, this is silly, and as soon as this code is proven to work, this
  *      should be the first thing fixed.  One step at a time.
+ *
+ *      The ONC RPC record marking (RM) standard (RFC 5531, s. 11) does not
+ *      provide for mixed call and reply fragment reassembly, so writes to the 
+ *      bytestream with MUST be record-wise atomic.  It appears that an
+ *      implementation may interleave call and reply messages on distinct
+ *      conversations.  This is not incompatible with holding a transport
+ *      exclusive locked across a full call and reply, bud does require new
+ *      control tranfers and delayed decoding support in the transport.  For
+ *      duplex channels, full coordination is required between client and
+ *      server tranpsorts sharing an underlying bytestream (Matt).
  */
 static int      *vc_fd_locks;
 extern mutex_t  clnt_fd_lock;

@@ -127,6 +127,9 @@ svc_vc_create(fd, sendsize, recvsize)
 	struct cf_rendezvous *r = NULL;
 	struct __rpc_sockinfo si;
 	struct sockaddr_storage sslocal;
+        struct sockaddr *salocal;
+        struct sockaddr_in *salocal_in;
+        struct sockaddr_in6 *salocal_in6;
 	socklen_t slen;
 
 	r = mem_alloc(sizeof(*r));
@@ -152,7 +155,6 @@ svc_vc_create(fd, sendsize, recvsize)
 	xprt->xp_auth = NULL;
 	xprt->xp_verf = _null_auth;
 	svc_vc_rendezvous_ops(xprt);
-	xprt->xp_port = (u_short)-1;	/* It is the rendezvouser */
 	xprt->xp_fd = fd;
 
 	slen = sizeof (struct sockaddr_storage);
@@ -160,7 +162,20 @@ svc_vc_create(fd, sendsize, recvsize)
 		__warnx("svc_vc_create: could not retrieve local addr");
 		goto cleanup_svc_vc_create;
 	}
-
+#if 0
+	xprt->xp_port = (u_short)-1;	/* It is the rendezvouser */
+#else
+        salocal = (struct sockaddr *) &sslocal;
+        switch (salocal->sa_family) {
+        case AF_INET:
+            salocal_in = (struct sockaddr_in *) salocal;
+            xprt->xp_port = ntohs(salocal_in->sin_port);
+            break;
+        case AF_INET6:
+            xprt->xp_port = ntohs(salocal_in6->sin6_port);
+            break;
+        }
+#endif
 	if (!__rpc_set_netbuf(&xprt->xp_ltaddr, &sslocal, sizeof(sslocal))) {
 		__warnx("svc_vc_create: no mem for local addr");
 		goto cleanup_svc_vc_create;
