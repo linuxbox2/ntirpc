@@ -851,20 +851,12 @@ svc_getreq_default(SVCXPRT *xprt)
 {
   struct svc_req r;
   struct rpc_msg msg;
-  svc_lookup_result_t lkp_res;
-
   int prog_found;
   rpcvers_t low_vers;
   rpcvers_t high_vers;
 
   enum xprt_stat stat;
   char cred_area[2 * MAX_AUTH_BYTES + RQCRED_SIZE];
-
-#if 0
-svc_lookup_result_t
-svc_lookup(svc_rec_t **rec, svc_vers_range_t *vrange, rpcprog_t prog,
-           rpcvers_t vers, char *netid, u_int flags)
-#endif
 
   msg.rm_call.cb_cred.oa_base = cred_area;
   msg.rm_call.cb_verf.oa_base = &(cred_area[MAX_AUTH_BYTES]);
@@ -874,10 +866,11 @@ svc_lookup(svc_rec_t **rec, svc_vers_range_t *vrange, rpcprog_t prog,
   do
     {
       if (SVC_RECV (xprt, &msg))
-	{
-
+        {
 	  /* now find the exported program and call it */
-	  struct svc_callout *s;
+          svc_vers_range_t vrange;
+          svc_lookup_result_t lkp_res;
+          svc_rec_t *svc_rec;
 	  enum auth_stat why;
 
 	  r.rq_xprt = xprt;
@@ -885,6 +878,7 @@ svc_lookup(svc_rec_t **rec, svc_vers_range_t *vrange, rpcprog_t prog,
 	  r.rq_vers = msg.rm_call.cb_vers;
 	  r.rq_proc = msg.rm_call.cb_proc;
 	  r.rq_cred = msg.rm_call.cb_cred;
+
 	  /* first authenticate the message */
 	  if ((why = _authenticate (&r, &msg)) != AUTH_OK)
 	    {
@@ -892,38 +886,21 @@ svc_lookup(svc_rec_t **rec, svc_vers_range_t *vrange, rpcprog_t prog,
 	      goto call_done;
 	    }
 
-          #if 1
-	  /* now match message with a registered service */
-	  prog_found = FALSE;
-	  low_vers = (rpcvers_t) - 1L;
-	  high_vers = (rpcvers_t) 0L;
-	  for (s = svc_head; s != NULL; s = s->sc_next)
-	    {
-	      if (s->rec.sc_prog == r.rq_prog)
-		{
-		  if (s->rec.sc_vers == r.rq_vers)
-		    {
-		      (*s->rec.sc_dispatch) (&r, xprt);
-		      goto call_done;
-		    }		/* found correct version */
-		  prog_found = TRUE;
-		  if (s->rec.sc_vers < low_vers)
-		    low_vers = s->rec.sc_vers;
-		  if (s->rec.sc_vers > high_vers)
-		    high_vers = s->rec.sc_vers;
-		}		/* found correct program */
-	    }
-          #endif
-	  /*
-	   * if we got here, the program or version
-	   * is not served ...
-	   */
-	  if (prog_found)
-	    svcerr_progvers (xprt, low_vers, high_vers);
-	  else
-	    svcerr_noprog (xprt);
-	  /* Fall through to ... */
-	}
+          lkp_res = svc_lookup(&svc_rec, &vrange, r.rq_prog, r.rq_vers,
+                               NULL, 0);
+          switch (lkp_res) {
+          case SVC_LKP_SUCCESS:
+              (*svc_rec->sc_dispatch) (&r, xprt);
+              goto call_done;
+              break;
+          SVC_LKP_VERS_NOTFOUND:
+              svcerr_progvers (xprt, low_vers, high_vers);
+          default:
+              svcerr_noprog (xprt);
+              break;
+          }
+        } /* SVC_RECV again? */
+
       /*
        * Check if the xprt has been disconnected in a
        * recursive call in the service dispatch routine.
