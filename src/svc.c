@@ -77,14 +77,14 @@ svc_params __svc_params[1];
  * Each entry represents a set of procedures (an rpc program).
  * The dispatch routine takes request structs and runs the
  * apropriate procedure.
+ *
+ * The service record is factored out to permit exporting the find
+ * routines without exposing the db implementation.
  */
 static struct svc_callout
 {
-  struct svc_callout *sc_next;
-  rpcprog_t sc_prog;
-  rpcvers_t sc_vers;
-  char *sc_netid;
-  void (*sc_dispatch) (struct svc_req *, SVCXPRT *);
+    struct svc_callout *sc_next;
+    struct svc_record rec;
 } *svc_head;
 
 extern rwlock_t svc_lock;
@@ -319,7 +319,7 @@ svc_reg (xprt, prog, vers, dispatch, nconf)
     {
       if (netid)
 	free (netid);
-      if (s->sc_dispatch == dispatch)
+      if (s->rec.sc_dispatch == dispatch)
 	goto rpcb_it;		/* he is registering another xptr */
       rwlock_unlock (&svc_lock);
       return (FALSE);
@@ -333,10 +333,10 @@ svc_reg (xprt, prog, vers, dispatch, nconf)
       return (FALSE);
     }
 
-  s->sc_prog = prog;
-  s->sc_vers = vers;
-  s->sc_dispatch = dispatch;
-  s->sc_netid = netid;
+  s->rec.sc_prog = prog;
+  s->rec.sc_vers = vers;
+  s->rec.sc_dispatch = dispatch;
+  s->rec.sc_netid = netid;
   s->sc_next = svc_head;
   svc_head = s;
 
@@ -381,8 +381,8 @@ svc_unreg (prog, vers)
 	  prev->sc_next = s->sc_next;
 	}
       s->sc_next = NULL;
-      if (s->sc_netid)
-	mem_free (s->sc_netid, sizeof (s->sc_netid) + 1);
+      if (s->rec.sc_netid)
+	mem_free (s->rec.sc_netid, sizeof (s->rec.sc_netid) + 1);
       mem_free (s, sizeof (struct svc_callout));
     }
   rwlock_unlock (&svc_lock);
@@ -413,7 +413,7 @@ svc_register (xprt, prog, vers, dispatch, protocol)
   if ((s = svc_find ((rpcprog_t) prog, (rpcvers_t) vers, &prev, NULL)) !=
       NULL)
     {
-      if (s->sc_dispatch == dispatch)
+      if (s->rec.sc_dispatch == dispatch)
 	goto pmap_it;		/* he is registering another xprt */
       return (FALSE);
     }
@@ -422,9 +422,9 @@ svc_register (xprt, prog, vers, dispatch, protocol)
     {
       return (FALSE);
     }
-  s->sc_prog = (rpcprog_t) prog;
-  s->sc_vers = (rpcvers_t) vers;
-  s->sc_dispatch = dispatch;
+  s->rec.sc_prog = (rpcprog_t) prog;
+  s->rec.sc_vers = (rpcvers_t) vers;
+  s->rec.sc_dispatch = dispatch;
   s->sc_next = svc_head;
   svc_head = s;
 pmap_it:
@@ -483,15 +483,76 @@ svc_find (prog, vers, prev, netid)
   p = NULL;
   for (s = svc_head; s != NULL; s = s->sc_next)
     {
-      if (((s->sc_prog == prog) && (s->sc_vers == vers)) &&
-	  ((netid == NULL) || (s->sc_netid == NULL) ||
-	   (strcmp (netid, s->sc_netid) == 0)))
+      if (((s->rec.sc_prog == prog) && (s->rec.sc_vers == vers)) &&
+	  ((netid == NULL) || (s->rec.sc_netid == NULL) ||
+	   (strcmp (netid, s->rec.sc_netid) == 0)))
 	break;
       p = s;
     }
   *prev = p;
   return (s);
 }
+
+/* An exported search routing similar to svc_find, but with error reporting
+ * needed by svc_getreq routines. */
+svc_lookup_result_t
+svc_lookup(svc_rec_t **rec, svc_vers_range_t *vrange, rpcprog_t prog,
+           rpcvers_t vers, char *netid, u_int flags)
+{
+    struct svc_callout *s, *p;
+    svc_lookup_result_t code;
+    bool_t prog_found, vers_found, netid_found;
+
+    p = NULL;
+    prog_found = vers_found = netid_found = FALSE;
+    vrange->lowvers = vrange->highvers = 0;
+
+    for (s = svc_head; s != NULL; s = s->sc_next) {
+        if (s->rec.sc_prog == prog) {
+            prog_found = TRUE;
+            /* track supported versions for SVC_LKP_VERS_NOTFOUND */
+            if (s->rec.sc_vers > vrange->highvers)
+                vrange->highvers = s->rec.sc_vers;
+            if (vrange->lowvers < s->rec.sc_vers)
+                vrange->lowvers = s->rec.sc_vers;
+            /* vers match*/
+            if (s->rec.sc_vers == vers) {
+                vers_found = TRUE;
+                /* the following semantics are unchanged */
+                if ((netid == NULL) || (s->rec.sc_netid == NULL) ||
+                    (strcmp (netid, s->rec.sc_netid) == 0)) {
+                    netid_found = TRUE;
+                    p = s;
+                } /* netid */
+            } /* vers */
+        } /* prog */
+    } /* for */
+
+    if (p != NULL) {
+        *rec = &(p->rec);
+        code = SVC_LKP_SUCCESS;
+        goto out;
+    }
+
+    if (! prog_found) {
+        code = SVC_LKP_PROG_NOTFOUND;
+        goto out;
+    }
+
+    if (! vers_found){
+        code = SVC_LKP_VERS_NOTFOUND;
+        goto out;
+    }
+
+    if ((netid != NULL) && (! netid_found)) {
+        code = SVC_LKP_NETID_NOTFOUND;
+        goto out;
+    }
+    
+out:
+    return (code);
+}
+
 
 /* ******************* REPLY GENERATION ROUTINES  ************ */
 
@@ -756,32 +817,58 @@ svc_getreq_common (fd)
      int fd;
 {
   SVCXPRT *xprt;
-  struct svc_req r;
-  struct rpc_msg msg;
-  int prog_found;
-  rpcvers_t low_vers;
-  rpcvers_t high_vers;
-  enum xprt_stat stat;
-  char cred_area[2 * MAX_AUTH_BYTES + RQCRED_SIZE];
-  sigset_t mask, newmask; /* XXX check */
-
-  CLIENT *cl;
-  struct ct_data *ct;
-
-  msg.rm_call.cb_cred.oa_base = cred_area;
-  msg.rm_call.cb_verf.oa_base = &(cred_area[MAX_AUTH_BYTES]);
-  r.rq_clntcred = &(cred_area[2 * MAX_AUTH_BYTES]);
+  bool_t code;
 
   rwlock_rdlock (&svc_fd_lock);
   xprt = __svc_xports[fd];
   rwlock_unlock (&svc_fd_lock);
 
   if (xprt == NULL)
-    /* But do we control sock? */
     return;
 
-  /* XXX call/reply mutex */
-  clnt_vc_fd_lock(xprt, &mask, &newmask);
+  code = xprt->xp_ops2->xp_getreq(xprt);
+
+  return;
+}
+
+/* Allow internal or external getreq routines to validate xprt
+ * has not been recursively disconnected. (I don't completely buy the
+ * logic, but it should be unchanged (Matt) */
+bool_t
+svc_validate_xprt_list(SVCXPRT *xprt)
+{
+    bool_t code;
+
+    rwlock_rdlock (&svc_fd_lock);
+    code = (xprt == __svc_xports[xprt->xp_fd]);
+    rwlock_unlock (&svc_fd_lock);
+
+    return (code);
+}
+
+bool_t
+svc_getreq_default(SVCXPRT *xprt)
+{
+  struct svc_req r;
+  struct rpc_msg msg;
+  svc_lookup_result_t lkp_res;
+
+  int prog_found;
+  rpcvers_t low_vers;
+  rpcvers_t high_vers;
+
+  enum xprt_stat stat;
+  char cred_area[2 * MAX_AUTH_BYTES + RQCRED_SIZE];
+
+#if 0
+svc_lookup_result_t
+svc_lookup(svc_rec_t **rec, svc_vers_range_t *vrange, rpcprog_t prog,
+           rpcvers_t vers, char *netid, u_int flags)
+#endif
+
+  msg.rm_call.cb_cred.oa_base = cred_area;
+  msg.rm_call.cb_verf.oa_base = &(cred_area[MAX_AUTH_BYTES]);
+  r.rq_clntcred = &(cred_area[2 * MAX_AUTH_BYTES]);
 
   /* now receive msgs from xprtprt (support batch calls) */
   do
@@ -804,26 +891,29 @@ svc_getreq_common (fd)
 	      svcerr_auth (xprt, why);
 	      goto call_done;
 	    }
+
+          #if 1
 	  /* now match message with a registered service */
 	  prog_found = FALSE;
 	  low_vers = (rpcvers_t) - 1L;
 	  high_vers = (rpcvers_t) 0L;
 	  for (s = svc_head; s != NULL; s = s->sc_next)
 	    {
-	      if (s->sc_prog == r.rq_prog)
+	      if (s->rec.sc_prog == r.rq_prog)
 		{
-		  if (s->sc_vers == r.rq_vers)
+		  if (s->rec.sc_vers == r.rq_vers)
 		    {
-		      (*s->sc_dispatch) (&r, xprt);
+		      (*s->rec.sc_dispatch) (&r, xprt);
 		      goto call_done;
 		    }		/* found correct version */
 		  prog_found = TRUE;
-		  if (s->sc_vers < low_vers)
-		    low_vers = s->sc_vers;
-		  if (s->sc_vers > high_vers)
-		    high_vers = s->sc_vers;
+		  if (s->rec.sc_vers < low_vers)
+		    low_vers = s->rec.sc_vers;
+		  if (s->rec.sc_vers > high_vers)
+		    high_vers = s->rec.sc_vers;
 		}		/* found correct program */
 	    }
+          #endif
 	  /*
 	   * if we got here, the program or version
 	   * is not served ...
@@ -839,14 +929,8 @@ svc_getreq_common (fd)
        * recursive call in the service dispatch routine.
        * If so, then break.
        */
-      rwlock_rdlock (&svc_fd_lock);
-      
-      if (xprt != __svc_xports[fd])
-	{
-	  rwlock_unlock (&svc_fd_lock);
-	  break;
-	}
-      rwlock_unlock (&svc_fd_lock);
+      if (!svc_validate_xprt_list(xprt))
+          break;
     call_done:
       if ((stat = SVC_STAT (xprt)) == XPRT_DIED)
 	{
@@ -860,11 +944,7 @@ svc_getreq_common (fd)
 	}
     }
   while (stat == XPRT_MOREREQS);
-
-  /* XXX */
-  clnt_vc_fd_unlock(xprt, &mask);
 }
-
 
 void
 svc_getreq_poll (pfdp, pollretval)

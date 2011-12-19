@@ -155,9 +155,10 @@ clnt_vc_fd_lock(SVCXPRT *xprt, sigset_t *mask, sigset_t *newmask)
         struct ct_data *ct = (struct ct_data *) cl->cl_private;
         /* this is way overdone */
         mutex_lock(&clnt_fd_lock);
-        while (vc_fd_locks[ct->ct_fd])
+        while (vc_fd_locks[ct->ct_fd]) {
+            printf("svc wait for xprt %p\n", xprt);
             cond_wait(&vc_cv[ct->ct_fd], &clnt_fd_lock);
-        rpc_lock_value = 1;
+        }
         vc_fd_locks[ct->ct_fd] = rpc_lock_value;
         mutex_unlock(&clnt_fd_lock);
     }
@@ -384,8 +385,11 @@ clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
 	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 	mutex_lock(&clnt_fd_lock);
-	while (vc_fd_locks[ct->ct_fd])
-		cond_wait(&vc_cv[ct->ct_fd], &clnt_fd_lock);
+	while (vc_fd_locks[ct->ct_fd]) {
+            /* XXX consolidate, add tag */
+            printf("clnt wait for ct %p xprt %p\n", ct, ct->ct_duplex.ct_xprt);
+            cond_wait(&vc_cv[ct->ct_fd], &clnt_fd_lock);
+        }
         rpc_lock_value = 1;
 	vc_fd_locks[ct->ct_fd] = rpc_lock_value;
 	mutex_unlock(&clnt_fd_lock);

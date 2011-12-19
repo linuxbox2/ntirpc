@@ -372,6 +372,8 @@ svc_dg_ops(xprt)
 		ops.xp_freeargs = svc_dg_freeargs;
 		ops.xp_destroy = svc_dg_destroy;
 		ops2.xp_control = svc_dg_control;
+		ops2.xp_getreq = svc_getreq_default;
+
 	}
 	xprt->xp_ops = &ops;
 	xprt->xp_ops2 = &ops2;

@@ -240,6 +240,7 @@ svc_raw_ops(xprt)
 		ops.xp_freeargs = svc_raw_freeargs;
 		ops.xp_destroy = svc_raw_destroy;
 		ops2.xp_control = svc_raw_control;
+		ops2.xp_getreq = svc_getreq_default;
 	}
 	xprt->xp_ops = &ops;
 	xprt->xp_ops2 = &ops2;

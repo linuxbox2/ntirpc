@@ -120,7 +120,7 @@ typedef struct svc_init_params
     warnx_t warnx;
 } svc_init_params;
 
-/* this won't work yet.  threading fdsets around is annoying */
+/* threading fdsets around is annoying */
 typedef struct svc_params
 {
     enum svc_event_type ev_type;
@@ -137,6 +137,8 @@ typedef struct svc_params
 
     u_int max_connections;
     
+    /* XXX this is looking insufficient--currently, prototype has
+     * a fine-grained getreq (the only one epoll needs) on xp->ops2 */
     struct __svc_ops {
         bool_t (*svc_clean_idle)(fd_set *fds, int timeout, bool_t cleanblock);
         void (*svc_run)(void);
@@ -206,8 +208,10 @@ typedef struct __rpc_svcxprt {
 	/* XXX - fvdl stick this here for ABI backward compat reasons */
 	struct xp_ops2 {
 		/* catch-all function */
-		bool_t  (*xp_control)(struct __rpc_svcxprt *, const u_int,
+            bool_t  (*xp_control)(struct __rpc_svcxprt *, const u_int,
 				void *);
+            /* handle incoming requests (calls xp_recv) */
+            bool_t  (*xp_getreq)(struct __rpc_svcxprt *);
 	} *xp_ops2;
 	char		*xp_tp;		 /* transport provider device name */
 	char		*xp_netid;	 /* network token */
@@ -226,6 +230,29 @@ typedef struct __rpc_svcxprt {
 	u_int		xp_flags;	 /* flags */
 	rwlock_t lock;                   /* xprt lock */
 } SVCXPRT;
+
+/* Service record used by exported search routines */
+typedef struct svc_record
+{
+  rpcprog_t sc_prog;
+  rpcvers_t sc_vers;
+  char *sc_netid;
+  void (*sc_dispatch) (struct svc_req *, SVCXPRT *);
+} svc_rec_t;
+
+typedef struct svc_vers_range
+{
+    rpcvers_t lowvers;
+    rpcvers_t highvers;
+} svc_vers_range_t;
+
+typedef enum svc_lookup_result
+{
+    SVC_LKP_SUCCESS=0,
+    SVC_LKP_PROG_NOTFOUND=1,
+    SVC_LKP_VERS_NOTFOUND=2,
+    SVC_LKP_NETID_NOTFOUND=3,
+} svc_lookup_result_t;
 
 /* functions which can be installed using a control function, e.g., 
  * xp_ops2->xp_control */
@@ -614,6 +641,16 @@ extern SVCXPRT *svcunixfd_create(int, u_int, u_int);
  * Memory based rpc (for speed check and testing)
  */
 extern SVCXPRT *svc_raw_create(void);
+
+/*
+ * Getreq plug-out prototype
+ */
+extern bool_t svc_getreq_default(SVCXPRT *xprt);
+
+/*
+ * Convenience functions for implementing these 
+ */
+extern bool_t svc_validate_xprt_list(SVCXPRT *xprt);
 
 /*
  * svc_dg_enable_cache() enables the cache on dg transports.
