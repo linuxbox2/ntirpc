@@ -82,6 +82,8 @@
 #define SVCSET_XP_RECV		6
 #define SVCGET_XP_FLAGS		7
 #define SVCSET_XP_FLAGS		8
+#define SVCGET_XP_GETREQ        9
+#define SVCSET_XP_GETREQ        10
 
 /*
  * Operations for rpc_control().
@@ -257,6 +259,7 @@ typedef enum svc_lookup_result
 /* functions which can be installed using a control function, e.g., 
  * xp_ops2->xp_control */
 typedef bool_t (*xp_recv_t)(struct __rpc_svcxprt *, struct rpc_msg *);
+typedef bool_t (*xp_getreq_t)(struct __rpc_svcxprt *);
 
 /*
  * Service request
