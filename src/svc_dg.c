@@ -327,6 +327,8 @@ svc_dg_destroy(xprt)
 	(void) mem_free(xprt, sizeof (SVCXPRT));
 }
 
+extern mutex_t ops_lock;
+
 static bool_t
 /*ARGSUSED*/
 svc_dg_control(xprt, rq, in)
@@ -342,10 +344,24 @@ svc_dg_control(xprt, rq, in)
 	    xprt->xp_flags = *(u_int *)in;
 	    break;
 	case SVCGET_XP_RECV:
+            mutex_lock(&ops_lock);
 	    *(xp_recv_t *)in = xprt->xp_ops->xp_recv;
+            mutex_unlock(&ops_lock);
 	    break;
 	case SVCSET_XP_RECV:
+            mutex_lock(&ops_lock);
 	    xprt->xp_ops->xp_recv = *(xp_recv_t)in;
+            mutex_unlock(&ops_lock);
+	    break;
+	case SVCGET_XP_GETREQ:
+            mutex_lock(&ops_lock);
+	    *(xp_getreq_t *)in = xprt->xp_ops2->xp_getreq;
+            mutex_unlock(&ops_lock);
+	    break;
+	case SVCSET_XP_GETREQ:
+            mutex_lock(&ops_lock);
+	    xprt->xp_ops2->xp_getreq = *(xp_getreq_t)in;
+            mutex_unlock(&ops_lock);
 	    break;
 	default:
 	    return (FALSE);
@@ -359,7 +375,6 @@ svc_dg_ops(xprt)
 {
 	static struct xp_ops ops;
 	static struct xp_ops2 ops2;
-	extern mutex_t ops_lock;
 
 /* VARIABLES PROTECTED BY ops_lock: ops */
 
