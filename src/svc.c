@@ -851,10 +851,6 @@ svc_getreq_default(SVCXPRT *xprt)
 {
   struct svc_req r;
   struct rpc_msg msg;
-  int prog_found;
-  rpcvers_t low_vers;
-  rpcvers_t high_vers;
-
   enum xprt_stat stat;
   char cred_area[2 * MAX_AUTH_BYTES + RQCRED_SIZE];
 
@@ -894,7 +890,7 @@ svc_getreq_default(SVCXPRT *xprt)
               goto call_done;
               break;
           SVC_LKP_VERS_NOTFOUND:
-              svcerr_progvers (xprt, low_vers, high_vers);
+              svcerr_progvers (xprt, vrange.lowvers, vrange.highvers);
           default:
               svcerr_noprog (xprt);
               break;
