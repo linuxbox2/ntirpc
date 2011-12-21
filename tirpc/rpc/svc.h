@@ -221,8 +221,10 @@ typedef struct __rpc_svcxprt {
 	struct netbuf	xp_rtaddr;	 /* remote transport address */
 	struct opaque_auth xp_verf;	 /* raw response verifier */
 	SVCAUTH		*xp_auth;	 /* auth handle of current req */
-#if defined(TIRPC_EPOLL)
+#if 0
         struct epoll_event xp_epoll_ev;  /* event handle */
+#else
+        void            *xp_ev;          /* event handle */
 #endif
 	void		*xp_p1;		 /* private: for use by svc ops */
 	void		*xp_p2;		 /* private: for use by svc ops */

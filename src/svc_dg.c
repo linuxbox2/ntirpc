@@ -138,7 +138,9 @@ svc_dg_create(fd, sendsize, recvsize)
 	xprt->xp_verf.oa_base = su->su_verfbody;
 	svc_dg_ops(xprt);
 	xprt->xp_rtaddr.maxlen = sizeof (struct sockaddr_storage);
-
+#if defined(TIRPC_EPOLL)
+        xprt->xp_ev = mem_alloc(sizeof(struct epoll_event));
+#endif
 	slen = sizeof ss;
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0)
 		goto freedata;
@@ -154,6 +156,10 @@ freedata:
 	if (xprt) {
 		if (su)
 			(void) mem_free(su, sizeof (*su));
+#if defined(TIRPC_EPOLL)
+        if (xprt->xp_ev)
+            mem_free(xprt->xp_ev, sizeof(struct epoll_event));
+#endif
 		(void) mem_free(xprt, sizeof (SVCXPRT));
 	}
 	return (NULL);
@@ -324,6 +330,10 @@ svc_dg_destroy(xprt)
 		(void) mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
 	if (xprt->xp_tp)
 		(void) free(xprt->xp_tp);
+#if defined(TIRPC_EPOLL)
+        if (xprt->xp_ev)
+            mem_free(xprt->xp_ev, sizeof(struct epoll_event));
+#endif
 	(void) mem_free(xprt, sizeof (SVCXPRT));
 }
 

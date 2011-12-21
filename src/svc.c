@@ -198,14 +198,15 @@ xprt_register (SVCXPRT * xprt)
 #if defined(TIRPC_EPOLL)
         case SVC_EVENT_EPOLL:
             /* set up epoll user data */
-            xprt->xp_epoll_ev.data.fd = sock;
+            ((struct epoll_event *) xprt->xp_ev)->data.fd = sock;
             /* wait for read events, level triggered */
-            xprt->xp_epoll_ev.events = EPOLLIN;
+            ((struct epoll_event *) xprt->xp_ev)->events = EPOLLIN;
             /* add to epoll vector */
+            assert(xprt->xp_ev);
             code = epoll_ctl(__svc_params->ev_u.epoll.epoll_fd,
                              EPOLL_CTL_ADD,
                              sock,
-                             &xprt->xp_epoll_ev);
+                             (struct epoll_event *) xprt->xp_ev);
             break;
 #endif
         default:
@@ -250,10 +251,11 @@ __xprt_do_unregister (SVCXPRT *xprt, bool_t dolock)
         switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
         case SVC_EVENT_EPOLL:
+            assert(xprt->xp_ev);
             code = epoll_ctl(__svc_params->ev_u.epoll.epoll_fd,
                              EPOLL_CTL_DEL,
                              sock,
-                             &xprt->xp_epoll_ev);
+                             (struct epoll_event *) xprt->xp_ev);
           break;
 #endif
         default:
@@ -858,7 +860,7 @@ svc_getreq_default(SVCXPRT *xprt)
   msg.rm_call.cb_verf.oa_base = &(cred_area[MAX_AUTH_BYTES]);
   r.rq_clntcred = &(cred_area[2 * MAX_AUTH_BYTES]);
 
-  /* now receive msgs from xprtprt (support batch calls) */
+  /* now receive msgs from xprt (support batch calls) */
   do
     {
       if (SVC_RECV (xprt, &msg))

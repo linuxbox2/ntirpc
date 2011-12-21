@@ -104,8 +104,6 @@ xdr_callmsg(xdrs, cmsg)
 		if (buf != NULL) {
 			cmsg->rm_xid = IXDR_GET_U_INT32(buf);
 			cmsg->rm_direction = IXDR_GET_ENUM(buf, enum msg_type);
-                        /* XXX we need to handle or defer this case in
-                         * duplex */
 			if (cmsg->rm_direction != CALL) {
 				return (FALSE);
 			}

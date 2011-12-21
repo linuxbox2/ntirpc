@@ -171,6 +171,14 @@ __BEGIN_DECLS
 extern bool_t	xdr_callmsg(XDR *, struct rpc_msg *);
 
 /*
+ * XDR routine to handle a duplex rpc message.
+ * xdr_callmsg(xdrs, cmsg)
+ * 	XDR *xdrs;
+ * 	struct rpc_msg *cmsg;
+ */
+extern bool_t	xdr_dplx_msg(XDR *, struct rpc_msg *);
+
+/*
  * XDR routine to pre-serialize the static part of a rpc message.
  * xdr_callhdr(xdrs, cmsg)
  * 	XDR *xdrs;

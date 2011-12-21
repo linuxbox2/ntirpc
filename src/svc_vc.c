@@ -62,6 +62,7 @@
 #include <unistd.h>
 
 #include <rpc/rpc.h>
+#include <rpc/svc.h>
 
 #include "rpc_com.h"
 #include "clnt_internal.h"
@@ -99,7 +100,7 @@ struct sockaddr_in6 *sin6;
   sin6->sin6_addr.s6_addr32[0] = 0;
   sin6->sin6_addr.s6_addr32[1] = 0;
   sin6->sin6_addr.s6_addr32[2] = htonl(0xffff);
-  sin6->sin6_addr.s6_addr32[3] = *(uint32_t *) & sin->sin_addr;
+  sin6->sin6_addr.s6_addr32[3] = *(uint32_t *) & sin->sin_addr; /* XXX strict */
 }
 
 /*
@@ -157,7 +158,9 @@ svc_vc_create(fd, sendsize, recvsize)
 	xprt->xp_verf = _null_auth;
 	svc_vc_rendezvous_ops(xprt);
 	xprt->xp_fd = fd;
-
+#if defined(TIRPC_EPOLL)
+        xprt->xp_ev = mem_alloc(sizeof(struct epoll_event));
+#endif
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&sslocal, &slen) < 0) {
 		__warnx("svc_vc_create: could not retrieve local addr");
@@ -166,6 +169,7 @@ svc_vc_create(fd, sendsize, recvsize)
 #if 0
 	xprt->xp_port = (u_short)-1;	/* It is the rendezvouser */
 #else
+        /* XXX following breaks strict aliasing? */
         salocal = (struct sockaddr *) &sslocal;
         switch (salocal->sa_family) {
         case AF_INET:
@@ -173,6 +177,7 @@ svc_vc_create(fd, sendsize, recvsize)
             xprt->xp_port = ntohs(salocal_in->sin_port);
             break;
         case AF_INET6:
+            salocal_in6 = (struct sockaddr_in6 *) salocal;
             xprt->xp_port = ntohs(salocal_in6->sin6_port);
             break;
         }
@@ -380,7 +385,9 @@ makefd_xprt(fd, sendsize, recvsize)
 	xprt->xp_fd = fd;
         if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
 		xprt->xp_netid = strdup(netid);
-
+#if defined(TIRPC_EPOLL)
+        xprt->xp_ev = mem_alloc(sizeof(struct epoll_event));
+#endif
 	xprt_register(xprt);
 done:
 	return (xprt);
@@ -531,6 +538,10 @@ __svc_vc_dodestroy(xprt)
 	if (xprt->xp_netid)
 		free(xprt->xp_netid); /* XXX check why not mem_alloc/free */
 
+#if defined(TIRPC_EPOLL)
+        if (xprt->xp_ev)
+            mem_free(xprt->xp_ev, sizeof(struct epoll_event));
+#endif
 	mem_free(xprt, sizeof(SVCXPRT));
 }
 
@@ -764,7 +775,7 @@ svc_vc_recv(xprt, msg)
 	 */
 	if (cd->nonblock == FALSE)
 		(void)xdrrec_skiprecord(xdrs);
-	if (xdr_callmsg(xdrs, msg)) {
+	if (xdr_dplx_msg(xdrs, msg)) {
 		cd->x_id = msg->rm_xid;
 		return (TRUE);
 	}
@@ -816,9 +827,11 @@ svc_vc_reply(xprt, msg)
 	XDR *xdrs;
 	bool_t rstat;
 
-	xdrproc_t xdr_results;
-	caddr_t xdr_location;
+	xdrproc_t xdr_results; /* XXX gcc warn uninitialized */
+	caddr_t xdr_location; /* XXX gcc warn uninitialized */
 	bool_t has_args;
+
+        /* XXX actually, gcc warning looks correct, revisit (Matt) */
 
 	assert(xprt != NULL);
 	assert(msg != NULL);
@@ -1169,6 +1182,11 @@ void svc_vc_destroy_xprt(SVCXPRT * xprt)
     cd = (struct cf_conn *) xprt->xp_p1;
     if(cd == NULL)
 	return;
+
+#if defined(TIRPC_EPOLL)
+    if (xprt->xp_ev)
+        mem_free(xprt->xp_ev, sizeof(struct epoll_event));
+#endif
     
     XDR_DESTROY(&(cd->xdrs));
     mem_free(cd, sizeof(struct cf_conn));
@@ -1195,6 +1213,10 @@ SVCXPRT *svc_vc_create_xprt(u_long sendsz, u_long recvsz)
 	xprt = NULL;
 	goto done;
     }
+
+#if defined(TIRPC_EPOLL)
+        xprt->xp_ev = mem_alloc(sizeof(struct epoll_event));
+#endif
 
     cd->strm_stat = XPRT_IDLE;
     xdrrec_create(&(cd->xdrs), sendsz, recvsz, xprt, read_vc, write_vc);

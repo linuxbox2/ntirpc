@@ -56,7 +56,6 @@ svc_run_select()
 	struct timeval timeout;
 	extern rwlock_t svc_fd_lock;
 
-
 	for (;;) {
 		rwlock_rdlock(&svc_fd_lock);
 		readfds = svc_fdset;
@@ -83,6 +82,9 @@ svc_run_select()
 
 #if defined(TIRPC_EPOLL)
 
+#define SVC_RUN_STOP 0x0001
+static u_long __svc_run_flags = 0;
+
 /* static */ void
 svc_run_epoll()
 {
@@ -98,6 +100,11 @@ svc_run_epoll()
 
     for (;;) {
         rwlock_rdlock(&svc_fd_lock);
+        /* permit graceful shutdown */
+        if (__svc_run_flags & SVC_RUN_STOP) {
+            rwlock_unlock(&svc_fd_lock);
+            return;
+        }
         rwlock_unlock(&svc_fd_lock);
         switch (nfds = epoll_wait(
                     __svc_params->ev_u.epoll.epoll_fd,
@@ -148,7 +155,7 @@ svc_exit()
     switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
     case SVC_EVENT_EPOLL:
-        /* XXXX need to actually signal svc_run */
+        __svc_run_flags |= SVC_RUN_STOP;
         close(__svc_params->ev_u.epoll.epoll_fd);
         break;
 #endif

@@ -70,7 +70,7 @@ struct ct_data {
 };
 
 /* internal client fd locking */
-extern void clnt_vc_fd_lock(SVCXPRT *xprt, sigset_t *mask, sigset_t *newmask);
+extern void clnt_vc_fd_lock(SVCXPRT *xprt, sigset_t *mask);
 extern void  clnt_vc_fd_unlock(SVCXPRT *xprt, sigset_t *mask);
 
 #endif /* _CLNT_INTERNAL_H */

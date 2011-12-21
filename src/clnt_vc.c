@@ -146,20 +146,28 @@ static const char __no_mem_str[] = "out of memory";
 
 
 void
-clnt_vc_fd_lock(SVCXPRT *xprt, sigset_t *mask, sigset_t *newmask)
+clnt_vc_fd_lock(SVCXPRT *xprt, sigset_t *mask)
 {
+    sigset_t newmask;
     static int rpc_lock_value = 1;
 
     if (xprt->xp_p4) {
         CLIENT *cl = (CLIENT *) xprt->xp_p4;
         struct ct_data *ct = (struct ct_data *) cl->cl_private;
+
+        sigfillset(&newmask);
+        thr_sigsetmask(SIG_SETMASK, &newmask, mask);
+
         /* this is way overdone */
         mutex_lock(&clnt_fd_lock);
+        fprintf(stderr, "xprt %p (fd %d) trylock (val %d)\n", xprt, ct->ct_fd,
+                vc_fd_locks[ct->ct_fd]);
         while (vc_fd_locks[ct->ct_fd]) {
-            printf("svc wait for xprt %p\n", xprt);
+            fprintf(stderr, "svc wait for xprt %p\n", xprt);
             cond_wait(&vc_cv[ct->ct_fd], &clnt_fd_lock);
         }
         vc_fd_locks[ct->ct_fd] = rpc_lock_value;
+        fprintf(stderr, "xprt %p (fd %d) locked\n", xprt, ct->ct_fd);
         mutex_unlock(&clnt_fd_lock);
     }
 }
@@ -170,7 +178,7 @@ clnt_vc_fd_unlock(SVCXPRT *xprt, sigset_t *mask)
     if (xprt->xp_p4) {
         CLIENT *cl = (CLIENT *) xprt->xp_p4;
         struct ct_data *ct = (struct ct_data *) cl->cl_private;
-        release_fd_lock(ct->ct_fd, *mask);
+        release_fd_lock(ct->ct_fd, *mask); /* restores mask */
     }
 }
 
