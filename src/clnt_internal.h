@@ -44,9 +44,10 @@ struct ct_wait_entry {
 
 #define MCALL_MSG_SIZE 24
 
-#define CT_FLAG_NONE            0x0000
-#define CT_FLAG_DUPLEX          0x0001
-#define CT_FLAG_EPOLL_ACTIVE    0x0002
+#define CT_FLAG_NONE              0x0000
+#define CT_FLAG_DUPLEX            0x0001
+#define CT_FLAG_EVENTS_BLOCKED    0x0002
+#define CT_FLAG_EPOLL_ACTIVE      0x0003
 
 struct ct_data {
 	int		ct_fd;		/* connection's fd */

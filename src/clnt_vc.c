@@ -733,10 +733,6 @@ read_vc(ctp, buf, len)
 	void *buf;
 	int len;
 {
-	/*
-	struct sockaddr sa;
-	socklen_t sal;
-	*/
 	struct ct_data *ct = (struct ct_data *)ctp;
 	struct pollfd fd;
 	int milliseconds = (int)((ct->ct_wait.tv_sec * 1000) +
@@ -745,28 +741,28 @@ read_vc(ctp, buf, len)
 	if (len == 0)
 		return (0);
 
-        if (ct->ct_duplex.ct_flags & CT_FLAG_EPOLL_ACTIVE) {
-            /* use epoll wait */
-            /* this requires a wait queue, etc */
-            abort(); /* XXX fixme */
-        } else {
-            fd.fd = ct->ct_fd;
-            fd.events = POLLIN;
-            for (;;) {
-		switch (poll(&fd, 1, milliseconds)) {
-		case 0:
-                    ct->ct_error.re_status = RPC_TIMEDOUT;
-                    return (-1);
+        /* if ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX, in the current
+         * strategy (cf. clnt_vc_call and the duplex-aware getreq
+         * implementation), we assert that the current thread may safely
+         * block in poll (though we are not constrained to blocking
+         * semantics) */
 
-		case -1:
-                    if (errno == EINTR)
-                        continue;
-                    ct->ct_error.re_status = RPC_CANTRECV;
-                    ct->ct_error.re_errno = errno;
-                    return (-1);
-		}
-		break;
+        fd.fd = ct->ct_fd;
+        fd.events = POLLIN;
+        for (;;) {
+            switch (poll(&fd, 1, milliseconds)) {
+            case 0:
+                ct->ct_error.re_status = RPC_TIMEDOUT;
+                return (-1);
+
+            case -1:
+                if (errno == EINTR)
+                    continue;
+                ct->ct_error.re_status = RPC_CANTRECV;
+                ct->ct_error.re_errno = errno;
+                return (-1);
             }
+            break;
         }
 
 	len = read(ct->ct_fd, buf, (size_t)len);
