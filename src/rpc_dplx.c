@@ -42,51 +42,57 @@
 
 #include <sys/select.h>
 
+static const struct xdr_discrim reply_dscrm[3] = {
+	{ (int)MSG_ACCEPTED, (xdrproc_t)xdr_accepted_reply },
+	{ (int)MSG_DENIED, (xdrproc_t)xdr_rejected_reply },
+	{ __dontcare__, NULL_xdrproc_t } };
+
 /*
  * XDR a duplex call message
  */
 bool_t
-xdr_dplx_msg(xdrs, cmsg)
+xdr_dplx_msg(xdrs, dmsg)
 	XDR *xdrs;
-	struct rpc_msg *cmsg;
+	struct rpc_msg *dmsg;
 {
 	int32_t *buf;
 	struct opaque_auth *oa;
+        bool_t rslt;
 
 	assert(xdrs != NULL);
-	assert(cmsg != NULL);
+	assert(dmsg != NULL);
 
 	if (xdrs->x_op == XDR_ENCODE) {
-            if (cmsg->rm_call.cb_cred.oa_length > MAX_AUTH_BYTES) {
+            if (dmsg->rm_call.cb_cred.oa_length > MAX_AUTH_BYTES) {
                 return (FALSE);
             }
-            if (cmsg->rm_call.cb_verf.oa_length > MAX_AUTH_BYTES) {
+            if (dmsg->rm_call.cb_verf.oa_length > MAX_AUTH_BYTES) {
                 return (FALSE);
             }
             buf = XDR_INLINE(xdrs, 8 * BYTES_PER_XDR_UNIT
-                             + RNDUP(cmsg->rm_call.cb_cred.oa_length)
+                             + RNDUP(dmsg->rm_call.cb_cred.oa_length)
                              + 2 * BYTES_PER_XDR_UNIT
-                             + RNDUP(cmsg->rm_call.cb_verf.oa_length));
+                             + RNDUP(dmsg->rm_call.cb_verf.oa_length));
             if (buf != NULL) {
-                IXDR_PUT_INT32(buf, cmsg->rm_xid);
-                IXDR_PUT_ENUM(buf, cmsg->rm_direction);
-                switch (cmsg->rm_direction) {
+                IXDR_PUT_INT32(buf, dmsg->rm_xid);
+                IXDR_PUT_ENUM(buf, dmsg->rm_direction);
+                switch (dmsg->rm_direction) {
                 case CALL:
-                    IXDR_PUT_INT32(buf, cmsg->rm_call.cb_rpcvers);
-                    if (cmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION) {
+                    IXDR_PUT_INT32(buf, dmsg->rm_call.cb_rpcvers);
+                    if (dmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION) {
                         return (FALSE);
                     }
-                    IXDR_PUT_INT32(buf, cmsg->rm_call.cb_prog);
-                    IXDR_PUT_INT32(buf, cmsg->rm_call.cb_vers);
-                    IXDR_PUT_INT32(buf, cmsg->rm_call.cb_proc);
-                    oa = &cmsg->rm_call.cb_cred;
+                    IXDR_PUT_INT32(buf, dmsg->rm_call.cb_prog);
+                    IXDR_PUT_INT32(buf, dmsg->rm_call.cb_vers);
+                    IXDR_PUT_INT32(buf, dmsg->rm_call.cb_proc);
+                    oa = &dmsg->rm_call.cb_cred;
                     IXDR_PUT_ENUM(buf, oa->oa_flavor);
                     IXDR_PUT_INT32(buf, oa->oa_length);
                     if (oa->oa_length) {
                         memmove(buf, oa->oa_base, oa->oa_length);
                         buf += RNDUP(oa->oa_length) / sizeof (int32_t);
                     }
-                    oa = &cmsg->rm_call.cb_verf;
+                    oa = &dmsg->rm_call.cb_verf;
                     IXDR_PUT_ENUM(buf, oa->oa_flavor);
                     IXDR_PUT_INT32(buf, oa->oa_length);
                     if (oa->oa_length) {
@@ -98,11 +104,15 @@ xdr_dplx_msg(xdrs, cmsg)
                     return (TRUE);
                     break;
                 case REPLY:
-                    /* XXX */
-                    fprintf(stderr, "Unexpected (duplex) REPLY\n");
-                    return (FALSE); /* XXX fix */
+                    printf("unexpected (duplex) REPLY\n");
+                    return (xdr_union(xdrs,
+                                      (enum_t *)&(dmsg->rm_reply.rp_stat),
+                                      (caddr_t)(void *)&(dmsg->rm_reply.ru),
+                                      reply_dscrm,
+                                      NULL_xdrproc_t));
                     break;
                 default:
+                    /* unlikely */
                     return (FALSE);
                 }
             } /* buf */
@@ -110,18 +120,18 @@ xdr_dplx_msg(xdrs, cmsg)
 	if (xdrs->x_op == XDR_DECODE) {
             buf = XDR_INLINE(xdrs, 8 * BYTES_PER_XDR_UNIT);
             if (buf != NULL) {
-                cmsg->rm_xid = IXDR_GET_U_INT32(buf);
-                cmsg->rm_direction = IXDR_GET_ENUM(buf, enum msg_type);
-                switch (cmsg->rm_direction) {
+                dmsg->rm_xid = IXDR_GET_U_INT32(buf);
+                dmsg->rm_direction = IXDR_GET_ENUM(buf, enum msg_type);
+                switch (dmsg->rm_direction) {
                 case CALL:
-                    cmsg->rm_call.cb_rpcvers = IXDR_GET_U_INT32(buf);
-                    if (cmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION) {
+                    dmsg->rm_call.cb_rpcvers = IXDR_GET_U_INT32(buf);
+                    if (dmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION) {
                         return (FALSE);
                     }
-                    cmsg->rm_call.cb_prog = IXDR_GET_U_INT32(buf);
-                    cmsg->rm_call.cb_vers = IXDR_GET_U_INT32(buf);
-                    cmsg->rm_call.cb_proc = IXDR_GET_U_INT32(buf);
-                    oa = &cmsg->rm_call.cb_cred;
+                    dmsg->rm_call.cb_prog = IXDR_GET_U_INT32(buf);
+                    dmsg->rm_call.cb_vers = IXDR_GET_U_INT32(buf);
+                    dmsg->rm_call.cb_proc = IXDR_GET_U_INT32(buf);
+                    oa = &dmsg->rm_call.cb_cred;
                     oa->oa_flavor = IXDR_GET_ENUM(buf, enum_t);
                     oa->oa_length = (u_int)IXDR_GET_U_INT32(buf);
                     if (oa->oa_length) {
@@ -149,7 +159,7 @@ xdr_dplx_msg(xdrs, cmsg)
                             */
                         }
                     }
-                    oa = &cmsg->rm_call.cb_verf;
+                    oa = &dmsg->rm_call.cb_verf;
                     buf = XDR_INLINE(xdrs, 2 * BYTES_PER_XDR_UNIT);
                     if (buf == NULL) {
                         if (xdr_enum(xdrs, &oa->oa_flavor) == FALSE ||
@@ -188,25 +198,71 @@ xdr_dplx_msg(xdrs, cmsg)
                     return (TRUE);
                     break;
                 case REPLY:
-                    fprintf(stderr, "Unexpected (duplex) REPLY\n");
-                    return (FALSE);
+                    printf("unexpected (duplex) REPLY\n");
+                    return (xdr_union(xdrs,
+                                      (enum_t *)&(dmsg->rm_reply.rp_stat),
+                                      (caddr_t)(void *)&(dmsg->rm_reply.ru),
+                                      reply_dscrm,
+                                      NULL_xdrproc_t));
+
                     break;
                 default:
+                    /* unlikely */
                     return (FALSE);
                 }
             } /* buf */
 	} /* XDR_DECODE */
         /* XXXX this has never been reached when rm_direction != CALL */
+        printf("xdr_callmsg:  got here (final stanza, xid=%d direction==%d)\n",
+               dmsg->rm_xid,
+               dmsg->rm_direction);
+#if 0
+        /* XXX What is it exactly doing--trying to read another call? */
+        switch (dmsg->rm_direction) {
+        case CALL:
+            printf("before xid: %d\n", dmsg->rm_xid);
+            rslt = xdr_u_int32_t(xdrs, &(dmsg->rm_xid));
+            if (! rslt)
+                break;
+            printf("after xid: %d\n", dmsg->rm_xid);
+            printf("before direction: %d\n", dmsg->rm_direction);
+            rslt = xdr_enum(xdrs, (enum_t *)&(dmsg->rm_direction));
+            if (! rslt)
+                break;
+            printf("after direction: %d\n", dmsg->rm_direction);
+            if (dmsg->rm_direction != CALL)
+                break;
+            printf("before rpcvers: %d\n", dmsg->rm_call.cb_rpcvers);
+            rslt = xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_rpcvers));
+            if (! rslt)
+                break;
+            printf("after rpcvers: %d\n", dmsg->rm_call.cb_rpcvers);
+            if (dmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION)
+                break;
+	    if (xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_prog)) &&
+                xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_vers)) &&
+                xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_proc)) &&
+                xdr_opaque_auth(xdrs, &(dmsg->rm_call.cb_cred)) )
+                return (xdr_opaque_auth(xdrs, &(dmsg->rm_call.cb_verf)));
+            break;
+        case REPLY:
+            
+        default:
+            return (FALSE);
+        }
+#else
 	if (
-	    xdr_u_int32_t(xdrs, &(cmsg->rm_xid)) &&
-	    xdr_enum(xdrs, (enum_t *)&(cmsg->rm_direction)) &&
-	    (cmsg->rm_direction == CALL) &&
-	    xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_rpcvers)) &&
-	    (cmsg->rm_call.cb_rpcvers == RPC_MSG_VERSION) &&
-	    xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_prog)) &&
-	    xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_vers)) &&
-	    xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_proc)) &&
-	    xdr_opaque_auth(xdrs, &(cmsg->rm_call.cb_cred)) )
-		return (xdr_opaque_auth(xdrs, &(cmsg->rm_call.cb_verf)));
-	return (FALSE);
+	    xdr_u_int32_t(xdrs, &(dmsg->rm_xid)) &&
+	    xdr_enum(xdrs, (enum_t *)&(dmsg->rm_direction)) &&
+	    (dmsg->rm_direction == CALL) &&
+	    xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_rpcvers)) &&
+	    (dmsg->rm_call.cb_rpcvers == RPC_MSG_VERSION) &&
+	    xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_prog)) &&
+	    xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_vers)) &&
+	    xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_proc)) &&
+	    xdr_opaque_auth(xdrs, &(dmsg->rm_call.cb_cred)) )
+		return (xdr_opaque_auth(xdrs, &(dmsg->rm_call.cb_verf)));
+        return (FALSE);
+#endif
+       
 }

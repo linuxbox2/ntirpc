@@ -505,6 +505,9 @@ call_again:
     if (timeout.tv_sec == 0 && timeout.tv_usec == 0)
         vc_call_return (ct->ct_error.re_status = RPC_TIMEDOUT);
 
+    /* XXX OK.  Now we need to deal with non REPLY msgs, I
+     * strongly suspect */
+
     /*
      * Keep receiving until we get a valid transaction id
      */
@@ -513,14 +516,22 @@ call_again:
         reply_msg.acpted_rply.ar_verf = _null_auth;
         reply_msg.acpted_rply.ar_results.where = NULL;
         reply_msg.acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
-        if (! xdrrec_skiprecord(xdrs))
-            vc_call_return (ct->ct_error.re_status);
-        /* now decode and validate the response header */
-        if (! xdr_replymsg(xdrs, &reply_msg)) {
-            if (ct->ct_error.re_status == RPC_SUCCESS)
-                continue;
+        if (! xdrrec_skiprecord(xdrs)) {
+            printf("error at skiprecord\n");
             vc_call_return (ct->ct_error.re_status);
         }
+        /* now decode and validate the response header */
+        if (! xdr_replymsg(xdrs, &reply_msg)) {
+            printf("error at replymsg\n");
+            if (ct->ct_error.re_status == RPC_SUCCESS) {
+                printf("error at ct_error (dirrection == %d)\n",
+                       reply_msg.rm_direction);
+                continue;
+            }
+            vc_call_return (ct->ct_error.re_status);
+        }
+        printf("successful xdr_replymsg (direction==%d)",
+               reply_msg.rm_direction);
         if (reply_msg.rm_xid == x_id)
             break;
     }
