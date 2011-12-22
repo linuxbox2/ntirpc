@@ -240,10 +240,10 @@ __xprt_do_unregister (SVCXPRT *xprt, bool_t dolock)
 
     assert (xprt != NULL);
 
-    sock = xprt->xp_fd;
-
     if (dolock)
         rwlock_wrlock (&svc_fd_lock);
+
+    sock = xprt->xp_fd;
 
     if ((sock < __svc_params->max_connections) && 
         (__svc_xports[sock] == xprt)) {

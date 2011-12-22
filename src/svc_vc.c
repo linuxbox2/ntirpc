@@ -426,7 +426,7 @@ again:
                     switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
                     case SVC_EVENT_EPOLL:
-                        
+                        /* XXX implement a plug-out strategy for this? */
                         break;
 #endif
                     default:
@@ -655,6 +655,9 @@ read_vc(xprtp, buf, len)
 			gettimeofday(&cfp->last_recv_time, NULL);
 		return len;
 	}
+
+        /* XXX svc_dplx side of poll -- I think we want to 
+         * consider making this hot-threaded as well (Matt) */
 
 	do {
 		pollfd.fd = sock;
