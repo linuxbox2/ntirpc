@@ -1095,10 +1095,10 @@ out:
  * deallocated without closing cl->cl_private->ct_fd.
  */
 SVCXPRT *
-svc_vc_create_cl(cl, sendsize, recvsize, flags)
+svc_vc_create_cl(cl, sendsz, recvsz, flags)
 	CLIENT *cl;
-	const u_int sendsize;
-	const u_int recvsize;
+	const u_int sendsz;
+	const u_int recvsz;
 	const uint32_t flags;
 {
 
@@ -1113,14 +1113,11 @@ svc_vc_create_cl(cl, sendsize, recvsize, flags)
     ct = (struct ct_data *) cl->cl_private;
     fd = ct->ct_fd;
 
-    /* TODO:  if flag passed, set send and receive
-     * size from client? */
-
     /*
      * make a new transport
      */
 
-    xprt = makefd_xprt(fd, sendsize, recvsize);
+    xprt = makefd_xprt(fd, sendsz, recvsz);
 
     if (!__rpc_set_netbuf(&xprt->xp_rtaddr, &addr, len))
 		return (FALSE);
@@ -1134,8 +1131,8 @@ svc_vc_create_cl(cl, sendsize, recvsize, flags)
 
     cd = (struct cf_conn *) xprt->xp_p1;
 
-    cd->recvsize = recvsize;
-    cd->sendsize = sendsize;
+    cd->recvsize = recvsz;
+    cd->sendsize = sendsz;
     cd->maxrec = __svc_maxrec;
 
     if (cd->maxrec != 0) {
