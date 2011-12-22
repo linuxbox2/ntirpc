@@ -184,6 +184,65 @@ clnt_vc_fd_unlock(SVCXPRT *xprt, sigset_t *mask)
     }
 }
 
+/* XXX steal name from above, renaming */
+void
+clnt_vc_fd_lock2(CLIENT * cl, sigset_t *mask)
+{
+    sigset_t newmask;
+    static int rpc_lock_value = 1;
+    struct ct_data *ct = (struct ct_data *) cl->cl_private;
+
+    sigfillset(&newmask);
+    thr_sigsetmask(SIG_SETMASK, &newmask, mask);
+
+    /* this is way overdone */
+    mutex_lock(&clnt_fd_lock);
+    fprintf(stderr, "clnt %p (fd %d) trylock (val %d)\n", cl, ct->ct_fd,
+            vc_fd_locks[ct->ct_fd]);
+    while (vc_fd_locks[ct->ct_fd]) {
+        fprintf(stderr, "svc wait for clnt %p\n", cl);
+        cond_wait(&vc_cv[ct->ct_fd], &clnt_fd_lock);
+    }
+    vc_fd_locks[ct->ct_fd] = rpc_lock_value;
+    fprintf(stderr, "clnt %p (fd %d) locked\n", cl, ct->ct_fd);
+    mutex_unlock(&clnt_fd_lock);
+}
+
+/*
+ * If event processing on the xprt associated with cl is not
+ * currently blocked, do so.
+ *
+ * Returns TRUE if blocking state was changed, FALSE otherwise.
+ *
+ * Locked on entry.
+ */
+bool_t
+cond_block_events_client(CLIENT *cl)
+{
+    struct ct_data *ct = (struct ct_data *) cl->cl_private;
+    if ((ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX) &&
+        (! (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED))) {
+        SVCXPRT *xprt = ct->ct_duplex.ct_xprt;
+        assert(xprt);
+        xprt_unregister(xprt);
+        return (TRUE);
+    }
+    return (FALSE);
+}
+
+/* Restore event processing on the xprt associated with cl.
+ * Locked. */
+void
+cond_unblock_events_client(CLIENT *cl)
+{
+    struct ct_data *ct = (struct ct_data *) cl->cl_private;
+    if (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED) {
+        SVCXPRT *xprt = ct->ct_duplex.ct_xprt;
+        assert(xprt);
+        xprt_register(xprt);
+    }
+}
+
 /*
  * Create a client handle for a connection.
  * Default options are set, which the user can change using clnt_control()'s.
@@ -369,6 +428,7 @@ err:
 	return ((CLIENT *)NULL);
 }
 
+#define vc_call_return(r) do { result=(r); goto out; } while (0);
 static enum clnt_stat
 clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
 	CLIENT *cl;
@@ -379,132 +439,120 @@ clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
 	void *results_ptr;
 	struct timeval timeout;
 {
-	struct ct_data *ct = (struct ct_data *) cl->cl_private;
-	XDR *xdrs = &(ct->ct_xdrs);
-	struct rpc_msg reply_msg;
-	u_int32_t x_id;
-	u_int32_t *msg_x_id = &ct->ct_u.ct_mcalli;    /* yuk */
-	bool_t shipnow;
-	int refreshes = 2;
-	sigset_t mask, newmask;
-	int rpc_lock_value;
+    struct ct_data *ct = (struct ct_data *) cl->cl_private;
+    XDR *xdrs = &(ct->ct_xdrs);
+    struct rpc_msg reply_msg;
+    enum clnt_stat result;
+    u_int32_t x_id;
+    u_int32_t *msg_x_id = &ct->ct_u.ct_mcalli;    /* yuk */
+    bool_t shipnow, ev_blocked;
+    int refreshes = 2;
+    sigset_t mask, newmask;
+    int rpc_lock_value;
 
-	assert(cl != NULL);
+    assert(cl != NULL);
 
-#if 1
-	sigfillset(&newmask);
-	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-	mutex_lock(&clnt_fd_lock);
-	while (vc_fd_locks[ct->ct_fd]) {
-            /* XXX consolidate, add tag */
-            printf("clnt wait for ct %p xprt %p\n", ct, ct->ct_duplex.ct_xprt);
-            cond_wait(&vc_cv[ct->ct_fd], &clnt_fd_lock);
-        }
-        rpc_lock_value = 1;
-	vc_fd_locks[ct->ct_fd] = rpc_lock_value;
-	mutex_unlock(&clnt_fd_lock);
-#else
-        /* XXX come back and fix this, it's dumb */
-        clnt_vc_fd_lock(xprt, &mask /*, "duplex_unit_getreq" */);
-#endif
+    clnt_vc_fd_lock2(cl, &mask /*, "duplex_unit_getreq" */);
 
-        /* try to minimize context switches around client calls in
-         * duplex mode */
-        /* epoll */
+    /* two basic strategies are possible here--this stage
+     * assumes the cost of updating the epoll (or select)
+     * registration of the connected transport is preferable
+     * to muxing reply events with call events through the/a
+     * request dispatcher (in the common case).
+     *
+     * the CT_FLAG_EPOLL_ACTIVE is intended to indicate the
+     * inverse strategy, which would place the current thread
+     * on a waitq here (in the common case). */
 
-	if (!ct->ct_waitset) {
-		/* If time is not within limits, we ignore it. */
-		if (time_not_ok(&timeout) == FALSE)
-			ct->ct_wait = timeout;
-	}
+    ev_blocked = cond_block_events_client(cl);
 
-	shipnow =
-	    (xdr_results == NULL && timeout.tv_sec == 0
-	    && timeout.tv_usec == 0) ? FALSE : TRUE;
+    if (!ct->ct_waitset) {
+        /* If time is not within limits, we ignore it. */
+        if (time_not_ok(&timeout) == FALSE)
+            ct->ct_wait = timeout;
+    }
+
+    shipnow =
+        (xdr_results == NULL && timeout.tv_sec == 0
+         && timeout.tv_usec == 0) ? FALSE : TRUE;
 
 call_again:
-	xdrs->x_op = XDR_ENCODE;
-	ct->ct_error.re_status = RPC_SUCCESS;
-	x_id = ntohl(--(*msg_x_id));
+    xdrs->x_op = XDR_ENCODE;
+    ct->ct_error.re_status = RPC_SUCCESS;
+    x_id = ntohl(--(*msg_x_id));
 
-	if ((! XDR_PUTBYTES(xdrs, ct->ct_u.ct_mcallc, ct->ct_mpos)) ||
-	    (! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
-	    (! AUTH_MARSHALL(cl->cl_auth, xdrs)) ||
-	    (! AUTH_WRAP(cl->cl_auth, xdrs, xdr_args, args_ptr))) {
-		if (ct->ct_error.re_status == RPC_SUCCESS)
-			ct->ct_error.re_status = RPC_CANTENCODEARGS;
-		(void)xdrrec_endofrecord(xdrs, TRUE);
-		release_fd_lock(ct->ct_fd, mask);
-		return (ct->ct_error.re_status);
-	}
-	if (! xdrrec_endofrecord(xdrs, shipnow)) {
-		release_fd_lock(ct->ct_fd, mask);
-		return (ct->ct_error.re_status = RPC_CANTSEND);
-	}
-	if (! shipnow) {
-		release_fd_lock(ct->ct_fd, mask);
-		return (RPC_SUCCESS);
-	}
-	/*
-	 * Hack to provide rpc-based message passing
-	 */
-	if (timeout.tv_sec == 0 && timeout.tv_usec == 0) {
-		release_fd_lock(ct->ct_fd, mask);
-		return(ct->ct_error.re_status = RPC_TIMEDOUT);
-	}
+    if ((! XDR_PUTBYTES(xdrs, ct->ct_u.ct_mcallc, ct->ct_mpos)) ||
+        (! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
+        (! AUTH_MARSHALL(cl->cl_auth, xdrs)) ||
+        (! AUTH_WRAP(cl->cl_auth, xdrs, xdr_args, args_ptr))) {
+        if (ct->ct_error.re_status == RPC_SUCCESS)
+            ct->ct_error.re_status = RPC_CANTENCODEARGS;
+        (void)xdrrec_endofrecord(xdrs, TRUE);
+        vc_call_return (ct->ct_error.re_status);
+    }
+    if (! xdrrec_endofrecord(xdrs, shipnow))
+        vc_call_return (ct->ct_error.re_status = RPC_CANTSEND);
+    if (! shipnow)
+        vc_call_return (RPC_SUCCESS);
+    /*
+     * Hack to provide rpc-based message passing
+     */
+    if (timeout.tv_sec == 0 && timeout.tv_usec == 0)
+        vc_call_return (ct->ct_error.re_status = RPC_TIMEDOUT);
 
+    /*
+     * Keep receiving until we get a valid transaction id
+     */
+    xdrs->x_op = XDR_DECODE;
+    while (TRUE) {
+        reply_msg.acpted_rply.ar_verf = _null_auth;
+        reply_msg.acpted_rply.ar_results.where = NULL;
+        reply_msg.acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
+        if (! xdrrec_skiprecord(xdrs))
+            vc_call_return (ct->ct_error.re_status);
+        /* now decode and validate the response header */
+        if (! xdr_replymsg(xdrs, &reply_msg)) {
+            if (ct->ct_error.re_status == RPC_SUCCESS)
+                continue;
+            vc_call_return (ct->ct_error.re_status);
+        }
+        if (reply_msg.rm_xid == x_id)
+            break;
+    }
 
-	/*
-	 * Keep receiving until we get a valid transaction id
-	 */
-	xdrs->x_op = XDR_DECODE;
-	while (TRUE) {
-		reply_msg.acpted_rply.ar_verf = _null_auth;
-		reply_msg.acpted_rply.ar_results.where = NULL;
-		reply_msg.acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
-		if (! xdrrec_skiprecord(xdrs)) {
-			release_fd_lock(ct->ct_fd, mask);
-			return (ct->ct_error.re_status);
-		}
-		/* now decode and validate the response header */
-		if (! xdr_replymsg(xdrs, &reply_msg)) {
-			if (ct->ct_error.re_status == RPC_SUCCESS)
-				continue;
-			release_fd_lock(ct->ct_fd, mask);
-			return (ct->ct_error.re_status);
-		}
-		if (reply_msg.rm_xid == x_id)
-			break;
-	}
+    /*
+     * process header
+     */
+    _seterr_reply(&reply_msg, &(ct->ct_error));
+    if (ct->ct_error.re_status == RPC_SUCCESS) {
+        if (! AUTH_VALIDATE(cl->cl_auth,
+                            &reply_msg.acpted_rply.ar_verf)) {
+            ct->ct_error.re_status = RPC_AUTHERROR;
+            ct->ct_error.re_why = AUTH_INVALIDRESP;
+        } else if (! AUTH_UNWRAP(cl->cl_auth, xdrs,
+                                 xdr_results, results_ptr)) {
+            if (ct->ct_error.re_status == RPC_SUCCESS)
+                ct->ct_error.re_status = RPC_CANTDECODERES;
+        }
+        /* free verifier ... */
+        if (reply_msg.acpted_rply.ar_verf.oa_base != NULL) {
+            xdrs->x_op = XDR_FREE;
+            (void)xdr_opaque_auth(xdrs, &(reply_msg.acpted_rply.ar_verf));
+        }
+    }  /* end successful completion */
+    else {
+        /* maybe our credentials need to be refreshed ... */
+        if (refreshes-- && AUTH_REFRESH(cl->cl_auth, &reply_msg))
+            goto call_again;
+    }  /* end of unsuccessful completion */
+    vc_call_return (ct->ct_error.re_status);
 
-	/*
-	 * process header
-	 */
-	_seterr_reply(&reply_msg, &(ct->ct_error));
-	if (ct->ct_error.re_status == RPC_SUCCESS) {
-		if (! AUTH_VALIDATE(cl->cl_auth,
-		    &reply_msg.acpted_rply.ar_verf)) {
-			ct->ct_error.re_status = RPC_AUTHERROR;
-			ct->ct_error.re_why = AUTH_INVALIDRESP;
-		} else if (! AUTH_UNWRAP(cl->cl_auth, xdrs,
-					 xdr_results, results_ptr)) {
-			if (ct->ct_error.re_status == RPC_SUCCESS)
-				ct->ct_error.re_status = RPC_CANTDECODERES;
-		}
-		/* free verifier ... */
-		if (reply_msg.acpted_rply.ar_verf.oa_base != NULL) {
-			xdrs->x_op = XDR_FREE;
-			(void)xdr_opaque_auth(xdrs,
-			    &(reply_msg.acpted_rply.ar_verf));
-		}
-	}  /* end successful completion */
-	else {
-		/* maybe our credentials need to be refreshed ... */
-		if (refreshes-- && AUTH_REFRESH(cl->cl_auth, &reply_msg))
-			goto call_again;
-	}  /* end of unsuccessful completion */
-	release_fd_lock(ct->ct_fd, mask);
-	return (ct->ct_error.re_status);
+out:
+        if (ev_blocked)
+            cond_unblock_events_client(cl);
+        release_fd_lock(ct->ct_fd, mask);
+
+        return (result);
 }
 
 static void
