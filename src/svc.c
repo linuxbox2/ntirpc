@@ -144,6 +144,31 @@ svc_init (svc_init_params * params)
     return;
 }
 
+struct rpc_msg *alloc_rpc_msg(void)
+{
+    /* XXX pool allocators */
+    struct rpc_msg *msg = mem_alloc(sizeof(struct rpc_msg));
+    if (! msg)
+        goto out;
+    msg->rm_call.cb_cred.oa_base = mem_alloc(2 * MAX_AUTH_BYTES + RQCRED_SIZE);
+    if (! msg->rm_call.cb_cred.oa_base) {
+        mem_free(msg, sizeof(struct rpc_msg));
+        msg = NULL;
+        goto out;
+    }
+    msg->rm_call.cb_verf.oa_base =
+        msg->rm_call.cb_cred.oa_base + MAX_AUTH_BYTES;
+out:
+    return (msg);
+}
+
+free_rpc_msg(struct rpc_msg *msg)
+{
+    mem_free(msg->rm_call.cb_cred.oa_base, 2 * MAX_AUTH_BYTES + RQCRED_SIZE);
+    mem_free(msg, sizeof(struct rpc_msg));
+}
+
+
 /* ***************  SVCXPRT related stuff **************** */
 
 /*

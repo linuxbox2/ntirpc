@@ -653,6 +653,8 @@ extern bool_t svc_getreq_default(SVCXPRT *xprt);
  * Convenience functions for implementing these 
  */
 extern bool_t svc_validate_xprt_list(SVCXPRT *xprt);
+extern struct rpc_msg *alloc_rpc_msg(void);
+extern free_rpc_msg(struct rpc_msg *msg);
 
 /*
  * svc_dg_enable_cache() enables the cache on dg transports.
@@ -660,6 +662,8 @@ extern bool_t svc_validate_xprt_list(SVCXPRT *xprt);
 int svc_dg_enablecache(SVCXPRT *, const u_int);
 
 int __rpc_get_local_uid(SVCXPRT *_transp, uid_t *_uid);
+
+
 
 __END_DECLS
 
