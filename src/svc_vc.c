@@ -91,6 +91,41 @@ static bool_t svc_vc_rendezvous_control (SVCXPRT *xprt, const u_int rq,
 void clnt_vc_destroy(CLIENT *);
 bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
 
+/*
+ * If event processing on xprt is not currently blocked, set to
+ * blocked. Returns TRUE if blocking state was changed, FALSE otherwise.
+ *
+ * The shared {CLIENT,SVCXPRT} pair is fd-locked on entry.
+ */
+bool_t
+cond_block_events_svc(SVCXPRT *xprt)
+{
+    CLIENT *cl = (CLIENT *) xprt->xp_p4;
+    if (cl) {
+        struct ct_data *ct = (struct ct_data *) cl->cl_private;
+        if ((ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX) &&
+            (! (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED))) {
+            xprt_unregister(xprt);
+            return (TRUE);
+        }
+    }
+    return (FALSE);
+}
+
+/* Restore event processing on xprt.  The shared {CLIENT,SVCXPRT}
+ * pair is fd-locked on entry.. */
+void
+cond_unblock_events_svc(SVCXPRT *xprt)
+{
+    CLIENT *cl = (CLIENT *) xprt->xp_p4;
+    if (cl) {
+        struct ct_data *ct = (struct ct_data *) cl->cl_private;
+        if (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED) {
+            xprt_register(xprt);
+        }
+    }
+}
+
 static void map_ipv4_to_ipv6(sin, sin6)
 struct sockaddr_in *sin;
 struct sockaddr_in6 *sin6;
