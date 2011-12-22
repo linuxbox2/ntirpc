@@ -178,10 +178,11 @@ clnt_vc_fd_unlock(SVCXPRT *xprt, sigset_t *mask)
     if (xprt->xp_p4) {
         CLIENT *cl = (CLIENT *) xprt->xp_p4;
         struct ct_data *ct = (struct ct_data *) cl->cl_private;
+        fprintf(stderr, "xprt %p (fd %d) unlockock (val %d)\n", xprt, ct->ct_fd,
+                vc_fd_locks[ct->ct_fd]);
         release_fd_lock(ct->ct_fd, *mask); /* restores mask */
     }
 }
-
 
 /*
  * Create a client handle for a connection.
@@ -390,6 +391,7 @@ clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
 
 	assert(cl != NULL);
 
+#if 1
 	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 	mutex_lock(&clnt_fd_lock);
@@ -401,6 +403,15 @@ clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
         rpc_lock_value = 1;
 	vc_fd_locks[ct->ct_fd] = rpc_lock_value;
 	mutex_unlock(&clnt_fd_lock);
+#else
+        /* XXX come back and fix this, it's dumb */
+        clnt_vc_fd_lock(xprt, &mask /*, "duplex_unit_getreq" */);
+#endif
+
+        /* try to minimize context switches around client calls in
+         * duplex mode */
+        /* epoll */
+
 	if (!ct->ct_waitset) {
 		/* If time is not within limits, we ignore it. */
 		if (time_not_ok(&timeout) == FALSE)
@@ -733,23 +744,30 @@ read_vc(ctp, buf, len)
 
 	if (len == 0)
 		return (0);
-	fd.fd = ct->ct_fd;
-	fd.events = POLLIN;
-	for (;;) {
+
+        if (ct->ct_duplex.ct_flags & CT_FLAG_EPOLL_ACTIVE) {
+            /* use epoll wait */
+            /* this requires a wait queue, etc */
+            abort(); /* XXX fixme */
+        } else {
+            fd.fd = ct->ct_fd;
+            fd.events = POLLIN;
+            for (;;) {
 		switch (poll(&fd, 1, milliseconds)) {
 		case 0:
-			ct->ct_error.re_status = RPC_TIMEDOUT;
-			return (-1);
+                    ct->ct_error.re_status = RPC_TIMEDOUT;
+                    return (-1);
 
 		case -1:
-			if (errno == EINTR)
-				continue;
-			ct->ct_error.re_status = RPC_CANTRECV;
-			ct->ct_error.re_errno = errno;
-			return (-1);
+                    if (errno == EINTR)
+                        continue;
+                    ct->ct_error.re_status = RPC_CANTRECV;
+                    ct->ct_error.re_errno = errno;
+                    return (-1);
 		}
 		break;
-	}
+            }
+        }
 
 	len = read(ct->ct_fd, buf, (size_t)len);
 

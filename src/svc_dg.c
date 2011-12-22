@@ -131,7 +131,7 @@ svc_dg_create(fd, sendsize, recvsize)
 	xdrmem_create(&(su->su_xdrs), rpc_buffer(xprt), su->su_iosz,
 		XDR_DECODE);
 	su->su_cache = NULL;
-	xprt->xp_flags = SVC_XPORT_FLAG_NONE;
+	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
 	xprt->xp_fd = fd;
 	xprt->xp_p2 = su;
 	xprt->xp_auth = NULL;

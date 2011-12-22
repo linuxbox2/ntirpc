@@ -127,7 +127,7 @@ svc_init (svc_init_params * params)
         FD_ZERO(&svc_fdset);
     }
 
-    if (params->flags & SVC_INIT_XPORTS) {
+    if (params->flags & SVC_INIT_XPRTS) {
 	if (__svc_xports == NULL) {
 	    __svc_xports = (SVCXPRT **) mem_alloc (
                 __svc_params->max_connections * sizeof (SVCXPRT *));

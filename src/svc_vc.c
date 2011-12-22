@@ -149,7 +149,7 @@ svc_vc_create(fd, sendsize, recvsize)
 		__warnx("svc_vc_create: out of memory");
 		goto cleanup_svc_vc_create;
 	}
-	xprt->xp_flags = SVC_XPORT_FLAG_NONE;
+	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
 	xprt->xp_tp = NULL;
 	xprt->xp_p1 = r;
 	xprt->xp_p2 = NULL;
@@ -510,7 +510,7 @@ __svc_vc_dodestroy(xprt)
 	/* Omit close in cases such as donation of the connection
 	 * to a client transport handle */
 	if ((xprt->xp_fd != RPC_ANYFD) &&
-	    (!(xprt->xp_flags & SVC_XPORT_FLAG_DONTCLOSE)))
+	    (!(xprt->xp_flags & SVC_XPRT_FLAG_DONTCLOSE)))
 	    (void)close(xprt->xp_fd);
 
 	if (xprt->xp_port != 0) {
@@ -1078,7 +1078,7 @@ svc_vc_clnt_create(xprt, prog, vers, flags)
 	xprt->xp_p4 = cl;
 
 	/* Warn cleanup routines not to close xp_fd */
-	xprt->xp_flags |= SVC_XPORT_FLAG_DONTCLOSE;
+	xprt->xp_flags |= SVC_XPRT_FLAG_DONTCLOSE;
 
         /* In this case, unregister and free xprt */
 	if (flags & SVC_VC_CLNT_CREATE_DEDICATED)

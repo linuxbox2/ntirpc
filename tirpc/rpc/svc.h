@@ -67,7 +67,7 @@
 
 /* Package init flags */
 #define SVC_INIT_DEFAULT        0x0000
-#define SVC_INIT_XPORTS         0x0001
+#define SVC_INIT_XPRTS          0x0001
 #define SVC_INIT_EPOLL          0x0002
 #define SVC_INIT_WARNX          0x0004
 
@@ -155,9 +155,9 @@ typedef struct svc_params
  * SVCXPRT xp_flags
  */
 
-#define SVC_XPORT_FLAG_NONE       0x0000
-#define SVC_XPORT_FLAG_SETNEWFDS  0x0001
-#define SVC_XPORT_FLAG_DONTCLOSE  0x0002
+#define SVC_XPRT_FLAG_NONE       0x0000
+#define SVC_XPRT_FLAG_SETNEWFDS  0x0001
+#define SVC_XPRT_FLAG_DONTCLOSE  0x0002
 
 enum xprt_stat {
 	XPRT_DIED,
