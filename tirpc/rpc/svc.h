@@ -654,7 +654,7 @@ extern bool_t svc_getreq_default(SVCXPRT *xprt);
  */
 extern bool_t svc_validate_xprt_list(SVCXPRT *xprt);
 extern struct rpc_msg *alloc_rpc_msg(void);
-extern free_rpc_msg(struct rpc_msg *msg);
+extern void free_rpc_msg(struct rpc_msg *msg);
 
 /*
  * svc_dg_enable_cache() enables the cache on dg transports.
