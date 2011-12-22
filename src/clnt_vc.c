@@ -155,7 +155,9 @@ clnt_vc_fd_lock(SVCXPRT *xprt, sigset_t *mask)
         CLIENT *cl = (CLIENT *) xprt->xp_p4;
         struct ct_data *ct = (struct ct_data *) cl->cl_private;
 
+        /* XXX should use sigaction */
         sigfillset(&newmask);
+        sigdelset(&newmask, SIGINT); /* debugger */
         thr_sigsetmask(SIG_SETMASK, &newmask, mask);
 
         /* this is way overdone */
@@ -193,6 +195,7 @@ clnt_vc_fd_lock2(CLIENT * cl, sigset_t *mask)
     struct ct_data *ct = (struct ct_data *) cl->cl_private;
 
     sigfillset(&newmask);
+    sigdelset(&newmask, SIGINT); /* debugger */
     thr_sigsetmask(SIG_SETMASK, &newmask, mask);
 
     /* this is way overdone */
@@ -224,6 +227,7 @@ cond_block_events_client(CLIENT *cl)
         (! (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED))) {
         SVCXPRT *xprt = ct->ct_duplex.ct_xprt;
         assert(xprt);
+        ct->ct_duplex.ct_flags |= CT_FLAG_EVENTS_BLOCKED;
         xprt_unregister(xprt);
         return (TRUE);
     }
@@ -239,6 +243,7 @@ cond_unblock_events_client(CLIENT *cl)
     if (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED) {
         SVCXPRT *xprt = ct->ct_duplex.ct_xprt;
         assert(xprt);
+        ct->ct_duplex.ct_flags &= ~CT_FLAG_EVENTS_BLOCKED;
         xprt_register(xprt);
     }
 }

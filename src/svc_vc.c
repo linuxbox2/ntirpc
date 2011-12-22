@@ -105,6 +105,7 @@ cond_block_events_svc(SVCXPRT *xprt)
         struct ct_data *ct = (struct ct_data *) cl->cl_private;
         if ((ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX) &&
             (! (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED))) {
+            ct->ct_duplex.ct_flags |= CT_FLAG_EVENTS_BLOCKED;
             xprt_unregister(xprt);
             return (TRUE);
         }
@@ -121,6 +122,7 @@ cond_unblock_events_svc(SVCXPRT *xprt)
     if (cl) {
         struct ct_data *ct = (struct ct_data *) cl->cl_private;
         if (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED) {
+            ct->ct_duplex.ct_flags &= ~CT_FLAG_EVENTS_BLOCKED;
             xprt_register(xprt);
         }
     }
@@ -1091,17 +1093,18 @@ clnt_dplx_create_from_svc(xprt, prog, vers, flags)
 	const rpcvers_t vers;
 	const uint32_t flags;
 {
+
+        struct cf_conn *cd;
+        struct ct_data *ct;
 	CLIENT *cl;
-	struct cf_conn *cd;
 
 	rwlock_wrlock (&xprt->lock);
 
 	/* Once */
 	if (xprt->xp_p4) {
 	    cl = (CLIENT *) xprt->xp_p4;
-            rwlock_unlock (&xprt->lock);
-	    goto out;
-	}
+            goto unlock;
+        }
 
 	/* Create a client transport handle.  The endpoint is already
 	 * connected. */
@@ -1113,15 +1116,24 @@ clnt_dplx_create_from_svc(xprt, prog, vers, flags)
 			      cd->recvsize,
 			      cd->sendsize,
 			      CLNT_CREATE_FLAG_SVCXPRT);
+        if (! cl)
+            goto unlock;
+
+        ct = (struct ct_data *) cl->cl_private;
+        ct->ct_duplex.ct_flags = CT_FLAG_DUPLEX;
+        ct->ct_duplex.ct_xprt = xprt;
 	xprt->xp_p4 = cl;
 
 	/* Warn cleanup routines not to close xp_fd */
 	xprt->xp_flags |= SVC_XPRT_FLAG_DONTCLOSE;
 
-        /* In this case, unregister and free xprt */
+unlock:
+        rwlock_unlock (&xprt->lock);
+
+        /* for a dedicated channel, unregister and free xprt */
 	if (flags & SVC_DPLX_CLNT_CREATE_DEDICATED)
             svc_vc_destroy(xprt);
-out:
+
 	return (cl);
 }
 
