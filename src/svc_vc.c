@@ -1047,7 +1047,7 @@ __svc_clean_idle2(int timeout, bool_t cleanblock)
  * unregistered and disposed inline.
  */
 CLIENT *
-svc_vc_clnt_create(xprt, prog, vers, flags)
+clnt_dplx_create_from_svc(xprt, prog, vers, flags)
 	SVCXPRT *xprt;
 	const rpcprog_t prog;
 	const rpcvers_t vers;
@@ -1081,7 +1081,7 @@ svc_vc_clnt_create(xprt, prog, vers, flags)
 	xprt->xp_flags |= SVC_XPRT_FLAG_DONTCLOSE;
 
         /* In this case, unregister and free xprt */
-	if (flags & SVC_VC_CLNT_CREATE_DEDICATED)
+	if (flags & SVC_DPLX_CLNT_CREATE_DEDICATED)
             svc_vc_destroy(xprt);
 out:
 	return (cl);
@@ -1095,7 +1095,7 @@ out:
  * deallocated without closing cl->cl_private->ct_fd.
  */
 SVCXPRT *
-svc_vc_create_cl(cl, sendsz, recvsz, flags)
+svc_dplx_create_from_clnt(cl, sendsz, recvsz, flags)
 	CLIENT *cl;
 	const u_int sendsz;
 	const u_int recvsz;

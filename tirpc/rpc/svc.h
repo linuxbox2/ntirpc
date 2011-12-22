@@ -554,17 +554,17 @@ extern SVCXPRT *svc_vc_create(const int, const u_int, const u_int);
 
 __END_DECLS
 
-#define SVC_VC_CLNT_CREATE_NONE           0x0000
-#define SVC_VC_CLNT_CREATE_DEDICATED      0x0001
-#define SVC_VC_CLNT_CREATE_SHARED         0x0002
+#define SVC_DPLX_CLNT_CREATE_NONE           0x0000
+#define SVC_DPLX_CLNT_CREATE_DEDICATED      0x0001
+#define SVC_DPLX_CLNT_CREATE_SHARED         0x0002
 
 __BEGIN_DECLS
 
 /*
  * Create a client handle from an active service transport handle.
  */
-extern CLIENT *svc_vc_clnt_create(SVCXPRT *, const rpcprog_t, const rpcvers_t,
-				  const uint32_t);
+extern CLIENT *clnt_dplx_create_from_svc(SVCXPRT *, const rpcprog_t,
+                                         const rpcvers_t, const uint32_t);
 /*
  *      SVCXPRT *xprt;                          -- active service xprt
  *      const rpcprog_t prog;                   -- RPC program number
@@ -582,7 +582,8 @@ __BEGIN_DECLS
  * Create an RPC SVCXPRT handle from an active client transport
  * handle, i.e., to service RPC requests 
  */
-extern SVCXPRT *svc_vc_create_cl(CLIENT *, u_int, u_int, const uint32_t);
+extern SVCXPRT *svc_dplx_create_from_clnt(CLIENT *, u_int, u_int,
+                                          const uint32_t);
         /*
 	 * 
          * CLIENT *cl;                                  -- connected client
