@@ -582,7 +582,7 @@ clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
 {
     struct ct_data *ct = (struct ct_data *) cl->cl_private;
     XDR *xdrs = &(ct->ct_xdrs);
-    struct rpc_msg *reply_msg = alloc_rpc_msg();
+    struct rpc_msg *duplex_msg = alloc_rpc_msg();
     enum clnt_stat result;
     u_int32_t x_id;
     u_int32_t *msg_x_id = &ct->ct_u.ct_mcalli;    /* yuk */
@@ -648,36 +648,50 @@ call_again:
      */
     xdrs->x_op = XDR_DECODE;
     while (TRUE) {
-        reply_msg->acpted_rply.ar_verf = _null_auth;
-        reply_msg->acpted_rply.ar_results.where = NULL;
-        reply_msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
+        duplex_msg->acpted_rply.ar_verf = _null_auth;
+        duplex_msg->acpted_rply.ar_results.where = NULL;
+        duplex_msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
         if (! xdrrec_skiprecord(xdrs)) {
             printf("error at skiprecord\n");
             vc_call_return (ct->ct_error.re_status);
         }
         /* now decode and validate the response header */
-        if (! xdr_dplx_msg(xdrs, reply_msg)) {
+        if (! xdr_dplx_msg(xdrs, duplex_msg)) {
             printf("error at replymsg\n");
             if (ct->ct_error.re_status == RPC_SUCCESS) {
                 printf("error at ct_error (direction == %d)\n",
-                       reply_msg->rm_direction);
+                       duplex_msg->rm_direction);
                 continue;
             }
             vc_call_return (ct->ct_error.re_status);
         }
         printf("successful xdr_replymsg (direction==%d)",
-               reply_msg->rm_direction);
-        if (reply_msg->rm_xid == x_id)
+               duplex_msg->rm_direction);
+        /* switch on direction */
+        switch (duplex_msg->rm_direction) {
+        case REPLY:
+            if (duplex_msg->rm_xid == x_id)
+                goto replied;
             break;
-    }
+        case CALL:
+            /* XXX queue or dispatch */
+            printf("call intercepted\n");
+            /* transfers ownership of the rpc_msg */
+            //duplex_msg = alloc_rpc_msg();
+            break;
+        default:
+            break;
+        }
+    } /* while (TRUE) */
 
     /*
      * process header
      */
-    _seterr_reply(reply_msg, &(ct->ct_error));
+replied:
+    _seterr_reply(duplex_msg, &(ct->ct_error));
     if (ct->ct_error.re_status == RPC_SUCCESS) {
         if (! AUTH_VALIDATE(cl->cl_auth,
-                            &reply_msg->acpted_rply.ar_verf)) {
+                            &duplex_msg->acpted_rply.ar_verf)) {
             ct->ct_error.re_status = RPC_AUTHERROR;
             ct->ct_error.re_why = AUTH_INVALIDRESP;
         } else if (! AUTH_UNWRAP(cl->cl_auth, xdrs,
@@ -686,14 +700,14 @@ call_again:
                 ct->ct_error.re_status = RPC_CANTDECODERES;
         }
         /* free verifier ... */
-        if (reply_msg->acpted_rply.ar_verf.oa_base != NULL) {
+        if (duplex_msg->acpted_rply.ar_verf.oa_base != NULL) {
             xdrs->x_op = XDR_FREE;
-            (void)xdr_opaque_auth(xdrs, &(reply_msg->acpted_rply.ar_verf));
+            (void)xdr_opaque_auth(xdrs, &(duplex_msg->acpted_rply.ar_verf));
         }
     }  /* end successful completion */
     else {
         /* maybe our credentials need to be refreshed ... */
-        if (refreshes-- && AUTH_REFRESH(cl->cl_auth, &reply_msg))
+        if (refreshes-- && AUTH_REFRESH(cl->cl_auth, &duplex_msg))
             goto call_again;
     }  /* end of unsuccessful completion */
     vc_call_return (ct->ct_error.re_status);
@@ -702,7 +716,7 @@ out:
         if (ev_blocked)
             cond_unblock_events_client(cl);
         release_fd_lock(ct->ct_fd, mask);
-        free_rpc_msg(reply_msg);
+        free_rpc_msg(duplex_msg);
 
         return (result);
 }
