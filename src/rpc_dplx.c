@@ -212,57 +212,32 @@ xdr_dplx_msg(xdrs, dmsg)
                 }
             } /* buf */
 	} /* XDR_DECODE */
-        /* XXXX this has never been reached when rm_direction != CALL */
-        printf("xdr_callmsg:  got here (final stanza, xid=%d direction==%d)\n",
-               dmsg->rm_xid,
-               dmsg->rm_direction);
-#if 0
-        /* XXX What is it exactly doing--trying to read another call? */
-        switch (dmsg->rm_direction) {
-        case CALL:
-            printf("before xid: %d\n", dmsg->rm_xid);
-            rslt = xdr_u_int32_t(xdrs, &(dmsg->rm_xid));
-            if (! rslt)
-                break;
-            printf("after xid: %d\n", dmsg->rm_xid);
-            printf("before direction: %d\n", dmsg->rm_direction);
-            rslt = xdr_enum(xdrs, (enum_t *)&(dmsg->rm_direction));
-            if (! rslt)
-                break;
-            printf("after direction: %d\n", dmsg->rm_direction);
-            if (dmsg->rm_direction != CALL)
-                break;
-            printf("before rpcvers: %d\n", dmsg->rm_call.cb_rpcvers);
-            rslt = xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_rpcvers));
-            if (! rslt)
-                break;
-            printf("after rpcvers: %d\n", dmsg->rm_call.cb_rpcvers);
-            if (dmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION)
-                break;
-	    if (xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_prog)) &&
-                xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_vers)) &&
-                xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_proc)) &&
-                xdr_opaque_auth(xdrs, &(dmsg->rm_call.cb_cred)) )
-                return (xdr_opaque_auth(xdrs, &(dmsg->rm_call.cb_verf)));
-            break;
-        case REPLY:
-            
-        default:
-            return (FALSE);
-        }
-#else
 	if (
 	    xdr_u_int32_t(xdrs, &(dmsg->rm_xid)) &&
-	    xdr_enum(xdrs, (enum_t *)&(dmsg->rm_direction)) &&
-	    (dmsg->rm_direction == CALL) &&
-	    xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_rpcvers)) &&
-	    (dmsg->rm_call.cb_rpcvers == RPC_MSG_VERSION) &&
-	    xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_prog)) &&
-	    xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_vers)) &&
-	    xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_proc)) &&
-	    xdr_opaque_auth(xdrs, &(dmsg->rm_call.cb_cred)) )
-		return (xdr_opaque_auth(xdrs, &(dmsg->rm_call.cb_verf)));
-        return (FALSE);
-#endif
-       
+	    xdr_enum(xdrs, (enum_t *)&(dmsg->rm_direction))) {
+                switch (dmsg->rm_direction) {
+                case CALL:
+                    if (
+                        xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_rpcvers)) &&
+                        (dmsg->rm_call.cb_rpcvers == RPC_MSG_VERSION) &&
+                        xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_prog)) &&
+                        xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_vers)) &&
+                        xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_proc)) &&
+                        xdr_opaque_auth(xdrs, &(dmsg->rm_call.cb_cred)) )
+                        return (
+                            xdr_opaque_auth(xdrs,
+                                            &(dmsg->rm_call.cb_verf)));
+                case REPLY:
+                    return (
+                        xdr_union(xdrs,
+                                  (enum_t *)&(dmsg->rm_reply.rp_stat),
+                                  (caddr_t)(void *)&(dmsg->rm_reply.ru),
+                                  reply_dscrm,
+                                  NULL_xdrproc_t));
+                default:
+                    /* unlikely */
+                    return (FALSE);
+                }
+            }
+            return (FALSE);       
 }

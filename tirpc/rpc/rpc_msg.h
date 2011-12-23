@@ -176,6 +176,8 @@ extern bool_t	xdr_callmsg(XDR *, struct rpc_msg *);
  * 	XDR *xdrs;
  * 	struct rpc_msg *cmsg;
  */
+#define XDR_DPLX_FLAG_NONE 0x00000
+#define XDR_DPLX_FLAG_ONCE 0x00001
 extern bool_t	xdr_dplx_msg(XDR *, struct rpc_msg *);
 
 /*

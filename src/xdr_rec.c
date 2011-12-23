@@ -217,7 +217,7 @@ xdrrec_create(xdrs, sendsize, recvsize, tcp_handle, readit, writeit)
 
 
 /*
- * The reoutines defined below are the xdr ops which will go into the
+ * The routines defined below are the xdr ops which will go into the
  * xdr handle filled in by xdrrec_create.
  */
 

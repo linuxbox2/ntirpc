@@ -523,7 +523,7 @@ call_again:
         if (! xdr_replymsg(xdrs, &reply_msg)) {
             printf("error at replymsg\n");
             if (ct->ct_error.re_status == RPC_SUCCESS) {
-                printf("error at ct_error (direction == %d)\n",
+                printf("error at ct_error (dirrection == %d)\n",
                        reply_msg.rm_direction);
                 continue;
             }
@@ -639,12 +639,12 @@ call_again:
      */
     if (timeout.tv_sec == 0 && timeout.tv_usec == 0)
         vc_call_return (ct->ct_error.re_status = RPC_TIMEDOUT);
-
-    /* XXX OK.  Now we need to deal with non REPLY msgs, I
-     * strongly suspect */
-
     /*
      * Keep receiving until we get a valid transaction id
+     */
+    /*
+     * I think we -can- do this, but we need to queue any message
+     * that isn't the desired reply (Matt)
      */
     xdrs->x_op = XDR_DECODE;
     while (TRUE) {
@@ -656,10 +656,10 @@ call_again:
             vc_call_return (ct->ct_error.re_status);
         }
         /* now decode and validate the response header */
-        if (! xdr_replymsg(xdrs, reply_msg)) {
+        if (! xdr_dplx_msg(xdrs, reply_msg)) {
             printf("error at replymsg\n");
             if (ct->ct_error.re_status == RPC_SUCCESS) {
-                printf("error at ct_error (dirrection == %d)\n",
+                printf("error at ct_error (direction == %d)\n",
                        reply_msg->rm_direction);
                 continue;
             }
