@@ -27,7 +27,7 @@
  */
 
 /*
- * rpc_callmsg.c
+ * rpc_dplx.c
  *
  * Copyright (C) 1984, Sun Microsystems, Inc.
  *
