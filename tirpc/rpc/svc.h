@@ -84,6 +84,8 @@
 #define SVCSET_XP_FLAGS		8
 #define SVCGET_XP_GETREQ        9
 #define SVCSET_XP_GETREQ        10
+#define SVCGET_XP_DISPATCH      11
+#define SVCSET_XP_DISPATCH      12
 
 /*
  * Operations for rpc_control().
@@ -260,6 +262,7 @@ typedef enum svc_lookup_result
  * xp_ops2->xp_control */
 typedef bool_t (*xp_recv_t)(struct __rpc_svcxprt *, struct rpc_msg *);
 typedef bool_t (*xp_getreq_t)(struct __rpc_svcxprt *);
+typedef void (*xp_dispatch_t)(struct __rpc_svcxprt *, struct rpc_msg **);
 
 /*
  * Service request
@@ -650,6 +653,11 @@ extern SVCXPRT *svc_raw_create(void);
  * Getreq plug-out prototype
  */
 extern bool_t svc_getreq_default(SVCXPRT *xprt);
+
+/*
+ * Dispatch plug-out prototype
+ */
+extern void svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg);
 
 /*
  * Convenience functions for implementing these 

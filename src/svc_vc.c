@@ -618,6 +618,16 @@ svc_vc_control(xprt, rq, in)
 	    xprt->xp_ops2->xp_getreq = *(xp_getreq_t)in;
             mutex_unlock(&ops_lock);
 	    break;
+	case SVCGET_XP_DISPATCH:
+            mutex_lock(&ops_lock);
+	    *(xp_dispatch_t *)in = xprt->xp_ops2->xp_dispatch;
+            mutex_unlock(&ops_lock);
+	    break;
+	case SVCSET_XP_DISPATCH:
+            mutex_lock(&ops_lock);
+	    xprt->xp_ops2->xp_dispatch = *(xp_dispatch_t)in;
+            mutex_unlock(&ops_lock);
+	    break;
 	default:
 	    return (FALSE);
 	}
@@ -921,6 +931,7 @@ svc_vc_ops(xprt)
 		ops.xp_destroy = svc_vc_destroy;
 		ops2.xp_control = svc_vc_control;
 		ops2.xp_getreq = svc_getreq_default;
+                ops2.xp_dispatch = svc_dispatch_default;
 	}
 	xprt->xp_ops = &ops;
 	xprt->xp_ops2 = &ops2;
@@ -948,6 +959,7 @@ svc_vc_rendezvous_ops(xprt)
 		ops.xp_destroy = svc_vc_destroy;
 		ops2.xp_control = svc_vc_rendezvous_control;
 		ops2.xp_getreq = svc_getreq_default;
+                ops2.xp_dispatch = svc_dispatch_default;
 	}
 	xprt->xp_ops = &ops;
 	xprt->xp_ops2 = &ops2;

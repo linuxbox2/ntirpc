@@ -662,7 +662,7 @@ call_again:
         }
         /* now decode and validate the response header */
         if (! xdr_dplx_msg(xdrs, duplex_msg)) {
-            printf("error at replymsg\n");
+            printf("error at xdr_dplx_msg\n");
             if (ct->ct_error.re_status == RPC_SUCCESS) {
                 printf("error at ct_error (direction == %d)\n",
                        duplex_msg->rm_direction);
@@ -670,7 +670,7 @@ call_again:
             }
             vc_call_return (ct->ct_error.re_status);
         }
-        printf("successful xdr_replymsg (direction==%d)",
+        printf("successful xdr_dplx_msg (direction==%d)\n",
                duplex_msg->rm_direction);
         /* switch on direction */
         switch (duplex_msg->rm_direction) {
@@ -685,7 +685,7 @@ call_again:
             printf("call intercepted, dispatching\n");
             if (duplex) {
                 assert(duplex_xprt);
-                //duplex_xprt->xp_ops2->xp_dispatch(duplex_xprt, &duplex_msg);
+                duplex_xprt->xp_ops2->xp_dispatch(duplex_xprt, &duplex_msg);
             }
             break;
         default:

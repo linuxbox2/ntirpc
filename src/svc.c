@@ -162,7 +162,7 @@ out:
     return (msg);
 }
 
-free_rpc_msg(struct rpc_msg *msg)
+void free_rpc_msg(struct rpc_msg *msg)
 {
     mem_free(msg->rm_call.cb_cred.oa_base, 2 * MAX_AUTH_BYTES + RQCRED_SIZE);
     mem_free(msg, sizeof(struct rpc_msg));
@@ -873,6 +873,44 @@ svc_validate_xprt_list(SVCXPRT *xprt)
     return (code);
 }
 
+void
+svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg)
+{
+    struct svc_req r;
+    struct rpc_msg *msg = *ind_msg;
+    svc_vers_range_t vrange;
+    svc_lookup_result_t lkp_res;
+    svc_rec_t *svc_rec;
+    enum auth_stat why;
+
+    r.rq_xprt = xprt;
+    r.rq_prog = msg->rm_call.cb_prog;
+    r.rq_vers = msg->rm_call.cb_vers;
+    r.rq_proc = msg->rm_call.cb_proc;
+    r.rq_cred = msg->rm_call.cb_cred;
+
+    /* first authenticate the message */
+    if ((why = _authenticate (&r, msg)) != AUTH_OK)
+    {
+        svcerr_auth (xprt, why);
+        return;
+    }
+
+    lkp_res = svc_lookup(&svc_rec, &vrange, r.rq_prog, r.rq_vers,
+                         NULL, 0);
+    switch (lkp_res) {
+    case SVC_LKP_SUCCESS:
+        /* call it */
+        (*svc_rec->sc_dispatch) (&r, xprt);
+        return;
+    case SVC_LKP_VERS_NOTFOUND:
+        svcerr_progvers (xprt, vrange.lowvers, vrange.highvers);
+    default:
+        svcerr_noprog (xprt);
+        break;
+    }
+}
+
 bool_t
 svc_getreq_default(SVCXPRT *xprt)
 {
@@ -916,7 +954,7 @@ svc_getreq_default(SVCXPRT *xprt)
               (*svc_rec->sc_dispatch) (&r, xprt);
               goto call_done;
               break;
-          SVC_LKP_VERS_NOTFOUND:
+          case SVC_LKP_VERS_NOTFOUND:
               svcerr_progvers (xprt, vrange.lowvers, vrange.highvers);
           default:
               svcerr_noprog (xprt);

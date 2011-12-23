@@ -227,6 +227,7 @@ xdr_dplx_msg(xdrs, dmsg)
                         return (
                             xdr_opaque_auth(xdrs,
                                             &(dmsg->rm_call.cb_verf)));
+                    break;
                 case REPLY:
                     return (
                         xdr_union(xdrs,
