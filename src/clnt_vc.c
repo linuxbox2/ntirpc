@@ -586,13 +586,14 @@ clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
     enum clnt_stat result;
     u_int32_t x_id;
     u_int32_t *msg_x_id = &ct->ct_u.ct_mcalli;    /* yuk */
-    bool_t shipnow, ev_blocked;
+    bool_t shipnow, ev_blocked, duplex;
+    SVCXPRT *duplex_xprt = NULL;
     int refreshes = 2;
     sigset_t mask;
 
     assert(cl != NULL);
 
-    clnt_vc_fd_lock2(cl, &mask /*, "duplex_unit_getreq" */);
+    clnt_vc_fd_lock2(cl, &mask);
 
     /* two basic strategies are possible here--this stage
      * assumes the cost of updating the epoll (or select)
@@ -603,6 +604,10 @@ clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
      * the CT_FLAG_EPOLL_ACTIVE is intended to indicate the
      * inverse strategy, which would place the current thread
      * on a waitq here (in the common case). */
+
+    duplex = ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX;
+    if (duplex)
+        duplex_xprt = ct->ct_duplex.ct_xprt;
 
     ev_blocked = cond_block_events_client(cl);
 
@@ -674,10 +679,14 @@ call_again:
                 goto replied;
             break;
         case CALL:
-            /* XXX queue or dispatch */
-            printf("call intercepted\n");
-            /* transfers ownership of the rpc_msg */
-            //duplex_msg = alloc_rpc_msg();
+            /* XXX queue or dispatch.  on return from xp_dispatch,
+             * duplex_msg points to a (potentially new, junk) rpc_msg
+             * object owned by this call path */
+            printf("call intercepted, dispatching\n");
+            if (duplex) {
+                assert(duplex_xprt);
+                //duplex_xprt->xp_ops2->xp_dispatch(duplex_xprt, &duplex_msg);
+            }
             break;
         default:
             break;
@@ -715,6 +724,7 @@ replied:
 out:
         if (ev_blocked)
             cond_unblock_events_client(cl);
+
         release_fd_lock(ct->ct_fd, mask);
         free_rpc_msg(duplex_msg);
 

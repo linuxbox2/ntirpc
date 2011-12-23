@@ -214,6 +214,8 @@ typedef struct __rpc_svcxprt {
 				void *);
             /* handle incoming requests (calls xp_recv) */
             bool_t  (*xp_getreq)(struct __rpc_svcxprt *);
+            /* call dispatch strategy function */
+            void (*xp_dispatch)(struct __rpc_svcxprt *, struct rpc_msg **);
 	} *xp_ops2;
 	char		*xp_tp;		 /* transport provider device name */
 	char		*xp_netid;	 /* network token */
