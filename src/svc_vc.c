@@ -839,16 +839,31 @@ svc_vc_getargs(xprt, xdr_args, args_ptr)
 	xdrproc_t xdr_args;
 	void *args_ptr;
 {
+    CLIENT *cl;
+    struct ct_data *ct;
 
-	assert(xprt != NULL);
-	/* args_ptr may be NULL */
+    assert(xprt != NULL);
+    /* args_ptr may be NULL */
 
-	if (! SVCAUTH_UNWRAP(xprt->xp_auth,
-			     &(((struct cf_conn *)(xprt->xp_p1))->xdrs),
-			     xdr_args, args_ptr)) {
-		return FALSE;  
-	}
-	return TRUE;
+    /* XXXX ok, this needs major cleanup (no heuristic detection
+     * of correct decoder, etc), but, it actually works */
+
+    if (! SVCAUTH_UNWRAP(xprt->xp_auth,
+                         &(((struct cf_conn *)(xprt->xp_p1))->xdrs),
+                         xdr_args, args_ptr)) {
+        cl = (CLIENT *) xprt->xp_p4;
+        ct = (struct ct_data *) cl->cl_private;
+        if (ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX) {
+                
+            if (! SVCAUTH_UNWRAP(xprt->xp_auth,
+                                 &(ct->ct_xdrs),
+                                 xdr_args, args_ptr)) {
+                return (FALSE);
+            }
+        }
+    }
+
+    return TRUE;
 }
 
 static bool_t
