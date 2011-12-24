@@ -579,6 +579,13 @@ __svc_vc_dodestroy(xprt)
         if (xprt->xp_ev)
             mem_free(xprt->xp_ev, sizeof(struct epoll_event));
 #endif
+        /* assert: caller has called xprt_unregister */
+        /* duplex */
+        if (xprt->xp_p4) {
+            CLIENT *cl = (CLIENT *) xprt->xp_p4;
+            SetDestroyed(cl);
+        }
+
 	mem_free(xprt, sizeof(SVCXPRT));
 }
 
@@ -1122,7 +1129,6 @@ clnt_dplx_create_from_svc(xprt, prog, vers, flags)
 {
 
         struct cf_conn *cd;
-        struct ct_data *ct;
 	CLIENT *cl;
 
 	rwlock_wrlock (&xprt->lock);
@@ -1146,10 +1152,7 @@ clnt_dplx_create_from_svc(xprt, prog, vers, flags)
         if (! cl)
             goto unlock;
 
-        ct = (struct ct_data *) cl->cl_private;
-        ct->ct_duplex.ct_flags = CT_FLAG_DUPLEX;
-        ct->ct_duplex.ct_xprt = xprt;
-	xprt->xp_p4 = cl;
+        SetDuplex(cl, xprt);
 
 	/* Warn cleanup routines not to close xp_fd */
 	xprt->xp_flags |= SVC_XPRT_FLAG_DONTCLOSE;
@@ -1228,9 +1231,7 @@ svc_dplx_create_from_clnt(cl, sendsz, recvsz, flags)
     gettimeofday(&cd->last_recv_time, NULL);
 
     /* remember where we came from */
-    xprt->xp_p4 = cl;
-    ct->ct_duplex.ct_flags = CT_FLAG_DUPLEX;
-    ct->ct_duplex.ct_xprt = xprt;
+    SetDuplex(cl, xprt);
 
     /* If creating a dedicated channel collect the supplied client
      * without closing fd */

@@ -47,7 +47,23 @@ struct ct_wait_entry {
 #define CT_FLAG_NONE              0x0000
 #define CT_FLAG_DUPLEX            0x0001
 #define CT_FLAG_EVENTS_BLOCKED    0x0002
-#define CT_FLAG_EPOLL_ACTIVE      0x0003
+#define CT_FLAG_EPOLL_ACTIVE      0x0004
+#define CT_FLAG_XPRT_DESTROYED    0x0008
+
+#define SetDuplex(cl, xprt) do { \
+        struct ct_data *ct = (struct ct_data *) (cl)->cl_private; \
+        ct->ct_duplex.ct_xprt = (xprt); \
+        ct->ct_duplex.ct_flags |= CT_FLAG_DUPLEX; \
+        ct->ct_duplex.ct_flags &= ~CT_FLAG_XPRT_DESTROYED; \
+	(xprt)->xp_p4 = (cl); \
+    } while (0);
+
+#define SetDestroyed(cl) do { \
+    struct ct_data *ct = (struct ct_data *) (cl)->cl_private; \
+    ct->ct_duplex.ct_flags &= ~CT_FLAG_DUPLEX; \
+    ct->ct_duplex.ct_flags |= CT_FLAG_XPRT_DESTROYED; \
+    ct->ct_duplex.ct_xprt = NULL; \
+    } while (0);
 
 struct ct_data {
 	int		ct_fd;		/* connection's fd */
