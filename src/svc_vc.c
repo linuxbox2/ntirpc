@@ -1220,8 +1220,8 @@ svc_dplx_create_from_clnt(cl, sendsz, recvsz, flags)
 
     cd = (struct cf_conn *) xprt->xp_p1;
 
-    cd->recvsize = recvsz;
-    cd->sendsize = sendsz;
+    cd->sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int) sendsz);
+    cd->recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int) recvsz);
     cd->maxrec = __svc_maxrec;
 
     if (cd->maxrec != 0) {
