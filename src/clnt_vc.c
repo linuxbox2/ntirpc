@@ -435,142 +435,6 @@ err:
 
 #define vc_call_return(r) do { result=(r); goto out; } while (0);
 static enum clnt_stat
-clnt_vc_call_orig(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
-	CLIENT *cl;
-	rpcproc_t proc;
-	xdrproc_t xdr_args;
-	void *args_ptr;
-	xdrproc_t xdr_results;
-	void *results_ptr;
-	struct timeval timeout;
-{
-    struct ct_data *ct = (struct ct_data *) cl->cl_private;
-    XDR *xdrs = &(ct->ct_xdrs);
-    struct rpc_msg reply_msg;
-    enum clnt_stat result;
-    u_int32_t x_id;
-    u_int32_t *msg_x_id = &ct->ct_u.ct_mcalli;    /* yuk */
-    bool_t shipnow, ev_blocked;
-    int refreshes = 2;
-    sigset_t mask;
-
-    assert(cl != NULL);
-
-    clnt_vc_fd_lock2(cl, &mask /*, "duplex_unit_getreq" */);
-
-    /* two basic strategies are possible here--this stage
-     * assumes the cost of updating the epoll (or select)
-     * registration of the connected transport is preferable
-     * to muxing reply events with call events through the/a
-     * request dispatcher (in the common case).
-     *
-     * the CT_FLAG_EPOLL_ACTIVE is intended to indicate the
-     * inverse strategy, which would place the current thread
-     * on a waitq here (in the common case). */
-
-    ev_blocked = cond_block_events_client(cl);
-
-    if (!ct->ct_waitset) {
-        /* If time is not within limits, we ignore it. */
-        if (time_not_ok(&timeout) == FALSE)
-            ct->ct_wait = timeout;
-    }
-
-    shipnow =
-        (xdr_results == NULL && timeout.tv_sec == 0
-         && timeout.tv_usec == 0) ? FALSE : TRUE;
-
-call_again:
-    xdrs->x_op = XDR_ENCODE;
-    ct->ct_error.re_status = RPC_SUCCESS;
-    x_id = ntohl(--(*msg_x_id));
-
-    if ((! XDR_PUTBYTES(xdrs, ct->ct_u.ct_mcallc, ct->ct_mpos)) ||
-        (! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
-        (! AUTH_MARSHALL(cl->cl_auth, xdrs)) ||
-        (! AUTH_WRAP(cl->cl_auth, xdrs, xdr_args, args_ptr))) {
-        if (ct->ct_error.re_status == RPC_SUCCESS)
-            ct->ct_error.re_status = RPC_CANTENCODEARGS;
-        (void)xdrrec_endofrecord(xdrs, TRUE);
-        vc_call_return (ct->ct_error.re_status);
-    }
-    if (! xdrrec_endofrecord(xdrs, shipnow))
-        vc_call_return (ct->ct_error.re_status = RPC_CANTSEND);
-    if (! shipnow)
-        vc_call_return (RPC_SUCCESS);
-    /*
-     * Hack to provide rpc-based message passing
-     */
-    if (timeout.tv_sec == 0 && timeout.tv_usec == 0)
-        vc_call_return (ct->ct_error.re_status = RPC_TIMEDOUT);
-
-    /* XXX OK.  Now we need to deal with non REPLY msgs, I
-     * strongly suspect */
-
-    /*
-     * Keep receiving until we get a valid transaction id
-     */
-    xdrs->x_op = XDR_DECODE;
-    while (TRUE) {
-        reply_msg.acpted_rply.ar_verf = _null_auth;
-        reply_msg.acpted_rply.ar_results.where = NULL;
-        reply_msg.acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
-        if (! xdrrec_skiprecord(xdrs)) {
-            printf("error at skiprecord\n");
-            vc_call_return (ct->ct_error.re_status);
-        }
-        /* now decode and validate the response header */
-        if (! xdr_replymsg(xdrs, &reply_msg)) {
-            printf("error at replymsg\n");
-            if (ct->ct_error.re_status == RPC_SUCCESS) {
-                printf("error at ct_error (dirrection == %d)\n",
-                       reply_msg.rm_direction);
-                continue;
-            }
-            vc_call_return (ct->ct_error.re_status);
-        }
-        printf("successful xdr_replymsg (direction==%d)",
-               reply_msg.rm_direction);
-        if (reply_msg.rm_xid == x_id)
-            break;
-    }
-
-    /*
-     * process header
-     */
-    _seterr_reply(&reply_msg, &(ct->ct_error));
-    if (ct->ct_error.re_status == RPC_SUCCESS) {
-        if (! AUTH_VALIDATE(cl->cl_auth,
-                            &reply_msg.acpted_rply.ar_verf)) {
-            ct->ct_error.re_status = RPC_AUTHERROR;
-            ct->ct_error.re_why = AUTH_INVALIDRESP;
-        } else if (! AUTH_UNWRAP(cl->cl_auth, xdrs,
-                                 xdr_results, results_ptr)) {
-            if (ct->ct_error.re_status == RPC_SUCCESS)
-                ct->ct_error.re_status = RPC_CANTDECODERES;
-        }
-        /* free verifier ... */
-        if (reply_msg.acpted_rply.ar_verf.oa_base != NULL) {
-            xdrs->x_op = XDR_FREE;
-            (void)xdr_opaque_auth(xdrs, &(reply_msg.acpted_rply.ar_verf));
-        }
-    }  /* end successful completion */
-    else {
-        /* maybe our credentials need to be refreshed ... */
-        if (refreshes-- && AUTH_REFRESH(cl->cl_auth, &reply_msg))
-            goto call_again;
-    }  /* end of unsuccessful completion */
-    vc_call_return (ct->ct_error.re_status);
-
-out:
-        if (ev_blocked)
-            cond_unblock_events_client(cl);
-        release_fd_lock(ct->ct_fd, mask);
-
-        return (result);
-} /* clnt_vc_call_orig */
-
-static enum clnt_stat
 clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
 	CLIENT *cl;
 	rpcproc_t proc;
@@ -664,8 +528,9 @@ call_again:
         if (! xdr_dplx_msg(xdrs, duplex_msg)) {
             printf("error at xdr_dplx_msg\n");
             if (ct->ct_error.re_status == RPC_SUCCESS) {
-                printf("error at ct_error (direction == %d)\n",
-                       duplex_msg->rm_direction);
+                printf("error at ct_error (direction == %d, status == %d)\n",
+                       duplex_msg->rm_direction,
+		       ct->ct_error.re_status);
                 continue;
             }
             vc_call_return (ct->ct_error.re_status);
