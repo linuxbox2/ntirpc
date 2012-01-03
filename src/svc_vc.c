@@ -100,8 +100,8 @@ bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
 bool_t
 cond_block_events_svc(SVCXPRT *xprt)
 {
-    CLIENT *cl = (CLIENT *) xprt->xp_p4;
-    if (cl) {
+    if (xprt->xp_p4) {
+        CLIENT *cl = (CLIENT *) xprt->xp_p4;
         struct ct_data *ct = (struct ct_data *) cl->cl_private;
         if ((ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX) &&
             (! (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED))) {
@@ -118,8 +118,8 @@ cond_block_events_svc(SVCXPRT *xprt)
 void
 cond_unblock_events_svc(SVCXPRT *xprt)
 {
-    CLIENT *cl = (CLIENT *) xprt->xp_p4;
-    if (cl) {
+    if (xprt->xp_p4) {
+        CLIENT *cl = (CLIENT *) xprt->xp_p4;
         struct ct_data *ct = (struct ct_data *) cl->cl_private;
         if (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED) {
             ct->ct_duplex.ct_flags &= ~CT_FLAG_EVENTS_BLOCKED;
@@ -897,19 +897,28 @@ svc_vc_reply(xprt, msg)
 {
 	struct cf_conn *cd;
 	XDR *xdrs;
-	bool_t rstat;
 
-	xdrproc_t xdr_results; /* XXX gcc warn uninitialized */
-	caddr_t xdr_location; /* XXX gcc warn uninitialized */
-	bool_t has_args;
+	xdrproc_t xdr_results = NULL;
+	caddr_t xdr_location = NULL;
 
-        /* XXX actually, gcc warning looks correct, revisit (Matt) */
+        CLIENT *cl; /* XXX duplex */
+        struct ct_data *ct;
+
+	bool_t has_args, rstat;
 
 	assert(xprt != NULL);
 	assert(msg != NULL);
 
 	cd = (struct cf_conn *)(xprt->xp_p1);
 	xdrs = &(cd->xdrs);
+
+#if 1 /* XXX duplex debugging */
+        if (xprt->xp_p4) {
+            /* we may need this to resolve XID */
+            cl = (CLIENT *) xprt->xp_p4;
+            ct = (struct ct_data *) cl->cl_private;
+        }
+#endif
 
 	if (msg->rm_reply.rp_stat == MSG_ACCEPTED &&
 	    msg->rm_reply.rp_acpt.ar_stat == SUCCESS) {
