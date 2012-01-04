@@ -384,7 +384,6 @@ makefd_xprt(fd, sendsize, recvsize)
  
 	assert(fd != -1);
 
-        /* XXX an ordering inelegance, at best */
         if (! __svc_params->max_connections)
             __svc_params->max_connections = FD_SETSIZE;
 
@@ -895,12 +894,10 @@ svc_vc_reply(xprt, msg)
 	SVCXPRT *xprt;
 	struct rpc_msg *msg;
 {
-	struct cf_conn *cd;
 	XDR *xdrs;
-
-	xdrproc_t xdr_results = NULL;
-	caddr_t xdr_location = NULL;
-
+	struct cf_conn *cd;
+	xdrproc_t xdr_results;
+	caddr_t xdr_location;
         CLIENT *cl; /* XXX duplex */
         struct ct_data *ct;
 
@@ -914,7 +911,6 @@ svc_vc_reply(xprt, msg)
 
 #if 1 /* XXX duplex debugging */
         if (xprt->xp_p4) {
-            /* we may need this to resolve XID */
             cl = (CLIENT *) xprt->xp_p4;
             ct = (struct ct_data *) cl->cl_private;
         }
@@ -1142,7 +1138,8 @@ clnt_dplx_create_from_svc(xprt, prog, vers, flags)
 
 	rwlock_wrlock (&xprt->lock);
 
-	/* Once */
+	/* XXX return allocated client structure, or allocate one if none
+         * is currently allocated (it can be destroyed) */
 	if (xprt->xp_p4) {
 	    cl = (CLIENT *) xprt->xp_p4;
             goto unlock;
@@ -1159,7 +1156,7 @@ clnt_dplx_create_from_svc(xprt, prog, vers, flags)
 			      cd->sendsize,
 			      CLNT_CREATE_FLAG_SVCXPRT);
         if (! cl)
-            goto unlock;
+            goto unlock; /* XXX should probably warn here */
 
         SetDuplex(cl, xprt);
 
