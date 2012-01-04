@@ -552,7 +552,7 @@ call_again:
                 assert(duplex_xprt);
                 cd = (struct cf_conn *) duplex_xprt->xp_p1;
                 cd->x_id = msg->rm_xid;
-                printf("call intercepted, dispatching (x_id = %d\n",
+                printf("call intercepted, dispatching (x_id == %d)\n",
                     cd->x_id);
                 duplex_xprt->xp_ops2->xp_dispatch(duplex_xprt, &msg);
             }
