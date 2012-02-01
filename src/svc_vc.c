@@ -1158,6 +1158,17 @@ clnt_dplx_create_from_svc(xprt, prog, vers, flags)
         if (! cl)
             goto unlock; /* XXX should probably warn here */
 
+#if 1
+        {
+            /* XXXX experimental share xdrs (and we leak them ) */
+            struct ct_data *ct = (struct ct_data *) cl->cl_private;
+            ct->ct_xdrs = cd->xdrs;
+            printf("clnt xdrs %p %s svc xdrs %p\n",
+                   &ct->ct_xdrs,
+                   (&ct->ct_xdrs == &cd->xdrs) ? "==" : "!=",
+                   &cd->xdrs);
+        }
+#endif
         SetDuplex(cl, xprt);
 
 	/* Warn cleanup routines not to close xp_fd */
@@ -1220,6 +1231,15 @@ svc_dplx_create_from_clnt(cl, sendsz, recvsz, flags)
     cd->sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int) sendsz);
     cd->recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int) recvsz);
     cd->maxrec = __svc_maxrec;
+
+#if 1
+    /* XXXX experimental share xdrs (and we leak them ) */
+    cd->xdrs = ct->ct_xdrs;
+    printf("clnt xdrs %p %s svc xdrs %p\n",
+           &ct->ct_xdrs,
+           (&ct->ct_xdrs == &cd->xdrs) ? "==" : "!=",
+           &cd->xdrs);
+#endif
 
     if (cd->maxrec != 0) {
 	fflags = fcntl(fd, F_GETFL, 0);

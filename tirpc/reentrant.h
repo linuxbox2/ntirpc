@@ -64,6 +64,7 @@
 #define rwlock_rdlock(l)	pthread_rwlock_rdlock(l)
 #define rwlock_wrlock(l)	pthread_rwlock_wrlock(l)
 #define rwlock_unlock(l)	pthread_rwlock_unlock(l)
+#define rwlockattr_init(a)      pthread_rwlockattr_init(a)
 
 #define thr_keycreate(k, d)	pthread_key_create(k, d)
 #define thr_setspecific(k, p)	pthread_setspecific(k, p)

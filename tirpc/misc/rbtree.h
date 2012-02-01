@@ -3,6 +3,10 @@
 #ifndef _OPR_RBTREE_H
 #define _OPR_RBTREE_H 1
 
+/* from opr.h */
+#define opr_containerof(ptr, structure, member) \
+   ((structure *)((char *)(ptr)-(char *)(&((structure *)NULL)->member)))
+
 struct opr_rbtree_node {
     struct opr_rbtree_node *left;
     struct opr_rbtree_node *right;
