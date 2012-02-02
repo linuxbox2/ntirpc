@@ -67,6 +67,8 @@
 #include <rpc/rpc.h>
 #include "rpc_com.h"
 
+#include <misc/rbtree_x.h>
+
 #define CMGROUP_MAX    16
 #define SCM_CREDS      0x03            /* process creds (struct cmsgcred) */
 

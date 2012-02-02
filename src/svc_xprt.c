@@ -11,8 +11,10 @@
 #include <assert.h>
 #include <err.h>
 #include <errno.h>
-#include <rpc/types.h>
+#include <unistd.h>
+#include <signal.h>
 
+#include <rpc/types.h>
 #include <rpc/rpc.h>
 #ifdef PORTMAP
 #include <rpc/pmap_clnt.h>
@@ -23,8 +25,10 @@
 #include <rpc/svc.h>
 
 #include <misc/rbtree_x.h>
-#include "svc_xprt.h"
+
+#include "clnt_internal.h"
 #include "vc_lock.h"
+#include "svc_xprt.h"
 
 #define SVC_XPRT_PARTITIONS 17
 

@@ -42,6 +42,18 @@ struct ct_wait_entry {
     cond_t  cv;
 };
 
+#include <misc/rbtree.h>
+
+/* clnt_fd_lock complex */
+struct vc_fd_rec
+{
+    struct opr_rbtree_node node_k;
+    int fd_k;
+    int lock_flag_value; /* state of lock at fd */
+    mutex_t mtx;
+    cond_t cv;
+};
+
 #define MCALL_MSG_SIZE 24
 
 #define CT_FLAG_NONE              0x0000
@@ -79,6 +91,7 @@ struct ct_data {
 	u_int		ct_mpos;	/* pos after marshal */
 	XDR		ct_xdrs;	/* XDR stream */
 	uint32_t	ct_xid;
+        struct vc_fd_rec ct_crec;       /* unified sync */
 	struct rpc_msg	ct_reply;       /* async reply */
 	struct ct_wait_entry ct_sync;   /* wait for completion */
 	struct ct_duplex {
