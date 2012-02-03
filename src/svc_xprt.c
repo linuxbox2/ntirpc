@@ -181,12 +181,11 @@ int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
             srec = opr_containerof(n, struct svc_xprt_rec, node_k);
             sk.fd_k = srec->xprt->xp_fd;
 
-            mutex_lock(&srec->mtx);
-            rwlock_unlock(&t->lock); /* t !LOCKED */
+            /* call each_func with t, srec, and xprt !LOCKED */
+            rwlock_unlock(&t->lock);
             each_f(srec->xprt, arg);
-            mutex_unlock(&srec->mtx);
+            rwlock_rdlock(&t->lock);
 
-            rwlock_rdlock(&t->lock); /* t RLOCKED */
             if (gen != t->head.gen) {
                 /* invalidated, try harder */
                 n = opr_rbtree_lookup(&t->head, &sk.node_k);

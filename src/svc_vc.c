@@ -66,6 +66,7 @@
 
 #include "rpc_com.h"
 #include "clnt_internal.h"
+#include "svc_xprt.h"
 
 #include <getpeereid.h>
 
@@ -1073,49 +1074,74 @@ __svc_clean_idle(fd_set *fds, int timeout, bool_t cleanblock)
 /*
  * Like __svc_clean_idle but event-type independent.  For now no cleanfds.
  */
+
+struct svc_clean_idle_arg
+{
+    SVCXPRT *least_active;
+    struct timeval tv, tmax;
+    int cleanblock, ncleaned, timeout;
+};
+
+static void svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
+{
+    struct cf_conn *cd;
+    struct timeval tdiff;
+    struct svc_clean_idle_arg *acc = (struct svc_clean_idle_arg *) arg;
+
+    if (TRUE) { /* flag in __svc_params->ev_u.epoll? */
+
+        rwlock_rdlock(&xprt->lock); /* XXX mutex? */
+
+        if (xprt == NULL || xprt->xp_ops == NULL ||
+            xprt->xp_ops->xp_recv != svc_vc_recv)
+            goto unlock;
+
+        cd = (struct cf_conn *) xprt->xp_p1;
+        if (!acc->cleanblock && !cd->nonblock)
+            goto unlock;
+
+        if (acc->timeout == 0) {
+            timersub(&acc->tv, &cd->last_recv_time, &tdiff);
+            if (timercmp(&tdiff, &acc->tmax, >)) {
+                acc->tmax = tdiff;
+                acc->least_active = xprt;
+            }
+            goto unlock;
+        }
+        if (acc->tv.tv_sec - cd->last_recv_time.tv_sec > acc->timeout) {
+            /* XXX locking */
+            __xprt_unregister_unlocked(xprt);
+            __svc_vc_dodestroy(xprt);
+            acc->ncleaned++;
+        }
+
+    unlock:
+        rwlock_rdlock(&xprt->lock); /* XXX mutex? */
+    } /* TRUE */
+}
+
 bool_t
 __svc_clean_idle2(int timeout, bool_t cleanblock)
 {
-	int i, ncleaned;
-	SVCXPRT *xprt, *least_active;
-	struct timeval tv, tdiff, tmax;
-	struct cf_conn *cd;
+        struct svc_clean_idle_arg acc;
 
-	gettimeofday(&tv, NULL);
-	tmax.tv_sec = tmax.tv_usec = 0;
-	least_active = NULL;
+        memset(&acc, 0, sizeof(struct svc_clean_idle_arg));
+	gettimeofday(&acc.tv, NULL);
+        acc.timeout = timeout;
+#if 0
 	rwlock_wrlock(&svc_fd_lock);
-	for (i = ncleaned = 0; i <= svc_maxfd; i++) {
-		xprt = __svc_xports[i];
-		if (TRUE) { /* flag in__svc_params->ev_u.epoll? */
-			if (xprt == NULL || xprt->xp_ops == NULL ||
-			    xprt->xp_ops->xp_recv != svc_vc_recv)
-				continue;
-			cd = (struct cf_conn *)xprt->xp_p1;
-			if (!cleanblock && !cd->nonblock)
-				continue;
-			if (timeout == 0) {
-				timersub(&tv, &cd->last_recv_time, &tdiff);
-				if (timercmp(&tdiff, &tmax, >)) {
-					tmax = tdiff;
-					least_active = xprt;
-				}
-				continue;
-			}
-			if (tv.tv_sec - cd->last_recv_time.tv_sec > timeout) {
-				__xprt_unregister_unlocked(xprt);
-				__svc_vc_dodestroy(xprt);
-				ncleaned++;
-			}
-		} /* TRUE */
-	} /* loop */
-	if (timeout == 0 && least_active != NULL) {
-		__xprt_unregister_unlocked(least_active);
-		__svc_vc_dodestroy(least_active);
-		ncleaned++;
+#endif
+        svc_xprt_foreach(svc_clean_idle2_func, (void *) &acc);
+
+	if (timeout == 0 && acc.least_active != NULL) {
+		__xprt_unregister_unlocked(acc.least_active);
+		__svc_vc_dodestroy(acc.least_active);
+		acc.ncleaned++;
 	}
+#if 0
 	rwlock_unlock(&svc_fd_lock);
-	return ncleaned > 0 ? TRUE : FALSE;
+#endif
+	return (acc.ncleaned > 0) ? TRUE : FALSE;
 } /* __svc_clean_idle2 */
 
 /*
