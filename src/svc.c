@@ -186,24 +186,30 @@ void
 xprt_register (SVCXPRT * xprt)
 {
     int code;
-
-    assert (xprt != NULL);
+    assert (xprt);
 
     rwlock_wrlock (&svc_fd_lock); /* XXX protecting event registration */
 
     switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
     case SVC_EVENT_EPOLL:
-        /* set up epoll user data */
-        ((struct epoll_event *) xprt->xp_ev)->data.fd = xprt->xp_fd;
-        /* wait for read events, level triggered */
-        ((struct epoll_event *) xprt->xp_ev)->events = EPOLLIN;
-        /* add to epoll vector */
-        assert(xprt->xp_ev);
-        code = epoll_ctl(__svc_params->ev_u.epoll.epoll_fd,
-                         EPOLL_CTL_ADD,
-                         xprt->xp_fd,
-                         (struct epoll_event *) xprt->xp_ev);
+        {
+            struct epoll_event *ev = (struct epoll_event *) xprt->xp_ev;
+            assert(ev);
+
+            /* set up epoll user data */
+            ev->data.fd = xprt->xp_fd;
+            ev->data.ptr = xprt;
+
+            /* wait for read events, level triggered */
+            ev->events = EPOLLIN;
+
+            /* add to epoll vector */
+            code = epoll_ctl(__svc_params->ev_u.epoll.epoll_fd,
+                             EPOLL_CTL_ADD,
+                             xprt->xp_fd,
+                             ev);
+        }
         break;
 #endif
     default:
@@ -794,16 +800,18 @@ svc_getreqset (readfds)
 
 #if defined(TIRPC_EPOLL)
 void
-svc_getreqset_epoll (struct epoll_event *events, int nfds)
+svc_getreqset_epoll (struct epoll_event *events, int nevts)
 {
-  int ix;
+    int ix, code = 0;
+    SVCXPRT *xprt;
 
-  assert (events != NULL);
+    assert (events != NULL);
 
-  for (ix = 0; ix < nfds; ++ix) {
-        svc_getreq_common (events[ix].data.fd);
-  }
-
+    for (ix = 0; ix < nevts; ++ix) {
+        /* XXX should do constant-time validity check */
+        xprt = (SVCXPRT *) events[ix].data.ptr;
+        code = xprt->xp_ops2->xp_getreq(xprt);
+    }
 }
 #endif /* TIRPC_EPOLL */
 
