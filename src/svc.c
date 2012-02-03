@@ -61,6 +61,7 @@
 #include <rpc/svc.h>
 
 #include "clnt_internal.h"
+#include "svc_xprt.h"
 
 #define	RQCRED_SIZE	400	/* this size is excessive */
 
@@ -112,34 +113,18 @@ svc_init (svc_init_params * params)
 #if defined(TIRPC_EPOLL)
     if (params->flags & SVC_INIT_EPOLL) {
         __svc_params->ev_type = SVC_EVENT_EPOLL;
-        __svc_params->max_connections = params->max_connections;
+        __svc_params->max_connections = params->max_connections; /* XXX going? */
         __svc_params->ev_u.epoll.max_events = params->max_events;
         __svc_params->ev_u.epoll.epoll_fd = epoll_create1(EPOLL_CLOEXEC);
         if (__svc_params->ev_u.epoll.epoll_fd == -1) {
             warnx("svc_init:  epoll_create failed");
             return;
         }
-    } else {
-#else
-    if (TRUE) {
-#endif
-        __svc_params->ev_type = SVC_EVENT_FDSET;
-        FD_ZERO(&svc_fdset);
     }
-
-    if (params->flags & SVC_INIT_XPRTS) {
-	if (__svc_xprts == NULL) {
-	    __svc_xprts = (SVCXPRT **) mem_alloc (
-                __svc_params->max_connections * sizeof (SVCXPRT *));
-	    if (__svc_xprts == NULL) {
-		warnx(
-                    "svc_init: __svc_xprts allocation failure");
-		return;
-	    }
-	    memset (__svc_xprts, 0,
-                    __svc_params->max_connections * sizeof (SVCXPRT *));
-	} /* !__svc_xprts */   
-    } /* SVC_INIT_XPORTS */
+#else
+    /* XXX formerly select/fd_set case, now placeholder for new
+     * event systems, reworked select, etc. */
+#endif
 
     return;
 }
@@ -200,47 +185,35 @@ __xprt_set_raddr(SVCXPRT *xprt, const struct sockaddr_storage *ss)
 void
 xprt_register (SVCXPRT * xprt)
 {
-    int code, sock;
+    int code;
 
     assert (xprt != NULL);
 
-    sock = xprt->xp_fd;
+    rwlock_wrlock (&svc_fd_lock); /* XXX protecting event registration */
 
-    rwlock_wrlock (&svc_fd_lock);
-    if (__svc_xprts == NULL) {
-        __svc_params->max_connections = FD_SETSIZE;
-        __svc_xprts = (SVCXPRT **) mem_alloc (FD_SETSIZE * sizeof (SVCXPRT *));
-        if (__svc_xprts == NULL) {
-            __warnx("xprt_register: __svc_xprts allocation failure");
-            rwlock_unlock (&svc_fd_lock);
-            return;
-        }
-        memset (__svc_xprts, 0, FD_SETSIZE * sizeof (SVCXPRT *));
-    }
-    if (sock < __svc_params->max_connections) {
-        __svc_xprts[sock] = xprt;
-        switch (__svc_params->ev_type) {
+    switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
-        case SVC_EVENT_EPOLL:
-            /* set up epoll user data */
-            ((struct epoll_event *) xprt->xp_ev)->data.fd = sock;
-            /* wait for read events, level triggered */
-            ((struct epoll_event *) xprt->xp_ev)->events = EPOLLIN;
-            /* add to epoll vector */
-            assert(xprt->xp_ev);
-            code = epoll_ctl(__svc_params->ev_u.epoll.epoll_fd,
-                             EPOLL_CTL_ADD,
-                             sock,
-                             (struct epoll_event *) xprt->xp_ev);
-            break;
+    case SVC_EVENT_EPOLL:
+        /* set up epoll user data */
+        ((struct epoll_event *) xprt->xp_ev)->data.fd = xprt->xp_fd;
+        /* wait for read events, level triggered */
+        ((struct epoll_event *) xprt->xp_ev)->events = EPOLLIN;
+        /* add to epoll vector */
+        assert(xprt->xp_ev);
+        code = epoll_ctl(__svc_params->ev_u.epoll.epoll_fd,
+                         EPOLL_CTL_ADD,
+                         xprt->xp_fd,
+                         (struct epoll_event *) xprt->xp_ev);
+        break;
 #endif
-        default:
-            FD_SET (sock, &svc_fdset);
-            break;
-        } /* switch */
-      svc_maxfd = max (svc_maxfd, sock);
-    }
+    default:
+        /* XXX formerly select/fd_set case, now placeholder for new
+         * event systems, reworked select, etc. */
+        break;
+    } /* switch */
+
     rwlock_unlock (&svc_fd_lock);
+
 } /* xprt_register */
 
 void
@@ -261,42 +234,37 @@ __xprt_unregister_unlocked (SVCXPRT * xprt)
 static void
 __xprt_do_unregister (SVCXPRT *xprt, bool_t dolock)
 {
-    int code, sock;
+    int code = 0;
+    SVCXPRT *xprt2;
 
     assert (xprt != NULL);
 
     if (dolock)
-        rwlock_wrlock (&svc_fd_lock);
+        rwlock_wrlock (&svc_fd_lock); /* XXX protect registration */
 
-    sock = xprt->xp_fd;
-
-    if ((sock < __svc_params->max_connections) && 
-        (__svc_xprts[sock] == xprt)) {
-        __svc_xprts[sock] = NULL;
-        switch (__svc_params->ev_type) {
+    switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
-        case SVC_EVENT_EPOLL:
-            assert(xprt->xp_ev);
-            code = epoll_ctl(__svc_params->ev_u.epoll.epoll_fd,
-                             EPOLL_CTL_DEL,
-                             sock,
-                             (struct epoll_event *) xprt->xp_ev);
-          break;
+    case SVC_EVENT_EPOLL:
+        assert(xprt->xp_ev);
+        code = epoll_ctl(__svc_params->ev_u.epoll.epoll_fd,
+                         EPOLL_CTL_DEL,
+                         xprt->xp_fd,
+                         (struct epoll_event *) xprt->xp_ev);
+        break;
 #endif
-        default:
-            FD_CLR (sock, &svc_fdset);
-            break;
-        } /* switch */
-
-        if (sock >= svc_maxfd) {
-            for (svc_maxfd--; svc_maxfd >= 0; svc_maxfd--)
-                if (__svc_xprts[svc_maxfd])
-                    break;
-        }
-    } /* sock */
+    default:
+        /* XXX formerly select/fd_set case, now placeholder for new
+         * event systems, reworked select, etc. */
+        break;
+    }
 
     if (dolock)
         rwlock_unlock (&svc_fd_lock);
+
+    /* xprt2 holds the address we displaced, it would be of interest
+     * if xprt2 != xprt */
+    xprt2 = svc_xprt_clear(xprt);
+
 }
 
 /*
@@ -527,7 +495,7 @@ svc_lookup(svc_rec_t **rec, svc_vers_range_t *vrange, rpcprog_t prog,
            rpcvers_t vers, char *netid, u_int flags)
 {
     struct svc_callout *s, *p;
-    svc_lookup_result_t code;
+    svc_lookup_result_t code = SVC_LKP_ERR;
     bool_t prog_found, vers_found, netid_found;
 
     p = NULL;
@@ -846,9 +814,7 @@ svc_getreq_common (fd)
   SVCXPRT *xprt;
   bool_t code;
 
-  rwlock_rdlock (&svc_fd_lock);
-  xprt = __svc_xprts[fd];
-  rwlock_unlock (&svc_fd_lock);
+  xprt = svc_xprt_get(fd);
 
   if (xprt == NULL)
     return;
@@ -866,9 +832,7 @@ svc_validate_xprt_list(SVCXPRT *xprt)
 {
     bool_t code;
 
-    rwlock_rdlock (&svc_fd_lock);
-    code = (xprt == __svc_xprts[xprt->xp_fd]);
-    rwlock_unlock (&svc_fd_lock);
+    code = (xprt == svc_xprt_get(xprt->xp_fd));
 
     return (code);
 }
@@ -982,6 +946,8 @@ svc_getreq_default(SVCXPRT *xprt)
 	}
     }
   while (stat == XPRT_MOREREQS);
+
+  return (stat);
 }
 
 void
@@ -1011,14 +977,8 @@ svc_getreq_poll (pfdp, pollretval)
 	   *
 	   *      XXX Should we do an xprt_unregister() instead?
 	   */
-	  if (p->revents & POLLNVAL)
-	    {
-	      rwlock_wrlock (&svc_fd_lock);
-	      FD_CLR (p->fd, &svc_fdset);
-	      rwlock_unlock (&svc_fd_lock);
-	    }
-	  else
-	    svc_getreq_common (p->fd);
+	  if (! (p->revents & POLLNVAL))
+              svc_getreq_common (p->fd);
 	}
     }
 }
@@ -1029,22 +989,6 @@ rpc_control (int what, void *arg)
   int val;
 
   switch (what) {
-  case RPC_SVC_FDSET_GET:
-      rwlock_rdlock(&svc_fd_lock);
-      *(fd_set *)arg = svc_fdset;
-      rwlock_unlock(&svc_fd_lock);
-      break;
-  case RPC_SVC_FDSET_SET:
-      rwlock_wrlock(&svc_fd_lock);
-      svc_fdset = *(fd_set *)arg;
-      rwlock_unlock(&svc_fd_lock);
-      break;
-  case RPC_SVC_XPRTS_GET:
-      *(SVCXPRT ***)arg = __svc_xprts;
-      break;
-  case RPC_SVC_XPRTS_SET:
-      __svc_xprts = *(SVCXPRT ***)arg;
-      break;
   case RPC_SVC_CONNMAXREC_SET:
       val = *(int *) arg;
       if (val <= 0)
@@ -1057,5 +1001,6 @@ rpc_control (int what, void *arg)
   default:
       return (FALSE);
   }
+
   return (TRUE);
 }

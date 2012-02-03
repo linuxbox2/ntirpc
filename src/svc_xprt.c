@@ -113,24 +113,30 @@ static inline SVCXPRT *svc_xprt_insert(SVCXPRT *xprt)
     return (xprt2);
 }
 
-SVCXPRT* svc_xprt_set(SVCXPRT *xprt)
+#define SVC_XPRT_FLAG_NONE       0x0000
+#define SVC_XPRT_FLAG_CLEAR      0x0001
+
+static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
 {
     SVCXPRT *xprt2 = NULL;
     struct svc_xprt_rec *srec = svc_xprt_lookup(xprt->xp_fd);
 
-    if (srec){
+    if (srec) {
         mutex_lock(&srec->mtx);
         /* XXX state flags and refcount here? */
         if (! srec->xprt) {
-            if (xprt) /* may be NULL */
-                if (xprt->xp_gen == 0) {
-                    srec->gen++;
-                    xprt->xp_gen = srec->gen;
-                }
-            srec->xprt = xprt;            
+            if (xprt->xp_gen == 0) {
+                srec->gen++;
+                xprt->xp_gen = srec->gen;
+            }
         }
-        else
+        else {
             xprt2 = srec->xprt;
+            if (flags & SVC_XPRT_FLAG_CLEAR)
+                srec->xprt = NULL;
+            else
+                srec->xprt = xprt;
+        }
         mutex_unlock(&srec->mtx);
     } else {
         /* no srec */
@@ -139,6 +145,16 @@ SVCXPRT* svc_xprt_set(SVCXPRT *xprt)
 
     return (xprt2);
 };
+
+SVCXPRT* svc_xprt_set(SVCXPRT *xprt)
+{
+    return (svc_xprt_set_impl(xprt, SVC_XPRT_FLAG_NONE));
+}
+
+SVCXPRT *svc_xprt_clear(SVCXPRT *xprt)
+{
+    return (svc_xprt_set_impl(xprt, SVC_XPRT_FLAG_CLEAR));
+}
 
 SVCXPRT* svc_xprt_get(int fd)
 {

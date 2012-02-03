@@ -443,7 +443,6 @@ rendezvous_request(xprt, msg)
 	socklen_t len;
 	struct __rpc_sockinfo si;
 	SVCXPRT *newxprt;
-	fd_set cleanfds;
 
 	assert(xprt != NULL);
 	assert(msg != NULL);
@@ -467,8 +466,9 @@ again:
                         break;
 #endif
                     default:
-			cleanfds = svc_fdset;
-			__svc_clean_idle2(0, FALSE);
+                        /* XXX formerly select/fd_set case, now placeholder
+                         * for new event systems, reworked select, etc. */
+                        abort(); /* XXX */
                         break;
                     } /* switch */
                     goto again;
@@ -1029,46 +1029,8 @@ __rpc_get_local_uid(SVCXPRT *transp, uid_t *uid) {
 bool_t
 __svc_clean_idle(fd_set *fds, int timeout, bool_t cleanblock)
 {
-	int i, ncleaned;
-	SVCXPRT *xprt, *least_active;
-	struct timeval tv, tdiff, tmax;
-	struct cf_conn *cd;
+    return ( __svc_clean_idle2(timeout, cleanblock) );
 
-	gettimeofday(&tv, NULL);
-	tmax.tv_sec = tmax.tv_usec = 0;
-	least_active = NULL;
-	rwlock_wrlock(&svc_fd_lock);
-	for (i = ncleaned = 0; i <= svc_maxfd; i++) {
-		xprt = __svc_xprts[i];
-		if (FD_ISSET(i, fds)) {			
-			if (xprt == NULL || xprt->xp_ops == NULL ||
-			    xprt->xp_ops->xp_recv != svc_vc_recv)
-				continue;
-			cd = (struct cf_conn *)xprt->xp_p1;
-			if (!cleanblock && !cd->nonblock)
-				continue;
-			if (timeout == 0) {
-				timersub(&tv, &cd->last_recv_time, &tdiff);
-				if (timercmp(&tdiff, &tmax, >)) {
-					tmax = tdiff;
-					least_active = xprt;
-				}
-				continue;
-			}
-			if (tv.tv_sec - cd->last_recv_time.tv_sec > timeout) {
-				__xprt_unregister_unlocked(xprt);
-				__svc_vc_dodestroy(xprt);
-				ncleaned++;
-			}
-		} /* ! FD_ISSET */
-	} /* loop */
-	if (timeout == 0 && least_active != NULL) {
-		__xprt_unregister_unlocked(least_active);
-		__svc_vc_dodestroy(least_active);
-		ncleaned++;
-	}
-	rwlock_unlock(&svc_fd_lock);
-	return ncleaned > 0 ? TRUE : FALSE;
 } /* __svc_clean_idle */
 
 /*
@@ -1128,9 +1090,8 @@ __svc_clean_idle2(int timeout, bool_t cleanblock)
         memset(&acc, 0, sizeof(struct svc_clean_idle_arg));
 	gettimeofday(&acc.tv, NULL);
         acc.timeout = timeout;
-#if 0
-	rwlock_wrlock(&svc_fd_lock);
-#endif
+
+        /* XXX refcounting, state? */
         svc_xprt_foreach(svc_clean_idle2_func, (void *) &acc);
 
 	if (timeout == 0 && acc.least_active != NULL) {
@@ -1138,10 +1099,9 @@ __svc_clean_idle2(int timeout, bool_t cleanblock)
 		__svc_vc_dodestroy(acc.least_active);
 		acc.ncleaned++;
 	}
-#if 0
-	rwlock_unlock(&svc_fd_lock);
-#endif
+
 	return (acc.ncleaned > 0) ? TRUE : FALSE;
+
 } /* __svc_clean_idle2 */
 
 /*

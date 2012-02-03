@@ -49,41 +49,16 @@
 
 extern svc_params __svc_params[1];
 
-static void
-svc_run_select()
-{
-	fd_set readfds, cleanfds;
-	struct timeval timeout;
-	extern rwlock_t svc_fd_lock;
-
-	for (;;) {
-		rwlock_rdlock(&svc_fd_lock);
-		readfds = svc_fdset;
-		cleanfds = svc_fdset;
-		rwlock_unlock(&svc_fd_lock);
-		timeout.tv_sec = 30;
-		timeout.tv_usec = 0;
-		switch (select(svc_maxfd+1, &readfds, NULL, NULL, &timeout)) {
-		case -1:
-			FD_ZERO(&readfds);
-			if (errno == EINTR) {
-				continue;
-			}
-			warn("svc_run: - select failed");
-			return;
-		case 0:
-			__svc_clean_idle(&cleanfds, 30, FALSE);
-			continue;
-		default:
-			svc_getreqset(&readfds);
-		}
-	}
-}
-
 #if defined(TIRPC_EPOLL)
 
 #define SVC_RUN_STOP 0x0001
 static u_long __svc_run_flags = 0;
+
+bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
+
+#if defined(TIRPC_EPOLL)
+void svc_getreqset_epoll (struct epoll_event *events, int nfds);
+#endif
 
 /* static */ void
 svc_run_epoll()
@@ -137,7 +112,8 @@ svc_run()
         break;
 #endif
     default:
-        return (svc_run_select());
+        /* XXX formerly select/fd_set case, now placeholder for new
+         * event systems, reworked select, etc. */
         break;
     } /* switch */
 }
@@ -160,7 +136,8 @@ svc_exit()
         break;
 #endif
     default:
-	FD_ZERO(&svc_fdset);
+        /* XXX formerly select/fd_set case, now placeholder for new
+         * event systems, reworked select, etc. */
         break;
     } /* switch */
     rwlock_unlock(&svc_fd_lock);

@@ -258,6 +258,7 @@ typedef enum svc_lookup_result
     SVC_LKP_PROG_NOTFOUND=1,
     SVC_LKP_VERS_NOTFOUND=2,
     SVC_LKP_NETID_NOTFOUND=3,
+    SVC_LKP_ERR=667,
 } svc_lookup_result_t;
 
 /* functions which can be installed using a control function, e.g., 
@@ -451,29 +452,6 @@ extern int	rpc_reg(rpcprog_t, rpcvers_t, rpcproc_t,
 			char *(*)(char *), xdrproc_t, xdrproc_t,
 			char *);
 __END_DECLS
-
-/*
- * Lowest level dispatching -OR- who owns this process anyway.
- * Somebody has to wait for incoming requests and then call the correct
- * service routine.  The routine svc_run does infinite waiting; i.e.,
- * svc_run never returns.
- * Since another (co-existant) package may wish to selectively wait for
- * incoming calls or other events outside of the rpc architecture, the
- * routine svc_getreq is provided.  It must be passed readfds, the
- * "in-place" results of a select system call (see select, section 2).
- */
-
-/*
- * Global keeper of rpc service descriptors in use
- * dynamic; must be inspected before each call to select
- */
-extern int svc_maxfd;
-#ifdef FD_SETSIZE
-extern fd_set svc_fdset;
-#define svc_fds svc_fdset.fds_bits[0]	/* compatibility */
-#else
-extern int svc_fds;
-#endif /* def FD_SETSIZE */
 
 /*
  * a small program implemented by the svc_rpc implementation itself;

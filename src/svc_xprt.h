@@ -18,6 +18,7 @@ struct svc_xprt_set
 
 SVCXPRT* svc_xprt_set(SVCXPRT *xprt);
 SVCXPRT* svc_xprt_get(int fd);
+SVCXPRT *svc_xprt_clear(SVCXPRT *xprt);
 
 /* iterator callback prototype */
 typedef void (*svc_xprt_each_func_t) (SVCXPRT *xprt, void *arg);
