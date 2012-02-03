@@ -1039,7 +1039,7 @@ __svc_clean_idle(fd_set *fds, int timeout, bool_t cleanblock)
 	least_active = NULL;
 	rwlock_wrlock(&svc_fd_lock);
 	for (i = ncleaned = 0; i <= svc_maxfd; i++) {
-		xprt = __svc_xports[i];
+		xprt = __svc_xprts[i];
 		if (FD_ISSET(i, fds)) {			
 			if (xprt == NULL || xprt->xp_ops == NULL ||
 			    xprt->xp_ops->xp_recv != svc_vc_recv)

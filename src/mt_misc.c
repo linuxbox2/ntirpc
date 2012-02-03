@@ -10,7 +10,7 @@
 /* protects the services list (svc.c) */
 pthread_rwlock_t	svc_lock = PTHREAD_RWLOCK_INITIALIZER;
 
-/* protects svc_fdset and the xports[] array */
+/* protects svc_fdset and the xprts[] array */
 pthread_rwlock_t	svc_fd_lock = PTHREAD_RWLOCK_INITIALIZER;
 
 /* protects the RPCBIND address cache */

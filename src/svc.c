@@ -128,17 +128,17 @@ svc_init (svc_init_params * params)
     }
 
     if (params->flags & SVC_INIT_XPRTS) {
-	if (__svc_xports == NULL) {
-	    __svc_xports = (SVCXPRT **) mem_alloc (
+	if (__svc_xprts == NULL) {
+	    __svc_xprts = (SVCXPRT **) mem_alloc (
                 __svc_params->max_connections * sizeof (SVCXPRT *));
-	    if (__svc_xports == NULL) {
+	    if (__svc_xprts == NULL) {
 		warnx(
-                    "svc_init: __svc_xports allocation failure");
+                    "svc_init: __svc_xprts allocation failure");
 		return;
 	    }
-	    memset (__svc_xports, 0,
+	    memset (__svc_xprts, 0,
                     __svc_params->max_connections * sizeof (SVCXPRT *));
-	} /* !__svc_xports */   
+	} /* !__svc_xprts */   
     } /* SVC_INIT_XPORTS */
 
     return;
@@ -207,18 +207,18 @@ xprt_register (SVCXPRT * xprt)
     sock = xprt->xp_fd;
 
     rwlock_wrlock (&svc_fd_lock);
-    if (__svc_xports == NULL) {
+    if (__svc_xprts == NULL) {
         __svc_params->max_connections = FD_SETSIZE;
-        __svc_xports = (SVCXPRT **) mem_alloc (FD_SETSIZE * sizeof (SVCXPRT *));
-        if (__svc_xports == NULL) {
-            __warnx("xprt_register: __svc_xports allocation failure");
+        __svc_xprts = (SVCXPRT **) mem_alloc (FD_SETSIZE * sizeof (SVCXPRT *));
+        if (__svc_xprts == NULL) {
+            __warnx("xprt_register: __svc_xprts allocation failure");
             rwlock_unlock (&svc_fd_lock);
             return;
         }
-        memset (__svc_xports, 0, FD_SETSIZE * sizeof (SVCXPRT *));
+        memset (__svc_xprts, 0, FD_SETSIZE * sizeof (SVCXPRT *));
     }
     if (sock < __svc_params->max_connections) {
-        __svc_xports[sock] = xprt;
+        __svc_xprts[sock] = xprt;
         switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
         case SVC_EVENT_EPOLL:
@@ -271,8 +271,8 @@ __xprt_do_unregister (SVCXPRT *xprt, bool_t dolock)
     sock = xprt->xp_fd;
 
     if ((sock < __svc_params->max_connections) && 
-        (__svc_xports[sock] == xprt)) {
-        __svc_xports[sock] = NULL;
+        (__svc_xprts[sock] == xprt)) {
+        __svc_xprts[sock] = NULL;
         switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
         case SVC_EVENT_EPOLL:
@@ -290,7 +290,7 @@ __xprt_do_unregister (SVCXPRT *xprt, bool_t dolock)
 
         if (sock >= svc_maxfd) {
             for (svc_maxfd--; svc_maxfd >= 0; svc_maxfd--)
-                if (__svc_xports[svc_maxfd])
+                if (__svc_xprts[svc_maxfd])
                     break;
         }
     } /* sock */
@@ -847,7 +847,7 @@ svc_getreq_common (fd)
   bool_t code;
 
   rwlock_rdlock (&svc_fd_lock);
-  xprt = __svc_xports[fd];
+  xprt = __svc_xprts[fd];
   rwlock_unlock (&svc_fd_lock);
 
   if (xprt == NULL)
@@ -867,7 +867,7 @@ svc_validate_xprt_list(SVCXPRT *xprt)
     bool_t code;
 
     rwlock_rdlock (&svc_fd_lock);
-    code = (xprt == __svc_xports[xprt->xp_fd]);
+    code = (xprt == __svc_xprts[xprt->xp_fd]);
     rwlock_unlock (&svc_fd_lock);
 
     return (code);
@@ -1040,10 +1040,10 @@ rpc_control (int what, void *arg)
       rwlock_unlock(&svc_fd_lock);
       break;
   case RPC_SVC_XPRTS_GET:
-      *(SVCXPRT ***)arg = __svc_xports;
+      *(SVCXPRT ***)arg = __svc_xprts;
       break;
   case RPC_SVC_XPRTS_SET:
-      __svc_xports = *(SVCXPRT ***)arg;
+      __svc_xprts = *(SVCXPRT ***)arg;
       break;
   case RPC_SVC_CONNMAXREC_SET:
       val = *(int *) arg;
