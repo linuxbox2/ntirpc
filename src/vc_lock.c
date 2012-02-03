@@ -37,6 +37,9 @@ void vc_lock_init()
 
     mutex_lock(&vc_fd_rec_set.clnt_fd_lock);
 
+    if (initialized)
+        return;
+
     /* one of advantages of this RBT is convenience of external
      * iteration, we'll go to that shortly */
     code = rbtx_init(vc_fd_rec_set.xt, fd_cmpf /* NULL (inline) */,

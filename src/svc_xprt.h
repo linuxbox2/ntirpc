@@ -7,12 +7,16 @@ struct svc_xprt_rec
     int fd_k;
     SVCXPRT *xprt;
     uint64_t gen; /* generation number */
+    mutex_t mtx;
 };
 
 struct svc_xprt_set
 {
-    mutex_t svc_xprt_lock; /* XXX unused */
+    mutex_t lock;
     struct rbtree_x *xt;
 };
+
+SVCXPRT* svc_xprt_set(SVCXPRT *xprt);
+SVCXPRT* svc_xprt_get(int fd);
 
 #endif /* TIRPC_XVC_XPRT_H */

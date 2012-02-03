@@ -230,9 +230,11 @@ typedef struct __rpc_svcxprt {
 	void		*xp_p2;		 /* private: for use by svc ops */
 	void		*xp_p3;		 /* private: for use by svc lib */
 	void		*xp_p4;		 /* private: for use by svc lib */
+	void            *xp_p5;          /* private: for use by svc lib */
 	int		xp_type;	 /* transport type */
 	u_int		xp_flags;	 /* flags */
-	rwlock_t lock;                   /* xprt lock */
+	uint64_t        xp_gen;          /* svc_xprt generation number */
+	rwlock_t lock;                   /* XXX xprt lock */
 } SVCXPRT;
 
 /* Service record used by exported search routines */
