@@ -153,3 +153,51 @@ SVCXPRT* svc_xprt_get(int fd)
 
     return (xprt);    
 }
+
+int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
+{
+    struct rbtree_x_part *t = NULL;
+    struct opr_rbtree_node *n;
+    struct svc_xprt_rec sk, *srec;
+    uint64_t gen;
+    int ix, restarts, code = 0;
+
+    /* concurrent, restartable iteration over t */
+    ix = 0;
+    while (ix < SVC_XPRT_PARTITIONS) {
+        t = &t[ix];
+        restarts = 0;
+        /* TI-RPC __svc_clean_idle held global svc_fd_lock
+         * exclusive locked for a full scan of the legacy svc_xprts
+         * array.  We avoid this via tree partitioning and by
+         * operating mostly unlocked. */
+        rwlock_rdlock(&t->lock); /* t RLOCKED */
+    restart:
+        if (++restarts > 5)
+            break;
+        gen = t->head.gen;
+        n = opr_rbtree_first(&t->head);
+        while (n != NULL) {
+            srec = opr_containerof(n, struct svc_xprt_rec, node_k);
+            sk.fd_k = srec->xprt->xp_fd;
+
+            mutex_lock(&srec->mtx);
+            rwlock_unlock(&t->lock); /* t !LOCKED */
+            each_f(srec->xprt, arg);
+            mutex_unlock(&srec->mtx);
+
+            rwlock_rdlock(&t->lock); /* t RLOCKED */
+            if (gen != t->head.gen) {
+                /* invalidated, try harder */
+                n = opr_rbtree_lookup(&t->head, &sk.node_k);
+                if (!n)
+                    goto restart;
+            }
+            n = opr_rbtree_next(n);
+        } /* curr partition */
+        rwlock_unlock(&t->lock); /* t !LOCKED */
+        ix++;
+    } /* SVC_SPRT_PARTITIONS */
+
+    return (code);
+}

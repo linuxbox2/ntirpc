@@ -19,4 +19,8 @@ struct svc_xprt_set
 SVCXPRT* svc_xprt_set(SVCXPRT *xprt);
 SVCXPRT* svc_xprt_get(int fd);
 
+/* iterator callback prototype */
+typedef void (*svc_xprt_each_func_t) (SVCXPRT *xprt, void *arg);
+int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg);
+
 #endif /* TIRPC_XVC_XPRT_H */

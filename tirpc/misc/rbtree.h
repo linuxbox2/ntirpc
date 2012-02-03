@@ -3,6 +3,8 @@
 #ifndef _OPR_RBTREE_H
 #define _OPR_RBTREE_H 1
 
+#include <stdint.h>
+
 /* from opr.h */
 #define opr_containerof(ptr, structure, member) \
    ((structure *)((char *)(ptr)-(char *)(&((structure *)NULL)->member)))
@@ -20,7 +22,8 @@ typedef int (*opr_rbtree_cmpf_t) (const struct opr_rbtree_node* lhs,
 struct opr_rbtree {
     struct opr_rbtree_node *root;
     opr_rbtree_cmpf_t cmpf;
-    unsigned long size;
+    uint64_t size;
+    uint64_t gen; /* generation number */
 };
 
 extern void opr_rbtree_init(struct opr_rbtree *head, opr_rbtree_cmpf_t cmpf);

@@ -64,6 +64,7 @@ opr_rbtree_init(struct opr_rbtree *head, opr_rbtree_cmpf_t cmpf)
     head->cmpf = cmpf;
     head->root = NULL;
     head->size = 0;
+    head->gen = 0;
 }
 
 struct opr_rbtree_node *
@@ -289,6 +290,7 @@ opr_rbtree_insert(struct opr_rbtree *head, struct opr_rbtree_node *node)
 
     opr_rbtree_insert_at(head, parent, iter, node);
     (head->size)++;
+    (head->gen)++;
 
     return (NULL);
 }
@@ -473,6 +475,7 @@ opr_rbtree_remove(struct opr_rbtree *head, struct opr_rbtree_node *node)
 
 done:
     (head->size)--;
+    (head->gen)++;
     return;
 }
 
