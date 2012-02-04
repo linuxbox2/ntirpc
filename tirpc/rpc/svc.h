@@ -653,7 +653,11 @@ int svc_dg_enablecache(SVCXPRT *, const u_int);
 
 int __rpc_get_local_uid(SVCXPRT *_transp, uid_t *_uid);
 
-
+/*
+ * Channel locking for external request handlers
+ */
+void vc_fd_lock(int fd, sigset_t *mask);
+void vc_fd_unlock(int fd, sigset_t *mask);
 
 __END_DECLS
 

@@ -100,11 +100,8 @@ struct ct_data {
 	} ct_duplex;
 };
 
-/* internal client fd locking */
-extern void clnt_vc_fd_lock(SVCXPRT *xprt, sigset_t *mask);
-extern void  clnt_vc_fd_unlock(SVCXPRT *xprt, sigset_t *mask);
-
-extern bool_t cond_block_events_client(CLIENT *cl);
-extern void cond_unblock_events_client(CLIENT *cl);
+/* events */
+bool_t cond_block_events_client(CLIENT *cl);
+void cond_unblock_events_client(CLIENT *cl);
 
 #endif /* _CLNT_INTERNAL_H */
