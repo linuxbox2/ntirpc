@@ -6,7 +6,7 @@ struct vc_fd_rec; /* in clnt_internal.h (avoids circular dependency) */
 struct vc_fd_rec_set
 {
     mutex_t clnt_fd_lock; /* global mtx we'll try to spam less than formerly */
-    struct rbtree_x *xt;
+    struct rbtree_x xt;
 };
 
 static inline int fd_cmpf(const struct opr_rbtree_node *lhs,

@@ -13,7 +13,7 @@ struct svc_xprt_rec
 struct svc_xprt_set
 {
     mutex_t lock;
-    struct rbtree_x *xt;
+    struct rbtree_x xt;
 };
 
 SVCXPRT* svc_xprt_set(SVCXPRT *xprt);

@@ -28,7 +28,7 @@ static bool_t initialized = FALSE;
 
 static struct vc_fd_rec_set vc_fd_rec_set = {
     PTHREAD_MUTEX_INITIALIZER /* clnt_fd_lock */,
-    NULL /* xt */
+    { 0, NULL } /* xt */
 };
 
 void vc_lock_init()
@@ -42,7 +42,7 @@ void vc_lock_init()
 
     /* one of advantages of this RBT is convenience of external
      * iteration, we'll go to that shortly */
-    code = rbtx_init(vc_fd_rec_set.xt, fd_cmpf /* NULL (inline) */,
+    code = rbtx_init(&vc_fd_rec_set.xt, fd_cmpf /* NULL (inline) */,
                      VC_LOCK_PARTITIONS, RBT_X_FLAG_ALLOC);
     if (code)
         __warnx("vc_lock_init: rbtx_init failed");
@@ -74,7 +74,7 @@ struct vc_fd_rec *vc_lookup_fd_rec(int fd)
     cond_init_vc_lock();
 
     ck.fd_k = fd;
-    t = rbtx_partition_of_scalar(vc_fd_rec_set.xt, fd);
+    t = rbtx_partition_of_scalar(&vc_fd_rec_set.xt, fd);
 
     rwlock_rdlock(&t->lock);
     nv = opr_rbtree_lookup(&t->head, &ck.node_k);

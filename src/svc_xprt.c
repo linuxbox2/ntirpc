@@ -36,7 +36,7 @@ static bool_t initialized = FALSE;
 
 static struct svc_xprt_set svc_xprt_set_ = {
     PTHREAD_MUTEX_INITIALIZER /* svc_xprt_lock */,
-    NULL /* xt */
+    { 0, NULL } /* xt */
 };
 
 void svc_xprt_init()
@@ -50,7 +50,7 @@ void svc_xprt_init()
 
     /* one of advantages of this RBT is convenience of external
      * iteration, we'll go to that shortly */
-    code = rbtx_init(svc_xprt_set_.xt, fd_cmpf /* NULL (inline) */,
+    code = rbtx_init(&svc_xprt_set_.xt, fd_cmpf /* NULL (inline) */,
                      SVC_XPRT_PARTITIONS, RBT_X_FLAG_ALLOC);
     if (code)
         __warnx("svc_xprt_init: rbtx_init failed");
@@ -74,7 +74,7 @@ static inline struct svc_xprt_rec *svc_xprt_lookup(int fd)
     cond_init_svc_xprt();
 
     sk.fd_k = fd;
-    t = rbtx_partition_of_scalar(svc_xprt_set_.xt, fd);
+    t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, fd);
 
     rwlock_rdlock(&t->lock);
     nv = opr_rbtree_lookup(&t->head, &sk.node_k);
@@ -97,7 +97,7 @@ static inline SVCXPRT *svc_xprt_insert(SVCXPRT *xprt)
     cond_init_svc_xprt();
 
     sk.fd_k = xprt->xp_fd;
-    t = rbtx_partition_of_scalar(svc_xprt_set_.xt, xprt->xp_fd);
+    t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, xprt->xp_fd);
 
     rwlock_wrlock(&t->lock);
     nv = opr_rbtree_lookup(&t->head, &sk.node_k);
@@ -178,10 +178,12 @@ int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
     uint64_t gen;
     int ix, restarts, code = 0;
 
+    cond_init_svc_xprt();
+
     /* concurrent, restartable iteration over t */
     ix = 0;
     while (ix < SVC_XPRT_PARTITIONS) {
-        t = &t[ix];
+        t = &svc_xprt_set_.xt.tree[ix];
         restarts = 0;
         /* TI-RPC __svc_clean_idle held global svc_fd_lock
          * exclusive locked for a full scan of the legacy svc_xprts

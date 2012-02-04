@@ -42,7 +42,7 @@ struct ct_wait_entry {
     cond_t  cv;
 };
 
-#include <misc/rbtree.h>
+#include <misc/rbtree_x.h>
 
 /* clnt_fd_lock complex */
 struct vc_fd_rec
