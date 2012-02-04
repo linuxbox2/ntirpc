@@ -60,6 +60,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include <rpc/rpc.h>
 #include <rpc/svc.h>
@@ -67,6 +68,7 @@
 #include "rpc_com.h"
 #include "clnt_internal.h"
 #include "svc_xprt.h"
+#include "vc_lock.h"
 
 #include <getpeereid.h>
 
@@ -244,44 +246,44 @@ svc_fd_create(fd, sendsize, recvsize)
 {
 	struct sockaddr_storage ss;
 	socklen_t slen;
-	SVCXPRT *ret;
+	SVCXPRT *xprt;
 
 	assert(fd != -1);
 
-	ret = makefd_xprt(fd, sendsize, recvsize);
-	if (ret == NULL)
-		return NULL;
+	xprt = makefd_xprt(fd, sendsize, recvsize);
+	if (! xprt)
+            return NULL;
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		__warnx("svc_fd_create: could not retrieve local addr");
-		goto freedata;
+            __warnx("svc_fd_create: could not retrieve local addr");
+            goto freedata;
 	}
-	if (!__rpc_set_netbuf(&ret->xp_ltaddr, &ss, sizeof(ss))) {
-		__warnx("svc_fd_create: no mem for local addr");
-		goto freedata;
+	if (!__rpc_set_netbuf(&xprt->xp_ltaddr, &ss, sizeof(ss))) {
+            __warnx("svc_fd_create: no mem for local addr");
+            goto freedata;
 	}
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		__warnx("svc_fd_create: could not retrieve remote addr");
-		goto freedata;
+            __warnx("svc_fd_create: could not retrieve remote addr");
+            goto freedata;
 	}
-	if (!__rpc_set_netbuf(&ret->xp_rtaddr, &ss, sizeof(ss))) {
-		__warnx("svc_fd_create: no mem for local addr");
-		goto freedata;
+	if (!__rpc_set_netbuf(&xprt->xp_rtaddr, &ss, sizeof(ss))) {
+            __warnx("svc_fd_create: no mem for local addr");
+            goto freedata;
 	}
 
 	/* Set xp_raddr for compatibility */
-	__xprt_set_raddr(ret, &ss);
+	__xprt_set_raddr(xprt, &ss);
 
-	return ret;
+	return (xprt);
 
 freedata:
-	if (ret->xp_ltaddr.buf != NULL)
-		mem_free(ret->xp_ltaddr.buf, ret->xp_ltaddr.maxlen);
+	if (xprt->xp_ltaddr.buf != NULL)
+            mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
 
-	return NULL;
+	return (NULL);
 }
 
 /*
@@ -1180,19 +1182,27 @@ svc_dplx_create_from_clnt(cl, sendsz, recvsz, flags)
     struct ct_data *ct;
     struct sockaddr_storage addr;
     struct __rpc_sockinfo si;
-    SVCXPRT *xprt;
+    sigset_t mask;
+    SVCXPRT *xprt = NULL;
 
     ct = (struct ct_data *) cl->cl_private;
     fd = ct->ct_fd;
+
+    vc_fd_lock_c(cl, &mask);
 
     /*
      * make a new transport
      */
 
     xprt = makefd_xprt(fd, sendsz, recvsz);
+    if (! xprt)
+        goto unlock;
 
-    if (!__rpc_set_netbuf(&xprt->xp_rtaddr, &addr, len))
-		return (FALSE);
+    if (!__rpc_set_netbuf(&xprt->xp_rtaddr, &addr, len)) {
+        /* keeps connected state, duplex clnt */
+        svc_vc_destroy_xprt(xprt);
+        goto unlock;
+    }
 
     __xprt_set_raddr(xprt, &addr);
     
@@ -1206,15 +1216,6 @@ svc_dplx_create_from_clnt(cl, sendsz, recvsz, flags)
     cd->sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int) sendsz);
     cd->recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int) recvsz);
     cd->maxrec = __svc_maxrec;
-
-#if 1
-    /* XXXX experimental share xdrs (and we leak them ) */
-    cd->xdrs = ct->ct_xdrs;
-    printf("clnt xdrs %p %s svc xdrs %p\n",
-           &ct->ct_xdrs,
-           (&ct->ct_xdrs == &cd->xdrs) ? "==" : "!=",
-           &cd->xdrs);
-#endif
 
     if (cd->maxrec != 0) {
 	fflags = fcntl(fd, F_GETFL, 0);
@@ -1241,6 +1242,9 @@ svc_dplx_create_from_clnt(cl, sendsz, recvsz, flags)
 	/* clean up immediately */
 	clnt_vc_destroy(cl);
     }
+
+unlock:
+    vc_fd_unlock(fd, &mask);
 
     return (xprt);
 }
