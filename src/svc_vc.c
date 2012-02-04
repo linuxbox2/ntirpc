@@ -1124,6 +1124,7 @@ clnt_dplx_create_from_svc(xprt, prog, vers, flags)
         struct cf_conn *cd;
 	CLIENT *cl;
 
+        /* XXX inconsistent lock pattern, revisit */
 	rwlock_wrlock (&xprt->lock);
 
 	/* XXX return allocated client structure, or allocate one if none

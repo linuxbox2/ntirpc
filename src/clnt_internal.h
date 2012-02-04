@@ -91,7 +91,7 @@ struct ct_data {
 	u_int		ct_mpos;	/* pos after marshal */
 	XDR		ct_xdrs;	/* XDR stream */
 	uint32_t	ct_xid;
-        struct vc_fd_rec ct_crec;       /* unified sync */
+        struct vc_fd_rec *ct_crec;      /* unified sync */
 	struct rpc_msg	ct_reply;       /* async reply */
 	struct ct_wait_entry ct_sync;   /* wait for completion */
 	struct ct_duplex {

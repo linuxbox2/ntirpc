@@ -310,7 +310,17 @@ clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
 	 */
 	cl->cl_ops = clnt_vc_ops();
 	cl->cl_private = ct;
+
+        /*
+         * Register lock channel (sync)
+         */
+        vc_lock_init_cl(cl);
+
+        /*
+         * Setup auth
+         */
 	cl->cl_auth = authnone_create();
+
 	sendsz = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
 	recvsz = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
 	xdrrec_create(&(ct->ct_xdrs), sendsz, recvsz,

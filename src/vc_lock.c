@@ -62,7 +62,7 @@ do { \
 /* vc_fd_lock has the same semantics as legacy clnt_fd_lock mechanism,
  * but greater concurrency */
 
-/* this is the lock logic, but since the lifetime of these structures
+/* since the lifetime of all vc_fd_rec structures
  * is the life of the program, CLNT/SVCXPRT structures can keep a reference
  * to them in private data, and we can make the lock/unlock ops inline,
  * so amortized cost of this change for locks is 0. */
@@ -70,7 +70,7 @@ do { \
 struct vc_fd_rec *vc_lookup_fd_rec(int fd)
 {
     struct rbtree_x_part *t;
-    struct vc_fd_rec ck, *crec;
+    struct vc_fd_rec ck, *crec = NULL;
     struct opr_rbtree_node *nv;
 
     cond_init_vc_lock();
@@ -78,14 +78,29 @@ struct vc_fd_rec *vc_lookup_fd_rec(int fd)
     ck.fd_k = fd;
     t = rbtx_partition_of_scalar(&vc_fd_rec_set.xt, fd);
 
+    /* find or install a vc_fd_rec at fd */
     rwlock_rdlock(&t->lock);
     nv = opr_rbtree_lookup(&t->head, &ck.node_k);
     rwlock_unlock(&t->lock);
 
+    if (! nv) {
+        rwlock_wrlock(&t->lock);
+        nv = opr_rbtree_lookup(&t->head, &ck.node_k);
+        if (! nv) {
+            crec = mem_alloc(sizeof(struct vc_fd_rec));
+            memset(crec, 0, sizeof(struct vc_fd_rec));
+            mutex_init(&crec->mtx, NULL);
+            cond_init(&crec->cv, 0, NULL);
+            crec->fd_k = fd;
+            goto out;
+        }
+        rwlock_unlock(&t->lock);
+    }
+
     /* XXX safe, even if tree is reorganizing */
-    assert(nv);
     crec = opr_containerof(nv, struct vc_fd_rec, node_k);
 
+out:
     return (crec);    
 }
 
