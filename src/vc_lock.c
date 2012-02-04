@@ -47,6 +47,8 @@ void vc_lock_init()
     if (code)
         __warnx("vc_lock_init: rbtx_init failed");
 
+    initialized = TRUE;
+
     mutex_unlock(&vc_fd_rec_set.clnt_fd_lock);
 }
 

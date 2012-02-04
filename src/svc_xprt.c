@@ -55,6 +55,8 @@ void svc_xprt_init()
     if (code)
         __warnx("svc_xprt_init: rbtx_init failed");
 
+    initialized = TRUE;
+
     mutex_unlock(&svc_xprt_set_.lock);
 }
 

@@ -40,6 +40,8 @@ int rbtx_init(struct rbtree_x *xt, opr_rbtree_cmpf_t cmpf, uint32_t npart,
         PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
 #endif
 
+    xt->npart = npart;
+
     for (ix = 0; ix < npart; ++ix) {
         rwlock_init(&xt->tree[ix].lock, &rwlock_attr);
         opr_rbtree_init(&xt->tree[ix].head, cmpf /* may be NULL */);

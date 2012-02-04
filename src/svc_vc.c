@@ -1144,17 +1144,6 @@ clnt_dplx_create_from_svc(xprt, prog, vers, flags)
         if (! cl)
             goto unlock; /* XXX should probably warn here */
 
-#if 1
-        {
-            /* XXXX experimental share xdrs (and we leak them ) */
-            struct ct_data *ct = (struct ct_data *) cl->cl_private;
-            ct->ct_xdrs = cd->xdrs;
-            printf("clnt xdrs %p %s svc xdrs %p\n",
-                   &ct->ct_xdrs,
-                   (&ct->ct_xdrs == &cd->xdrs) ? "==" : "!=",
-                   &cd->xdrs);
-        }
-#endif
         SetDuplex(cl, xprt);
 
 	/* Warn cleanup routines not to close xp_fd */
