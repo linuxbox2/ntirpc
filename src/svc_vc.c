@@ -1307,20 +1307,3 @@ SVCXPRT *svc_vc_create_xprt(u_long sendsz, u_long recvsz)
 done:
     return (xprt);
  }
-
-/*
- * Duplicate xprt from original to copy.
- */
-void svc_vc_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig)
-{
-    struct cf_conn *cd_copy = (struct cf_conn *)(xprt_copy->xp_p1);
-    struct cf_conn *cd_orig = (struct cf_conn *)(xprt_orig->xp_p1);
-
-    memcpy(xprt_copy, xprt_orig, sizeof(SVCXPRT));
-    xprt_copy->xp_p1 = cd_copy;
-    xprt_copy->xp_verf.oa_base = cd_copy->verf_body;
-
-    cd_copy->strm_stat = cd_orig->strm_stat;
-    cd_copy->x_id = cd_orig->x_id;
-    memcpy(cd_copy->verf_body, cd_orig->verf_body, MAX_AUTH_BYTES);
-}
