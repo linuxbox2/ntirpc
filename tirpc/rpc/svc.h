@@ -590,10 +590,9 @@ extern void svc_vc_destroy_handle(SVCXPRT * xprt);
 extern SVCXPRT *svc_vc_create_xprt(u_long sendsz, u_long recvsz);
 
 /*
- * Duplicate xprt from original to copy.
+ * Destroy a transport handle.  Do not alter connected transport state.
  */
-extern void svc_vc_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig);
-
+extern void svc_vc_destroy_xprt(SVCXPRT * xprt);
 
 /*
  * Added for compatibility to old rpc 4.0. Obsoleted by svc_vc_create().
