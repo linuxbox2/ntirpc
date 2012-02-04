@@ -1136,13 +1136,13 @@ clnt_dplx_create_from_svc(xprt, prog, vers, flags)
 	/* Create a client transport handle.  The endpoint is already
 	 * connected. */
 	cd = (struct cf_conn *) xprt->xp_p1;
-	cl  = clnt_vc_create2(xprt->xp_fd,
-			      &xprt->xp_rtaddr,
-			      prog,
-			      vers,
-			      cd->recvsize,
-			      cd->sendsize,
-			      CLNT_CREATE_FLAG_SVCXPRT);
+	cl = clnt_vc_create2(xprt->xp_fd,
+                             &xprt->xp_rtaddr,
+                             prog,
+                             vers,
+                             cd->recvsize,
+                             cd->sendsize,
+                             CLNT_CREATE_FLAG_SVCXPRT);
         if (! cl)
             goto unlock; /* XXX should probably warn here */
 
