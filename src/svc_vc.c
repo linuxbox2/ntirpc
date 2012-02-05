@@ -72,7 +72,7 @@
 
 #include <getpeereid.h>
 
-extern svc_params __svc_params[1];
+extern struct svc_params __svc_params[1];
 extern rwlock_t svc_fd_lock;
 
 static bool_t rendezvous_request(SVCXPRT *, struct rpc_msg *);

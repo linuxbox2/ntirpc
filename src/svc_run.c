@@ -47,7 +47,7 @@
 #include "rpc_com.h"
 #include <sys/select.h>
 
-extern svc_params __svc_params[1];
+extern struct svc_params __svc_params[1];
 
 #if defined(TIRPC_EPOLL)
 
@@ -114,6 +114,7 @@ svc_run()
     default:
         /* XXX formerly select/fd_set case, now placeholder for new
          * event systems, reworked select, etc. */
+        __warnx("svc_run: unsupported event type");
         break;
     } /* switch */
 }

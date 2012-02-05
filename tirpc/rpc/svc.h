@@ -111,7 +111,7 @@
 
 /* Svc event strategy */
 enum svc_event_type {
-    SVC_EVENT_FDSET /* trad. using select and poll */,
+    SVC_EVENT_FDSET /* trad. using select and poll (currently unhooked) */,
     SVC_EVENT_EPOLL /* Linux epoll interface */ 
 };
 
@@ -125,8 +125,9 @@ typedef struct svc_init_params
 } svc_init_params;
 
 /* threading fdsets around is annoying */
-typedef struct svc_params
+struct svc_params
 {
+    bool_t initialized;
     enum svc_event_type ev_type;
     union {
         struct {
@@ -135,23 +136,20 @@ typedef struct svc_params
             u_int max_events;      /* epoll events */
         } epoll;
         struct {
-            fd_set set; /* XXX future svc_fdset */
+            fd_set set; /* select/fd_set (currently unhooked) */
         } fd;
     } ev_u;
 
     u_int max_connections;
-    
-    /* XXX this is looking insufficient--currently, prototype has
-     * a fine-grained getreq (the only one epoll needs) on xp->ops2 */
+
     struct __svc_ops {
         bool_t (*svc_clean_idle)(fd_set *fds, int timeout, bool_t cleanblock);
         void (*svc_run)(void);
-        void (*svc_getreq)(int rdfds);
-        void (*svc_getreqset)(fd_set *readfds);
+        void (*svc_getreq)(int rdfds); /* XXX */
+        void (*svc_getreqset)(fd_set *readfds); /* XXX */
         void (*svc_exit)(void);
     } *svc_ops;
-
-} svc_params;
+};
 
 /*
  * SVCXPRT xp_flags

@@ -71,7 +71,10 @@
 #define max(a, b) (a > b ? a : b)
 
 extern tirpc_pkg_params __pkg_params;
-svc_params __svc_params[1];
+
+struct svc_params __svc_params[1] = {
+    { FALSE /* !initialized */ }
+};
 
 /*
  * The services list
@@ -103,6 +106,11 @@ static void __xprt_do_unregister (SVCXPRT * xprt, bool_t dolock);
 void
 svc_init (svc_init_params * params)
 {
+    if (__svc_params->initialized) {
+        __warnx("svc_init: multiple initialization attempt (nothing happens)");
+        return;
+    }
+
     __svc_params->max_connections = FD_SETSIZE;
 
     if (params->flags & SVC_INIT_WARNX)
