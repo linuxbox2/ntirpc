@@ -1,5 +1,5 @@
 
-#ifndef TIRPC_XVC_XPRT_H
+#ifndef TIRPC_SVC_XPRT_H
 
 struct svc_xprt_rec
 {
@@ -24,4 +24,4 @@ SVCXPRT *svc_xprt_clear(SVCXPRT *xprt);
 typedef void (*svc_xprt_each_func_t) (SVCXPRT *xprt, void *arg);
 int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg);
 
-#endif /* TIRPC_XVC_XPRT_H */
+#endif /* TIRPC_SVC_XPRT_H */
