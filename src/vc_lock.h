@@ -1,5 +1,6 @@
 
 #ifndef TIRPC_VC_LOCK_H
+#define TIRPC_VC_LOCK_H
 
 struct vc_fd_rec; /* in clnt_internal.h (avoids circular dependency) */
 

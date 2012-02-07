@@ -1,5 +1,6 @@
 
 #ifndef TIRPC_SVC_XPRT_H
+#define TIRPC_SVC_XPRT_H
 
 struct svc_xprt_rec
 {

@@ -38,7 +38,7 @@ void vc_lock_init()
     mutex_lock(&vc_fd_rec_set.clnt_fd_lock);
 
     if (initialized)
-        return;
+        goto unlock;
 
     /* one of advantages of this RBT is convenience of external
      * iteration, we'll go to that shortly */
@@ -49,6 +49,7 @@ void vc_lock_init()
 
     initialized = TRUE;
 
+unlock:
     mutex_unlock(&vc_fd_rec_set.clnt_fd_lock);
 }
 
@@ -80,12 +81,12 @@ struct vc_fd_rec *vc_lookup_fd_rec(int fd)
 
     /* find or install a vc_fd_rec at fd */
     rwlock_rdlock(&t->lock);
-    nv = opr_rbtree_lookup(&t->head, &ck.node_k);
+    nv = opr_rbtree_lookup(&t->t, &ck.node_k);
     rwlock_unlock(&t->lock);
 
     if (! nv) {
         rwlock_wrlock(&t->lock);
-        nv = opr_rbtree_lookup(&t->head, &ck.node_k);
+        nv = opr_rbtree_lookup(&t->t, &ck.node_k);
         if (! nv) {
             crec = mem_alloc(sizeof(struct vc_fd_rec));
             memset(crec, 0, sizeof(struct vc_fd_rec));

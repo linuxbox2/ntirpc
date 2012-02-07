@@ -7,7 +7,7 @@
 struct rbtree_x_part
 {
     rwlock_t lock;
-    struct opr_rbtree head;
+    struct opr_rbtree t;
 };
 
 struct rbtree_x

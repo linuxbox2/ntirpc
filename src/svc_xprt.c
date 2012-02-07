@@ -46,7 +46,7 @@ void svc_xprt_init()
     mutex_lock(&svc_xprt_set_.lock);
 
     if (initialized)
-        return;
+        goto unlock;
 
     /* one of advantages of this RBT is convenience of external
      * iteration, we'll go to that shortly */
@@ -57,6 +57,7 @@ void svc_xprt_init()
 
     initialized = TRUE;
 
+unlock:
     mutex_unlock(&svc_xprt_set_.lock);
 }
 
@@ -79,7 +80,7 @@ static inline struct svc_xprt_rec *svc_xprt_lookup(int fd)
     t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, fd);
 
     rwlock_rdlock(&t->lock);
-    nv = opr_rbtree_lookup(&t->head, &sk.node_k);
+    nv = opr_rbtree_lookup(&t->t, &sk.node_k);
     rwlock_unlock(&t->lock);
 
     /* XXX safe, even if tree is reorganizing */
@@ -102,7 +103,7 @@ static inline SVCXPRT *svc_xprt_insert(SVCXPRT *xprt)
     t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, xprt->xp_fd);
 
     rwlock_wrlock(&t->lock);
-    nv = opr_rbtree_lookup(&t->head, &sk.node_k);
+    nv = opr_rbtree_lookup(&t->t, &sk.node_k);
     if (! nv) {
         srec = mem_alloc(sizeof(struct svc_xprt_rec));
         mutex_init(&srec->mtx, NULL);
@@ -195,8 +196,8 @@ int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
     restart:
         if (++restarts > 5)
             break;
-        gen = t->head.gen;
-        n = opr_rbtree_first(&t->head);
+        gen = t->t.gen;
+        n = opr_rbtree_first(&t->t);
         while (n != NULL) {
             srec = opr_containerof(n, struct svc_xprt_rec, node_k);
             sk.fd_k = srec->xprt->xp_fd;
@@ -206,9 +207,9 @@ int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
             each_f(srec->xprt, arg);
             rwlock_rdlock(&t->lock);
 
-            if (gen != t->head.gen) {
+            if (gen != t->t.gen) {
                 /* invalidated, try harder */
-                n = opr_rbtree_lookup(&t->head, &sk.node_k);
+                n = opr_rbtree_lookup(&t->t, &sk.node_k);
                 if (!n)
                     goto restart;
             }
