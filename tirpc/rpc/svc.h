@@ -133,7 +133,7 @@ struct svc_params
         struct {
             int epoll_fd;
             struct epoll_event *events;
-            u_int max_events;      /* epoll events */
+            u_int max_events; /* max epoll events */
         } epoll;
         struct {
             fd_set set; /* select/fd_set (currently unhooked) */
