@@ -93,7 +93,12 @@ struct vc_fd_rec *vc_lookup_fd_rec(int fd)
             mutex_init(&crec->mtx, NULL);
             cond_init(&crec->cv, 0, NULL);
             crec->fd_k = fd;
-            goto out;
+            if (opr_rbtree_insert(&t->t, &crec->node_k)) {
+                /* cant happen */
+                __warnx("%s: collision inserting in locked rbtree partition",
+                        __func__);
+                mem_free(crec, sizeof(struct vc_fd_rec));
+            }
         }
         rwlock_unlock(&t->lock);
     }

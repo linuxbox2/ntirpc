@@ -110,6 +110,12 @@ static inline SVCXPRT *svc_xprt_insert(SVCXPRT *xprt)
         srec->fd_k = xprt->xp_fd;
         srec->xprt = xprt;
         srec->gen = 1;
+        if (opr_rbtree_insert(&t->t, &srec->node_k)) {
+            /* cant happen */
+            __warnx("%s: collision inserting in locked rbtree partition",
+                    __func__);
+            mem_free(srec, sizeof(struct svc_xprt_rec));
+        }
     }
     rwlock_unlock(&t->lock);
 
