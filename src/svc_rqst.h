@@ -9,11 +9,13 @@ struct svc_rqst_rec
      */
     enum svc_event_type ev_type;
     union {
+#if defined(TIRPC_EPOLL)
         struct {
             int epoll_fd;
             struct epoll_event *events;
             u_int max_events; /* max epoll events */
         } epoll;
+#endif
         struct {
             fd_set set; /* select/fd_set (currently unhooked) */
         } fd;
@@ -21,7 +23,7 @@ struct svc_rqst_rec
 
     uint32_t id_k; /* id */
     struct opr_queue xprt_q; /* list of xprt handles */
-    
+    void *u_data;
     struct opr_rbtree_node node_k;
     uint64_t gen; /* generation number */
     mutex_t mtx;
@@ -31,6 +33,7 @@ struct svc_rqst_set
 {
     rwlock_t lock;
     struct opr_rbtree t;
+    uint32_t next_id;
 };
 
 static inline int rqst_xprt_cmpf(const struct opr_rbtree_node *lhs,

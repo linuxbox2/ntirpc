@@ -45,12 +45,12 @@ static struct svc_rqst_set svc_rqst_set_ = {
       rqst_xprt_cmpf,
       0, /* size */
       0  /* gen */ 
-    } /* t */
+    } /* t */,
+    0 /* gen */
 };
 
 void svc_rqst_init()
 {
-    int code = 0;
     pthread_rwlockattr_t rwlock_attr;
 
     rwlock_wrlock(&svc_rqst_set_.lock);
@@ -67,8 +67,44 @@ void svc_rqst_init()
         PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
 #endif
     rwlock_init(&svc_rqst_set_.lock, &rwlock_attr);
-    opr_rbtree_init(&svc_rqst_set_.t.root, rqst_xprt_cmpf /* may be NULL */);
+    opr_rbtree_init(&svc_rqst_set_.t, rqst_xprt_cmpf /* may be NULL */);
 
 unlock:
     rwlock_unlock(&svc_rqst_set_.lock);
+}
+
+int svc_rqst_register_thrd(uint32_t *id /* OUT */, void *u_data,
+                            uint32_t flags)
+{
+    uint32_t n_id;
+    struct svc_rqst_rec *sr_rec, *trec;
+    int code = 0;
+
+    rwlock_wrlock(&svc_rqst_set_.lock);
+    sr_rec = mem_alloc(sizeof(struct svc_rqst_rec));
+    if (!sr_rec) {
+        __warnx("%s: failed allocating svc_rqst_rec", __func__);
+        goto unlock;
+    }
+
+    n_id = ++(svc_rqst_set_.next_id);
+    sr_rec->id_k = n_id;
+    sr_rec->gen = 0;
+    sr_rec->u_data = u_data;
+    mutex_init(&sr_rec->mtx, NULL);
+    opr_queue_Init(&sr_rec->xprt_q);
+
+    if (opr_rbtree_insert(&svc_rqst_set_.t, &sr_rec->node_k)) {
+        /* cant happen */
+        __warnx("%s: inserted a counted value twice (counter fail)", __func__);
+        mem_free(sr_rec, sizeof(struct svc_rqst_rec));
+        n_id = 0; /* invalid value */
+    }
+
+    *id = n_id;
+    
+unlock:
+    rwlock_unlock(&svc_rqst_set_.lock);
+
+    return (code);
 }
