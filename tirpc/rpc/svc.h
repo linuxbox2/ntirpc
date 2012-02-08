@@ -128,6 +128,9 @@ typedef struct svc_init_params
 struct svc_params
 {
     bool_t initialized;
+
+    /* package global event handling--may be overridden using the
+     * svc_rqst interface */
     enum svc_event_type ev_type;
     union {
         struct {
@@ -221,9 +224,14 @@ typedef struct __rpc_svcxprt {
 	char		*xp_netid;	 /* network token */
 	struct netbuf	xp_ltaddr;	 /* local transport address */
 	struct netbuf	xp_rtaddr;	 /* remote transport address */
+
+        /* XXXX duplex fix */
 	struct opaque_auth xp_verf;	 /* raw response verifier */
 	SVCAUTH		*xp_auth;	 /* auth handle of current req */
+        /* XXXX */
+
         void            *xp_ev;          /* event handle */
+
 	void		*xp_p1;		 /* private: for use by svc ops */
 	void		*xp_p2;		 /* private: for use by svc ops */
 	void		*xp_p3;		 /* private: for use by svc lib */
@@ -232,7 +240,10 @@ typedef struct __rpc_svcxprt {
 	int		xp_type;	 /* transport type */
 	u_int		xp_flags;	 /* flags */
 	uint64_t        xp_gen;          /* svc_xprt generation number */
-	rwlock_t lock;                   /* XXX xprt lock */
+
+    /* XXXX doing anything?  prefer mutex? */
+	rwlock_t lock;                   /* XXXX xprt lock */
+
 } SVCXPRT;
 
 /* Service record used by exported search routines */
