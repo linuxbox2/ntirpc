@@ -44,6 +44,7 @@ struct svc_rqst_rec
 
     uint32_t id_k; /* id */
     uint32_t states;
+    uint32_t signals;
     void *u_data; /* user-installable opaque data */
     struct opr_rbtree xprt_q; /* sorted list of xprt handles */
     struct opr_rbtree_node node_k;
@@ -140,9 +141,13 @@ int svc_rqst_foreach_xprt(uint32_t chan_id, svc_rqst_xprt_each_func_t each_f,
 #define SVC_RQST_FLAG_RLOCK       0x00001
 #define SVC_RQST_FLAG_WLOCK       0x00002
 #define SVC_RQST_FLAG_UNLOCK      0x00004
+#define SVC_RQST_FLAG_EPOLL       0x00008
+#define SVC_RQST_FLAG_FDSET       0x00010
 
 #define SVC_RQST_STATE_NONE       0x00000
 #define SVC_RQST_STATE_ACTIVE     0x00001 /* thrd in event loop */
 #define SVC_RQST_STATE_BLOCKED    0x00002 /* channel blocked */
+
+#define SVC_RQST_SIGNAL_SHUTDOWN   0x00004 /* chan shutdown */
 
 #endif /* TIRPC_SVC_RQST_H */

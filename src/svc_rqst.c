@@ -78,11 +78,9 @@ void svc_rqst_init_xprt(SVCXPRT *xprt)
     struct svc_xprt_ev *xp_ev = mem_alloc(sizeof(struct svc_xprt_ev));
 #if defined(TIRPC_EPOLL)
     xp_ev->ev_type = SVC_EVENT_EPOLL;
-    
 #else
     xp_ev->ev_type = SVC_EVENT_FDSET;
 #endif
-
 }
 
 void svc_rqst_finalize_xprt(SVCXPRT *xprt)
@@ -97,8 +95,8 @@ out:
     return;
 }
 
-static inline struct svc_rqst_rec *svc_rqst_lookup_chan(uint32_t chan_id,
-                                                        uint32_t flags)
+static inline struct svc_rqst_rec *
+svc_rqst_lookup_chan(uint32_t chan_id, uint32_t flags)
 {
     struct svc_rqst_rec trec, *sr_rec = NULL;
     struct opr_rbtree_node *ns;
@@ -138,6 +136,20 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
         __warnx("%s: failed allocating svc_rqst_rec", __func__);
         goto out;
     }
+    memset(sr_rec, 0, sizeof(struct svc_rqst_rec));
+#if defined(TIRPC_EPOLL)
+    if (flags & SVC_RQST_FLAG_EPOLL) {
+        sr_rec->ev_type = SVC_EVENT_EPOLL;
+        sr_rec->ev_u.epoll.events = (struct epoll_event *)
+            mem_alloc(
+                sr_rec->ev_u.epoll.max_events*sizeof(struct epoll_event));    
+    } else {
+        /* legacy fdset (currently unhooked) */
+        sr_rec->ev_type = SVC_EVENT_FDSET;
+    }
+#else
+    sr_rec->ev_type = SVC_EVENT_FDSET;
+#endif
 
     n_id = ++(svc_rqst_set_.next_id);
     sr_rec->id_k = n_id;
@@ -250,12 +262,55 @@ unlock:
     return (code);
 }
 
-static inline int svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
-                                          uint32_t flags)
-{
-    int code = 0;
+bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
 
-    
+static inline int 
+svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
+                        uint32_t flags)
+{
+    struct epoll_event *ev;
+    SVCXPRT *xprt;
+
+    int ix, code = 0;
+    int timeout_s = 30;
+    int n_events;
+
+    for (;;) {
+
+        mutex_lock(&sr_rec->mtx);
+
+        /* check for signals */
+        if (sr_rec->signals & SVC_RQST_SIGNAL_SHUTDOWN) {
+            mutex_unlock(&sr_rec->mtx);
+            break;
+        }
+
+        mutex_unlock(&sr_rec->mtx);
+
+        switch (n_events = epoll_wait(sr_rec->ev_u.epoll.epoll_fd,
+                                      sr_rec->ev_u.epoll.events, 
+                                      sr_rec->ev_u.epoll.max_events, 
+                                      timeout_s)) {
+        case -1:
+            if (errno == EINTR)
+                continue;
+            /* XXX epoll_ctl del all events ? */
+            __warnx("svc_rqst_thrd_run_epoll: epoll_wait failed %d", n_events);
+            break;
+        case 0:
+            /* timed out (idle) */
+            __svc_clean_idle2(30, FALSE);
+            continue;
+        default:
+            /* new events */
+            for (ix = 0; ix < n_events; ++ix) {
+                ev = &(sr_rec->ev_u.epoll.events[ix]);
+                xprt = (SVCXPRT *) ev->data.ptr;
+                code = xprt->xp_ops2->xp_getreq(xprt);
+            }
+
+        } /* switch */
+    } /* ;; */
 
     return (code);
 }
