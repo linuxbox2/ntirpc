@@ -68,6 +68,7 @@
 #include "rpc_com.h"
 #include "clnt_internal.h"
 #include "svc_xprt.h"
+#include "svc_rqst.h"
 #include "vc_lock.h"
 
 #include <getpeereid.h>
@@ -198,9 +199,7 @@ svc_vc_create(fd, sendsize, recvsize)
 	xprt->xp_verf = _null_auth;
 	svc_vc_rendezvous_ops(xprt);
 	xprt->xp_fd = fd;
-#if defined(TIRPC_EPOLL)
-        xprt->xp_ev = mem_alloc(sizeof(struct epoll_event));
-#endif
+        svc_rqst_init_xprt(xprt);
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&sslocal, &slen) < 0) {
 		__warnx("svc_vc_create: could not retrieve local addr");
@@ -424,9 +423,7 @@ makefd_xprt(fd, sendsize, recvsize)
 	xprt->xp_fd = fd;
         if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
 		xprt->xp_netid = strdup(netid);
-#if defined(TIRPC_EPOLL)
-        xprt->xp_ev = mem_alloc(sizeof(struct epoll_event));
-#endif
+        svc_rqst_init_xprt(xprt);
 	xprt_register(xprt);
 done:
 	return (xprt);
@@ -577,10 +574,8 @@ __svc_vc_dodestroy(xprt)
 	if (xprt->xp_netid)
 		free(xprt->xp_netid); /* XXX check why not mem_alloc/free */
 
-#if defined(TIRPC_EPOLL)
-        if (xprt->xp_ev)
-            mem_free(xprt->xp_ev, sizeof(struct epoll_event));
-#endif
+        svc_rqst_finalize_xprt(xprt);
+
         /* assert: caller has called xprt_unregister */
         /* duplex */
         if (xprt->xp_p4) {
@@ -1264,10 +1259,7 @@ void svc_vc_destroy_xprt(SVCXPRT * xprt)
     if(cd == NULL)
 	return;
 
-#if defined(TIRPC_EPOLL)
-    if (xprt->xp_ev)
-        mem_free(xprt->xp_ev, sizeof(struct epoll_event));
-#endif
+    svc_rqst_finalize_xprt(xprt);
     
     XDR_DESTROY(&(cd->xdrs));
     mem_free(cd, sizeof(struct cf_conn));
@@ -1295,9 +1287,7 @@ SVCXPRT *svc_vc_create_xprt(u_long sendsz, u_long recvsz)
 	goto done;
     }
 
-#if defined(TIRPC_EPOLL)
-        xprt->xp_ev = mem_alloc(sizeof(struct epoll_event));
-#endif
+    svc_rqst_init_xprt(xprt);
 
     cd->strm_stat = XPRT_IDLE;
     xdrrec_create(&(cd->xdrs), sendsz, recvsz, xprt, read_vc, write_vc);

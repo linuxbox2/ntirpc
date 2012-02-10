@@ -54,6 +54,10 @@
 
 #include "rpc_com.h"
 
+#include "clnt_internal.h"
+#include "svc_xprt.h"
+#include "svc_rqst.h"
+
 extern tirpc_pkg_params __pkg_params;
 
 #define	su_data(xprt)	((struct svc_dg_data *)(xprt->xp_p2))
@@ -138,9 +142,8 @@ svc_dg_create(fd, sendsize, recvsize)
 	xprt->xp_verf.oa_base = su->su_verfbody;
 	svc_dg_ops(xprt);
 	xprt->xp_rtaddr.maxlen = sizeof (struct sockaddr_storage);
-#if defined(TIRPC_EPOLL)
-        xprt->xp_ev = mem_alloc(sizeof(struct epoll_event));
-#endif
+        svc_rqst_init_xprt(xprt);
+
 	slen = sizeof ss;
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0)
 		goto freedata;
@@ -154,13 +157,10 @@ svc_dg_create(fd, sendsize, recvsize)
 freedata:
 	(void) __warnx(svc_dg_str, __no_mem_str);
 	if (xprt) {
-		if (su)
-			(void) mem_free(su, sizeof (*su));
-#if defined(TIRPC_EPOLL)
-        if (xprt->xp_ev)
-            mem_free(xprt->xp_ev, sizeof(struct epoll_event));
-#endif
-		(void) mem_free(xprt, sizeof (SVCXPRT));
+            if (su)
+                (void) mem_free(su, sizeof (*su));
+            svc_rqst_finalize_xprt(xprt);
+            (void) mem_free(xprt, sizeof (SVCXPRT));
 	}
 	return (NULL);
 }
@@ -241,8 +241,8 @@ svc_dg_reply(xprt, msg)
 	bool_t stat = FALSE;
 	size_t slen;
 
-	xdrproc_t xdr_results;
-	caddr_t xdr_location;
+	xdrproc_t xdr_results; /* XXX used uninitialized? */
+	caddr_t xdr_location; /* XXX used uninitialized? */
 	bool_t has_args;
 
 	if (msg->rm_reply.rp_stat == MSG_ACCEPTED &&
@@ -330,10 +330,7 @@ svc_dg_destroy(xprt)
 		(void) mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
 	if (xprt->xp_tp)
 		(void) free(xprt->xp_tp);
-#if defined(TIRPC_EPOLL)
-        if (xprt->xp_ev)
-            mem_free(xprt->xp_ev, sizeof(struct epoll_event));
-#endif
+        svc_rqst_finalize_xprt(xprt);
 	(void) mem_free(xprt, sizeof (SVCXPRT));
 }
 

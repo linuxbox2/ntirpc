@@ -2,6 +2,27 @@
 #ifndef TIRPC_SVC_RQST_H
 #define TIRPC_SVC_RQST_H
 
+struct svc_xprt_ev
+{
+    /*
+     * union of event processor types
+     */
+    enum svc_event_type ev_type;
+    union {
+#if defined(TIRPC_EPOLL)
+        struct {
+            struct epoll_event event;
+        } epoll;
+#endif
+    } ev_u;
+
+    /*
+     * thread on svc_xprt_rec
+     */
+    struct opr_rbtree_node node_k;
+    SVCXPRT *xprt; /* contains this */
+};
+
 struct svc_rqst_rec
 {
     /*
@@ -22,8 +43,9 @@ struct svc_rqst_rec
     } ev_u;
 
     uint32_t id_k; /* id */
-    struct opr_queue xprt_q; /* list of xprt handles */
-    void *u_data;
+    uint32_t states;
+    void *u_data; /* user-installable opaque data */
+    struct opr_rbtree xprt_q; /* sorted list of xprt handles */
     struct opr_rbtree_node node_k;
     uint64_t gen; /* generation number */
     mutex_t mtx;
@@ -36,7 +58,7 @@ struct svc_rqst_set
     uint32_t next_id;
 };
 
-static inline int rqst_xprt_cmpf(const struct opr_rbtree_node *lhs,
+static inline int rqst_thrd_cmpf(const struct opr_rbtree_node *lhs,
                                  const struct opr_rbtree_node *rhs)
 {
     struct svc_rqst_rec *lk, *rk;
@@ -48,6 +70,25 @@ static inline int rqst_xprt_cmpf(const struct opr_rbtree_node *lhs,
         return (-1);
 
     if (lk->id_k == rk->id_k)
+        return (0);
+
+    return (1);
+}
+
+static inline int rqst_xprt_cmpf(const struct opr_rbtree_node *lhs,
+                                 const struct opr_rbtree_node *rhs)
+{
+    SVCXPRT *lk, *rk;
+
+    lk = opr_containerof(lhs, struct svc_xprt_ev, node_k)->xprt;
+    rk = opr_containerof(rhs, struct svc_xprt_ev, node_k)->xprt;
+
+    /* XXX we just want each xprt handle unique, in some order
+     * (just use the address) */
+    if (lk < rk)
+        return (-1);
+
+    if (lk == rk)
         return (0);
 
     return (1);
@@ -74,21 +115,34 @@ static inline int rqst_xprt_cmpf(const struct opr_rbtree_node *lhs,
  *  other adaptation
  */
 
-int svc_rqst_register_thrd(uint32_t *id /* OUT */, void *u_data,
-                            uint32_t flags);
-int svc_rqst_unregister_thrd(uint32_t id, uint32_t flags);
-int svc_rqst_register_thrd_xprt(uint32_t id, SVCXPRT *xprt, uint32_t flags);
-int svc_rqst_unregister_thrd_xprt(uint32_t id, SVCXPRT *xprt, uint32_t flags);
-int svc_rqst_thrd_run(uint32_t id, SVCXPRT *xprt, uint32_t flags);
+void svc_rqst_init();
+void svc_rqst_init_xprt(SVCXPRT *xprt);
+void svc_rqst_finalize_xprt(SVCXPRT *xprt);
+int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
+                        uint32_t flags);
+int svc_rqst_free_evchan(uint32_t chan_id, uint32_t flags);
+int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
+int svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
+int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags);
 
 /* xprt/connection rendezvous callout */
 typedef int (*svc_rqst_rendezvous_t)
     (SVCXPRT *oxprt, SVCXPRT *nxprt, uint32_t flags);
 
 /* iterator callback prototype */
-typedef void (*svc_rqst_xprt_each_func_t)
-    (uint32_t id, SVCXPRT *xprt, void *arg);
-int svc_rqst_foreach_xprt(svc_rqst_xprt_each_func_t each_f, uint32_t id,
+typedef void (*svc_rqst_xprt_each_func_t) (uint32_t chan_id, SVCXPRT *xprt,
+                                           void *arg);
+int svc_rqst_foreach_xprt(uint32_t chan_id, svc_rqst_xprt_each_func_t each_f,
                           void *arg);
+
+
+#define SVC_RQST_FLAG_NONE        0x00000
+#define SVC_RQST_FLAG_RLOCK       0x00001
+#define SVC_RQST_FLAG_WLOCK       0x00002
+#define SVC_RQST_FLAG_UNLOCK      0x00004
+
+#define SVC_RQST_STATE_NONE       0x00000
+#define SVC_RQST_STATE_ACTIVE     0x00001 /* thrd in event loop */
+#define SVC_RQST_STATE_BLOCKED    0x00002 /* channel blocked */
 
 #endif /* TIRPC_SVC_RQST_H */

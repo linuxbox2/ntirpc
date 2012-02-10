@@ -69,7 +69,7 @@ static inline void vc_fd_unlock_c(CLIENT *cl, sigset_t *mask)
     struct ct_data *ct = (struct ct_data *) cl->cl_private;
     struct vc_fd_rec *crec = ct->ct_crec;
 
-    /* XXX hopefully this need NOT be clnt_fd_lock, however this is a
+    /* XXX I -think- this need not be clnt_fd_lock, however this is a
      * significant unserialization */
     mutex_lock(&crec->mtx);
     crec->lock_flag_value = rpc_flag_clear;
