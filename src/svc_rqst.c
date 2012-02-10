@@ -250,6 +250,16 @@ unlock:
     return (code);
 }
 
+static inline int svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
+                                          uint32_t flags)
+{
+    int code = 0;
+
+    
+
+    return (code);
+}
+
 int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags)
 {
     struct svc_rqst_rec *sr_rec = NULL;
@@ -258,6 +268,7 @@ int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags)
     sr_rec = svc_rqst_lookup_chan(chan_id, SVC_RQST_FLAG_RLOCK);
     if (! sr_rec) {
         rwlock_unlock(&svc_rqst_set_.lock);
+        __warnx("svc_rqst_thrd_run: unknown chan_id %d", chan_id);
         code = ENOENT;
         goto out;
     }
@@ -270,7 +281,19 @@ int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags)
     sr_rec->states |= SVC_RQST_STATE_ACTIVE;
     mutex_unlock(&sr_rec->mtx);
     
-    /* XXXX enter type-specific event loop */
+    /* enter event loop */
+    switch (sr_rec->ev_type) {
+#if defined(TIRPC_EPOLL)
+    case SVC_EVENT_EPOLL:
+        code = svc_rqst_thrd_run_epoll(sr_rec, flags);
+        break;
+#endif
+    default:
+        /* XXX formerly select/fd_set case, now placeholder for new
+         * event systems, reworked select, etc. */
+        __warnx("svc_rqst_thrd_run: unsupported event type");
+        break;
+    } /* switch */
 
 out:
     return (code);
