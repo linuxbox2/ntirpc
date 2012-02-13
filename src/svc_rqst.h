@@ -2,6 +2,8 @@
 #ifndef TIRPC_SVC_RQST_H
 #define TIRPC_SVC_RQST_H
 
+struct svc_rqst_rec; /* forward decl */
+
 struct svc_xprt_ev
 {
     /*
@@ -21,6 +23,7 @@ struct svc_xprt_ev
      */
     struct opr_rbtree_node node_k;
     SVCXPRT *xprt; /* contains this */
+    struct svc_rqst_rec *sr_rec; /* container of this */
 };
 
 struct svc_rqst_rec
@@ -128,6 +131,8 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
 int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags);
 int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
+int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags);
+int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags);
 int svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags);
 
@@ -142,18 +147,18 @@ int svc_rqst_foreach_xprt(uint32_t chan_id, svc_rqst_xprt_each_func_t each_f,
                           void *arg);
 
 
-#define SVC_RQST_FLAG_NONE        0x00000
-#define SVC_RQST_FLAG_RLOCK       0x00001
-#define SVC_RQST_FLAG_WLOCK       0x00002
-#define SVC_RQST_FLAG_UNLOCK      0x00004
-#define SVC_RQST_FLAG_EPOLL       0x00008
-#define SVC_RQST_FLAG_FDSET       0x00010
+#define SVC_RQST_FLAG_NONE          0x00000
+#define SVC_RQST_FLAG_RLOCK         0x00001
+#define SVC_RQST_FLAG_WLOCK         0x00002
+#define SVC_RQST_FLAG_UNLOCK        0x00004
+#define SVC_RQST_FLAG_EPOLL         0x00008
+#define SVC_RQST_FLAG_FDSET         0x00010
 
-#define SVC_RQST_STATE_NONE       0x00000
-#define SVC_RQST_STATE_ACTIVE     0x00001 /* thrd in event loop */
-#define SVC_RQST_STATE_BLOCKED    0x00002 /* channel blocked */
+#define SVC_RQST_STATE_NONE         0x00000
+#define SVC_RQST_STATE_ACTIVE       0x00001 /* thrd in event loop */
+#define SVC_RQST_STATE_BLOCKED      0x00002 /* channel blocked */
 
-#define SVC_RQST_SIGNAL_SHUTDOWN   0x00004 /* chan shutdown */
+#define SVC_RQST_SIGNAL_SHUTDOWN    0x00008 /* chan shutdown */
 
 /* ie, masks unused bits */
 #define SVC_RQST_SIGNAL_MASK ~(SVC_RQST_SIGNAL_SHUTDOWN)

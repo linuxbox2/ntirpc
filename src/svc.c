@@ -62,6 +62,7 @@
 
 #include "clnt_internal.h"
 #include "svc_xprt.h"
+#include "svc_rqst.h"
 
 #define	RQCRED_SIZE	400	/* this size is excessive */
 
@@ -194,10 +195,13 @@ void
 xprt_register (SVCXPRT * xprt)
 {
     int code;
-    assert (xprt);
+
+    /* Use dedicated event channel if xprt is registered on one, otherwise
+     * use the legacy/global mechanism. */
+    if (xprt->xp_flags & SVC_XPRT_FLAG_EVCHAN)
+        return (svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE));
 
     rwlock_wrlock (&svc_fd_lock); /* XXX protecting event registration */
-
     switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
     case SVC_EVENT_EPOLL:
@@ -225,7 +229,6 @@ xprt_register (SVCXPRT * xprt)
          * event systems, reworked select, etc. */
         break;
     } /* switch */
-
     rwlock_unlock (&svc_fd_lock);
 
 } /* xprt_register */

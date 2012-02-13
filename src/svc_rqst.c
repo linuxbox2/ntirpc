@@ -100,6 +100,7 @@ void svc_rqst_init_xprt(SVCXPRT *xprt)
 #else
     xp_ev->ev_type = SVC_EVENT_FDSET;
 #endif
+    xprt->xp_ev = xp_ev;
 }
 
 void svc_rqst_finalize_xprt(SVCXPRT *xprt)
@@ -273,6 +274,7 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     }
 
     mutex_lock(&sr_rec->mtx);
+    /* XXX lock xprt? and see xprt_register */
     assert(xprt->xp_ev); /* cf. svc_rqst_init_xprt */
     xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
     if (opr_rbtree_insert(&sr_rec->xprt_q, &xp_ev->node_k)) {
@@ -280,6 +282,13 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
         __warnx("%s: SVCXPRT %p already registered",
                 __func__, xprt);
     }
+
+    /* mark xprt */
+    xprt->xp_flags |= SVC_XPRT_FLAG_EVCHAN;
+
+    /* register on event demultiplexer */
+    (void) svc_rqst_block_events(xprt, SVC_RQST_FLAG_NONE);
+
     mutex_unlock(&sr_rec->mtx);
 
 unlock:
@@ -309,11 +318,84 @@ int svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     else
         __warnx("%s: SVCXPRT %p found but cant be removed",
                 __func__, xprt);
+
+    /* XXX lock xprt? */
+    xprt->xp_flags &= ~SVC_XPRT_FLAG_EVCHAN;
+
     mutex_unlock(&sr_rec->mtx);
 
 unlock:
     rwlock_unlock(&svc_rqst_set_.lock);
     return (code);
+}
+
+int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
+{
+    struct svc_xprt_ev *xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
+    struct svc_rqst_rec *sr_rec = xp_ev->sr_rec;
+    int code = 0;
+
+    mutex_lock(&sr_rec->mtx);
+
+    switch (sr_rec->ev_type) {
+#if defined(TIRPC_EPOLL)
+    case SVC_EVENT_EPOLL:
+        {
+            struct epoll_event *ev = &xp_ev->ev_u.epoll.event;
+
+            /* clear epoll vector */
+            code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd, EPOLL_CTL_DEL,
+                             xprt->xp_fd, ev);
+        }
+        break;
+#endif
+    default:
+        /* XXX formerly select/fd_set case, now placeholder for new
+         * event systems, reworked select, etc. */
+        break;
+    } /* switch */
+
+    mutex_unlock(&sr_rec->mtx);
+
+    return (0);
+}
+
+int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
+{
+    struct svc_xprt_ev *xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
+    struct svc_rqst_rec *sr_rec = xp_ev->sr_rec;
+    int code = 0;
+
+    mutex_lock(&sr_rec->mtx);
+
+    switch (sr_rec->ev_type) {
+#if defined(TIRPC_EPOLL)
+    case SVC_EVENT_EPOLL:
+        {
+            struct epoll_event *ev = &xp_ev->ev_u.epoll.event;
+
+            /* set up epoll user data */
+            ev->data.fd = xprt->xp_fd;
+            ev->data.ptr = xprt;
+
+            /* wait for read events, level triggered */
+            ev->events = EPOLLIN;
+
+            /* add to epoll vector */
+            code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd, EPOLL_CTL_ADD,
+                             xprt->xp_fd, ev);
+        }
+        break;
+#endif
+    default:
+        /* XXX formerly select/fd_set case, now placeholder for new
+         * event systems, reworked select, etc. */
+        break;
+    } /* switch */
+
+    mutex_unlock(&sr_rec->mtx);
+
+    return (0);
 }
 
 bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
@@ -334,13 +416,13 @@ static inline void ev_sig(uint32_t sig)
 
 /*
  * Read a single 4-byte value from the shared event-notification channel,
- * the socket is in non-blocking mode.  The value read is discarded.
+ * the socket is in non-blocking mode.  The value read is returned.
  */
 static inline uint32_t consume_ev_sig_nb()
 {
-    uint32_t sig;
-    int code = 
-        read(svc_rqst_set_.sv[1], &sig, sizeof(uint32_t));
+    uint32_t sig = 0;
+    (void) read(svc_rqst_set_.sv[1], &sig, sizeof(uint32_t));
+    return (sig);
 }
 
 static inline int 

@@ -161,6 +161,7 @@ struct svc_params
 #define SVC_XPRT_FLAG_NONE               0x0000
 #define SVC_XPRT_FLAG_SETNEWFDS          0x0001
 #define SVC_XPRT_FLAG_DONTCLOSE          0x0002
+#define SVC_XPRT_FLAG_EVCHAN             0x0004
 
 enum xprt_stat {
 	XPRT_DIED,
