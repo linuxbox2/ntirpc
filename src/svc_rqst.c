@@ -217,6 +217,35 @@ out:
     return (code);
 }
 
+static inline void evchan_unreg_impl(struct svc_rqst_rec *sr_rec,
+                                     SVCXPRT *xprt, uint32_t flags)
+{
+    struct svc_xprt_ev *xp_ev;
+    struct opr_rbtree_node *nx;
+
+    if (! (flags & SVC_RQST_FLAG_SREC_LOCK))
+        mutex_lock(&sr_rec->mtx);
+
+    assert(xprt->xp_ev); /* cf. svc_rqst_init_xprt */
+    xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
+
+    nx = opr_rbtree_lookup(&sr_rec->xprt_q, &xp_ev->node_k);
+    if (nx)
+        opr_rbtree_remove(&sr_rec->xprt_q, &xp_ev->node_k);
+    else
+        __warnx("%s: SVCXPRT %p found but cant be removed",
+                __func__, xprt);
+
+    /* clear from event mux */
+    (void) svc_rqst_block_events(xprt, SVC_RQST_FLAG_NONE);
+
+    /* XXX lock xprt? */
+    xprt->xp_flags &= ~SVC_XPRT_FLAG_EVCHAN;
+
+    if (! (flags & SVC_RQST_FLAG_SREC_LOCK))
+        mutex_unlock(&sr_rec->mtx);
+}
+
 int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
 {
     struct svc_rqst_rec *sr_rec;
@@ -250,7 +279,10 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
     while (n != NULL) {
         /* indirect on xp_ev */
         xprt = opr_containerof(n, struct svc_xprt_ev, node_k)->xprt;
-        /* XXXX TODO: unregister */
+        /* stop processing events */
+        evchan_ureg_impl(sr_rec, xprt,
+                         (SVC_RQST_FLAG_RLOCK | SVC_RQST_FLAG_SREC_LOCK));
+            
         n = opr_rbtree_next(n);
     }
     /* XXXX TODO: deep free sr_rec */
@@ -286,8 +318,8 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     /* mark xprt */
     xprt->xp_flags |= SVC_XPRT_FLAG_EVCHAN;
 
-    /* register on event demultiplexer */
-    (void) svc_rqst_block_events(xprt, SVC_RQST_FLAG_NONE);
+    /* register on event mux */
+    (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
 
     mutex_unlock(&sr_rec->mtx);
 
@@ -299,8 +331,6 @@ unlock:
 int svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 {
     struct svc_rqst_rec *sr_rec;
-    struct opr_rbtree_node *nx;
-    struct svc_xprt_ev *xp_ev;
     int code = EINVAL;
 
     sr_rec = svc_rqst_lookup_chan(chan_id, SVC_RQST_FLAG_RLOCK);
@@ -309,20 +339,7 @@ int svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
         goto unlock;
     }
 
-    mutex_lock(&sr_rec->mtx);
-    assert(xprt->xp_ev); /* cf. svc_rqst_init_xprt */
-    xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
-    nx = opr_rbtree_lookup(&sr_rec->xprt_q, &xp_ev->node_k);
-    if (nx)
-        opr_rbtree_remove(&sr_rec->xprt_q, &xp_ev->node_k);
-    else
-        __warnx("%s: SVCXPRT %p found but cant be removed",
-                __func__, xprt);
-
-    /* XXX lock xprt? */
-    xprt->xp_flags &= ~SVC_XPRT_FLAG_EVCHAN;
-
-    mutex_unlock(&sr_rec->mtx);
+    evchan_ureg_impl(sr_rec, xprt, SVC_RQST_FLAG_RLOCK);
 
 unlock:
     rwlock_unlock(&svc_rqst_set_.lock);

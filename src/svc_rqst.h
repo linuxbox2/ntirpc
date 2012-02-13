@@ -153,6 +153,7 @@ int svc_rqst_foreach_xprt(uint32_t chan_id, svc_rqst_xprt_each_func_t each_f,
 #define SVC_RQST_FLAG_UNLOCK        0x00004
 #define SVC_RQST_FLAG_EPOLL         0x00008
 #define SVC_RQST_FLAG_FDSET         0x00010
+#define SVC_RQST_FLAG_SREC_LOCK     0x00020
 
 #define SVC_RQST_STATE_NONE         0x00000
 #define SVC_RQST_STATE_ACTIVE       0x00001 /* thrd in event loop */
