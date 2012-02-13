@@ -12,6 +12,7 @@
 #include <err.h>
 #include <errno.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <signal.h>
 
 #include <rpc/types.h>
@@ -46,12 +47,20 @@ static struct svc_rqst_set svc_rqst_set_ = {
       0, /* size */
       0  /* gen */ 
     } /* t */,
-    0 /* gen */
+    0 /* next_id */,
+    { 0, 0 } /* event sv */
 };
+
+static inline void SetNonBlock(int fd)
+{
+    int s_flags = fcntl(fd, F_GETFL, 0);
+    (void) fcntl(fd, F_SETFL, (s_flags|O_NONBLOCK));
+}
 
 void svc_rqst_init()
 {
     pthread_rwlockattr_t rwlock_attr;
+    int code = 0;
 
     rwlock_wrlock(&svc_rqst_set_.lock);
 
@@ -68,6 +77,16 @@ void svc_rqst_init()
 #endif
     rwlock_init(&svc_rqst_set_.lock, &rwlock_attr);
     opr_rbtree_init(&svc_rqst_set_.t, rqst_thrd_cmpf /* may be NULL */);
+
+    /* create a pair of anonymous sockets for async event channel wakeups */
+    code = socketpair(AF_UNIX, SOCK_STREAM, 0, svc_rqst_set_.sv);
+    if (code) {
+        __warnx("%s: failed creating event signal socketpair",
+                __func__);
+    }
+
+    /* set read side non-blocking */
+    SetNonBlock(svc_rqst_set_.sv[1]);
 
 unlock:
     rwlock_unlock(&svc_rqst_set_.lock);
@@ -131,18 +150,33 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
     struct svc_rqst_rec *sr_rec;
     int code = 0;
 
+    flags |= SVC_RQST_FLAG_EPOLL; /* XXX */
+
     sr_rec = mem_alloc(sizeof(struct svc_rqst_rec));
     if (!sr_rec) {
         __warnx("%s: failed allocating svc_rqst_rec", __func__);
         goto out;
     }
     memset(sr_rec, 0, sizeof(struct svc_rqst_rec));
+
 #if defined(TIRPC_EPOLL)
     if (flags & SVC_RQST_FLAG_EPOLL) {
+
         sr_rec->ev_type = SVC_EVENT_EPOLL;
         sr_rec->ev_u.epoll.events = (struct epoll_event *)
             mem_alloc(
-                sr_rec->ev_u.epoll.max_events*sizeof(struct epoll_event));    
+                sr_rec->ev_u.epoll.max_events*sizeof(struct epoll_event));
+
+        /* permit wakeup of threads blocked in epoll_wait, with a
+         * couple of possible semantics */
+        sr_rec->ev_u.epoll.ctrl_ev.events = EPOLLIN;
+        sr_rec->ev_u.epoll.ctrl_ev.data.fd = sr_rec->ev_u.epoll.epoll_fd;
+        sr_rec->ev_u.epoll.ctrl_ev.data.ptr = NULL; /* not an xprt */
+
+        code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
+                         EPOLL_CTL_ADD,
+                         svc_rqst_set_.sv[1],
+                         &sr_rec->ev_u.epoll.ctrl_ev);
     } else {
         /* legacy fdset (currently unhooked) */
         sr_rec->ev_type = SVC_EVENT_FDSET;
@@ -163,6 +197,14 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
     if (opr_rbtree_insert(&svc_rqst_set_.t, &sr_rec->node_k)) {
         /* cant happen */
         __warnx("%s: inserted a counted value twice (counter fail)", __func__);
+#if defined(TIRPC_EPOLL)
+        /* but it did */
+        if (flags & SVC_RQST_FLAG_EPOLL)
+            (void) epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
+                             EPOLL_CTL_DEL,
+                             svc_rqst_set_.sv[1],
+                             &sr_rec->ev_u.epoll.ctrl_ev);
+#endif
         mem_free(sr_rec, sizeof(struct svc_rqst_rec));
         n_id = 0; /* invalid value */
     }    
@@ -174,7 +216,7 @@ out:
     return (code);
 }
 
-int svc_rqst_free_evchan(uint32_t chan_id, uint32_t flags)
+int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
 {
     struct svc_rqst_rec *sr_rec;
     struct opr_rbtree_node *n;
@@ -187,6 +229,20 @@ int svc_rqst_free_evchan(uint32_t chan_id, uint32_t flags)
         goto unlock;
     }
 
+    /* stop event processing */
+    switch (sr_rec->ev_type) {
+#if defined(TIRPC_EPOLL)
+    case SVC_EVENT_EPOLL:
+        (void) epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
+                         EPOLL_CTL_DEL,
+                         svc_rqst_set_.sv[1],
+                         &sr_rec->ev_u.epoll.ctrl_ev);
+        break;
+#endif
+    default:
+        break;
+    }
+
     /* traverse sr_req->xprt_q inorder */
     mutex_lock(&sr_rec->mtx);
     n = opr_rbtree_first(&sr_rec->xprt_q);
@@ -196,11 +252,11 @@ int svc_rqst_free_evchan(uint32_t chan_id, uint32_t flags)
         /* XXXX TODO: unregister */
         n = opr_rbtree_next(n);
     }
+    /* XXXX TODO: deep free sr_rec */
     mutex_unlock(&sr_rec->mtx);
 
 unlock:
     rwlock_unlock(&svc_rqst_set_.lock);
-
     return (code);
 }
 
@@ -228,7 +284,6 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 
 unlock:
     rwlock_unlock(&svc_rqst_set_.lock);
-
     return (code);
 }
 
@@ -258,11 +313,35 @@ int svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 
 unlock:
     rwlock_unlock(&svc_rqst_set_.lock);
-
     return (code);
 }
 
 bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
+
+/*
+ * Write 4-byte value to shared event-notification channel.  The
+ * value as presently implemented can be interpreted only by one consumer,
+ * so is not relied on.
+ */
+static inline void ev_sig(uint32_t sig)
+{
+    int code = 
+        write(svc_rqst_set_.sv[0], &sig, sizeof(uint32_t));
+    if (code < 1)
+        __warnx("%s: error writing to event socket (%d:%d)",
+                code, errno);
+}
+
+/*
+ * Read a single 4-byte value from the shared event-notification channel,
+ * the socket is in non-blocking mode.  The value read is discarded.
+ */
+static inline uint32_t consume_ev_sig_nb()
+{
+    uint32_t sig;
+    int code = 
+        read(svc_rqst_set_.sv[1], &sig, sizeof(uint32_t));
+}
 
 static inline int 
 svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
@@ -294,7 +373,6 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
         case -1:
             if (errno == EINTR)
                 continue;
-            /* XXX epoll_ctl del all events ? */
             __warnx("svc_rqst_thrd_run_epoll: epoll_wait failed %d", n_events);
             break;
         case 0:
@@ -305,10 +383,15 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
             /* new events */
             for (ix = 0; ix < n_events; ++ix) {
                 ev = &(sr_rec->ev_u.epoll.events[ix]);
-                xprt = (SVCXPRT *) ev->data.ptr;
-                code = xprt->xp_ops2->xp_getreq(xprt);
-            }
-
+                if (ev->data.ptr) {
+                    xprt = (SVCXPRT *) ev->data.ptr;
+                    code = xprt->xp_ops2->xp_getreq(xprt);
+                } else {
+                    /* signalled -- there was a wakeup on ctrl_ev (see
+                     * top-of-loop) */
+                    (void) consume_ev_sig_nb();
+                }
+            } /* each events[ix] */
         } /* switch */
     } /* ;; */
 
@@ -351,5 +434,26 @@ int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags)
     } /* switch */
 
 out:
+    return (code);
+}
+
+int svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags)
+{
+    struct svc_rqst_rec *sr_rec;
+    int code = 0;
+
+    sr_rec = svc_rqst_lookup_chan(chan_id, SVC_RQST_FLAG_RLOCK);
+    if (! sr_rec) {
+        code = ENOENT;
+        goto unlock;
+    }
+
+    mutex_lock(&sr_rec->mtx);
+    sr_rec->signals |= (flags & ~SVC_RQST_SIGNAL_MASK);
+    ev_sig(flags); /* send wakeup */
+    mutex_unlock(&sr_rec->mtx);
+
+unlock:
+    rwlock_unlock(&svc_rqst_set_.lock);
     return (code);
 }
