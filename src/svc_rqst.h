@@ -32,6 +32,9 @@ struct svc_rqst_rec
      * union of event processor types
      */
     enum svc_event_type ev_type;
+
+    uint32_t flags;
+
     union {
 #if defined(TIRPC_EPOLL)
         struct {
@@ -122,7 +125,6 @@ static inline int rqst_xprt_cmpf(const struct opr_rbtree_node *lhs,
  *  can be used by the application to chose a correct request handler, or do
  *  other adaptation
  */
-
 void svc_rqst_init();
 void svc_rqst_init_xprt(SVCXPRT *xprt);
 void svc_rqst_finalize_xprt(SVCXPRT *xprt);
@@ -133,6 +135,8 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags);
+int svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt);
+int svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags);
 int svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags);
 
@@ -147,19 +151,24 @@ int svc_rqst_foreach_xprt(uint32_t chan_id, svc_rqst_xprt_each_func_t each_f,
                           void *arg);
 
 
-#define SVC_RQST_FLAG_NONE          0x00000
-#define SVC_RQST_FLAG_RLOCK         0x00001
-#define SVC_RQST_FLAG_WLOCK         0x00002
-#define SVC_RQST_FLAG_UNLOCK        0x00004
-#define SVC_RQST_FLAG_EPOLL         0x00008
-#define SVC_RQST_FLAG_FDSET         0x00010
-#define SVC_RQST_FLAG_SREC_LOCK     0x00020
+#define SVC_RQST_FLAG_NONE            0x00000
+#define SVC_RQST_FLAG_RLOCK           0x00001
+#define SVC_RQST_FLAG_WLOCK           0x00002
+#define SVC_RQST_FLAG_UNLOCK          0x00004
+#define SVC_RQST_FLAG_EPOLL           0x00008
+#define SVC_RQST_FLAG_FDSET           0x00010
+#define SVC_RQST_FLAG_SREC_LOCK       0x00020
 
-#define SVC_RQST_STATE_NONE         0x00000
-#define SVC_RQST_STATE_ACTIVE       0x00001 /* thrd in event loop */
-#define SVC_RQST_STATE_BLOCKED      0x00002 /* channel blocked */
+#define SVC_RQST_FLAG_CHAN_AFFINITY   0x00040 /* bind new conn to parent chan */
+#define SVC_RQST_FLAG_CHAN_ACCEPT_CB  0x00080 /* make rendezvous callout? */
 
-#define SVC_RQST_SIGNAL_SHUTDOWN    0x00008 /* chan shutdown */
+#define SVC_RQST_FLAG_XPRT_DTOR       0x00100
+
+#define SVC_RQST_STATE_NONE           0x00000
+#define SVC_RQST_STATE_ACTIVE         0x00001 /* thrd in event loop */
+#define SVC_RQST_STATE_BLOCKED        0x00002 /* channel blocked */
+
+#define SVC_RQST_SIGNAL_SHUTDOWN      0x00008 /* chan shutdown */
 
 /* ie, masks unused bits */
 #define SVC_RQST_SIGNAL_MASK ~(SVC_RQST_SIGNAL_SHUTDOWN)

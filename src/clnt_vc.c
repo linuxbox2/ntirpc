@@ -69,6 +69,7 @@
 
 #include "clnt_internal.h"
 #include "vc_lock.h"
+#include "svc_rqst.h"
 
 #define CMGROUP_MAX    16
 #define SCM_CREDS      0x03            /* process creds (struct cmsgcred) */
@@ -155,7 +156,7 @@ cond_block_events_client(CLIENT *cl)
         SVCXPRT *xprt = ct->ct_duplex.ct_xprt;
         assert(xprt);
         ct->ct_duplex.ct_flags |= CT_FLAG_EVENTS_BLOCKED;
-        xprt_unregister(xprt);
+        (void) svc_rqst_block_events(xprt, SVC_RQST_FLAG_NONE);
         return (TRUE);
     }
     return (FALSE);
@@ -171,7 +172,7 @@ cond_unblock_events_client(CLIENT *cl)
         SVCXPRT *xprt = ct->ct_duplex.ct_xprt;
         assert(xprt);
         ct->ct_duplex.ct_flags &= ~CT_FLAG_EVENTS_BLOCKED;
-        xprt_register(xprt);
+        (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
     }
 }
 

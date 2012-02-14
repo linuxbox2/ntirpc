@@ -51,6 +51,8 @@ static struct svc_rqst_set svc_rqst_set_ = {
     { 0, 0 } /* event sv */
 };
 
+extern struct svc_params __svc_params[1];
+
 static inline void SetNonBlock(int fd)
 {
     int s_flags = fcntl(fd, F_GETFL, 0);
@@ -144,6 +146,8 @@ svc_rqst_lookup_chan(uint32_t chan_id, uint32_t flags)
     return (sr_rec);
 }
 
+#define SVC_RQST_FLAG_MASK (SVC_RQST_FLAG_CHAN_AFFINITY)
+
 int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
                         uint32_t flags)
 {
@@ -162,6 +166,9 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
 
 #if defined(TIRPC_EPOLL)
     if (flags & SVC_RQST_FLAG_EPOLL) {
+
+        /* XXX improve mask */
+        sr_rec->flags = flags & SVC_RQST_FLAG_MASK;
 
         sr_rec->ev_type = SVC_EVENT_EPOLL;
         sr_rec->ev_u.epoll.events = (struct epoll_event *)
@@ -241,6 +248,7 @@ static inline void evchan_unreg_impl(struct svc_rqst_rec *sr_rec,
 
     /* XXX lock xprt? */
     xprt->xp_flags &= ~SVC_XPRT_FLAG_EVCHAN;
+    sr_rec->id_k = 0; /* no chan */
 
     if (! (flags & SVC_RQST_FLAG_SREC_LOCK))
         mutex_unlock(&sr_rec->mtx);
@@ -280,8 +288,8 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
         /* indirect on xp_ev */
         xprt = opr_containerof(n, struct svc_xprt_ev, node_k)->xprt;
         /* stop processing events */
-        evchan_ureg_impl(sr_rec, xprt,
-                         (SVC_RQST_FLAG_RLOCK | SVC_RQST_FLAG_SREC_LOCK));
+        evchan_unreg_impl(sr_rec, xprt,
+                          (SVC_RQST_FLAG_RLOCK | SVC_RQST_FLAG_SREC_LOCK));
             
         n = opr_rbtree_next(n);
     }
@@ -339,8 +347,8 @@ int svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
         goto unlock;
     }
 
-    evchan_ureg_impl(sr_rec, xprt, SVC_RQST_FLAG_RLOCK);
-
+    evchan_unreg_impl(sr_rec, xprt, SVC_RQST_FLAG_RLOCK);
+    
 unlock:
     rwlock_unlock(&svc_rqst_set_.lock);
     return (code);
@@ -412,6 +420,57 @@ int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
 
     mutex_unlock(&sr_rec->mtx);
 
+    return (0);
+}
+
+/* register newxprt on an event channel, based on various
+ * parameters */
+int svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt)
+{
+    struct svc_xprt_ev *xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
+    struct svc_rqst_rec *sr_rec = xp_ev->sr_rec;
+    int code = 0;
+
+    /* do nothing if event registration is globally disabled */
+    if (__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
+        goto out;
+
+    /* use global registration if parent xprt has no dedicated event
+     * channel */
+    if (!sr_rec) {
+        xprt_register(newxprt);
+        goto out;
+    }
+
+    /* follow policy if applied.  the client code will still normally
+     * be called back to, e.g., adjust channel assignment */
+    if (sr_rec->flags & SVC_RQST_FLAG_CHAN_AFFINITY)
+        svc_rqst_evchan_reg(sr_rec->id_k, newxprt, SVC_RQST_FLAG_NONE);
+    else
+        xprt_register(xprt);
+
+out:
+    return (code);
+}
+
+int svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t flags)
+{
+    struct svc_xprt_ev *xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
+    struct svc_rqst_rec *sr_rec = xp_ev->sr_rec;
+    int code = 0;
+
+    if (!sr_rec) {
+        xprt_unregister(xprt);
+        goto out;
+    }
+
+    /* if xprt is is on a dedicated channel? */
+    if (sr_rec->id_k)
+        evchan_unreg_impl(sr_rec, xprt, SVC_RQST_FLAG_NONE);
+    else
+        xprt_unregister(xprt);
+
+out:
     return (0);
 }
 

@@ -124,10 +124,16 @@ typedef struct svc_init_params
     warnx_t warnx;
 } svc_init_params;
 
+/* Svc param flags */
+#define SVC_FLAG_NONE             0x0000
+#define SVC_FLAG_NOREG_XPRTS      0x0001
+
 /* threading fdsets around is annoying */
 struct svc_params
 {
     bool_t initialized;
+
+    u_long flags;
 
     /* package global event handling--may be overridden using the
      * svc_rqst interface */
@@ -568,8 +574,9 @@ extern CLIENT *clnt_dplx_create_from_svc(SVCXPRT *, const rpcprog_t,
 
 __END_DECLS
 
-#define SVC_VC_CREATE_CL_FLAG_NONE        0x0000
-#define SVC_VC_CREATE_CL_FLAG_DEDICATED   0x0001
+#define SVC_VC_CREATE_CL_FLAG_NONE            0x0000
+#define SVC_VC_CREATE_CL_FLAG_DEDICATED       0x0001
+#define SVC_VC_CREATE_CL_FLAG_XPRT_REGISTER   0x0002
 
 __BEGIN_DECLS
 

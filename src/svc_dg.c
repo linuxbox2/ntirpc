@@ -59,6 +59,7 @@
 #include "svc_rqst.h"
 
 extern tirpc_pkg_params __pkg_params;
+extern struct svc_params __svc_params[1];
 
 #define	su_data(xprt)	((struct svc_dg_data *)(xprt->xp_p2))
 #define	rpc_buffer(xprt) ((xprt)->xp_p1)
@@ -152,7 +153,10 @@ svc_dg_create(fd, sendsize, recvsize)
 	/* Enable reception of IP*_PKTINFO control msgs */
 	svc_dg_enable_pktinfo(fd, &si);
 
-	xprt_register(xprt);
+        /* conditional xprt_register */
+        if (! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
+            xprt_register(xprt);
+
 	return (xprt);
 freedata:
 	(void) __warnx(svc_dg_str, __no_mem_str);
@@ -314,7 +318,7 @@ svc_dg_destroy(xprt)
 {
 	struct svc_dg_data *su = su_data(xprt);
 
-	xprt_unregister(xprt);
+        (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
 	if (xprt->xp_fd != -1)
 		(void)close(xprt->xp_fd);
 	if (xprt->xp_auth != NULL) {

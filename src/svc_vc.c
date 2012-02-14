@@ -110,7 +110,7 @@ cond_block_events_svc(SVCXPRT *xprt)
         if ((ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX) &&
             (! (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED))) {
             ct->ct_duplex.ct_flags |= CT_FLAG_EVENTS_BLOCKED;
-            xprt_unregister(xprt);
+            (void) svc_rqst_block_events(xprt, SVC_RQST_FLAG_NONE);
             return (TRUE);
         }
     }
@@ -127,7 +127,7 @@ cond_unblock_events_svc(SVCXPRT *xprt)
         struct ct_data *ct = (struct ct_data *) cl->cl_private;
         if (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED) {
             ct->ct_duplex.ct_flags &= ~CT_FLAG_EVENTS_BLOCKED;
-            xprt_register(xprt);
+            (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
         }
     }
 }
@@ -225,7 +225,11 @@ svc_vc_create(fd, sendsize, recvsize)
 		__warnx("svc_vc_create: no mem for local addr");
 		goto cleanup_svc_vc_create;
 	}
-	xprt_register(xprt);
+
+        /* conditional xprt_register */
+        if (! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
+            xprt_register(xprt);
+
 	return (xprt);
 cleanup_svc_vc_create:
 	if (r != NULL)
@@ -252,6 +256,10 @@ svc_fd_create(fd, sendsize, recvsize)
 	xprt = makefd_xprt(fd, sendsize, recvsize);
 	if (! xprt)
             return NULL;
+
+        /* conditional xprt_register */
+        if (! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
+            xprt_register(xprt);
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
@@ -301,21 +309,26 @@ svc_fd_create2(fd, sendsize, recvsize, flags)
 	struct sockaddr_in6 sin6;
 	struct netbuf *addr;
 	socklen_t slen;
-	SVCXPRT *ret;
+	SVCXPRT *xprt;
 	int af;
 
 	assert(fd != -1);
 
-	ret = makefd_xprt(fd, sendsize, recvsize);
-	if (ret == NULL)
+	xprt = makefd_xprt(fd, sendsize, recvsize);
+	if (xprt == NULL)
 		return NULL;
+
+        /* conditional xprt_register */
+        if (! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
+            if (flags & SVC_VC_CREATE_CL_FLAG_XPRT_REGISTER)
+                xprt_register(xprt);
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
 		__warnx("svc_fd_create: could not retrieve local addr");
 		goto freedata;
 	}
-	if (!__rpc_set_netbuf(&ret->xp_ltaddr, &ss, sizeof(ss))) {
+	if (!__rpc_set_netbuf(&xprt->xp_ltaddr, &ss, sizeof(ss))) {
 		__warnx("svc_fd_create: no mem for local addr");
 		goto freedata;
 	}
@@ -331,12 +344,12 @@ svc_fd_create2(fd, sendsize, recvsize, flags)
 	if (flags & SVC_VCCR_MAP6_V1) {
 	    if (af == AF_INET) {
 		map_ipv4_to_ipv6((struct sockaddr_in *)&ss, &sin6);
-		addr = __rpc_set_netbuf(&ret->xp_rtaddr, &ss, sizeof(ss));
+		addr = __rpc_set_netbuf(&xprt->xp_rtaddr, &ss, sizeof(ss));
 	    }
 	    else
-		addr = __rpc_set_netbuf(&ret->xp_rtaddr, &sin6, sizeof(ss));
+		addr = __rpc_set_netbuf(&xprt->xp_rtaddr, &sin6, sizeof(ss));
 	} else
-	    addr = __rpc_set_netbuf(&ret->xp_rtaddr, &ss, sizeof(ss));
+	    addr = __rpc_set_netbuf(&xprt->xp_rtaddr, &ss, sizeof(ss));
 	if (!addr) {
 		__warnx("svc_fd_create: no mem for local addr");
 		goto freedata;
@@ -361,14 +374,14 @@ svc_fd_create2(fd, sendsize, recvsize, flags)
 		break;
 	    }
 	    /* Set xp_raddr for compatibility */
-	    __xprt_set_raddr(ret, &ss);
+	    __xprt_set_raddr(xprt, &ss);
 	}
 out:
-	return ret;
+	return xprt;
 
 freedata:
-	if (ret->xp_ltaddr.buf != NULL)
-		mem_free(ret->xp_ltaddr.buf, ret->xp_ltaddr.maxlen);
+	if (xprt->xp_ltaddr.buf != NULL)
+		mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
 
 	return NULL;
 }
@@ -423,8 +436,8 @@ makefd_xprt(fd, sendsize, recvsize)
 	xprt->xp_fd = fd;
         if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
 		xprt->xp_netid = strdup(netid);
+        /* XXX defer register */
         svc_rqst_init_xprt(xprt);
-	xprt_register(xprt);
 done:
 	return (xprt);
 }
@@ -477,8 +490,10 @@ again:
 	/*
 	 * make a new transporter (re-uses xprt)
 	 */
-
 	newxprt = makefd_xprt(sock, r->sendsize, r->recvsize);
+
+        /* move xprt_register() out of makefd_xprt */
+        (void) svc_rqst_xprt_register(xprt, newxprt);
 
 	if (!__rpc_set_netbuf(&newxprt->xp_rtaddr, &addr, len))
 		return (FALSE);
@@ -529,8 +544,7 @@ svc_vc_destroy(xprt)
 	SVCXPRT *xprt;
 {
 	assert(xprt != NULL);
-	
-	xprt_unregister(xprt);
+	(void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
 	__svc_vc_dodestroy(xprt);
 }
 
@@ -576,7 +590,7 @@ __svc_vc_dodestroy(xprt)
 
         svc_rqst_finalize_xprt(xprt);
 
-        /* assert: caller has called xprt_unregister */
+        /* assert: caller has unregistered xprt */
         /* duplex */
         if (xprt->xp_p4) {
             CLIENT *cl = (CLIENT *) xprt->xp_p4;
@@ -1069,7 +1083,8 @@ static void svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
         }
         if (acc->tv.tv_sec - cd->last_recv_time.tv_sec > acc->timeout) {
             /* XXX locking */
-            __xprt_unregister_unlocked(xprt);
+            (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
+            /* __xprt_unregister_unlocked(xprt); */
             __svc_vc_dodestroy(xprt);
             acc->ncleaned++;
         }
@@ -1092,9 +1107,11 @@ __svc_clean_idle2(int timeout, bool_t cleanblock)
         svc_xprt_foreach(svc_clean_idle2_func, (void *) &acc);
 
 	if (timeout == 0 && acc.least_active != NULL) {
-		__xprt_unregister_unlocked(acc.least_active);
-		__svc_vc_dodestroy(acc.least_active);
-		acc.ncleaned++;
+            (void) svc_rqst_xprt_unregister(
+                acc.least_active, SVC_RQST_FLAG_NONE);
+            /* __xprt_unregister_unlocked(acc.least_active); */
+            __svc_vc_dodestroy(acc.least_active);
+            acc.ncleaned++;
 	}
 
 	return (acc.ncleaned > 0) ? TRUE : FALSE;
@@ -1193,6 +1210,11 @@ svc_dplx_create_from_clnt(cl, sendsz, recvsz, flags)
     xprt = makefd_xprt(fd, sendsz, recvsz);
     if (! xprt)
         goto unlock;
+    
+    /* conditional xprt_register */
+    if (! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
+        if (flags & SVC_VC_CREATE_CL_FLAG_XPRT_REGISTER)
+            xprt_register(xprt);
 
     if (!__rpc_set_netbuf(&xprt->xp_rtaddr, &addr, len)) {
         /* keeps connected state, duplex clnt */
