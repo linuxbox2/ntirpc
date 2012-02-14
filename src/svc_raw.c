@@ -242,6 +242,7 @@ svc_raw_ops(xprt)
 		ops2.xp_control = svc_raw_control;
 		ops2.xp_getreq = svc_getreq_default;
                 ops2.xp_dispatch = svc_dispatch_default;
+                ops2.xp_rdvs = NULL; /* no default */
 	}
 	xprt->xp_ops = &ops;
 	xprt->xp_ops2 = &ops2;

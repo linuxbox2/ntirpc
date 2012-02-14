@@ -527,6 +527,10 @@ again:
 
 	gettimeofday(&cd->last_recv_time, NULL);
 
+        /* if parent has xp_rdvs, use it */
+        if (xprt->xp_ops2->xp_rdvs)
+            xprt->xp_ops2->xp_rdvs(xprt, newxprt, SVC_RQST_FLAG_NONE, NULL);
+
 	return (FALSE); /* there is never an rpc msg to be processed */
 }
 
@@ -644,6 +648,16 @@ svc_vc_control(xprt, rq, in)
 	case SVCSET_XP_DISPATCH:
             mutex_lock(&ops_lock);
 	    xprt->xp_ops2->xp_dispatch = *(xp_dispatch_t)in;
+            mutex_unlock(&ops_lock);
+	    break;
+	case SVCGET_XP_RDVS:
+            mutex_lock(&ops_lock);
+	    *(xp_rdvs_t *)in = xprt->xp_ops2->xp_rdvs;
+            mutex_unlock(&ops_lock);
+	    break;
+	case SVCSET_XP_RDVS:
+            mutex_lock(&ops_lock);
+	    xprt->xp_ops2->xp_rdvs = *(xp_rdvs_t)in;
             mutex_unlock(&ops_lock);
 	    break;
 	default:
@@ -971,6 +985,7 @@ svc_vc_ops(xprt)
 		ops2.xp_control = svc_vc_control;
 		ops2.xp_getreq = svc_getreq_default;
                 ops2.xp_dispatch = svc_dispatch_default;
+                ops2.xp_rdvs = NULL; /* no default */
 	}
 	xprt->xp_ops = &ops;
 	xprt->xp_ops2 = &ops2;
