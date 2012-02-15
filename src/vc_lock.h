@@ -48,10 +48,12 @@ static inline void vc_lock_init_cl(CLIENT *cl)
 static inline void vc_fd_lock_c(CLIENT *cl, sigset_t *mask)
 {
     struct ct_data *ct = (struct ct_data *) cl->cl_private;
-    struct vc_fd_rec *crec = ct->ct_crec;
+    struct vc_fd_rec *crec;
     sigset_t newmask;
 
     vc_lock_init_cl(cl);
+
+    crec = ct->ct_crec;
 
     sigfillset(&newmask);
     sigdelset(&newmask, SIGINT); /* XXXX debugger */
@@ -81,9 +83,11 @@ static inline void vc_fd_unlock_c(CLIENT *cl, sigset_t *mask)
 static inline void vc_fd_wait_c(CLIENT *cl, uint32_t wait_for)
 {
     struct ct_data *ct = (struct ct_data *) cl->cl_private;
-    struct vc_fd_rec *crec = ct->ct_crec;
+    struct vc_fd_rec *crec;
 
     vc_lock_init_cl(cl);
+
+    crec = ct->ct_crec;
 
     /* XXX hopefully this need NOT be clnt_fd_lock, however this is a
      * significant unserialization */
