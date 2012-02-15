@@ -1231,6 +1231,14 @@ svc_vc_create_from_clnt(cl, sendsz, recvsz, flags)
     if (flags & SVC_VC_CREATE_FLAG_XPRT_REGISTER)
         svc_rqst_xprt_register_cl(cl, xprt);
 
+    len = sizeof (struct sockaddr_storage);
+    if (getpeername(fd, (struct sockaddr *)(void *)&addr, &len) < 0) {
+        __warnx("%s: could not retrieve remote addr",
+                __func__);
+        svc_vc_destroy_xprt(xprt);
+        goto unlock;
+    }
+
     if (!__rpc_set_netbuf(&xprt->xp_rtaddr, &addr, len)) {
         /* keeps connected state, duplex clnt */
         svc_vc_destroy_xprt(xprt);
