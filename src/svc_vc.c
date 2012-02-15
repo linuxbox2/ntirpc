@@ -1273,8 +1273,8 @@ svc_vc_create_from_clnt(cl, sendsz, recvsz, flags)
 
     gettimeofday(&cd->last_recv_time, NULL);
 
-    /* remember where we came from */
-    SetDuplex(cl, xprt);
+    if (flags & SVC_VC_CREATE_FLAG_DPLX)
+        SetDuplex(cl, xprt);
 
     /* If creating a dedicated channel collect the supplied client
      * without closing fd */
