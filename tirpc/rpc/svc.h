@@ -291,7 +291,8 @@ typedef bool_t (*xp_recv_t)(struct __rpc_svcxprt *, struct rpc_msg *);
 typedef bool_t (*xp_getreq_t)(struct __rpc_svcxprt *);
 typedef void (*xp_dispatch_t)(struct __rpc_svcxprt *, struct rpc_msg **);
 /* XXX args */
-typedef u_int (*xp_rdvs_t)(struct __rpc_svcxprt *, const u_int, void *);
+typedef u_int (*xp_rdvs_t)(struct __rpc_svcxprt *, struct __rpc_svcxprt *,
+                           const u_int, void *);
 
 /*
  * Service request
@@ -565,17 +566,20 @@ extern SVCXPRT *svc_vc_create(const int, const u_int, const u_int);
 
 __END_DECLS
 
-#define SVC_DPLX_CLNT_CREATE_NONE           0x0000
-#define SVC_DPLX_CLNT_CREATE_DEDICATED      0x0001
-#define SVC_DPLX_CLNT_CREATE_SHARED         0x0002
+#define SVC_VC_CREATE_FLAG_NONE             0x0000
+#define SVC_VC_CREATE_FLAG_DPLX             0x0001
+#define SVC_VC_CREATE_FLAG_SPLX             ~(SVC_VC_CREATE_FLAG_DPLX)
+#define SVC_VC_CREATE_FLAG_DISPOSE          0x0002 /* !dplx */
+#define SVC_VC_CREATE_FLAG_XPRT_REGISTER    0x0004
+
 
 __BEGIN_DECLS
 
 /*
  * Create a client handle from an active service transport handle.
  */
-extern CLIENT *clnt_dplx_create_from_svc(SVCXPRT *, const rpcprog_t,
-                                         const rpcvers_t, const uint32_t);
+extern CLIENT *clnt_vc_create_from_svc(SVCXPRT *, const rpcprog_t,
+                                       const rpcvers_t, const uint32_t);
 /*
  *      SVCXPRT *xprt;                          -- active service xprt
  *      const rpcprog_t prog;                   -- RPC program number
@@ -584,18 +588,14 @@ extern CLIENT *clnt_dplx_create_from_svc(SVCXPRT *, const rpcprog_t,
 
 __END_DECLS
 
-#define SVC_VC_CREATE_CL_FLAG_NONE            0x0000
-#define SVC_VC_CREATE_CL_FLAG_DEDICATED       0x0001
-#define SVC_VC_CREATE_CL_FLAG_XPRT_REGISTER   0x0002
-
 __BEGIN_DECLS
 
 /*
  * Create an RPC SVCXPRT handle from an active client transport
  * handle, i.e., to service RPC requests 
  */
-extern SVCXPRT *svc_dplx_create_from_clnt(CLIENT *, u_int, u_int,
-                                          const uint32_t);
+extern SVCXPRT *svc_vc_create_from_clnt(CLIENT *, u_int, u_int,
+                                        const uint32_t);
         /*
 	 * 
          * CLIENT *cl;                                  -- connected client

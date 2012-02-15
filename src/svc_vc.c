@@ -319,9 +319,8 @@ svc_fd_create2(fd, sendsize, recvsize, flags)
 		return NULL;
 
         /* conditional xprt_register */
-        if (! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
-            if (flags & SVC_VC_CREATE_CL_FLAG_XPRT_REGISTER)
-                xprt_register(xprt);
+        if (flags & SVC_VC_CREATE_FLAG_XPRT_REGISTER)
+            svc_rqst_xprt_register_cl(NULL, xprt);
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
@@ -1141,7 +1140,7 @@ __svc_clean_idle2(int timeout, bool_t cleanblock)
  * unregistered and disposed inline.
  */
 CLIENT *
-clnt_dplx_create_from_svc(xprt, prog, vers, flags)
+clnt_vc_create_from_svc(xprt, prog, vers, flags)
 	SVCXPRT *xprt;
 	const rpcprog_t prog;
 	const rpcvers_t vers;
@@ -1174,7 +1173,8 @@ clnt_dplx_create_from_svc(xprt, prog, vers, flags)
         if (! cl)
             goto unlock; /* XXX should probably warn here */
 
-        SetDuplex(cl, xprt);
+        if (flags & SVC_VC_CREATE_FLAG_DPLX)
+            SetDuplex(cl, xprt);
 
 	/* Warn cleanup routines not to close xp_fd */
 	xprt->xp_flags |= SVC_XPRT_FLAG_DONTCLOSE;
@@ -1183,7 +1183,8 @@ unlock:
         rwlock_unlock (&xprt->lock);
 
         /* for a dedicated channel, unregister and free xprt */
-	if (flags & SVC_DPLX_CLNT_CREATE_DEDICATED)
+	if ((flags & SVC_VC_CREATE_FLAG_SPLX) &&
+            (flags & SVC_VC_CREATE_FLAG_DISPOSE))
             svc_vc_destroy(xprt);
 
 	return (cl);
@@ -1197,7 +1198,7 @@ unlock:
  * deallocated without closing cl->cl_private->ct_fd.
  */
 SVCXPRT *
-svc_dplx_create_from_clnt(cl, sendsz, recvsz, flags)
+svc_vc_create_from_clnt(cl, sendsz, recvsz, flags)
 	CLIENT *cl;
 	const u_int sendsz;
 	const u_int recvsz;
@@ -1227,9 +1228,8 @@ svc_dplx_create_from_clnt(cl, sendsz, recvsz, flags)
         goto unlock;
     
     /* conditional xprt_register */
-    if (! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
-        if (flags & SVC_VC_CREATE_CL_FLAG_XPRT_REGISTER)
-            xprt_register(xprt);
+    if (flags & SVC_VC_CREATE_FLAG_XPRT_REGISTER)
+        svc_rqst_xprt_register_cl(cl, xprt);
 
     if (!__rpc_set_netbuf(&xprt->xp_rtaddr, &addr, len)) {
         /* keeps connected state, duplex clnt */
@@ -1270,10 +1270,10 @@ svc_dplx_create_from_clnt(cl, sendsz, recvsz, flags)
 
     /* If creating a dedicated channel collect the supplied client
      * without closing fd */
-    if (flags & SVC_VC_CREATE_CL_FLAG_DEDICATED) {
-	ct->ct_closeit = FALSE; /* must not close */
-	/* clean up immediately */
-	clnt_vc_destroy(cl);
+    if ((flags & SVC_VC_CREATE_FLAG_SPLX) &&
+        (flags & SVC_VC_CREATE_FLAG_DISPOSE)) {
+	ct->ct_closeit = FALSE; /* must not close */	
+	clnt_vc_destroy(cl); /* clean up immediately */
     }
 
 unlock:

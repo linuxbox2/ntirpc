@@ -28,6 +28,7 @@
 #include <misc/rbtree.h>
 #include <misc/opr_queue.h>
 #include <svc_rqst.h>
+#include "clnt_internal.h"
 
 /*
  * The TI-RPC instance should be able to reach every registered
@@ -427,16 +428,24 @@ int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
  * parameters */
 int svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt)
 {
-    struct svc_xprt_ev *xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
-    struct svc_rqst_rec *sr_rec = xp_ev->sr_rec;
+    struct svc_rqst_rec *sr_rec;
+    struct svc_xprt_ev *xp_ev;
     int code = 0;
 
     /* do nothing if event registration is globally disabled */
     if (__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
         goto out;
 
-    /* use global registration if parent xprt has no dedicated event
-     * channel */
+    /* use global registration if no parent xprt */
+    if (! xprt) {
+        xprt_register(newxprt);
+        goto out;
+    }
+
+    xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
+    sr_rec = xp_ev->sr_rec;
+
+    /* or if parent xprt has no dedicated event channel */
     if (!sr_rec) {
         xprt_register(newxprt);
         goto out;
@@ -451,6 +460,27 @@ int svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt)
 
 out:
     return (code);
+}
+
+/*
+ * register newxprt associated with (connected, potentially duplex) client
+ */
+int svc_rqst_xprt_register_cl(CLIENT *cl, SVCXPRT *newxprt)
+{
+    int code = 0;
+    struct ct_data *ct = (struct ct_data *) cl->cl_private;
+
+    /* do nothing if event registration is globally disabled */
+    if (__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
+        goto out;
+
+    if (ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX)
+        code = svc_rqst_xprt_register(ct->ct_duplex.ct_xprt, newxprt);
+    else
+        xprt_register(newxprt);
+
+    out:
+        return (code);
 }
 
 int svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t flags)
