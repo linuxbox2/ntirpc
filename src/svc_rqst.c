@@ -97,6 +97,8 @@ void svc_rqst_init()
     /* set read side non-blocking */
     SetNonBlock(svc_rqst_set_.sv[1]);
 
+    initialized = TRUE;
+
 unlock:
     rwlock_unlock(&svc_rqst_set_.lock);
 }
