@@ -143,7 +143,6 @@ svc_dg_create(fd, sendsize, recvsize)
 	xprt->xp_verf.oa_base = su->su_verfbody;
 	svc_dg_ops(xprt);
 	xprt->xp_rtaddr.maxlen = sizeof (struct sockaddr_storage);
-        svc_rqst_init_xprt(xprt);
 
 	slen = sizeof ss;
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0)
@@ -152,6 +151,9 @@ svc_dg_create(fd, sendsize, recvsize)
 
 	/* Enable reception of IP*_PKTINFO control msgs */
 	svc_dg_enable_pktinfo(fd, &si);
+
+        /* Make reachable */
+        svc_rqst_init_xprt(xprt);
 
         /* conditional xprt_register */
         if (! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS))

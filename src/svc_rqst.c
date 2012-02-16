@@ -28,6 +28,7 @@
 #include <misc/opr_queue.h>
 #include "clnt_internal.h"
 #include <rpc/svc_rqst.h>
+#include "svc_xprt.h"
 
 /*
  * The TI-RPC instance should be able to reach every registered
@@ -110,6 +111,9 @@ void svc_rqst_init_xprt(SVCXPRT *xprt)
     xp_ev->ev_type = SVC_EVENT_FDSET;
 #endif
     xprt->xp_ev = xp_ev;
+
+    /* reachable */
+    svc_xprt_set(xprt);
 }
 
 void svc_rqst_finalize_xprt(SVCXPRT *xprt)

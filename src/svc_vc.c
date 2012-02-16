@@ -435,7 +435,8 @@ makefd_xprt(fd, sendsize, recvsize)
 	xprt->xp_fd = fd;
         if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
 		xprt->xp_netid = strdup(netid);
-        /* XXX defer register */
+
+        /* Make reachable.  Registration deferred.  */
         svc_rqst_init_xprt(xprt);
 done:
 	return (xprt);
