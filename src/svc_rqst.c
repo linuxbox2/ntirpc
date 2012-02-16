@@ -342,6 +342,9 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
                 __func__, xprt);
     }
 
+    /* link from xprt */
+    xp_ev->sr_rec = sr_rec;
+
     /* mark xprt */
     xprt->xp_flags |= SVC_XPRT_FLAG_EVCHAN;
 
