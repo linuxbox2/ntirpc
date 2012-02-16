@@ -427,10 +427,12 @@ makefd_xprt(fd, sendsize, recvsize)
 	xprt->xp_p1 = cd;
 	xprt->xp_auth = NULL;
 	xprt->xp_verf.oa_base = cd->verf_body;
+
 	/* the SVCXPRT created in svc_vc_create accepts new connections
 	 * in its xp_recv op, the rendezvous_request method, but xprt is
 	 * a call channel */
 	svc_vc_ops(xprt);
+
 	xprt->xp_port = 0;  /* this is a connection, not a rendezvouser */
 	xprt->xp_fd = fd;
         if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
@@ -495,8 +497,10 @@ again:
         /* move xprt_register() out of makefd_xprt */
         (void) svc_rqst_xprt_register(xprt, newxprt);
 
-	if (!__rpc_set_netbuf(&newxprt->xp_rtaddr, &addr, len))
-		return (FALSE);
+	if (!__rpc_set_netbuf(&newxprt->xp_rtaddr, &addr, len)) {
+            abort();
+            return (FALSE);
+        }
 
 	__xprt_set_raddr(newxprt, &addr);
 

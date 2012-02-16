@@ -205,24 +205,24 @@ xprt_register (SVCXPRT * xprt)
     switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
     case SVC_EVENT_EPOLL:
-        {
-            struct epoll_event *ev = (struct epoll_event *) xprt->xp_ev;
-            assert(ev);
+    {
+        struct svc_xprt_ev *xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
+        struct epoll_event *ev = &xp_ev->ev_u.epoll.event;
 
-            /* set up epoll user data */
-            ev->data.fd = xprt->xp_fd;
-            ev->data.ptr = xprt;
+        /* set up epoll user data */
+        ev->data.fd = xprt->xp_fd;
+        ev->data.ptr = xprt;
 
-            /* wait for read events, level triggered */
-            ev->events = EPOLLIN;
+        /* wait for read events, level triggered */
+        ev->events = EPOLLIN;
 
-            /* add to epoll vector */
-            code = epoll_ctl(__svc_params->ev_u.epoll.epoll_fd,
-                             EPOLL_CTL_ADD,
-                             xprt->xp_fd,
-                             ev);
-        }
-        break;
+        /* add to epoll vector */
+        code = epoll_ctl(__svc_params->ev_u.epoll.epoll_fd,
+                         EPOLL_CTL_ADD,
+                         xprt->xp_fd,
+                         ev);
+    }
+    break;
 #endif
     default:
         /* XXX formerly select/fd_set case, now placeholder for new
@@ -811,14 +811,14 @@ svc_getreqset (readfds)
 
 #if defined(TIRPC_EPOLL)
 void
-svc_getreqset_epoll (struct epoll_event *events, int nevts)
+svc_getreqset_epoll (struct epoll_event *events, int nfds)
 {
     int ix, code = 0;
     SVCXPRT *xprt;
 
     assert (events != NULL);
 
-    for (ix = 0; ix < nevts; ++ix) {
+    for (ix = 0; ix < nfds; ++ix) {
         /* XXX should do constant-time validity check */
         xprt = (SVCXPRT *) events[ix].data.ptr;
         code = xprt->xp_ops2->xp_getreq(xprt);
@@ -938,8 +938,10 @@ svc_getreq_default(SVCXPRT *xprt)
               goto call_done;
               break;
           case SVC_LKP_VERS_NOTFOUND:
+              __warnx("%s: dispatch prog vers notfound\n", __func__);
               svcerr_progvers (xprt, vrange.lowvers, vrange.highvers);
           default:
+              __warnx("%s: dispatch prog notfound\n", __func__);
               svcerr_noprog (xprt);
               break;
           }
@@ -950,19 +952,28 @@ svc_getreq_default(SVCXPRT *xprt)
        * recursive call in the service dispatch routine.
        * If so, then break.
        */
-      if (!svc_validate_xprt_list(xprt))
+      if (! svc_validate_xprt_list(xprt)) {
+          printf("%s: breaking loop cause failed validate xprt list\n",
+                 __func__);
           break;
+      }
+
     call_done:
       if ((stat = SVC_STAT (xprt)) == XPRT_DIED)
 	{
-	  SVC_DESTROY (xprt);
-	  break;
+            printf("%s: xprt died\n", __func__);
+            SVC_DESTROY (xprt);
+            break;
 	}
     else if ((xprt->xp_auth != NULL) &&
 	     (xprt->xp_auth->svc_ah_private == NULL))
 	{
 	  xprt->xp_auth = NULL;
 	}
+
+      printf("%s: bottom of SVC_RECV loop stat: %d\n",
+             __func__, stat);
+
     }
   while (stat == XPRT_MOREREQS);
 

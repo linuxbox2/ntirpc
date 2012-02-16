@@ -85,7 +85,6 @@ void svc_rqst_init()
         &rwlock_attr, 
         PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
 #endif
-    rwlock_init(&svc_rqst_set_.lock, &rwlock_attr);
     opr_rbtree_init(&svc_rqst_set_.t, rqst_thrd_cmpf /* may be NULL */);
 
     /* create a pair of anonymous sockets for async event channel wakeups */
@@ -476,7 +475,7 @@ int svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt)
     if (sr_rec->flags & SVC_RQST_FLAG_CHAN_AFFINITY)
         svc_rqst_evchan_reg(sr_rec->id_k, newxprt, SVC_RQST_FLAG_NONE);
     else
-        xprt_register(xprt);
+        xprt_register(newxprt);
 
 out:
     return (code);
