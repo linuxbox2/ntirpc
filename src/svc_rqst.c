@@ -123,6 +123,9 @@ void svc_rqst_finalize_xprt(SVCXPRT *xprt)
 #endif
     if (xprt->xp_ev)
         mem_free(xprt->xp_ev, sizeof(struct svc_xprt_ev));
+
+    /* unreachable */
+    svc_xprt_clear(xprt);
 out:
     return;
 }

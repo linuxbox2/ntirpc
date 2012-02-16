@@ -952,16 +952,13 @@ svc_getreq_default(SVCXPRT *xprt)
        * recursive call in the service dispatch routine.
        * If so, then break.
        */
-      if (! svc_validate_xprt_list(xprt)) {
-          printf("%s: breaking loop cause failed validate xprt list\n",
-                 __func__);
+      if (! svc_validate_xprt_list(xprt))
           break;
-      }
 
     call_done:
       if ((stat = SVC_STAT (xprt)) == XPRT_DIED)
 	{
-            printf("%s: xprt died\n", __func__);
+            __warnx("%s: stat == XPRT_DIED", __func__);
             SVC_DESTROY (xprt);
             break;
 	}
@@ -970,10 +967,6 @@ svc_getreq_default(SVCXPRT *xprt)
 	{
 	  xprt->xp_auth = NULL;
 	}
-
-      printf("%s: bottom of SVC_RECV loop stat: %d\n",
-             __func__, stat);
-
     }
   while (stat == XPRT_MOREREQS);
 

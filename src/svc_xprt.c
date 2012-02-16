@@ -30,7 +30,7 @@
 #include "vc_lock.h"
 #include "svc_xprt.h"
 
-#define SVC_XPRT_PARTITIONS 17
+#define SVC_XPRT_PARTITIONS 7
 
 static bool_t initialized = FALSE;
 
@@ -185,14 +185,14 @@ int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
     struct opr_rbtree_node *n;
     struct svc_xprt_rec sk, *srec;
     uint64_t gen;
-    int ix, restarts, code = 0;
+    int p_ix, x_ix, restarts, code = 0;
 
     cond_init_svc_xprt();
 
     /* concurrent, restartable iteration over t */
-    ix = 0;
-    while (ix < SVC_XPRT_PARTITIONS) {
-        t = &svc_xprt_set_.xt.tree[ix];
+    p_ix = 0;
+    while (p_ix < SVC_XPRT_PARTITIONS) {
+        t = &svc_xprt_set_.xt.tree[p_ix];
         restarts = 0;
         /* TI-RPC __svc_clean_idle held global svc_fd_lock
          * exclusive locked for a full scan of the legacy svc_xprts
@@ -203,26 +203,34 @@ int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
         if (++restarts > 5)
             break;
         gen = t->t.gen;
+        x_ix = 0;
         n = opr_rbtree_first(&t->t);
         while (n != NULL) {
+            ++x_ix; /* diagnostic, index into logical srec sequence */
             srec = opr_containerof(n, struct svc_xprt_rec, node_k);
-            sk.fd_k = srec->xprt->xp_fd;
+            if (srec->xprt) {
+                sk.fd_k = srec->fd_k;
+            
+                /* call each_func with t !LOCKED, srec LOCKED */
+                mutex_lock(&srec->mtx);
+                rwlock_unlock(&t->lock);
+                each_f(srec->xprt, arg);
+                mutex_unlock(&srec->mtx);
 
-            /* call each_func with t, srec, and xprt !LOCKED */
-            rwlock_unlock(&t->lock);
-            each_f(srec->xprt, arg);
-            rwlock_rdlock(&t->lock);
+                /* can invalidate */
+                rwlock_rdlock(&t->lock);
 
-            if (gen != t->t.gen) {
-                /* invalidated, try harder */
-                n = opr_rbtree_lookup(&t->t, &sk.node_k);
-                if (!n)
-                    goto restart;
+                if (gen != t->t.gen) {
+                    /* invalidated, try harder */
+                    n = opr_rbtree_lookup(&t->t, &sk.node_k);
+                    if (!n)
+                        goto restart;
+                }
             }
             n = opr_rbtree_next(n);
         } /* curr partition */
         rwlock_unlock(&t->lock); /* t !LOCKED */
-        ix++;
+        p_ix++;
     } /* SVC_SPRT_PARTITIONS */
 
     return (code);
