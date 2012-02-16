@@ -2,6 +2,8 @@
 #ifndef TIRPC_SVC_RQST_H
 #define TIRPC_SVC_RQST_H
 
+#include <misc/rbtree.h>
+
 struct svc_rqst_rec; /* forward decl */
 
 struct svc_xprt_ev

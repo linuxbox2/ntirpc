@@ -68,8 +68,8 @@
 #include "rpc_com.h"
 #include "clnt_internal.h"
 #include "svc_xprt.h"
-#include "svc_rqst.h"
 #include "vc_lock.h"
+#include <rpc/svc_rqst.h>
 
 #include <getpeereid.h>
 

@@ -69,7 +69,7 @@
 
 #include "clnt_internal.h"
 #include "vc_lock.h"
-#include "svc_rqst.h"
+#include <rpc/svc_rqst.h>
 
 #define CMGROUP_MAX    16
 #define SCM_CREDS      0x03            /* process creds (struct cmsgcred) */

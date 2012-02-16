@@ -56,7 +56,7 @@
 
 #include "clnt_internal.h"
 #include "svc_xprt.h"
-#include "svc_rqst.h"
+#include <rpc/svc_rqst.h>
 
 extern tirpc_pkg_params __pkg_params;
 extern struct svc_params __svc_params[1];

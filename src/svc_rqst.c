@@ -24,11 +24,10 @@
 #include "rpc_com.h"
 
 #include <rpc/svc.h>
-
 #include <misc/rbtree.h>
 #include <misc/opr_queue.h>
-#include <svc_rqst.h>
 #include "clnt_internal.h"
+#include <rpc/svc_rqst.h>
 
 /*
  * The TI-RPC instance should be able to reach every registered
@@ -53,6 +52,13 @@ static struct svc_rqst_set svc_rqst_set_ = {
 };
 
 extern struct svc_params __svc_params[1];
+
+#define cond_init_svc_rqst() { \
+do { \
+    if (! initialized) \
+        svc_rqst_init(); \
+    } while (0); \
+}
 
 static inline void SetNonBlock(int fd)
 {
@@ -124,6 +130,8 @@ svc_rqst_lookup_chan(uint32_t chan_id, uint32_t flags)
     struct svc_rqst_rec trec, *sr_rec = NULL;
     struct opr_rbtree_node *ns;
 
+    cond_init_svc_rqst();
+
     trec.id_k = chan_id;
  
    switch (flags) {
@@ -155,6 +163,8 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
     uint32_t n_id;
     struct svc_rqst_rec *sr_rec;
     int code = 0;
+
+    cond_init_svc_rqst();
 
     flags |= SVC_RQST_FLAG_EPOLL; /* XXX */
 
@@ -361,6 +371,8 @@ int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
     struct svc_rqst_rec *sr_rec = xp_ev->sr_rec;
     int code = 0;
 
+    cond_init_svc_rqst();
+
     mutex_lock(&sr_rec->mtx);
 
     switch (sr_rec->ev_type) {
@@ -391,6 +403,8 @@ int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
     struct svc_xprt_ev *xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
     struct svc_rqst_rec *sr_rec = xp_ev->sr_rec;
     int code = 0;
+
+    cond_init_svc_rqst();
 
     mutex_lock(&sr_rec->mtx);
 
@@ -432,6 +446,8 @@ int svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt)
     struct svc_xprt_ev *xp_ev;
     int code = 0;
 
+    cond_init_svc_rqst();
+
     /* do nothing if event registration is globally disabled */
     if (__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
         goto out;
@@ -470,6 +486,8 @@ int svc_rqst_xprt_register_cl(CLIENT *cl, SVCXPRT *newxprt)
     int code = 0;
     struct ct_data *ct = (struct ct_data *) cl->cl_private;
 
+    cond_init_svc_rqst();
+
     /* do nothing if event registration is globally disabled */
     if (__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
         goto out;
@@ -501,7 +519,7 @@ int svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t flags)
         xprt_unregister(xprt);
 
 out:
-    return (0);
+    return (code);
 }
 
 bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);

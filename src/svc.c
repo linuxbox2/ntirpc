@@ -62,7 +62,7 @@
 
 #include "clnt_internal.h"
 #include "svc_xprt.h"
-#include "svc_rqst.h"
+#include <rpc/svc_rqst.h>
 
 #define	RQCRED_SIZE	400	/* this size is excessive */
 
