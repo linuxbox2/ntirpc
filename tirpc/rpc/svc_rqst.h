@@ -170,6 +170,7 @@ int svc_rqst_foreach_xprt(uint32_t chan_id, svc_rqst_xprt_each_func_t each_f,
 #define SVC_RQST_STATE_NONE           0x00000
 #define SVC_RQST_STATE_ACTIVE         0x00001 /* thrd in event loop */
 #define SVC_RQST_STATE_BLOCKED        0x00002 /* channel blocked */
+#define SVC_RQST_STATE_DESTROYED      0x00004
 
 #define SVC_RQST_SIGNAL_SHUTDOWN      0x00008 /* chan shutdown */
 

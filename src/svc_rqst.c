@@ -324,13 +324,20 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
         n = opr_rbtree_next(n);
     }
 
+    switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
-    /* close epoll fd */
-    close(sr_rec->ev_u.epoll.epoll_fd);
+    case SVC_EVENT_EPOLL:
+        close(sr_rec->ev_u.epoll.epoll_fd);
+        mem_free(sr_rec->ev_u.epoll.events, sizeof(struct epoll_event));
+        break;
 #endif
-
-    /* XXXX TODO: deep free sr_rec */
+    default:
+        /* XXX */
+        break;
+    }
+    sr_rec->states = SVC_RQST_STATE_DESTROYED;    
     mutex_unlock(&sr_rec->mtx);
+    mem_free(sr_rec, sizeof(struct svc_rqst_rec));
 
 unlock:
     rwlock_unlock(&svc_rqst_set_.lock);
