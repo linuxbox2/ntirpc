@@ -190,14 +190,25 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
         sr_rec->flags = flags & SVC_RQST_FLAG_MASK;
 
         sr_rec->ev_type = SVC_EVENT_EPOLL;
+
+        /* XXX improve this too */
+        sr_rec->ev_u.epoll.max_events = __svc_params->ev_u.epoll.max_events;
         sr_rec->ev_u.epoll.events = (struct epoll_event *)
             mem_alloc(
                 sr_rec->ev_u.epoll.max_events*sizeof(struct epoll_event));
 
+        /* create epoll fd */
+        sr_rec->ev_u.epoll.epoll_fd = epoll_create1(EPOLL_CLOEXEC);
+        if (sr_rec->ev_u.epoll.epoll_fd == -1) {
+            __warnx("svc_init:  epoll_create failed");
+            code = EINVAL;
+            goto out;
+        }
+
         /* permit wakeup of threads blocked in epoll_wait, with a
          * couple of possible semantics */
         sr_rec->ev_u.epoll.ctrl_ev.events = EPOLLIN;
-        sr_rec->ev_u.epoll.ctrl_ev.data.fd = sr_rec->ev_u.epoll.epoll_fd;
+        sr_rec->ev_u.epoll.ctrl_ev.data.fd = svc_rqst_set_.sv[1];
         sr_rec->ev_u.epoll.ctrl_ev.data.ptr = NULL; /* not an xprt */
 
         code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
@@ -312,6 +323,12 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
             
         n = opr_rbtree_next(n);
     }
+
+#if defined(TIRPC_EPOLL)
+    /* close epoll fd */
+    close(sr_rec->ev_u.epoll.epoll_fd);
+#endif
+
     /* XXXX TODO: deep free sr_rec */
     mutex_unlock(&sr_rec->mtx);
 
@@ -348,10 +365,10 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     /* mark xprt */
     xprt->xp_flags |= SVC_XPRT_FLAG_EVCHAN;
 
+    mutex_unlock(&sr_rec->mtx);
+
     /* register on event mux */
     (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
-
-    mutex_unlock(&sr_rec->mtx);
 
 unlock:
     rwlock_unlock(&svc_rqst_set_.lock);
@@ -590,7 +607,7 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
         case -1:
             if (errno == EINTR)
                 continue;
-            __warnx("svc_rqst_thrd_run_epoll: epoll_wait failed %d", n_events);
+            __warnx("svc_rqst_thrd_run_epoll: epoll_wait failed %d", errno);
             break;
         case 0:
             /* timed out (idle) */

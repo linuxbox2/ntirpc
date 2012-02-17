@@ -126,7 +126,7 @@ svc_init (svc_init_params * params)
         __svc_params->ev_u.epoll.max_events = params->max_events;
         __svc_params->ev_u.epoll.epoll_fd = epoll_create1(EPOLL_CLOEXEC);
         if (__svc_params->ev_u.epoll.epoll_fd == -1) {
-            warnx("svc_init:  epoll_create failed");
+            __warnx("svc_init:  epoll_create failed");
             return;
         }
     }
@@ -198,8 +198,10 @@ xprt_register (SVCXPRT * xprt)
 
     /* Use dedicated event channel if xprt is registered on one, otherwise
      * use the legacy/global mechanism. */
-    if (xprt->xp_flags & SVC_XPRT_FLAG_EVCHAN)
-        return (svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE));
+    if (xprt->xp_flags & SVC_XPRT_FLAG_EVCHAN) {
+        svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
+        return;
+    }
 
     rwlock_wrlock (&svc_fd_lock); /* XXX protecting event registration */
     switch (__svc_params->ev_type) {
