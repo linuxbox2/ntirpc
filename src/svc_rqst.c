@@ -328,7 +328,8 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
 #if defined(TIRPC_EPOLL)
     case SVC_EVENT_EPOLL:
         close(sr_rec->ev_u.epoll.epoll_fd);
-        mem_free(sr_rec->ev_u.epoll.events, sizeof(struct epoll_event));
+        mem_free(sr_rec->ev_u.epoll.events,
+                 sr_rec->ev_u.epoll.max_events*sizeof(struct epoll_event));
         break;
 #endif
     default:
