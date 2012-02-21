@@ -904,6 +904,8 @@ svc_getreq_default(SVCXPRT *xprt)
   enum xprt_stat stat;
   char cred_area[2 * MAX_AUTH_BYTES + RQCRED_SIZE];
 
+  printf("%s: base %p\n", __func__, msg.rm_call.cb_cred.oa_base);
+
   msg.rm_call.cb_cred.oa_base = cred_area;
   msg.rm_call.cb_verf.oa_base = &(cred_area[MAX_AUTH_BYTES]);
   r.rq_clntcred = &(cred_area[2 * MAX_AUTH_BYTES]);
