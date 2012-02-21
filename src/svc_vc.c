@@ -553,7 +553,6 @@ svc_vc_destroy(xprt)
 {
 	assert(xprt != NULL);
 	(void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
-        (void) svc_rqst_finalize_xprt(xprt);
 	__svc_vc_dodestroy(xprt);
 }
 
