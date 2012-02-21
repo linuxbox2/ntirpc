@@ -98,9 +98,8 @@ xdr_dplx_msg(xdrs, dmsg)
                     IXDR_PUT_INT32(buf, oa->oa_length);
                     if (oa->oa_length) {
                         memmove(buf, oa->oa_base, oa->oa_length);
-                        /* no real need....
-                           buf += RNDUP(oa->oa_length) / sizeof (int32_t);
-                        */
+                        /* no real need.... XXX next line uncommented (matt) */
+                        buf += RNDUP(oa->oa_length) / sizeof (int32_t);
                     }
                     return (TRUE);
                     break;
@@ -155,10 +154,8 @@ xdr_dplx_msg(xdrs, dmsg)
                         } else {
                             memmove(oa->oa_base, buf,
                                     oa->oa_length);
-                            /* no real need....
-                               buf += RNDUP(oa->oa_length) /
-                               sizeof (int32_t);
-                            */
+                            /* no real need... XXX uncommented (matt) */
+                            buf += RNDUP(oa->oa_length) / sizeof (int32_t);
                         }
                     }
                     oa = &dmsg->rm_call.cb_verf;
@@ -191,10 +188,8 @@ xdr_dplx_msg(xdrs, dmsg)
                         } else {
                             memmove(oa->oa_base, buf,
                                     oa->oa_length);
-                            /* no real need...
-                               buf += RNDUP(oa->oa_length) /
-                               sizeof (int32_t);
-                            */
+                            /* no real need... */
+                            buf += RNDUP(oa->oa_length) / sizeof (int32_t);
                         }
                     }
                     return (TRUE);
