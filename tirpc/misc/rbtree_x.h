@@ -4,10 +4,15 @@
 
 #include <misc/rbtree.h>
 
+#define CACHE_LINE_SIZE 64
+#define CACHE_PAD(_n) char __pad ## _n [CACHE_LINE_SIZE]
+
 struct rbtree_x_part
 {
+    CACHE_PAD(0);
     rwlock_t lock;
     struct opr_rbtree t;
+    CACHE_PAD(1);
 };
 
 struct rbtree_x
