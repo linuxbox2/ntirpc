@@ -151,12 +151,13 @@ struct call_body {
 struct rpc_msg {
 	u_int32_t		rm_xid;
 	enum msg_type		rm_direction;
-	struct /* XXX union */ {
+	union {
 		struct call_body RM_cmb;
 		struct reply_body RM_rmb;
 	} ru;
 #define	rm_call		ru.RM_cmb
 #define	rm_reply	ru.RM_rmb
+	caddr_t fr_vec[1];
 };
 #define	acpted_rply	ru.RM_rmb.ru.RP_ar
 #define	rjcted_rply	ru.RM_rmb.ru.RP_dr

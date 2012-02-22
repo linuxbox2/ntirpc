@@ -150,15 +150,18 @@ struct rpc_msg *alloc_rpc_msg(void)
         msg = NULL;
         goto out;
     }
+    /* save original address */
+    msg->fr_vec[0] = msg->rm_call.cb_cred.oa_base;
     msg->rm_call.cb_verf.oa_base =
         msg->rm_call.cb_cred.oa_base + MAX_AUTH_BYTES;
+
 out:
     return (msg);
 }
 
 void free_rpc_msg(struct rpc_msg *msg)
 {
-    mem_free(msg->rm_call.cb_cred.oa_base, 2 * MAX_AUTH_BYTES + RQCRED_SIZE);
+    mem_free(msg->fr_vec[0], 2 * MAX_AUTH_BYTES + RQCRED_SIZE);
     mem_free(msg, sizeof(struct rpc_msg));
 }
 
