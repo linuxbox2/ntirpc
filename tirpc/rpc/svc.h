@@ -568,9 +568,9 @@ __END_DECLS
 
 #define SVC_VC_CREATE_FLAG_NONE             0x0000
 #define SVC_VC_CREATE_FLAG_DPLX             0x0001
-#define SVC_VC_CREATE_FLAG_SPLX             ~(SVC_VC_CREATE_FLAG_DPLX)
-#define SVC_VC_CREATE_FLAG_DISPOSE          0x0002 /* !dplx */
-#define SVC_VC_CREATE_FLAG_XPRT_REGISTER    0x0004
+#define SVC_VC_CREATE_FLAG_SPLX             0x0002 /* !dplx */
+#define SVC_VC_CREATE_FLAG_DISPOSE          0x0004 /* !dplx */
+#define SVC_VC_CREATE_FLAG_XPRT_REGISTER    0x0008
 
 
 __BEGIN_DECLS
