@@ -165,7 +165,8 @@ int svc_rqst_foreach_xprt(uint32_t chan_id, svc_rqst_xprt_each_func_t each_f,
 #define SVC_RQST_FLAG_CHAN_AFFINITY   0x00040 /* bind new conn to parent chan */
 #define SVC_RQST_FLAG_CHAN_ACCEPT_CB  0x00080 /* make rendezvous callout? */
 
-#define SVC_RQST_FLAG_XPRT_DTOR       0x00100
+#define SVC_RQST_FLAG_XPRT_UREG       0x00100
+#define SVC_RQST_FLAG_XPRT_DTOR       0x00200
 
 #define SVC_RQST_STATE_NONE           0x00000
 #define SVC_RQST_STATE_ACTIVE         0x00001 /* thrd in event loop */

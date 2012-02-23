@@ -358,7 +358,10 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     }
 
     mutex_lock(&sr_rec->mtx);
-    /* XXX lock xprt? and see xprt_register */
+
+    if (flags & SVC_RQST_FLAG_XPRT_UREG)
+        xprt_unregister(xprt);
+
     assert(xprt->xp_ev); /* cf. svc_rqst_init_xprt */
     xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
     if (opr_rbtree_insert(&sr_rec->xprt_q, &xp_ev->node_k)) {
