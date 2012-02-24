@@ -1178,8 +1178,10 @@ clnt_vc_create_from_svc(xprt, prog, vers, flags)
         if (! cl)
             goto unlock; /* XXX should probably warn here */
 
-        if (flags & SVC_VC_CREATE_FLAG_DPLX)
+        if (flags & SVC_VC_CREATE_FLAG_DPLX) {
+            __warnx("%s:  disposing--calls SetDuplex\n", __func__);
             SetDuplex(cl, xprt);
+        }
 
 	/* Warn cleanup routines not to close xp_fd */
 	xprt->xp_flags |= SVC_XPRT_FLAG_DONTCLOSE;
@@ -1189,8 +1191,11 @@ unlock:
 
         /* for a dedicated channel, unregister and free xprt */
 	if ((flags & SVC_VC_CREATE_FLAG_SPLX) &&
-            (flags & SVC_VC_CREATE_FLAG_DISPOSE))
+            (flags & SVC_VC_CREATE_FLAG_DISPOSE)) {
+            __warnx("%s:  disposing--calls svc_vc_destroy_xprt\n",
+                    __func__);
             svc_vc_destroy(xprt);
+        }
 
 	return (cl);
 }

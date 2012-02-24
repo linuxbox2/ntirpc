@@ -106,6 +106,8 @@ unlock:
 void svc_rqst_init_xprt(SVCXPRT *xprt)
 {
     struct svc_xprt_ev *xp_ev = mem_alloc(sizeof(struct svc_xprt_ev));
+
+    xp_ev->xprt = xprt;
 #if defined(TIRPC_EPOLL)
     xp_ev->ev_type = SVC_EVENT_EPOLL;
 #else
@@ -274,7 +276,7 @@ static inline void evchan_unreg_impl(struct svc_rqst_rec *sr_rec,
                 __func__, xprt);
 
     /* clear from event mux */
-    (void) svc_rqst_block_events(xprt, SVC_RQST_FLAG_NONE);
+    (void) svc_rqst_block_events(xprt, SVC_RQST_FLAG_SREC_LOCKED);
 
     /* XXX lock xprt? */
     xprt->xp_flags &= ~SVC_XPRT_FLAG_EVCHAN;
@@ -412,7 +414,8 @@ int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
 
     cond_init_svc_rqst();
 
-    mutex_lock(&sr_rec->mtx);
+    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
+        mutex_lock(&sr_rec->mtx);
 
     switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
@@ -432,7 +435,8 @@ int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
         break;
     } /* switch */
 
-    mutex_unlock(&sr_rec->mtx);
+    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
+        mutex_unlock(&sr_rec->mtx);
 
     return (0);
 }

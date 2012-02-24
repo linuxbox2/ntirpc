@@ -963,7 +963,7 @@ svc_getreq_default(SVCXPRT *xprt)
     call_done:
       if ((stat = SVC_STAT (xprt)) == XPRT_DIED)
 	{
-            __warnx("%s: stat == XPRT_DIED", __func__);
+            __warnx("%s: stat == XPRT_DIED\n", __func__);
             SVC_DESTROY (xprt);
             break;
 	}
