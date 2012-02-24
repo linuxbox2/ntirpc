@@ -102,9 +102,8 @@ struct vc_fd_rec *vc_lookup_fd_rec(int fd)
         }
         rwlock_unlock(&t->lock);
     }
-
-    /* XXX safe, even if tree is reorganizing */
-    crec = opr_containerof(nv, struct vc_fd_rec, node_k);
+    else
+        crec = opr_containerof(nv, struct vc_fd_rec, node_k);
 
 out:
     return (crec);    

@@ -89,6 +89,7 @@ static bool_t svc_vc_freeargs(SVCXPRT *, xdrproc_t, void *);
 static bool_t svc_vc_reply(SVCXPRT *, struct rpc_msg *);
 static void svc_vc_rendezvous_ops(SVCXPRT *);
 static void svc_vc_ops(SVCXPRT *);
+static void svc_vc_override_ops(SVCXPRT *xprt, SVCXPRT *newxprt);
 static bool_t svc_vc_control(SVCXPRT *xprt, const u_int rq, void *in);
 static bool_t svc_vc_rendezvous_control (SVCXPRT *xprt, const u_int rq,
 				   	     void *in);
@@ -494,6 +495,11 @@ again:
 	 */
 	newxprt = makefd_xprt(sock, r->sendsize, r->recvsize);
 
+        /*
+         * propagate special ops
+         */
+        svc_vc_override_ops(xprt, newxprt);
+
         /* move xprt_register() out of makefd_xprt */
         (void) svc_rqst_xprt_register(xprt, newxprt);
 
@@ -682,18 +688,48 @@ svc_vc_rendezvous_control(xprt, rq, in)
 	if (cfp == NULL)
 		return (FALSE);
 	switch (rq) {
-		case SVCGET_CONNMAXREC:
-			*(int *)in = cfp->maxrec;
-			break;
-		case SVCSET_CONNMAXREC:
-			cfp->maxrec = *(int *)in;
-			break;
-		case SVCGET_XP_RECV:
-			*(xp_recv_t *)in = xprt->xp_ops->xp_recv;
-			break;
-		case SVCSET_XP_RECV:
-			xprt->xp_ops->xp_recv = *(xp_recv_t)in;
-			break;
+        case SVCGET_CONNMAXREC:
+            *(int *)in = cfp->maxrec;
+            break;
+        case SVCSET_CONNMAXREC:
+            cfp->maxrec = *(int *)in;
+            break;
+        case SVCGET_XP_RECV:
+            *(xp_recv_t *)in = xprt->xp_ops->xp_recv;
+            break;
+        case SVCSET_XP_RECV:
+            xprt->xp_ops->xp_recv = *(xp_recv_t)in;
+            break;
+	case SVCGET_XP_GETREQ:
+            mutex_lock(&ops_lock);
+	    *(xp_getreq_t *)in = xprt->xp_ops2->xp_getreq;
+            mutex_unlock(&ops_lock);
+	    break;
+	case SVCSET_XP_GETREQ:
+            mutex_lock(&ops_lock);
+	    xprt->xp_ops2->xp_getreq = *(xp_getreq_t)in;
+            mutex_unlock(&ops_lock);
+	    break;
+	case SVCGET_XP_DISPATCH:
+            mutex_lock(&ops_lock);
+	    *(xp_dispatch_t *)in = xprt->xp_ops2->xp_dispatch;
+            mutex_unlock(&ops_lock);
+	    break;
+	case SVCSET_XP_DISPATCH:
+            mutex_lock(&ops_lock);
+	    xprt->xp_ops2->xp_dispatch = *(xp_dispatch_t)in;
+            mutex_unlock(&ops_lock);
+	    break;
+	case SVCGET_XP_RDVS:
+            mutex_lock(&ops_lock);
+	    *(xp_rdvs_t *)in = xprt->xp_ops2->xp_rdvs;
+            mutex_unlock(&ops_lock);
+	    break;
+	case SVCSET_XP_RDVS:
+            mutex_lock(&ops_lock);
+	    xprt->xp_ops2->xp_rdvs = *(xp_rdvs_t)in;
+            mutex_unlock(&ops_lock);
+	    break;
 	default:
 			return (FALSE);
 	}
@@ -994,6 +1030,17 @@ svc_vc_ops(xprt)
 	xprt->xp_ops = &ops;
 	xprt->xp_ops2 = &ops2;
 	mutex_unlock(&ops_lock);
+}
+
+static void
+svc_vc_override_ops(SVCXPRT *xprt, SVCXPRT *newxprt)
+{
+    if (xprt->xp_ops2->xp_getreq)
+        newxprt->xp_ops2->xp_getreq = xprt->xp_ops2->xp_getreq;
+    if (xprt->xp_ops2->xp_dispatch)
+        newxprt->xp_ops2->xp_dispatch = xprt->xp_ops2->xp_dispatch;
+    if (xprt->xp_ops2->xp_rdvs)
+        newxprt->xp_ops2->xp_rdvs = xprt->xp_ops2->xp_rdvs;
 }
 
 static void

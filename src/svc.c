@@ -963,7 +963,13 @@ svc_getreq_default(SVCXPRT *xprt)
     call_done:
       if ((stat = SVC_STAT (xprt)) == XPRT_DIED)
 	{
-            __warnx("%s: stat == XPRT_DIED\n", __func__);
+            /* XXX the xp_destroy methods call the new svc_rqst_xprt_unregister
+             * routine, so there shouldn't be internal references to xprt.  The
+             * API client could also override this routine.  Still, there may
+             * be a motivation for adding a lifecycle callback, since the API
+             * client can get a new-xprt callback, and could have kept the
+             * address (and should now be notified we are disposing it). */
+            __warnx("%s: stat == XPRT_DIED (%p) \n", __func__, xprt);
             SVC_DESTROY (xprt);
             break;
 	}
