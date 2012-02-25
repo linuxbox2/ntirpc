@@ -51,7 +51,7 @@ struct svc_rqst_rec
         } fd;
     } ev_u;
 
-    uint32_t id_k; /* id */
+    uint32_t id_k; /* chan id */
     uint32_t states;
     uint32_t signals;
     void *u_data; /* user-installable opaque data */

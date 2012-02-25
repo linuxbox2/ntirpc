@@ -280,7 +280,6 @@ static inline void evchan_unreg_impl(struct svc_rqst_rec *sr_rec,
 
     /* XXX lock xprt? */
     xprt->xp_flags &= ~SVC_XPRT_FLAG_EVCHAN;
-    sr_rec->id_k = 0; /* no chan */
 
     if (! (flags & SVC_RQST_FLAG_SREC_LOCK))
         mutex_unlock(&sr_rec->mtx);
@@ -353,6 +352,12 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     struct svc_xprt_ev *xp_ev;
     int code = EINVAL;
 
+    __warnx("%s: chan %d xprt %p flags %d", __func__, chan_id, xprt, flags);
+    if (chan_id == 0) {
+        __warnx("%s: called with chan_id 0, fatal (bug)", __func__);
+        goto out;
+    }
+
     sr_rec = svc_rqst_lookup_chan(chan_id, SVC_RQST_FLAG_RLOCK);
     if (! sr_rec) {
         code = ENOENT;
@@ -385,6 +390,8 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 
 unlock:
     rwlock_unlock(&svc_rqst_set_.lock);
+
+out:
     return (code);
 }
 
