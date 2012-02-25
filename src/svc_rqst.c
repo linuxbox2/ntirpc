@@ -325,6 +325,9 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
         n = opr_rbtree_next(n);
     }
 
+    /* now remove sr_rec */
+    opr_rbtree_remove(&svc_rqst_set_.t, &sr_rec->node_k);
+
     switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
     case SVC_EVENT_EPOLL:
@@ -337,7 +340,8 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
         /* XXX */
         break;
     }
-    sr_rec->states = SVC_RQST_STATE_DESTROYED;    
+    sr_rec->states = SVC_RQST_STATE_DESTROYED;
+    sr_rec->id_k = 0; /* no chan */
     mutex_unlock(&sr_rec->mtx);
     mem_free(sr_rec, sizeof(struct svc_rqst_rec));
 
@@ -352,7 +356,9 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     struct svc_xprt_ev *xp_ev;
     int code = EINVAL;
 
+    /* XXX remove */
     __warnx("%s: chan %d xprt %p flags %d", __func__, chan_id, xprt, flags);
+
     if (chan_id == 0) {
         __warnx("%s: called with chan_id 0, fatal (bug)", __func__);
         goto out;
