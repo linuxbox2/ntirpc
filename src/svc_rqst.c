@@ -281,6 +281,9 @@ static inline void evchan_unreg_impl(struct svc_rqst_rec *sr_rec,
     /* XXX lock xprt? */
     xprt->xp_flags &= ~SVC_XPRT_FLAG_EVCHAN;
 
+    /* unlink from xprt */
+    xp_ev->sr_rec = NULL;
+
     if (! (flags & SVC_RQST_FLAG_SREC_LOCK))
         mutex_unlock(&sr_rec->mtx);
 }
@@ -563,7 +566,7 @@ int svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t flags)
     struct svc_rqst_rec *sr_rec = xp_ev->sr_rec;
     int code = 0;
 
-    if (!sr_rec) {
+    if (! sr_rec) {
         xprt_unregister(xprt);
         goto out;
     }
