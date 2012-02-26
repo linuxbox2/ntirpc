@@ -146,8 +146,7 @@ void vc_lock_shutdown()
     struct opr_rbtree_node *n;
     struct vc_fd_rec ck, *crec = NULL;
     struct opr_rbtree_node *nv;
-    uint64_t gen;
-    int p_ix, x_ix, restarts, code = 0;
+    int p_ix, code = 0;
 
     cond_init_vc_lock();
 
@@ -155,19 +154,13 @@ void vc_lock_shutdown()
     p_ix = 0;
     while (p_ix < VC_LOCK_PARTITIONS) {
         t = &vc_fd_rec_set.xt.tree[p_ix];
-        restarts = 0;
         rwlock_rdlock(&t->lock); /* t RLOCKED */
-    restart:
-        if (++restarts > 5)
-            break;
-        gen = t->t.gen;
-        x_ix = 0;
         n = opr_rbtree_first(&t->t);
         while (n != NULL) {
-            ++x_ix; /* diagnostic, index into logical srec sequence */
             crec = opr_containerof(n, struct vc_fd_rec, node_k);
-            n = opr_rbtree_next(n);
+            opr_rbtree_remove(&t->t, &crec->node_k);
             mem_free(crec, sizeof(struct vc_fd_rec));
+            n = opr_rbtree_first(&t->t);
         } /* curr partition */
         rwlock_unlock(&t->lock); /* t !LOCKED */
         p_ix++;

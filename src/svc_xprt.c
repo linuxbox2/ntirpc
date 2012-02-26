@@ -249,7 +249,7 @@ void svc_xprt_shutdown()
     p_ix = 0;
     while (p_ix < SVC_XPRT_PARTITIONS) {
         t = &svc_xprt_set_.xt.tree[p_ix];
-        rwlock_wrlock(&t->lock); /* t RLOCKED */
+        rwlock_wrlock(&t->lock); /* t WLOCKED */
         n = opr_rbtree_first(&t->t);
         while (n != NULL) {
             srec = opr_containerof(n, struct svc_xprt_rec, node_k);
