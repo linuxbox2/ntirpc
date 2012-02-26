@@ -71,6 +71,8 @@
 #define SVC_INIT_EPOLL          0x0002
 #define SVC_INIT_WARNX          0x0004
 
+#define SVC_SHUTDOWN_FLAG_NONE  0x0000
+
 /*
  *      Service control requests
  */
@@ -362,10 +364,16 @@ struct svc_req {
  */
 
 __BEGIN_DECLS
-void
-svc_init (struct svc_init_params *);
+void svc_init(struct svc_init_params *);
 __END_DECLS
 
+/*
+ * Service shutdown (optional).
+ */
+
+__BEGIN_DECLS
+int svc_shutdown(u_long flags);
+__END_DECLS
 
 /*
  * Service registration
@@ -690,7 +698,5 @@ __END_DECLS
 
 /* for backward compatibility */
 #include <rpc/svc_soc.h>
-
-
 
 #endif /* !_TIRPC_SVC_H */

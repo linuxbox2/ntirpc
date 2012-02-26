@@ -231,7 +231,48 @@ int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
         } /* curr partition */
         rwlock_unlock(&t->lock); /* t !LOCKED */
         p_ix++;
-    } /* SVC_SPRT_PARTITIONS */
+    } /* SVC_XPRT_PARTITIONS */
 
     return (code);
+}
+
+void svc_xprt_shutdown()
+{
+    struct rbtree_x_part *t = NULL;
+    struct opr_rbtree_node *n;
+    struct svc_xprt_rec *srec;
+    int p_ix;
+
+    if (! initialized)
+        goto out;
+
+    p_ix = 0;
+    while (p_ix < SVC_XPRT_PARTITIONS) {
+        t = &svc_xprt_set_.xt.tree[p_ix];
+        rwlock_wrlock(&t->lock); /* t RLOCKED */
+        n = opr_rbtree_first(&t->t);
+        while (n != NULL) {
+            srec = opr_containerof(n, struct svc_xprt_rec, node_k);
+            if (srec->xprt) {            
+                /* call each_func with t !LOCKED, srec LOCKED */
+                mutex_lock(&srec->mtx);
+                SVC_DESTROY(srec->xprt);
+                srec->xprt = NULL;
+                mutex_unlock(&srec->mtx);
+            }
+            /* now remove srec */
+            opr_rbtree_remove(&t->t, &srec->node_k);
+            /* and free it */
+            mem_free(srec, sizeof(struct svc_xprt_rec));    
+            n = opr_rbtree_first(&t->t);
+        } /* curr partition */
+        rwlock_unlock(&t->lock); /* t !LOCKED */
+        p_ix++;
+    } /* SVC_XPRT_PARTITIONS */
+
+    /* free tree */
+    mem_free(svc_xprt_set_.xt.tree,
+             SVC_XPRT_PARTITIONS*sizeof(struct rbtree_x_part));
+out:
+    return;
 }

@@ -437,7 +437,7 @@ makefd_xprt(fd, sendsize, recvsize)
 	xprt->xp_port = 0;  /* this is a connection, not a rendezvouser */
 	xprt->xp_fd = fd;
         if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
-		xprt->xp_netid = strdup(netid);
+            xprt->xp_netid = strdup(netid);
 
         /* Make reachable.  Registration deferred.  */
         svc_rqst_init_xprt(xprt);
@@ -1149,15 +1149,18 @@ static void svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
         }
         if (acc->tv.tv_sec - cd->last_recv_time.tv_sec > acc->timeout) {
             /* XXX locking */
+            rwlock_unlock(&xprt->lock); /* XXX mutex? */
             (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
-            /* __xprt_unregister_unlocked(xprt); */
-            __svc_vc_dodestroy(xprt);
+            SVC_DESTROY(xprt);
             acc->ncleaned++;
+            goto out;
         }
 
     unlock:
-        rwlock_rdlock(&xprt->lock); /* XXX mutex? */
+        rwlock_unlock(&xprt->lock); /* XXX mutex? */
     } /* TRUE */
+out:
+    return;
 }
 
 bool_t

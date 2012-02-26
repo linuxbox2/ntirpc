@@ -1038,3 +1038,19 @@ rpc_control (int what, void *arg)
 
   return (TRUE);
 }
+
+int
+svc_shutdown(u_long flags)
+{
+    int code = 0;
+
+    /* XXX assert quiescent */
+
+    /* dispose all xprts and support */
+    svc_xprt_shutdown();
+
+    /* release fd lock records */
+    vc_lock_shutdown();
+
+    return (code);
+}

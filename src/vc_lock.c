@@ -105,7 +105,6 @@ struct vc_fd_rec *vc_lookup_fd_rec(int fd)
     else
         crec = opr_containerof(nv, struct vc_fd_rec, node_k);
 
-out:
     return (crec);    
 }
 
@@ -139,4 +138,44 @@ void vc_fd_unlock(int fd, sigset_t *mask)
     mutex_unlock(&crec->mtx);
     thr_sigsetmask(SIG_SETMASK, mask, (sigset_t *) NULL);
     cond_signal(&crec->cv);
+}
+
+void vc_lock_shutdown()
+{
+    struct rbtree_x_part *t = NULL;
+    struct opr_rbtree_node *n;
+    struct vc_fd_rec ck, *crec = NULL;
+    struct opr_rbtree_node *nv;
+    uint64_t gen;
+    int p_ix, x_ix, restarts, code = 0;
+
+    cond_init_vc_lock();
+
+    /* concurrent, restartable iteration over t */
+    p_ix = 0;
+    while (p_ix < VC_LOCK_PARTITIONS) {
+        t = &vc_fd_rec_set.xt.tree[p_ix];
+        restarts = 0;
+        rwlock_rdlock(&t->lock); /* t RLOCKED */
+    restart:
+        if (++restarts > 5)
+            break;
+        gen = t->t.gen;
+        x_ix = 0;
+        n = opr_rbtree_first(&t->t);
+        while (n != NULL) {
+            ++x_ix; /* diagnostic, index into logical srec sequence */
+            crec = opr_containerof(n, struct vc_fd_rec, node_k);
+            n = opr_rbtree_next(n);
+            mem_free(crec, sizeof(struct vc_fd_rec));
+        } /* curr partition */
+        rwlock_unlock(&t->lock); /* t !LOCKED */
+        p_ix++;
+    } /* VC_LOCK_PARTITIONS */
+
+    /* free tree */
+    mem_free(vc_fd_rec_set.xt.tree,
+             VC_LOCK_PARTITIONS*sizeof(struct rbtree_x_part));
+
+    /* set initialized = FALSE? */
 }
