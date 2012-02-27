@@ -30,7 +30,7 @@
 #include "vc_lock.h"
 #include "svc_xprt.h"
 
-#define SVC_XPRT_PARTITIONS /* 7 */ 1
+#define SVC_XPRT_PARTITIONS 7
 
 static bool_t initialized = FALSE;
 
