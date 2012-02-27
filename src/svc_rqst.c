@@ -324,7 +324,6 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
         /* stop processing events */
         evchan_unreg_impl(sr_rec, xprt,
                           (SVC_RQST_FLAG_RLOCK | SVC_RQST_FLAG_SREC_LOCK));
-            
         n = opr_rbtree_next(n);
     }
 
@@ -358,9 +357,6 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     struct svc_rqst_rec *sr_rec;
     struct svc_xprt_ev *xp_ev;
     int code = EINVAL;
-
-    /* XXX remove */
-    __warnx("%s: chan %d xprt %p flags %d", __func__, chan_id, xprt, flags);
 
     if (chan_id == 0) {
         __warnx("%s: called with chan_id 0, fatal (bug)", __func__);

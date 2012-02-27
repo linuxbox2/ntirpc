@@ -30,7 +30,7 @@
 #include "vc_lock.h"
 #include "svc_xprt.h"
 
-#define SVC_XPRT_PARTITIONS 7
+#define SVC_XPRT_PARTITIONS /* 7 */ 1
 
 static bool_t initialized = FALSE;
 
@@ -128,6 +128,7 @@ static inline SVCXPRT *svc_xprt_insert(SVCXPRT *xprt)
 static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
 {
     SVCXPRT *xprt2 = NULL;
+    struct rbtree_x_part *t;
     struct svc_xprt_rec *srec = svc_xprt_lookup(xprt->xp_fd);
 
     if (srec) {
@@ -138,11 +139,18 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
                 srec->gen++;
                 xprt->xp_gen = srec->gen;
             }
-        }
-        else {
+            srec->xprt = xprt;
+        } else {
             xprt2 = srec->xprt;
-            if (flags & SVC_XPRT_FLAG_CLEAR)
+            if (flags & SVC_XPRT_FLAG_CLEAR) {
                 srec->xprt = NULL;
+                /* XXX avoid bloat, remove cleared entries */
+                t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, srec->fd_k);
+                opr_rbtree_remove(&t->t, &srec->node_k);
+                mutex_unlock(&srec->mtx);
+                mem_free(srec, sizeof(struct svc_xprt_rec));  
+                goto out;
+            }
             else
                 srec->xprt = xprt;
         }
@@ -152,6 +160,7 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
         xprt2 = svc_xprt_insert(xprt);
     }
 
+out:
     return (xprt2);
 };
 
@@ -234,6 +243,36 @@ int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
     } /* SVC_XPRT_PARTITIONS */
 
     return (code);
+}
+
+void svc_xprt_dump_xprts(const char *tag)
+{
+    struct rbtree_x_part *t = NULL;
+    struct opr_rbtree_node *n;
+    struct svc_xprt_rec *srec;
+    int p_ix;
+
+    if (! initialized)
+        goto out;
+
+    p_ix = 0;
+    while (p_ix < SVC_XPRT_PARTITIONS) {
+        t = &svc_xprt_set_.xt.tree[p_ix];
+        rwlock_wrlock(&t->lock); /* t WLOCKED */
+        __warnx("xprts at %s: tree %d size %d", tag, p_ix, t->t.size);
+        n = opr_rbtree_first(&t->t);
+        while (n != NULL) {
+            srec = opr_containerof(n, struct svc_xprt_rec, node_k);
+            __warnx("xprts at %s:    srec %p fd %d xprt %p xp_fd %d", tag, srec,
+                    srec->fd_k, srec->xprt,
+                    (srec->xprt) ? srec->xprt->xp_fd : 0);
+            n = opr_rbtree_next(n);
+        } /* curr partition */
+        rwlock_unlock(&t->lock); /* t !LOCKED */
+        p_ix++;
+    } /* SVC_XPRT_PARTITIONS */
+out:
+    return;
 }
 
 void svc_xprt_shutdown()

@@ -24,6 +24,7 @@ SVCXPRT *svc_xprt_clear(SVCXPRT *xprt);
 /* iterator callback prototype */
 typedef void (*svc_xprt_each_func_t) (SVCXPRT *xprt, void *arg);
 int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg);
+void svc_xprt_dump_xprts(const char *tag);
 void svc_xprt_shutdown();
 
 #endif /* TIRPC_SVC_XPRT_H */
