@@ -1,4 +1,3 @@
-
 #include <config.h>
 
 #include <pthread.h>
@@ -82,9 +81,9 @@ struct vc_fd_rec *vc_lookup_fd_rec(int fd)
     /* find or install a vc_fd_rec at fd */
     rwlock_rdlock(&t->lock);
     nv = opr_rbtree_lookup(&t->t, &ck.node_k);
-    rwlock_unlock(&t->lock);
 
     if (! nv) {
+        rwlock_unlock(&t->lock);
         rwlock_wrlock(&t->lock);
         nv = opr_rbtree_lookup(&t->t, &ck.node_k);
         if (! nv) {
@@ -100,18 +99,21 @@ struct vc_fd_rec *vc_lookup_fd_rec(int fd)
                 mem_free(crec, sizeof(struct vc_fd_rec));
             }
         }
-        rwlock_unlock(&t->lock);
     }
     else
         crec = opr_containerof(nv, struct vc_fd_rec, node_k);
+
+    vc_lock_ref(crec, VC_LOCK_FLAG_NONE);
+
+    rwlock_unlock(&t->lock);
 
     return (crec);    
 }
 
 void vc_fd_lock(int fd, sigset_t *mask)
 {
-    struct vc_fd_rec *crec = vc_lookup_fd_rec(fd);
     sigset_t newmask;
+    struct vc_fd_rec *crec = vc_lookup_fd_rec(fd);
 
     assert(crec);
 
@@ -140,13 +142,48 @@ void vc_fd_unlock(int fd, sigset_t *mask)
     cond_signal(&crec->cv);
 }
 
+int32_t vc_lock_unref(struct vc_fd_rec *crec, u_int flags)
+{
+    struct rbtree_x_part *t;
+    struct opr_rbtree_node *nv;
+    int32_t refcount;
+
+    if (! (flags & VC_LOCK_FLAG_MTX_LOCKED))
+        mutex_lock(&crec->mtx);
+
+    refcount = --(crec->refcount);
+
+    if (crec->refcount == 0) {
+        t = rbtx_partition_of_scalar(&vc_fd_rec_set.xt, crec->fd_k);
+        mutex_unlock(&crec->mtx);
+        rwlock_wrlock(&t->lock);
+        nv = opr_rbtree_lookup(&t->t, &crec->node_k);
+        if (nv) {
+            crec = opr_containerof(nv, struct vc_fd_rec, node_k);
+            mutex_lock(&crec->mtx);
+            if (crec->refcount == 0) {
+                (void) opr_rbtree_remove(&t->t, &crec->node_k);
+                mutex_unlock(&crec->mtx);
+                mem_free(crec, sizeof(struct vc_fd_rec));
+                crec = NULL;
+            } else
+                refcount = crec->refcount;
+        }
+        rwlock_unlock(&t->lock);
+    }
+
+    if (crec && (! (flags & VC_LOCK_FLAG_MTX_LOCKED)))
+        mutex_unlock(&crec->mtx);
+
+    return (refcount);
+}
+
 void vc_lock_shutdown()
 {
     struct rbtree_x_part *t = NULL;
     struct opr_rbtree_node *n;
-    struct vc_fd_rec ck, *crec = NULL;
-    struct opr_rbtree_node *nv;
-    int p_ix, code = 0;
+    struct vc_fd_rec *crec = NULL;
+    int p_ix;
 
     cond_init_vc_lock();
 

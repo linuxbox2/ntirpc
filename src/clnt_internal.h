@@ -47,6 +47,7 @@ struct ct_wait_entry {
 /* clnt_fd_lock complex */
 struct vc_fd_rec
 {
+    int32_t refcount;
     struct opr_rbtree_node node_k;
     int fd_k;
     int lock_flag_value; /* state of lock at fd */

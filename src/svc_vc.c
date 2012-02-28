@@ -603,6 +603,7 @@ __svc_vc_dodestroy(xprt)
 		free(xprt->xp_netid); /* XXX check why not mem_alloc/free */
 
         svc_rqst_finalize_xprt(xprt);
+        vc_lock_unref_xprt(xprt);
 
         /* assert: caller has unregistered xprt */
         /* duplex */

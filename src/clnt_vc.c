@@ -550,7 +550,7 @@ clnt_vc_freeres(cl, xdr_res, res_ptr)
 	dummy = (*xdr_res)(xdrs, res_ptr);
 
 	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
-        vc_fd_signal_c(cl);
+        vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE);
 
 	return dummy;
 }
@@ -702,7 +702,8 @@ clnt_vc_destroy(cl)
 	if (ct->ct_addr.buf)
             free(ct->ct_addr.buf);
 
-        vc_fd_signal_c(cl); /* XXX moved before free */
+        vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE); /* XXX moved before free */
+        vc_lock_unref_clnt(cl);
 
 	mem_free(ct, sizeof(struct ct_data));
 
