@@ -258,7 +258,7 @@ void svc_xprt_dump_xprts(const char *tag)
     p_ix = 0;
     while (p_ix < SVC_XPRT_PARTITIONS) {
         t = &svc_xprt_set_.xt.tree[p_ix];
-        rwlock_wrlock(&t->lock); /* t WLOCKED */
+        rwlock_rdlock(&t->lock); /* t RLOCKED */
         __warnx("xprts at %s: tree %d size %d", tag, p_ix, t->t.size);
         n = opr_rbtree_first(&t->t);
         while (n != NULL) {
