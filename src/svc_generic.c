@@ -247,54 +247,54 @@ svc_tli_create(fd, nconf, bindaddr, sendsz, recvsz)
 	 * call transport specific function.
 	 */
 	switch (si.si_socktype) {
-		case SOCK_STREAM:
-			slen = sizeof ss;
-			if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen)
-			    == 0) {
-				/* accepted socket */
-				xprt = svc_fd_create(fd, sendsz, recvsz);
-			} else
-				xprt = svc_vc_create(fd, sendsz, recvsz);
-			if (!nconf || !xprt)
-				break;
+        case SOCK_STREAM:
+            slen = sizeof ss;
+            if (getpeername(fd, (struct sockaddr *)(void *)&ss,
+                            &slen) == 0) {
+                /* accepted socket */
+                xprt = svc_fd_create(fd, sendsz, recvsz);
+            } else
+                xprt = svc_vc_create(fd, sendsz, recvsz);
+            if (!nconf || !xprt)
+                break;
 #if 0
-			/* XXX fvdl */
-			if (strcmp(nconf->nc_protofmly, "inet") == 0 ||
-			    strcmp(nconf->nc_protofmly, "inet6") == 0)
-				(void) __svc_vc_setflag(xprt, TRUE);
+            /* XXX fvdl */ /* XXXX check matt */
+            if (strcmp(nconf->nc_protofmly, "inet") == 0 ||
+                strcmp(nconf->nc_protofmly, "inet6") == 0)
+                (void) __svc_vc_setflag(xprt, TRUE);
 #endif
-			break;
-		case SOCK_DGRAM:
-			xprt = svc_dg_create(fd, sendsz, recvsz);
-			break;
-		default:
-			__warnx("svc_tli_create: bad service type");
-			goto freedata;
+            break;
+        case SOCK_DGRAM:
+            xprt = svc_dg_create(fd, sendsz, recvsz);
+            break;
+        default:
+            __warnx("svc_tli_create: bad service type");
+            goto freedata;
 	}
 
 	if (xprt == NULL)
-		/*
-		 * The error messages here are spitted out by the lower layers:
-		 * svc_vc_create(), svc_fd_create() and svc_dg_create().
-		 */
-		goto freedata;
+            /*
+             * The error messages here are produced by the lower layers:
+             * svc_vc_create(), svc_fd_create() and svc_dg_create().
+             */
+            goto freedata;
 
 	/* Fill in type of service */
-	xprt->xp_type = __rpc_socktype2seman(si.si_socktype);
+	xprt->xp_si_type = __rpc_socktype2seman(si.si_socktype);
 
 	if (nconf) {
-		xprt->xp_netid = strdup(nconf->nc_netid);
-		xprt->xp_tp = strdup(nconf->nc_device);
+            xprt->xp_netid = strdup(nconf->nc_netid);
+            xprt->xp_tp = strdup(nconf->nc_device);
 	}
 	return (xprt);
 
 freedata:
 	if (madefd)
-		(void)close(fd);
+            (void)close(fd);
 	if (xprt) {
-		if (!madefd) /* so that svc_destroy doesnt close fd */
-			xprt->xp_fd = RPC_ANYFD;
-		SVC_DESTROY(xprt);
+            if (!madefd) /* so that svc_destroy doesnt close fd */
+                xprt->xp_fd = RPC_ANYFD;
+            SVC_DESTROY(xprt);
 	}
 	return (NULL);
 }

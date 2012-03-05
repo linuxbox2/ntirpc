@@ -42,6 +42,9 @@ lib_LTLIBRARIES = libtirpc.la
 #
 libtirpc_la_LDFLAGS = -lnsl -lpthread -version-info 1:10:0
 
+include_HEADERS = clnt_internal.h rpc_com.h svc_internal.h \
+	svc_xprt.h vc_lock.h
+
 libtirpc_la_SOURCES = auth_none.c auth_unix.c authunix_prot.c bindresvport.c \
 	clnt_bcast.c clnt_dg.c clnt_generic.c clnt_perror.c clnt_raw.c \
 	clnt_simple.c clnt_vc.c rpc_dtablesize.c getnetconfig.c getnetpath.c \
@@ -52,7 +55,7 @@ libtirpc_la_SOURCES = auth_none.c auth_unix.c authunix_prot.c bindresvport.c \
 	svc_auth_unix.c svc_auth_none.c svc_generic.c svc_raw.c svc_run.c \
 	svc_simple.c svc_vc.c getpeereid.c auth_time.c auth_des.c \
 	authdes_prot.c rbtree.c rbtree_x.c vc_lock.c svc_xprt.c svc_rqst.c \
-	svc_dplx.c
+	svc_dplx.c svc_shim.c
 
 ## XDR
 libtirpc_la_SOURCES += xdr.c xdr_rec.c xdr_array.c xdr_float.c xdr_mem.c xdr_reference.c xdr_stdio.c

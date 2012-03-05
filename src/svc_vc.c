@@ -80,8 +80,9 @@ static bool_t rendezvous_request(SVCXPRT *, struct rpc_msg *);
 static enum xprt_stat rendezvous_stat(SVCXPRT *);
 static void svc_vc_destroy(SVCXPRT *);
 static void __svc_vc_dodestroy (SVCXPRT *);
-static int read_vc(void *, void *, int);
-static int write_vc(void *, void *, int);
+/* XXX */
+/* static */ int read_vc(void *, void *, int);
+/* static */ int write_vc(void *, void *, int);
 static enum xprt_stat svc_vc_stat(SVCXPRT *);
 static bool_t svc_vc_recv(SVCXPRT *, struct rpc_msg *);
 static bool_t svc_vc_getargs(SVCXPRT *, xdrproc_t, void *);
@@ -160,12 +161,13 @@ struct sockaddr_in6 *sin6;
  * Since streams do buffered io similar to stdio, the caller can specify
  * how big the send and receive buffers are via the second and third parms;
  * 0 => use the system default.
+ *
+ * Added svc_vc_create2 with flags argument, has the behavior of the original
+ * function if flags are SVC_VC_FLAG_NONE (0).
+ *
  */
 SVCXPRT *
-svc_vc_create(fd, sendsize, recvsize)
-	int fd;
-	u_int sendsize;
-	u_int recvsize;
+svc_vc_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 {
 	SVCXPRT *xprt;
 	struct cf_rendezvous *r = NULL;
@@ -201,6 +203,11 @@ svc_vc_create(fd, sendsize, recvsize)
 	svc_vc_rendezvous_ops(xprt);
 	xprt->xp_fd = fd;
         svc_rqst_init_xprt(xprt);
+
+        /* caller should know what it's doing */
+        if (flags & SVC_VC_CREATE_FLAG_LISTEN)
+            listen(fd, SOMAXCONN);
+
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&sslocal, &slen) < 0) {
 		__warnx("svc_vc_create: could not retrieve local addr");
@@ -227,7 +234,7 @@ svc_vc_create(fd, sendsize, recvsize)
 		goto cleanup_svc_vc_create;
 	}
 
-        /* conditional xprt_register */
+        /* Conditional xprt_register */
         if (! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
             xprt_register(xprt);
 
@@ -236,6 +243,12 @@ cleanup_svc_vc_create:
 	if (r != NULL)
 		mem_free(r, sizeof(*r));
 	return (NULL);
+}
+
+SVCXPRT *
+svc_vc_create(int fd, u_int sendsize, u_int recvsize)
+{
+    return (svc_vc_create2(fd, sendsize, recvsize, SVC_VC_CREATE_FLAG_NONE));
 }
 
 /*
@@ -612,6 +625,10 @@ __svc_vc_dodestroy(xprt)
             SetDestroyed(cl);
         }
 
+        /* call free hook */
+        if (xprt->xp_ops2->xp_free_xprt)
+            xprt->xp_ops2->xp_free_xprt(xprt);
+
 	mem_free(xprt, sizeof(SVCXPRT));
 }
 
@@ -744,7 +761,7 @@ svc_vc_rendezvous_control(xprt, rq, in)
  * All read operations timeout after 35 seconds.  A timeout is
  * fatal for the connection.
  */
-static int
+/* static */ int
 read_vc(xprtp, buf, len)
 	void *xprtp;
 	void *buf;
@@ -810,7 +827,7 @@ fatal_err:
  * writes data to the tcp connection.
  * Any error is fatal and the connection is closed.
  */
-static int
+/* static */ int
 write_vc(xprtp, buf, len)
 	void *xprtp;
 	void *buf;
@@ -1013,9 +1030,10 @@ svc_vc_ops(xprt)
 	static struct xp_ops ops;
 	static struct xp_ops2 ops2;
 
-/* VARIABLES PROTECTED BY ops_lock: ops, ops2 */
+/* VARIABLES PROTECTED BY ops_lock: ops, ops2, xp_type */
 
 	mutex_lock(&ops_lock);
+        xprt->xp_type = XPRT_TCP;
 	if (ops.xp_recv == NULL) {
 		ops.xp_recv = svc_vc_recv;
 		ops.xp_stat = svc_vc_stat;
@@ -1053,6 +1071,7 @@ svc_vc_rendezvous_ops(xprt)
 	extern mutex_t ops_lock;
 
 	mutex_lock(&ops_lock);
+        xprt->xp_type = XPRT_TCP_RENDEZVOUS;
 	if (ops.xp_recv == NULL) {
 		ops.xp_recv = rendezvous_request;
 		ops.xp_stat = rendezvous_stat;

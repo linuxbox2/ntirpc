@@ -70,6 +70,7 @@
 #define SVC_INIT_XPRTS          0x0001
 #define SVC_INIT_EPOLL          0x0002
 #define SVC_INIT_WARNX          0x0004
+#define SVC_INIT_NOREG_XPRTS    0x0008
 
 #define SVC_SHUTDOWN_FLAG_NONE  0x0000
 
@@ -172,6 +173,21 @@ struct svc_params
 #define SVC_XPRT_FLAG_SETNEWFDS          0x0001
 #define SVC_XPRT_FLAG_DONTCLOSE          0x0002
 #define SVC_XPRT_FLAG_EVCHAN             0x0004
+#define SVC_XPRT_FLAG_COPY               0x0008 /* XXX */
+
+/* XXX Ganesha
+ * Don't confuse with (currently incomplete) transport type, nee
+ * socktype. */
+typedef enum xprt_type {
+    XPRT_UNKNOWN,
+    XPRT_UDP,
+    XPRT_TCP,
+    XPRT_TCP_RENDEZVOUS,
+    /* 6 types? */
+    /* placeholders */
+    XPRT_SCTP,
+    XPRT_RDMA
+} xprt_type_t;
 
 enum xprt_stat {
 	XPRT_DIED,
@@ -220,7 +236,7 @@ typedef struct __rpc_svcxprt {
 	    void	(*xp_destroy)(struct __rpc_svcxprt *);
 	} *xp_ops;
 	int		xp_addrlen;	 /* length of remote address */
-	struct sockaddr_in6 xp_raddr;	 /* remote addr. (backward ABI compat) */
+	struct sockaddr_in6 xp_raddr;	 /* remote addr (backward ABI compat) */
 	/* XXX - fvdl stick this here for ABI backward compat reasons */
 	struct xp_ops2 {
 		/* catch-all function */
@@ -235,6 +251,10 @@ typedef struct __rpc_svcxprt {
             /* rendezvous (epilogue) */
             u_int (*xp_rdvs)(struct __rpc_svcxprt *, struct __rpc_svcxprt *,
                              const u_int, void *);
+
+            /* xprt free hook */
+            bool_t  (*xp_free_xprt)(struct __rpc_svcxprt *);
+
 
 	} *xp_ops2;
 	char		*xp_tp;		 /* transport provider device name */
@@ -254,7 +274,9 @@ typedef struct __rpc_svcxprt {
 	void		*xp_p3;		 /* private: for use by svc lib */
 	void		*xp_p4;		 /* private: for use by svc lib */
 	void            *xp_p5;          /* private: for use by svc lib */
-	int		xp_type;	 /* transport type */
+	void            *xp_u1;           /* client user data */
+	int             xp_si_type;      /* si type */
+	int             xp_type;         /* xprt type */
 	u_int		xp_flags;	 /* flags */
 	uint64_t        xp_gen;          /* svc_xprt generation number */
 
@@ -317,6 +339,28 @@ struct svc_req {
  *  Approved way of getting address of caller
  */
 #define svc_getrpccaller(x) (&(x)->xp_rtaddr)
+
+/*
+ * Ganesha.  Get connected transport type.
+ */
+#define svc_get_xprt_type(x) ((x)->xp_type);
+
+/*
+ * Ganesha.  Original TI-RPC si type.
+ */
+#define svc_get_xprt_si_type(x) ((x)->xp_si_type);
+
+/*
+ * XXX Ganesha.  Return "current" xid/su_xid.  Deprecated, going away
+ * (layering and cardinality problem).
+ */
+extern u_int svc_shim_get_xid(SVCXPRT *xprt);
+
+/*
+ * XXX Ganesha.  Duplicate xprt from original to copy.  GOING AWAY.
+ */
+extern SVCXPRT *svc_shim_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig);
+
 
 /*
  * Operations defined on an SVCXPRT handle
@@ -572,6 +616,15 @@ extern SVCXPRT *svc_vc_create(const int, const u_int, const u_int);
  *      const u_int recvsize;                   -- max recv size
  */
 
+extern SVCXPRT *svc_vc_create2(const int, const u_int, const u_int,
+                               const u_int);
+/*
+ *      const int fd;                           -- open connection end point
+ *      const u_int sendsize;                   -- max send size
+ *      const u_int recvsize;                   -- max recv size
+ *      const u_int flags;                      -- flags
+ */
+
 __END_DECLS
 
 #define SVC_VC_CREATE_FLAG_NONE             0x0000
@@ -579,7 +632,7 @@ __END_DECLS
 #define SVC_VC_CREATE_FLAG_SPLX             0x0002 /* !dplx */
 #define SVC_VC_CREATE_FLAG_DISPOSE          0x0004 /* !dplx */
 #define SVC_VC_CREATE_FLAG_XPRT_REGISTER    0x0008
-
+#define SVC_VC_CREATE_FLAG_LISTEN           0x0010
 
 __BEGIN_DECLS
 

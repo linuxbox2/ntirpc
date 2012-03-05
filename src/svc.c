@@ -105,7 +105,7 @@ static void __xprt_do_unregister (SVCXPRT * xprt, bool_t dolock);
  * any svc exported functions.   Traditional TI-RPC programs need not
  * call the function as presently integrated. */
 void
-svc_init (svc_init_params * params)
+svc_init(svc_init_params * params)
 {
     if (__svc_params->initialized) {
         __warnx("svc_init: multiple initialization attempt (nothing happens)");
@@ -134,6 +134,10 @@ svc_init (svc_init_params * params)
     /* XXX formerly select/fd_set case, now placeholder for new
      * event systems, reworked select, etc. */
 #endif
+
+    /* allow consumers to manage all xprt registration */
+    if (params->flags & SVC_INIT_NOREG_XPRTS)
+        __svc_params->flags |= SVC_FLAG_NOREG_XPRTS;
 
     return;
 }

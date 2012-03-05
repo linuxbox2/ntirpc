@@ -53,7 +53,7 @@
 #include <err.h>
 
 #include "rpc_com.h"
-
+#include "svc_internal.h"
 #include "clnt_internal.h"
 #include "svc_xprt.h"
 #include <rpc/svc_rqst.h>
@@ -155,7 +155,7 @@ svc_dg_create(fd, sendsize, recvsize)
         /* Make reachable */
         svc_rqst_init_xprt(xprt);
 
-        /* conditional xprt_register */
+        /* Conditional xprt_register */
         if (! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
             xprt_register(xprt);
 
@@ -337,6 +337,9 @@ svc_dg_destroy(xprt)
 	if (xprt->xp_tp)
 		(void) free(xprt->xp_tp);
         svc_rqst_finalize_xprt(xprt);
+        /* call free hook */
+        if (xprt->xp_ops2->xp_free_xprt)
+            xprt->xp_ops2->xp_free_xprt(xprt);
 	(void) mem_free(xprt, sizeof (SVCXPRT));
 }
 
@@ -399,9 +402,13 @@ svc_dg_ops(xprt)
 	static struct xp_ops ops;
 	static struct xp_ops2 ops2;
 
-/* VARIABLES PROTECTED BY ops_lock: ops */
+        /* VARIABLES PROTECTED BY ops_lock: ops, xp_type */
 
 	mutex_lock(&ops_lock);
+
+	/* Fill in type of service */
+        xprt->xp_type = XPRT_UDP;
+
 	if (ops.xp_recv == NULL) {
 		ops.xp_recv = svc_dg_recv;
 		ops.xp_stat = svc_dg_stat;
@@ -418,75 +425,6 @@ svc_dg_ops(xprt)
 	xprt->xp_ops2 = &ops2;
 	mutex_unlock(&ops_lock);
 }
-
-/*  The CACHING COMPONENT */
-
-/*
- * Could have been a separate file, but some part of it depends upon the
- * private structure of the client handle.
- *
- * Fifo cache for cl server
- * Copies pointers to reply buffers into fifo cache
- * Buffers are sent again if retransmissions are detected.
- */
-
-#define	SPARSENESS 4	/* 75% sparse */
-
-#define	ALLOC(type, size)	\
-	(type *) mem_alloc((sizeof (type) * (size)))
-
-#define	MEMZERO(addr, type, size)	 \
-	(void) memset((void *) (addr), 0, sizeof (type) * (int) (size))
-
-#define	FREE(addr, type, size)	\
-	mem_free((addr), (sizeof (type) * (size)))
-
-/*
- * An entry in the cache
- */
-typedef struct cache_node *cache_ptr;
-struct cache_node {
-	/*
-	 * Index into cache is xid, proc, vers, prog and address
-	 */
-	u_int32_t cache_xid;
-	rpcproc_t cache_proc;
-	rpcvers_t cache_vers;
-	rpcprog_t cache_prog;
-	struct netbuf cache_addr;
-	/*
-	 * The cached reply and length
-	 */
-	char *cache_reply;
-	size_t cache_replylen;
-	/*
-	 * Next node on the list, if there is a collision
-	 */
-	cache_ptr cache_next;
-};
-
-/*
- * The entire cache
- */
-struct cl_cache {
-	u_int uc_size;		/* size of cache */
-	cache_ptr *uc_entries;	/* hash table of entries in cache */
-	cache_ptr *uc_fifo;	/* fifo list of entries in cache */
-	u_int uc_nextvictim;	/* points to next victim in fifo list */
-	rpcprog_t uc_prog;	/* saved program number */
-	rpcvers_t uc_vers;	/* saved version number */
-	rpcproc_t uc_proc;	/* saved procedure number */
-};
-
-
-/*
- * the hashing function
- */
-#define	CACHE_LOC(transp, xid)	\
-	(xid % (SPARSENESS * ((struct cl_cache *) \
-		su_data(transp)->su_cache)->uc_size))
-
-extern mutex_t	dupreq_lock;
 
 /*
  * Enable use of the cache. Returns 1 on success, 0 on failure.
