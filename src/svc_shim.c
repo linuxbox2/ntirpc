@@ -118,7 +118,7 @@ svc_shim_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig)
   if(xprt_copy == NULL)
     goto fail_no_xprt;
 
-  __warnx("Svcxprt_copy copying xprt_orig=%p to xprt_copy=%p",
+  __warnx("svcxprt_copy copying xprt_orig=%p to xprt_copy=%p",
           xprt_orig, xprt_copy);
 
   memset(xprt_copy, 0, sizeof(SVCXPRT));
