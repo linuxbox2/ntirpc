@@ -486,6 +486,8 @@ int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
 
     cond_init_svc_rqst();
 
+    assert(sr_rec);
+
     mutex_lock(&sr_rec->mtx);
 
     switch (sr_rec->ev_type) {
