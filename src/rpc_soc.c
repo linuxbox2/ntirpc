@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
  * All rights reserved.
@@ -74,6 +73,11 @@ static bool_t rpc_wrap_bcast(char *, struct netbuf *, struct netconfig *);
 /* XXX */
 #define IN4_LOCALHOST_STRING    "127.0.0.1"
 #define IN6_LOCALHOST_STRING    "::1"
+
+/* XXX */
+#ifndef SOCK_CLOEXEC
+# define SOCK_CLOEXEC 02000000
+#endif
 
 /*
  * A common clnt create routine

@@ -52,6 +52,7 @@
 #include <misc/rbtree.h>
 #include <misc/opr_queue.h>
 #include "clnt_internal.h"
+#include "svc_internal.h"
 #include <rpc/svc_rqst.h>
 #include "svc_xprt.h"
 
@@ -225,9 +226,12 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
                 sr_rec->ev_u.epoll.max_events*sizeof(struct epoll_event));
 
         /* create epoll fd */
-        sr_rec->ev_u.epoll.epoll_fd = epoll_create1(EPOLL_CLOEXEC);
+        sr_rec->ev_u.epoll.epoll_fd =
+            epoll_create_wr(sr_rec->ev_u.epoll.max_events, EPOLL_CLOEXEC);
+
         if (sr_rec->ev_u.epoll.epoll_fd == -1) {
-            __warnx("svc_init:  epoll_create failed");
+            __warnx("%s: epoll_create failed (%d)",
+                    __func__, errno);
             code = EINVAL;
             goto out;
         }
@@ -242,6 +246,9 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
                          EPOLL_CTL_ADD,
                          svc_rqst_set_.sv[1],
                          &sr_rec->ev_u.epoll.ctrl_ev);
+        if (code == -1)
+            __warnx("%s: add control socket failed (%d)",
+                    __func__, errno);
     } else {
         /* legacy fdset (currently unhooked) */
         sr_rec->ev_type = SVC_EVENT_FDSET;
@@ -330,10 +337,13 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
     switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
     case SVC_EVENT_EPOLL:
-        (void) epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
+        code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
                          EPOLL_CTL_DEL,
                          svc_rqst_set_.sv[1],
                          &sr_rec->ev_u.epoll.ctrl_ev);
+        if (code == -1)
+            __warnx("%s: epoll del control socket failed (%d)",
+                    __func__, errno);
         break;
 #endif
     default:
@@ -463,6 +473,11 @@ int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
             /* clear epoll vector */
             code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd, EPOLL_CTL_DEL,
                              xprt->xp_fd, ev);
+            if (code = -1) {
+                __warnx("%s: epoll del failed fd %d (%d)",
+                        __func__, xprt->xp_fd, errno);
+                code = errno;
+            }
         }
         break;
 #endif
@@ -506,6 +521,10 @@ int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
             /* add to epoll vector */
             code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd, EPOLL_CTL_ADD,
                              xprt->xp_fd, ev);
+
+            __warnx("epoll add xprt %p fd %d (%d, %d)",
+                    xprt, xprt->xp_fd, code, errno);
+
         }
         break;
 #endif

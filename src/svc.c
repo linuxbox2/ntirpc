@@ -61,6 +61,7 @@
 #include <rpc/svc.h>
 
 #include "clnt_internal.h"
+#include "svc_internal.h"
 #include "svc_xprt.h"
 #include <rpc/svc_rqst.h>
 
@@ -124,7 +125,8 @@ svc_init(svc_init_params * params)
         __svc_params->ev_type = SVC_EVENT_EPOLL;
         __svc_params->max_connections = params->max_connections; /* XXX going? */
         __svc_params->ev_u.epoll.max_events = params->max_events;
-        __svc_params->ev_u.epoll.epoll_fd = epoll_create1(EPOLL_CLOEXEC);
+        __svc_params->ev_u.epoll.epoll_fd = epoll_create_wr(__svc_params->ev_u.epoll.max_events,
+							    EPOLL_CLOEXEC);
         if (__svc_params->ev_u.epoll.epoll_fd == -1) {
             __warnx("svc_init:  epoll_create failed");
             return;

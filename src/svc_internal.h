@@ -97,4 +97,18 @@ struct cl_cache {
 	rpcproc_t uc_proc;	/* saved procedure number */
 };
 
+/* Epoll interface change */
+#ifndef EPOLL_CLOEXEC
+#define EPOLL_CLOEXEC 02000000
+static inline int epoll_create_wr(size_t size, int flags)
+{
+  return (epoll_create(size));
+}
+#else
+static inline int epoll_create_wr(size_t size, int flags)
+{
+  return (epoll_create(flags));
+}
+#endif
+
 #endif /* TIRPC_SVC_INTERNAL_H */
