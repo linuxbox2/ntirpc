@@ -639,7 +639,7 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
     SVCXPRT *xprt;
 
     int ix, code = 0;
-    int timeout_s = 30;
+    int timeout_ms = 30*1000;
     int n_events;
 
     for (;;) {
@@ -657,7 +657,7 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
         switch (n_events = epoll_wait(sr_rec->ev_u.epoll.epoll_fd,
                                       sr_rec->ev_u.epoll.events, 
                                       sr_rec->ev_u.epoll.max_events, 
-                                      timeout_s)) {
+                                      timeout_ms)) {
         case -1:
             if (errno == EINTR)
                 continue;

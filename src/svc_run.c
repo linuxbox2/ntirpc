@@ -61,7 +61,7 @@ void svc_getreqset_epoll (struct epoll_event *events, int nfds);
 svc_run_epoll()
 {
     int nfds;
-    int timeout_s = 30;
+    int timeout_ms = 30*1000;
     extern rwlock_t svc_fd_lock;
 
     if (! __svc_params->ev_u.epoll.events)
@@ -82,7 +82,7 @@ svc_run_epoll()
                     __svc_params->ev_u.epoll.epoll_fd,
                     __svc_params->ev_u.epoll.events, 
                     __svc_params->ev_u.epoll.max_events, 
-                    timeout_s)) {
+                    timeout_ms)) {
         case -1:
             if (errno == EINTR)
                 continue;
