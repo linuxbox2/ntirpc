@@ -299,7 +299,7 @@ __xprt_do_unregister (SVCXPRT *xprt, bool_t dolock)
  * program number comes in.
  */
 bool_t
-svc_reg (xprt, prog, vers, dispatch, nconf)
+svc_reg(xprt, prog, vers, dispatch, nconf)
      SVCXPRT *xprt;
      const rpcprog_t prog;
      const rpcvers_t vers;
@@ -316,41 +316,41 @@ svc_reg (xprt, prog, vers, dispatch, nconf)
 /* VARIABLES PROTECTED BY svc_lock: s, prev, svc_head */
   if (xprt->xp_netid)
     {
-      netid = strdup (xprt->xp_netid);
+      netid = rpc_strdup(xprt->xp_netid);
       flag = 1;
     }
   else if (nconf && nconf->nc_netid)
     {
-      netid = strdup (nconf->nc_netid);
+      netid = rpc_strdup(nconf->nc_netid);
       flag = 1;
     }
-  else if ((tnconf = __rpcgettp (xprt->xp_fd)) != NULL)
+  else if ((tnconf = __rpcgettp(xprt->xp_fd)) != NULL)
     {
-      netid = strdup (tnconf->nc_netid);
+      netid = rpc_strdup(tnconf->nc_netid);
       flag = 1;
-      freenetconfigent (tnconf);
+      freenetconfigent(tnconf);
     }				/* must have been created with svc_raw_create */
   if ((netid == NULL) && (flag == 1))
     {
       return (FALSE);
     }
 
-  rwlock_wrlock (&svc_lock);
-  if ((s = svc_find (prog, vers, &prev, netid)) != NULL)
+  rwlock_wrlock(&svc_lock);
+  if ((s = svc_find(prog, vers, &prev, netid)) != NULL)
     {
       if (netid)
-	free (netid);
+	__free(netid);
       if (s->rec.sc_dispatch == dispatch)
 	goto rpcb_it;		/* he is registering another xptr */
-      rwlock_unlock (&svc_lock);
+      rwlock_unlock(&svc_lock);
       return (FALSE);
     }
-  s = mem_alloc (sizeof (struct svc_callout));
+  s = mem_alloc(sizeof (struct svc_callout));
   if (s == NULL)
     {
       if (netid)
-	free (netid);
-      rwlock_unlock (&svc_lock);
+	__free(netid);
+      rwlock_unlock(&svc_lock);
       return (FALSE);
     }
 
@@ -362,15 +362,15 @@ svc_reg (xprt, prog, vers, dispatch, nconf)
   svc_head = s;
 
   if ((xprt->xp_netid == NULL) && (flag == 1) && netid)
-    ((SVCXPRT *) xprt)->xp_netid = strdup (netid);
+      ((SVCXPRT *) xprt)->xp_netid = rpc_strdup (netid);
 
 rpcb_it:
-  rwlock_unlock (&svc_lock);
+  rwlock_unlock(&svc_lock);
   /* now register the information with the local binder service */
   if (nconf)
     {
       /*LINTED const castaway */
-      dummy = rpcb_set (prog, vers, (struct netconfig *) nconf,
+      dummy = rpcb_set(prog, vers, (struct netconfig *) nconf,
 			&((SVCXPRT *) xprt)->xp_ltaddr);
       return (dummy);
     }
@@ -403,8 +403,8 @@ svc_unreg (prog, vers)
 	}
       s->sc_next = NULL;
       if (s->rec.sc_netid)
-	mem_free (s->rec.sc_netid, sizeof (s->rec.sc_netid) + 1);
-      mem_free (s, sizeof (struct svc_callout));
+	mem_free(s->rec.sc_netid, sizeof (s->rec.sc_netid) + 1);
+      mem_free(s, sizeof (struct svc_callout));
     }
   rwlock_unlock (&svc_lock);
 }

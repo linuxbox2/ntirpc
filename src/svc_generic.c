@@ -108,7 +108,7 @@ svc_create(dispatch, prognum, versnum, nettype)
 			/* It was not found. Now create a new one */
 			xprt = svc_tp_create(dispatch, prognum, versnum, nconf);
 			if (xprt) {
-				l = (struct xlist *)malloc(sizeof (*l));
+				l = (struct xlist *) mem_alloc(sizeof (*l));
 				if (l == NULL) {
 					__warnx("svc_create: no memory");
 					mutex_unlock(&xprtlist_lock);
@@ -283,8 +283,8 @@ svc_tli_create(fd, nconf, bindaddr, sendsz, recvsz)
 	xprt->xp_si_type = __rpc_socktype2seman(si.si_socktype);
 
 	if (nconf) {
-            xprt->xp_netid = strdup(nconf->nc_netid);
-            xprt->xp_tp = strdup(nconf->nc_device);
+            xprt->xp_netid = rpc_strdup(nconf->nc_netid);
+            xprt->xp_tp = rpc_strdup(nconf->nc_device);
 	}
 	return (xprt);
 

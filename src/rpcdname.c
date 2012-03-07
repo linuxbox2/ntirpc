@@ -48,7 +48,7 @@ get_default_domain()
 	if (getdomainname(temp, sizeof(temp)) < 0)
 		return (0);
 	if ((int) strlen(temp) > 0) {
-		default_domain = (char *)malloc((strlen(temp)+(unsigned)1));
+		default_domain = (char *) mem_alloc((strlen(temp)+(unsigned)1));
 		if (default_domain == 0)
 			return (0);
 		(void) strcpy(default_domain, temp);

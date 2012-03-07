@@ -44,7 +44,7 @@
 #include <sys/select.h>
 #undef NIS
 #include <rpcsvc/nis.h>
-
+#include "rpc_com.h"
 
 #ifdef TESTING
 #define	msg(x)	__warnx("ERROR: %s\n", x)
@@ -109,7 +109,7 @@ static int uaddr_to_sockaddr(uaddr, sin)
 /*
  * free_eps()
  *
- * Free the strings that were strduped into the eps structure.
+ * Free the strings that were rpc_strduped into the eps structure.
  */
 static void
 free_eps(eps, num)
@@ -119,9 +119,9 @@ free_eps(eps, num)
 	int		i;
 
 	for (i = 0; i < num; i++) {
-		free(eps[i].uaddr);
-		free(eps[i].proto);
-		free(eps[i].family);
+            __free(eps[i].uaddr);
+            __free(eps[i].proto);
+            __free(eps[i].family);
 	}
 	return;
 }
@@ -175,9 +175,9 @@ get_server(sin, host, srv, eps, maxep)
 
 		a = (struct in_addr *)he->h_addr_list[i];
 		snprintf(hname, sizeof(hname), "%s.0.111", inet_ntoa(*a));
-		eps[num_ep].uaddr = strdup(hname);
-		eps[num_ep].family = strdup("inet");
-		eps[num_ep].proto =  strdup("tcp");
+		eps[num_ep].uaddr = rpc_strdup(hname);
+		eps[num_ep].family = rpc_strdup("inet");
+		eps[num_ep].proto =  rpc_strdup("tcp");
 	}
 
 	for (i = 0; (he->h_addr_list[i] != NULL) && (num_ep < maxep);
@@ -186,9 +186,9 @@ get_server(sin, host, srv, eps, maxep)
 
 		a = (struct in_addr *)he->h_addr_list[i];
 		snprintf(hname, sizeof(hname), "%s.0.111", inet_ntoa(*a));
-		eps[num_ep].uaddr = strdup(hname);
-		eps[num_ep].family = strdup("inet");
-		eps[num_ep].proto =  strdup("udp");
+		eps[num_ep].uaddr = rpc_strdup(hname);
+		eps[num_ep].family = rpc_strdup("inet");
+		eps[num_ep].proto =  rpc_strdup("udp");
 	}
 
 	srv->name = (nis_name) host;
@@ -473,7 +473,7 @@ error:
 	 */
 	if (time_valid) {
 		if (*uaddr == NULL)
-			*uaddr = strdup(useua);
+			*uaddr = rpc_strdup(useua);
 
 		/* Round to the nearest second */
 		tv.tv_sec += (tv.tv_sec > 500000) ? 1 : 0;

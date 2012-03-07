@@ -80,13 +80,13 @@ svc_raw_create()
 	mutex_lock(&svcraw_lock);
 	srp = svc_raw_private;
 	if (srp == NULL) {
-		srp = (struct svc_raw_private *)calloc(1, sizeof (*srp));
+		srp = (struct svc_raw_private *) mem_alloc(sizeof (*srp));
 		if (srp == NULL) {
 			mutex_unlock(&svcraw_lock);
 			return (NULL);
 		}
 		if (__rpc_rawcombuf == NULL)
-			__rpc_rawcombuf = calloc(UDPMSGSIZE, sizeof (char));
+			__rpc_rawcombuf = mem_alloc(UDPMSGSIZE * sizeof (char));
 		srp->raw_buf = __rpc_rawcombuf; /* Share it with the client */
 		svc_raw_private = srp;
 	}

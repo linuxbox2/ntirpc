@@ -284,7 +284,7 @@ key_call_destroy(void *vp)
 	if (kcp) {
 		if (kcp->client)
 			clnt_destroy(kcp->client);
-		free(kcp);
+		__free(kcp);
 	}
 }
 
@@ -316,7 +316,7 @@ int	vers;
 	}
 	kcp = (struct key_call_private *)thr_getspecific(key_call_key);
 	if (kcp == (struct key_call_private *)NULL) {
-		kcp = (struct key_call_private *)malloc(sizeof (*kcp));
+		kcp = (struct key_call_private *) mem_alloc(sizeof (*kcp));
 		if (kcp == (struct key_call_private *)NULL) {
 			return ((CLIENT *) NULL);
 		}

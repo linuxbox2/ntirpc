@@ -194,13 +194,13 @@ svc_shim_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig)
   } /* switch */
 
   if(xprt_orig->xp_tp) {
-      xprt_copy->xp_tp = strdup(xprt_orig->xp_tp);
+      xprt_copy->xp_tp = rpc_strdup(xprt_orig->xp_tp);
       if(!xprt_copy->xp_tp)
           goto fail;
   }
 
   if(xprt_orig->xp_netid) {
-      xprt_copy->xp_netid = strdup(xprt_orig->xp_netid);
+      xprt_copy->xp_netid = rpc_strdup(xprt_orig->xp_netid);
       if(!xprt_copy->xp_netid)
           goto fail;
   }

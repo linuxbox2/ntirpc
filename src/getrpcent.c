@@ -83,7 +83,7 @@ _rpcdata()
 	struct rpcdata *d = rpcdata;
 
 	if (d == 0) {
-		d = (struct rpcdata *)calloc(1, sizeof (struct rpcdata));
+		d = (struct rpcdata *) mem_alloc(sizeof (struct rpcdata));
 		rpcdata = d;
 	}
 	return (d);
@@ -121,7 +121,7 @@ getrpcbynumber(number)
                 }
                 d->current[d->currentlen] = '\0';
                 p = interpret(d->current, d->currentlen);
-                (void) free(d->current);
+                __free(d->current);
                 return p;
         }
 no_yp:
@@ -171,7 +171,7 @@ setrpcent(f)
 #ifdef	YP
         if (!__yp_nomap && _yp_check(NULL)) {
                 if (d->current)
-                        free(d->current);
+                        __free(d->current);
                 d->current = NULL;
                 d->currentlen = 0;
                 return;
@@ -195,7 +195,7 @@ endrpcent()
 #ifdef	YP
         if (!__yp_nomap && _yp_check(NULL)) {
         	if (d->current && !d->stayopen)
-                        free(d->current);
+                        __free(d->current);
                 d->current = NULL;
                 d->currentlen = 0;
                 return;
@@ -246,7 +246,7 @@ getrpcent()
                 }
                 val[vallen] = '\0';
                 hp = interpret(val, vallen);
-                (void) free(val);
+                free(val); /* yp allocated with malloc */
                 return hp;
         }
 no_yp:

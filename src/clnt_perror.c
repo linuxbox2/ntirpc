@@ -55,7 +55,7 @@ _buf()
 {
 
 	if (buf == 0)
-		buf = (char *)malloc(CLNT_PERROR_BUFLEN);
+		buf = (char *) mem_alloc(CLNT_PERROR_BUFLEN);
 	return (buf);
 }
 

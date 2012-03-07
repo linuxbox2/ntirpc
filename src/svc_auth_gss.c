@@ -40,6 +40,8 @@
 #include <rpc/rpc.h>
 #include <gssapi/gssapi.h>
 
+#include "rpc_com.h"
+
 extern SVCAUTH svc_auth_none;
 
 /*
@@ -381,11 +383,11 @@ _svcauth_gss(struct svc_req *rqst, struct rpc_msg *msg, bool_t *no_dispatch)
 	/* Allocate and set up server auth handle. */
 	if (rqst->rq_xprt->xp_auth == NULL ||
 	    rqst->rq_xprt->xp_auth == &svc_auth_none) {
-		if ((auth = calloc(sizeof(*auth), 1)) == NULL) {
+		if ((auth = mem_alloc(sizeof(*auth))) == NULL) {
 			fprintf(stderr, "svcauth_gss: out_of_memory\n");
 			return (AUTH_FAILED);
 		}
-		if ((gd = calloc(sizeof(*gd), 1)) == NULL) {
+		if ((gd = mem_alloc(sizeof(*gd))) == NULL) {
 			fprintf(stderr, "svcauth_gss: out_of_memory\n");
 			return (AUTH_FAILED);
 		}
@@ -580,7 +582,7 @@ svcauth_gss_get_principal(SVCAUTH *auth)
 	if (gd->cname.length == 0)
 		return (NULL);
 
-	if ((pname = malloc(gd->cname.length + 1)) == NULL)
+	if ((pname = mem_alloc(gd->cname.length + 1)) == NULL)
 		return (NULL);
 
 	memcpy(pname, gd->cname.value, gd->cname.length);

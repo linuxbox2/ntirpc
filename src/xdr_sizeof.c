@@ -43,6 +43,8 @@
 #include <stdlib.h>
 #include "un-namespace.h"
 
+#include "rpc_com.h"
+
 /* ARGSUSED */
 static bool_t
 x_putlong(xdrs, longp)
@@ -99,8 +101,8 @@ x_inline(xdrs, len)
 	} else {
 		/* Free the earlier space and allocate new area */
 		if (xdrs->x_private)
-			free(xdrs->x_private);
-		if ((xdrs->x_private = (caddr_t) malloc(len)) == NULL) {
+			__free(xdrs->x_private);
+		if ((xdrs->x_private = (caddr_t) mem_alloc(len)) == NULL) {
 			xdrs->x_base = 0;
 			return (NULL);
 		}
@@ -124,7 +126,7 @@ x_destroy(xdrs)
 	xdrs->x_handy = 0;
 	xdrs->x_base = 0;
 	if (xdrs->x_private) {
-		free(xdrs->x_private);
+		__free(xdrs->x_private);
 		xdrs->x_private = NULL;
 	}
 	return;
@@ -161,6 +163,6 @@ xdr_sizeof(func, data)
 
 	stat = func(&x, data);
 	if (x.x_private)
-		free(x.x_private);
+		__free(x.x_private);
 	return (stat == TRUE ? (unsigned) x.x_handy: 0);
 }

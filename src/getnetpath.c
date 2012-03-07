@@ -39,6 +39,8 @@
 #include <string.h>
 #include <syslog.h>
 
+#include <rpc/types.h>
+
 /*
  * internal structure to keep track of a netpath "session"
  */
@@ -84,8 +86,8 @@ setnetpath()
     malloc_debug(1);
 #endif
 
-    if ((np_sessionp =
-	(struct netpath_vars *)malloc(sizeof (struct netpath_vars))) == NULL) {
+    if ((np_sessionp = (struct netpath_vars *)
+         mem_alloc(sizeof (struct netpath_vars))) == NULL) {
 	return (NULL);
     }
     if ((np_sessionp->nc_handlep = setnetconfig()) == NULL) {
@@ -99,8 +101,8 @@ setnetpath()
     } else {
 	(void) endnetconfig(np_sessionp->nc_handlep);/* won't need nc session*/
 	np_sessionp->nc_handlep = NULL;
-	if ((np_sessionp->netpath = malloc(strlen(npp)+1)) == NULL) {
-	    free(np_sessionp);
+	if ((np_sessionp->netpath = mem_alloc(strlen(npp)+1)) == NULL) {
+	    __free(np_sessionp);
 	    return (NULL);
 	} else {
 	    (void) strcpy(np_sessionp->netpath, npp);
@@ -165,7 +167,7 @@ getnetpath(handlep)
 	 */
 	if ((ncp = getnetconfigent(npp)) != NULL) {
 	    chainp = (struct netpath_chain *)	/* cobble alloc chain entry */
-		    malloc(sizeof (struct netpath_chain));
+		    mem_alloc(sizeof (struct netpath_chain));
 	    chainp->ncp = ncp;
 	    chainp->nchain_next = NULL;
 	    if (np_sessionp->ncp_list == NULL) {
@@ -199,12 +201,14 @@ endnetpath(handlep)
     if (np_sessionp->nc_handlep != NULL)
 	endnetconfig(np_sessionp->nc_handlep);
     if (np_sessionp->netpath_start != NULL)
-	free(np_sessionp->netpath_start);
+	__free(np_sessionp->netpath_start);
     for (chainp = np_sessionp->ncp_list; chainp != NULL;
-	    lastp=chainp, chainp=chainp->nchain_next, free(lastp)) {
+	    lastp=chainp, chainp=chainp->nchain_next, __free(lastp)) {
 	freenetconfigent(chainp->ncp);
     }
-    free(np_sessionp);
+
+
+    __free(np_sessionp);
 #ifdef MEM_CHK
     if (malloc_verify() == 0) {
 	fprintf(stderr, "memory heap corrupted in endnetpath\n");

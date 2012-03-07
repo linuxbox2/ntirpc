@@ -128,7 +128,7 @@ getpublicandprivatekey(key, ret)
 			lookup[len] = 0;
 			strcpy(ret, lookup);
 			fclose(fd);
-			free(lookup);
+			free(lookup); /* yp allocated with malloc */
 			return (2);
 #else /* YP */
 #ifdef DEBUG

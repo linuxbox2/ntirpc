@@ -214,7 +214,7 @@ retry:
 	/* Bump allocation size.  A zero allocation size may result in a
 	 * NULL calloc(3) result, which is not reliably distinguishable
 	 * from a memory allocation error. */
-	gids = calloc(len + 1, sizeof(gid_t));
+	gids = mem_alloc((len + 1)*sizeof(gid_t));
 	if (gids == NULL) {
 		rpc_createerr.cf_error.re_errno = ENOMEM;
 		goto out_err;
@@ -223,7 +223,7 @@ retry:
 	len = getgroups(len, gids);
 	if (len == -1) {
 		rpc_createerr.cf_error.re_errno = errno;
-		free(gids);
+		__free(gids);
 		if (rpc_createerr.cf_error.re_errno == EINVAL) {
 			rpc_createerr.cf_error.re_errno = 0;
 			goto retry;
@@ -240,7 +240,7 @@ retry:
 
 	/* XXX: interface problem; those should all have been unsigned */
 	result = authunix_create(machname, uid, gid, len, gids);
-	free(gids);
+	__free(gids);
 	return result;
 
 out_err:

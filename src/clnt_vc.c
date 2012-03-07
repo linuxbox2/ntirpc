@@ -274,7 +274,7 @@ clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
 	ct->ct_fd = fd;
 	ct->ct_wait.tv_usec = 0;
 	ct->ct_waitset = FALSE;
-	ct->ct_addr.buf = malloc(raddr->maxlen);
+	ct->ct_addr.buf = mem_alloc(raddr->maxlen);
 	if (ct->ct_addr.buf == NULL)
 		goto err;
 	memcpy(ct->ct_addr.buf, raddr->buf, raddr->len);
@@ -700,7 +700,7 @@ clnt_vc_destroy(cl)
             (void)close(ct->ct_fd);
 	XDR_DESTROY(&(ct->ct_xdrs));
 	if (ct->ct_addr.buf)
-            free(ct->ct_addr.buf);
+            __free(ct->ct_addr.buf);
 
         vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE); /* XXX moved before free */
         vc_lock_unref_clnt(cl);

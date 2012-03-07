@@ -506,7 +506,7 @@ clnt_broadcast(prog, vers, proc, xargs, argsp, xresults, resultsp, eachresult)
 	if (clnt_broadcast_key == -1) {
 		mutex_lock(&tsd_lock);
 		if (clnt_broadcast_key == -1)
-			thr_keycreate(&clnt_broadcast_key, free);
+			thr_keycreate(&clnt_broadcast_key, __rpc_free);
 		mutex_unlock(&tsd_lock);
 	}
 	thr_setspecific(clnt_broadcast_key, (void *) eachresult);
@@ -565,10 +565,10 @@ clntunix_create(raddr, prog, vers, sockp, sendsz, recvsz)
 
 	cl = NULL;
 	svcaddr = NULL;
-	if (((svcaddr = malloc(sizeof(struct netbuf))) == NULL ) ||
-	    ((svcaddr->buf = malloc(sizeof(struct sockaddr_un))) == NULL)) {
+	if (((svcaddr = mem_alloc(sizeof(struct netbuf))) == NULL ) ||
+	    ((svcaddr->buf = mem_alloc(sizeof(struct sockaddr_un))) == NULL)) {
 		if (svcaddr != NULL)
-			free(svcaddr);
+			__free(svcaddr);
 		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 		rpc_createerr.cf_error.re_errno = errno;
 		return(cl);
@@ -591,8 +591,8 @@ clntunix_create(raddr, prog, vers, sockp, sendsz, recvsz)
 	cl = clnt_vc_create(*sockp, svcaddr, prog,
 	    vers, sendsz, recvsz);
 done:
-	free(svcaddr->buf);
-	free(svcaddr);
+	__free(svcaddr->buf);
+	__free(svcaddr);
 	return(cl);
 }
 
@@ -638,14 +638,14 @@ svcunix_create(sock, sendsize, recvsize, path)
 		goto done;
 
 	taddr.addr.len = taddr.addr.maxlen = addrlen;
-	taddr.addr.buf = malloc(addrlen);
+	taddr.addr.buf = mem_alloc(addrlen);
 	if (taddr.addr.buf == NULL)
 		goto done;
 	memcpy(taddr.addr.buf, sa, addrlen);
 
 	if (nconf->nc_semantics != NC_TPI_CLTS) {
 		if (listen(sock, SOMAXCONN) < 0) {
-			free(taddr.addr.buf);
+			__free(taddr.addr.buf);
 			goto done;
 		}
 	}

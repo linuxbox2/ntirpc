@@ -76,7 +76,7 @@ rpc_call_destroy(void *vp)
 	if (rcp) {
 		if (rcp->client)
 			CLNT_DESTROY(rcp->client);
-		free(rcp);
+		__free(rcp);
 	}
 }
 
@@ -112,7 +112,7 @@ rpc_call(host, prognum, versnum, procnum, inproc, in, outproc, out, nettype)
 	}
 	rcp = (struct rpc_call_private *)thr_getspecific(rpc_call_key);
 	if (rcp == NULL) {
-		rcp = malloc(sizeof (*rcp));
+		rcp = mem_alloc(sizeof(*rcp));
 		if (rcp == NULL) {
 			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 			rpc_createerr.cf_error.re_errno = errno;

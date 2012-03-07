@@ -149,7 +149,7 @@ __rpc_getbroadifs(int af, int proto, int socktype, broadlist_t *list)
 		if (ifap->ifa_addr->sa_family != af ||
 		    !(ifap->ifa_flags & IFF_UP))
 			continue;
-		bip = (struct broadif *)malloc(sizeof *bip);
+		bip = (struct broadif *) mem_alloc(sizeof *bip);
 		if (bip == NULL)
 			break;
 		bip->index = if_nametoindex(ifap->ifa_name);
@@ -180,7 +180,7 @@ __rpc_getbroadifs(int af, int proto, int socktype, broadlist_t *list)
 		} else
 #endif
 		{
-			free(bip);
+			__free(bip);
 			continue;
 		}
 		TAILQ_INSERT_TAIL(list, bip, link);
@@ -201,7 +201,7 @@ __rpc_freebroadifs(broadlist_t *list)
 
 	while (bip != NULL) {
 		next = TAILQ_NEXT(bip, link);
-		free(bip);
+		__free(bip);
 		bip = next;
 	}
 }
@@ -341,7 +341,7 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 #ifdef PORTMAP
 		if (si.si_af == AF_INET && si.si_proto == IPPROTO_UDP) {
 			udpbufsz = fdlist[fdlistno].dsize;
-			if ((outbuf_pmap = malloc(udpbufsz)) == NULL) {
+			if ((outbuf_pmap = mem_alloc(udpbufsz)) == NULL) {
 				close(fd);
 				stat = RPC_SYSTEMERROR;
 				goto done_broad;
@@ -362,8 +362,8 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 			stat = RPC_CANTSEND;
 		goto done_broad;
 	}
-	inbuf = malloc(maxbufsize);
-	outbuf = malloc(maxbufsize);
+	inbuf = mem_alloc(maxbufsize);
+	outbuf = mem_alloc(maxbufsize);
 	if ((inbuf == NULL) || (outbuf == NULL)) {
 		stat = RPC_SYSTEMERROR;
 		goto done_broad;
@@ -607,7 +607,7 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 						    fdlist[i].nconf, uaddrp);
 						done = (*eachresult)(resultsp,
 						    np, fdlist[i].nconf);
-						free(np);
+						__free(np);
 #ifdef PORTMAP
 					}
 #endif				/* PORTMAP */
@@ -632,12 +632,12 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 
 done_broad:
 	if (inbuf)
-		(void) free(inbuf);
+		__free(inbuf);
 	if (outbuf)
-		(void) free(outbuf);
+		__free(outbuf);
 #ifdef PORTMAP
 	if (outbuf_pmap)
-		(void) free(outbuf_pmap);
+		__free(outbuf_pmap);
 #endif				/* PORTMAP */
 	for (i = 0; i < fdlistno; i++) {
 		(void)close(fdlist[i].fd);

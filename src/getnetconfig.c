@@ -41,6 +41,7 @@
 #include <string.h>
 #include <rpc/rpc.h>
 #include <unistd.h>
+
 #include "rpc_com.h"
 
 /*
@@ -140,16 +141,16 @@ __nc_error()
 		error = 0;
 		mutex_lock(&nc_lock);
 		if (nc_key == -1)
-			error = thr_keycreate(&nc_key, free);
+			error = thr_keycreate(&nc_key, __rpc_free);
 		mutex_unlock(&nc_lock);
 		if (error)
 			return (&nc_error);
 	}
 	if ((nc_addr = (int *)thr_getspecific(nc_key)) == NULL) {
-		nc_addr = (int *)malloc(sizeof (int));
+		nc_addr = (int *) mem_alloc(sizeof (int));
 		if (thr_setspecific(nc_key, (void *) nc_addr) != 0) {
 			if (nc_addr)
-				free(nc_addr);
+				__free(nc_addr);
 			return (&nc_error);
 		}
 		*nc_addr = 0;
@@ -182,7 +183,7 @@ setnetconfig()
 {
     struct netconfig_vars *nc_vars;
 
-    if ((nc_vars = (struct netconfig_vars *)malloc(sizeof
+    if ((nc_vars = (struct netconfig_vars *) mem_alloc(sizeof
 		(struct netconfig_vars))) == NULL) {
 	return(NULL);
     }
@@ -200,7 +201,7 @@ setnetconfig()
     }
     ni.ref--;
     nc_error = NC_NONETCONFIG;
-    free(nc_vars);
+    __free(nc_vars);
     return (NULL);
 }
 
@@ -262,7 +263,7 @@ void *handlep;
 	return (NULL);
     }
 
-    stringp = (char *) malloc(MAXNETCONFIGLINE);
+    stringp = (char *) mem_alloc(MAXNETCONFIGLINE);
     if (stringp == NULL)
     	return (NULL);
 
@@ -278,21 +279,21 @@ void *handlep;
      */
     do {
 	if (fgets(stringp, MAXNETCONFIGLINE, nc_file) == NULL) {
-	    free(stringp);
+	    __free(stringp);
 	    ni.eof = 1;
 	    return (NULL);
         }
     } while (*stringp == '#');
 
-    list = (struct netconfig_list *) malloc(sizeof (struct netconfig_list));
+    list = (struct netconfig_list *) mem_alloc(sizeof (struct netconfig_list));
     if (list == NULL) {
-    	free(stringp);
+    	__free(stringp);
     	return(NULL);
     }
-    np = (struct netconfig *) malloc(sizeof (struct netconfig));
+    np = (struct netconfig *) mem_alloc(sizeof (struct netconfig));
     if (np == NULL) {
-    	free(stringp);
-	free(list);
+    	__free(stringp);
+	__free(list);
     	return(NULL);
     }
     list->ncp = np;
@@ -300,9 +301,9 @@ void *handlep;
     list->ncp->nc_lookups = NULL;
     list->linep = stringp;
     if (parse_ncp(stringp, list->ncp) == -1) {
-	free(stringp);
-	free(np);
-	free(list);
+	__free(stringp);
+	__free(np);
+	__free(list);
 	return (NULL);
     }
     else {
@@ -355,7 +356,7 @@ void *handlep;
     nc_handlep->flag = 0;
     nc_handlep->nc_configs = NULL;
     if (--ni.ref > 0) {
-    	free(nc_handlep);
+    	__free(nc_handlep);
 	return(0);
     }
 
@@ -369,13 +370,13 @@ void *handlep;
     ni.tail = NULL;
     while (q) {
 	p = q->next;
-	if (q->ncp->nc_lookups != NULL) free(q->ncp->nc_lookups);
-	free(q->ncp);
-	free(q->linep);
-	free(q);
+	if (q->ncp->nc_lookups != NULL) __free(q->ncp->nc_lookups);
+	__free(q->ncp);
+	__free(q->linep);
+	__free(q);
 	q = p;
     }
-    free(nc_handlep);
+    __free(nc_handlep);
 
     fclose(nc_file);
     nc_file = NULL;
@@ -442,7 +443,7 @@ getnetconfigent(netid)
 	return (NULL);
     }
 
-    if ((linep = malloc(MAXNETCONFIGLINE)) == NULL) {
+    if ((linep = mem_alloc(MAXNETCONFIGLINE)) == NULL) {
 	fclose(file);
 	nc_error = NC_NOMEM;
 	return (NULL);
@@ -466,19 +467,19 @@ getnetconfigent(netid)
 	if (strlen(netid) == (size_t) (len = tmpp - stringp) &&	/* a match */
 		strncmp(stringp, netid, (size_t)len) == 0) {
 	    if ((ncp = (struct netconfig *)
-		    malloc(sizeof (struct netconfig))) == NULL) {
+		    mem_alloc(sizeof (struct netconfig))) == NULL) {
 		break;
 	    }
 	    ncp->nc_lookups = NULL;
 	    if (parse_ncp(linep, ncp) == -1) {
-		free(ncp);
+		__free(ncp);
 		ncp = NULL;
 	    }
 	    break;
 	}
     } while (stringp != NULL);
     if (ncp == NULL) {
-	free(linep);
+	__free(linep);
     }
     fclose(file);
     return(ncp);
@@ -494,10 +495,10 @@ freenetconfigent(netconfigp)
 	struct netconfig *netconfigp;
 {
     if (netconfigp != NULL) {
-	free(netconfigp->nc_netid);	/* holds all netconfigp's strings */
+	__free(netconfigp->nc_netid);	/* holds all netconfigp's strings */
 	if (netconfigp->nc_lookups != NULL)
-	    free(netconfigp->nc_lookups);
-	free(netconfigp);
+	    __free(netconfigp->nc_lookups);
+	__free(netconfigp);
     }
     return;
 }
@@ -585,9 +586,9 @@ struct netconfig *ncp;	/* where to put results */
 	char *cp;	    /* tmp string */
 
 	if (ncp->nc_lookups != NULL)	/* from last visit */
-	    free(ncp->nc_lookups);
+	    __free(ncp->nc_lookups);
 	/* preallocate one string pointer */
-	ncp->nc_lookups = (char **)malloc(sizeof (char *));
+	ncp->nc_lookups = (char **) mem_alloc(sizeof (char *));
 	ncp->nc_nlookups = 0;
 	while ((cp = tokenp) != NULL) {
 	    tokenp = _get_next_token(cp, ',');
@@ -652,10 +653,10 @@ struct netconfig	*ncp;
     char	*tmp;
     u_int	i;
 
-    if ((tmp=malloc(MAXNETCONFIGLINE)) == NULL)
+    if ((tmp=mem_alloc(MAXNETCONFIGLINE)) == NULL)
 	return(NULL);
-    if ((p=(struct netconfig *)malloc(sizeof(struct netconfig))) == NULL) {
-	free(tmp);
+    if ((p=(struct netconfig *) mem_alloc(sizeof(struct netconfig))) == NULL) {
+	__free(tmp);
 	return(NULL);
     }
     /*
@@ -675,9 +676,9 @@ struct netconfig	*ncp;
     p->nc_proto = (char *)strcpy(tmp,ncp->nc_proto);
     tmp = strchr(tmp, 0) + 1;
     p->nc_device = (char *)strcpy(tmp,ncp->nc_device);
-    p->nc_lookups = (char **)malloc((size_t)(p->nc_nlookups+1) * sizeof(char *));
+    p->nc_lookups = (char **) mem_alloc((size_t)(p->nc_nlookups+1) * sizeof(char *));
     if (p->nc_lookups == NULL) {
-	free(p->nc_netid);
+	__free(p->nc_netid);
 	return(NULL);
     }
     for (i=0; i < p->nc_nlookups; i++) {

@@ -43,6 +43,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+
 #include "rpc_com.h"
 
 extern bool_t __rpc_is_local_host(const char *);
@@ -288,9 +289,9 @@ clnt_tp_create_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
 		/* Reuse the CLIENT handle and change the appropriate fields */
 		if (CLNT_CONTROL(cl, CLSET_SVC_ADDR, (void *)svcaddr) == TRUE) {
 			if (cl->cl_netid == NULL)
-				cl->cl_netid = strdup(nconf->nc_netid);
+				cl->cl_netid = rpc_strdup(nconf->nc_netid);
 			if (cl->cl_tp == NULL)
-				cl->cl_tp = strdup(nconf->nc_device);
+				cl->cl_tp = rpc_strdup(nconf->nc_device);
 			(void) CLNT_CONTROL(cl, CLSET_PROG, (void *)&prog);
 			(void) CLNT_CONTROL(cl, CLSET_VERS, (void *)&vers);
 		} else {
@@ -299,8 +300,8 @@ clnt_tp_create_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
 					prog, vers, 0, 0);
 		}
 	}
-	free(svcaddr->buf);
-	free(svcaddr);
+	__free(svcaddr->buf);
+	__free(svcaddr);
 	return (cl);
 }
 
@@ -379,8 +380,8 @@ clnt_tli_create(int fd, const struct netconfig *nconf,
 	if (cl == NULL)
 		goto err1; /* borrow errors from clnt_dg/vc creates */
 	if (nconf) {
-		cl->cl_netid = strdup(nconf->nc_netid);
-		cl->cl_tp = strdup(nconf->nc_device);
+		cl->cl_netid = rpc_strdup(nconf->nc_netid);
+		cl->cl_tp = rpc_strdup(nconf->nc_device);
 	} else {
 		cl->cl_netid = "";
 		cl->cl_tp = "";

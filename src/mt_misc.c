@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rpc_com.h"
+
 /* protects the services list (svc.c) */
 pthread_rwlock_t	svc_lock = PTHREAD_RWLOCK_INITIALIZER;
 
@@ -102,17 +104,17 @@ __rpc_createerr()
 
 	mutex_lock(&tsd_lock);
 	if (rce_key == -1)
-		thr_keycreate(&rce_key, free);
+		thr_keycreate(&rce_key, __rpc_free);
 	mutex_unlock(&tsd_lock);
 
 	rce_addr = (struct rpc_createerr *)thr_getspecific(rce_key);
 	if (!rce_addr) {
 		rce_addr = (struct rpc_createerr *)
-			malloc(sizeof (struct rpc_createerr));
+			mem_alloc(sizeof (struct rpc_createerr));
 		if (!rce_addr ||
 		    thr_setspecific(rce_key, (void *) rce_addr) != 0) {
 			if (rce_addr)
-				free(rce_addr);
+				__rpc_free(rce_addr);
 			return (&rpc_createerr);
 		}
 		memset(rce_addr, 0, sizeof (struct rpc_createerr));

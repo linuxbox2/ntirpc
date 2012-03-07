@@ -154,8 +154,8 @@ rpc_reg(prognum, versnum, procnum, progname, inproc, outproc, nettype)
 				SVC_DESTROY(svcxprt);
 				continue;
 			}
-			if (((xdrbuf = malloc((unsigned)recvsz)) == NULL) ||
-				((netid = strdup(nconf->nc_netid)) == NULL)) {
+			if (((xdrbuf = mem_alloc((unsigned)recvsz)) == NULL) ||
+                            ((netid = rpc_strdup(nconf->nc_netid)) == NULL)) {
 				__warnx(rpc_reg_err, rpc_reg_msg, __no_mem_str);
 				SVC_DESTROY(svcxprt);
 				break;
@@ -184,19 +184,19 @@ rpc_reg(prognum, versnum, procnum, progname, inproc, outproc, nettype)
 				(unsigned)versnum, netid);
 			if (madenow) {
 				SVC_DESTROY(svcxprt);
-				free(xdrbuf);
-				free(netid);
+				__free(xdrbuf);
+				__free(netid);
 			}
 			continue;
 		}
 
-		pl = malloc(sizeof (struct proglst));
+		pl = mem_alloc(sizeof (struct proglst));
 		if (pl == NULL) {
 			__warnx(rpc_reg_err, rpc_reg_msg, __no_mem_str);
 			if (madenow) {
 				SVC_DESTROY(svcxprt);
-				free(xdrbuf);
-				free(netid);
+				__free(xdrbuf);
+				__free(netid);
 			}
 			break;
 		}

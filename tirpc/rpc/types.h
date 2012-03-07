@@ -68,15 +68,16 @@ typedef int32_t rpc_inline_t;
 
 #define TIRPC_GET_MALLOC           1
 #define TIRPC_SET_MALLOC           2
-#define TIRPC_GET_FREE             3
-#define TIRPC_SET_FREE             4
-#define TIRPC_GET_FLAGS            5
-#define TIRPC_SET_FLAGS            6
-#define TIRPC_GET_DEBUG_FLAGS      7
-#define TIRPC_SET_DEBUG_FLAGS      8
-#define TIRPC_GET_WARNX            9
-#define TIRPC_SET_WARNX            10
-
+#define TIRPC_GET_MEM_FREE         3
+#define TIRPC_SET_MEM_FREE         4
+#define TIRPC_GET_FREE             5
+#define TIRPC_SET_FREE             6
+#define TIRPC_GET_FLAGS            7
+#define TIRPC_SET_FLAGS            8
+#define TIRPC_GET_DEBUG_FLAGS      9
+#define TIRPC_SET_DEBUG_FLAGS      10
+#define TIRPC_GET_WARNX            11
+#define TIRPC_SET_WARNX            12
 
 /*
  * Debug flags support
@@ -88,17 +89,19 @@ typedef int32_t rpc_inline_t;
 
 typedef void *(*mem_alloc_t)(size_t);
 typedef void (*mem_free_t)(void *, size_t);
+typedef  void (*std_free_t)(void *);
 typedef void (*warnx_t)(const char *fmt, ...);
 
 /*
  * Package params support
  */
 typedef struct tirpc_pkg_params {
-	u_int flags;
-	u_int debug_flags;
-	mem_alloc_t mem_alloc;
-	mem_free_t mem_free;
-	warnx_t warnx;
+    u_int flags;
+    u_int debug_flags;
+    mem_alloc_t mem_alloc;
+    mem_free_t mem_free;
+    std_free_t free;
+    warnx_t warnx;
 } tirpc_pkg_params;
 
 extern tirpc_pkg_params __pkg_params;
@@ -106,6 +109,7 @@ extern tirpc_pkg_params __pkg_params;
 #define __warnx(...) __pkg_params.warnx(__VA_ARGS__)
 #define mem_alloc(size) __pkg_params.mem_alloc((size))
 #define mem_free(ptr, size) __pkg_params.mem_free((ptr),(size))
+#define __free(ptr) __pkg_params.free((ptr))
 
 #include <sys/time.h>
 #include <sys/param.h>

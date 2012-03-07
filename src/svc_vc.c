@@ -450,7 +450,7 @@ makefd_xprt(fd, sendsize, recvsize)
 	xprt->xp_port = 0;  /* this is a connection, not a rendezvouser */
 	xprt->xp_fd = fd;
         if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
-            xprt->xp_netid = strdup(netid);
+            xprt->xp_netid = rpc_strdup(netid);
 
         /* Make reachable.  Registration deferred.  */
         svc_rqst_init_xprt(xprt);
@@ -610,10 +610,10 @@ __svc_vc_dodestroy(xprt)
 		mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
 
 	if (xprt->xp_tp)
-		free(xprt->xp_tp); /* XXX check why not mem_alloc/free */
+                __free(xprt->xp_tp);
 
 	if (xprt->xp_netid)
-		free(xprt->xp_netid); /* XXX check why not mem_alloc/free */
+		__free(xprt->xp_netid);
 
         svc_rqst_finalize_xprt(xprt);
         vc_lock_unref_xprt(xprt);

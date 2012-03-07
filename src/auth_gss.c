@@ -156,15 +156,15 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 
 	memset(&rpc_createerr, 0, sizeof(rpc_createerr));
 
-	if ((auth = calloc(sizeof(*auth), 1)) == NULL) {
+	if ((auth = mem_alloc(sizeof(*auth))) == NULL) {
 		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 		rpc_createerr.cf_error.re_errno = ENOMEM;
 		return (NULL);
 	}
-	if ((gd = calloc(sizeof(*gd), 1)) == NULL) {
+	if ((gd = mem_alloc(sizeof(*gd))) == NULL) {
 		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 		rpc_createerr.cf_error.re_errno = ENOMEM;
-		free(auth);
+		__free(auth);
 		return (NULL);
 	}
 #ifdef DEBUG
@@ -175,7 +175,7 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 						!= GSS_S_COMPLETE) {
 			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 			rpc_createerr.cf_error.re_errno = ENOMEM;
-			free(auth);
+			__free(auth);
 			return (NULL);
 		}
 	}
@@ -608,8 +608,8 @@ authgss_destroy(AUTH *auth)
 	if (gd->name != GSS_C_NO_NAME)
 		gss_release_name(&min_stat, &gd->name);
 
-	free(gd);
-	free(auth);
+	__free(gd);
+	__free(auth);
 }
 
 bool_t

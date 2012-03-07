@@ -286,7 +286,7 @@ getnetid(key, ret)
 			}
 			lookup[len] = 0;
 			strcpy(ret, lookup);
-			free(lookup);
+			free(lookup); /* yp allocated with malloc */
 			if (fd != NULL)
 				fclose(fd);
 			return (2);

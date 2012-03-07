@@ -63,6 +63,7 @@ tirpc_pkg_params __pkg_params = {
     TIRPC_DEBUG_FLAGS_NONE,
     __mem_alloc,
     __mem_free,
+    __rpc_free,
     warnx
 };
 
@@ -78,11 +79,17 @@ tirpc_control(rq, in)
 	case TIRPC_SET_MALLOC:
 		__pkg_params.mem_alloc = *(mem_alloc_t)in;
 		break;
-	case TIRPC_GET_FREE:
+	case TIRPC_GET_MEM_FREE:
 		*(mem_free_t *)in = __pkg_params.mem_free;
 		break;
-	case TIRPC_SET_FREE:
+	case TIRPC_SET_MEM_FREE:
 		__pkg_params.mem_free = *(mem_free_t)in;
+		break;
+	case TIRPC_GET_FREE:
+		*(std_free_t *)in = __pkg_params.free;
+		break;
+	case TIRPC_SET_FREE:
+		__pkg_params.free = *(std_free_t)in;
 		break;
 	case TIRPC_GET_FLAGS:
 	    *(u_int *)in = __pkg_params.flags;
@@ -156,6 +163,12 @@ void
 __mem_free(ptr, bsize)
 	void *ptr;
 	size_t bsize;
+{
+    free(ptr);
+}
+
+void
+__rpc_free(void *ptr)
 {
     free(ptr);
 }
@@ -297,14 +310,14 @@ __rpc_getconfip(nettype)
 	if (tcp_key == -1) {
 		mutex_lock(&tsd_lock);
 		if (tcp_key == -1)
-			thr_keycreate(&tcp_key, free);
+			thr_keycreate(&tcp_key, __rpc_free);
 		mutex_unlock(&tsd_lock);
 	}
 	netid_tcp = (char *)thr_getspecific(tcp_key);
 	if (udp_key == -1) {
 		mutex_lock(&tsd_lock);
 		if (udp_key == -1)
-			thr_keycreate(&udp_key, free);
+			thr_keycreate(&udp_key, __rpc_free);
 		mutex_unlock(&tsd_lock);
 	}
 	netid_udp = (char *)thr_getspecific(udp_key);
@@ -321,13 +334,13 @@ __rpc_getconfip(nettype)
 			    strcmp(nconf->nc_protofmly, NC_INET6) == 0) {
 				if (strcmp(nconf->nc_proto, NC_TCP) == 0 &&
 						netid_tcp == NULL) {
-					netid_tcp = strdup(nconf->nc_netid);
+					netid_tcp = rpc_strdup(nconf->nc_netid);
 					thr_setspecific(tcp_key,
 							(void *) netid_tcp);
 				} else
 				if (strcmp(nconf->nc_proto, NC_UDP) == 0 &&
 						netid_udp == NULL) {
-					netid_udp = strdup(nconf->nc_netid);
+					netid_udp = rpc_strdup(nconf->nc_netid);
 					thr_setspecific(udp_key,
 						(void *) netid_udp);
 				}
@@ -359,7 +372,7 @@ __rpc_setconf(nettype)
 {
 	struct handle *handle;
 
-	handle = (struct handle *) malloc(sizeof (struct handle));
+	handle = (struct handle *) mem_alloc(sizeof (struct handle));
 	if (handle == NULL) {
 		return (NULL);
 	}
@@ -368,7 +381,7 @@ __rpc_setconf(nettype)
 	case _RPC_CIRCUIT_N:
 	case _RPC_DATAGRAM_N:
 		if (!(handle->nhandle = setnetpath())) {
-			free(handle);
+			__free(handle);
 			return (NULL);
 		}
 		handle->nflag = TRUE;
@@ -380,7 +393,7 @@ __rpc_setconf(nettype)
 	case _RPC_UDP:
 		if (!(handle->nhandle = setnetconfig())) {
 		    __warnx("rpc: failed to open %s", NETCONFIG);
-		    free(handle);
+		    __free(handle);
 		    return (NULL);
 		}
 		handle->nflag = FALSE;
@@ -488,7 +501,7 @@ __rpc_endconf(vhandle)
 	} else {
 		endnetconfig(handle->nhandle);
 	}
-	free(handle);
+	__free(handle);
 }
 
 /*
@@ -732,7 +745,7 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 
 	port = 0;
 	sin = NULL;
-	addrstr = strdup(uaddr);
+	addrstr = rpc_strdup(uaddr);
 	if (addrstr == NULL)
 		return NULL;
 
@@ -755,21 +768,21 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 		port = (porthi << 8) | portlo;
 	}
 
-	ret = (struct netbuf *)malloc(sizeof *ret);
+	ret = (struct netbuf *) mem_alloc(sizeof *ret);
 	if (ret == NULL)
 		goto out;
 	
 	switch (af) {
 	case AF_INET:
-		sin = (struct sockaddr_in *)malloc(sizeof *sin);
+		sin = (struct sockaddr_in *) mem_alloc(sizeof *sin);
 		if (sin == NULL)
 			goto out;
 		memset(sin, 0, sizeof *sin);
 		sin->sin_family = AF_INET;
 		sin->sin_port = htons(port);
 		if (inet_pton(AF_INET, addrstr, &sin->sin_addr) <= 0) {
-			free(sin);
-			free(ret);
+			__free(sin);
+			__free(ret);
 			ret = NULL;
 			goto out;
 		}
@@ -778,15 +791,15 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 		break;
 #ifdef INET6
 	case AF_INET6:
-		sin6 = (struct sockaddr_in6 *)malloc(sizeof *sin6);
+		sin6 = (struct sockaddr_in6 *) mem_alloc(sizeof *sin6);
 		if (sin6 == NULL)
 			goto out;
 		memset(sin6, 0, sizeof *sin6);
 		sin6->sin6_family = AF_INET6;
 		sin6->sin6_port = htons(port);
 		if (inet_pton(AF_INET6, addrstr, &sin6->sin6_addr) <= 0) {
-			free(sin6);
-			free(ret);
+			__free(sin6);
+			__free(ret);
 			ret = NULL;
 			goto out;
 		}
@@ -795,7 +808,7 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 		break;
 #endif
 	case AF_LOCAL:
-		sun = (struct sockaddr_un *)malloc(sizeof *sun);
+		sun = (struct sockaddr_un *) mem_alloc(sizeof *sun);
 		if (sun == NULL)
 			goto out;
 		memset(sun, 0, sizeof *sun);
@@ -809,7 +822,7 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 		break;
 	}
 out:
-	free(addrstr);
+	__free(addrstr);
 	return ret;
 }
 

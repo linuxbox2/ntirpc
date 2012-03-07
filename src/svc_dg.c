@@ -552,7 +552,7 @@ svc_dg_cache_set(xprt, replylen)
 		    "cache set for xid= %x prog=%d vers=%d proc=%d for rmtaddr=%s\n",
 		    su->su_xid, uc->uc_prog, uc->uc_vers,
 		    uc->uc_proc, uaddr);
-		free(uaddr);
+		__free(uaddr);
 	    }
 	} /* DEBUG_RPC_CACHE */
 	victim->cache_replylen = replylen;
@@ -614,7 +614,7 @@ svc_dg_cache_get(xprt, msg, replyp, replylenp)
 				su->su_xid, msg->rm_call.cb_prog,
 				msg->rm_call.cb_vers,
 				msg->rm_call.cb_proc, uaddr);
-			    free(uaddr);
+			    __free(uaddr);
 			}
 		    } /* RPC_CACHE_DEBUG */
 		    *replyp = ent->cache_reply;

@@ -86,6 +86,19 @@ bool_t __xdrrec_getrec(XDR *, enum xprt_stat *, bool_t);
 void __xprt_unregister_unlocked(SVCXPRT *);
 void __xprt_set_raddr(SVCXPRT *, const struct sockaddr_storage *);
 
+/*
+ * Uses allocator with indirections, if any.
+ */
+static inline char *rpc_strdup(const char *s)
+{
+    char *t = mem_alloc(strlen(s) + 1);
+    if (t)
+        strcpy(t,s);
+    return (t);
+}
+
+void __rpc_free(void *ptr);
+
 int __svc_maxrec;
 
 __END_DECLS
