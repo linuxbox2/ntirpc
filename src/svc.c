@@ -221,7 +221,6 @@ xprt_register (SVCXPRT * xprt)
         struct epoll_event *ev = &xp_ev->ev_u.epoll.event;
 
         /* set up epoll user data */
-        ev->data.fd = xprt->xp_fd;
         ev->data.ptr = xprt;
 
         /* wait for read events, level triggered */

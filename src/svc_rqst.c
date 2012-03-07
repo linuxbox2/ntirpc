@@ -240,7 +240,6 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
          * couple of possible semantics */
         sr_rec->ev_u.epoll.ctrl_ev.events = EPOLLIN;
         sr_rec->ev_u.epoll.ctrl_ev.data.fd = svc_rqst_set_.sv[1];
-        sr_rec->ev_u.epoll.ctrl_ev.data.ptr = NULL; /* not an xprt */
 
         code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
                          EPOLL_CTL_ADD,
@@ -512,7 +511,6 @@ int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
             struct epoll_event *ev = &xp_ev->ev_u.epoll.event;
 
             /* set up epoll user data */
-            ev->data.fd = xprt->xp_fd;
             ev->data.ptr = xprt;
 
             /* wait for read events, level triggered */
