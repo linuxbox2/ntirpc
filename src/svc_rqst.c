@@ -344,9 +344,7 @@ static inline void ev_sig(int fd, uint32_t sig)
 static inline uint32_t consume_ev_sig_nb(int fd)
 {
     uint32_t sig = 0;
-    __warnx("%s: before consume sig fd %d", __func__, fd);
     (void) read(fd, &sig, sizeof(uint32_t));
-    __warnx("%s: after consume sig fd %d", __func__, fd);
     return (sig);
 }
 
@@ -554,8 +552,11 @@ int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
             code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd, EPOLL_CTL_ADD,
                              xprt->xp_fd, ev);
 
-            __warnx("epoll add xprt %p fd %d (%d, %d)",
-                    xprt, xprt->xp_fd, code, errno);
+            __warnx("%s: add xprt %p fd %d sr_rec %p epoll_fd %d control fd "
+                    "pair (%d:%d) (%d, %d)",
+                    __func__, xprt, xprt->xp_fd, sr_rec,
+                    sr_rec->ev_u.epoll.epoll_fd,
+                    sr_rec->sv[0], sr_rec->sv[1], code, errno);
 
         }
         break;
@@ -686,6 +687,9 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
 
         mutex_unlock(&sr_rec->mtx);
 
+        __warnx("%s: before epoll_wait fd %d", __func__,
+                sr_rec->ev_u.epoll.epoll_fd);
+
         switch (n_events = epoll_wait(sr_rec->ev_u.epoll.epoll_fd,
                                       sr_rec->ev_u.epoll.events, 
                                       sr_rec->ev_u.epoll.max_events, 
@@ -715,8 +719,12 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
                 } else {
                     /* signalled -- there was a wakeup on ctrl_ev (see
                      * top-of-loop) */
-                    __warnx("%s: wakeup fd %d", __func__, sr_rec->sv[1]);
+                    __warnx("%s: wakeup fd %d (sr_rec %p)",
+                            __func__, sr_rec->sv[1], sr_rec);
                     (void) consume_ev_sig_nb(sr_rec->sv[1]);
+                    __warnx("%s: after consume sig fd %d (sr_rec %p)",
+                            __func__, sr_rec->sv[1], sr_rec);
+
                 }
             } /* each events[ix] */
         } /* switch */
