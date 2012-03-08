@@ -75,6 +75,7 @@ struct svc_rqst_rec
         } fd;
     } ev_u;
 
+    int sv[2];
     uint32_t id_k; /* chan id */
     uint32_t states;
     uint32_t signals;
