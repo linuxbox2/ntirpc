@@ -288,7 +288,7 @@ void svc_xprt_dump_xprts(const char *tag)
         n = opr_rbtree_first(&t->t);
         while (n != NULL) {
             srec = opr_containerof(n, struct svc_xprt_rec, node_k);
-            __warnx("xprts at %s:    srec %p fd %d xprt %p xp_fd %d", tag, srec,
+            __warnx("xprts at %s:  srec %p fd %d xprt %p xp_fd %d", tag, srec,
                     srec->fd_k, srec->xprt,
                     (srec->xprt) ? srec->xprt->xp_fd : 0);
             n = opr_rbtree_next(n);

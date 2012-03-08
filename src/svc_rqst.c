@@ -74,8 +74,7 @@ static struct svc_rqst_set svc_rqst_set_ = {
       0, /* size */
       0  /* gen */ 
     } /* t */,
-    0 /* next_id */,
-    { 0, 0 } /* event sv */
+    0 /* next_id */
 };
 
 extern struct svc_params __svc_params[1];
@@ -208,11 +207,9 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
         goto out;
     }
 
-#if 1
-    /* set read side non-blocking */
+    /* set non-blocking */
     SetNonBlock(sr_rec->sv[0]);
     SetNonBlock(sr_rec->sv[1]);
-#endif
 
 #if defined(TIRPC_EPOLL)
     if (flags & SVC_RQST_FLAG_EPOLL) {
@@ -246,7 +243,7 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
 
         code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
                          EPOLL_CTL_ADD,
-                         svc_rqst_set_.sv[1],
+                         sr_rec->sv[1],
                          &sr_rec->ev_u.epoll.ctrl_ev);
         if (code == -1)
             __warnx("%s: add control socket failed (%d)",
@@ -347,8 +344,9 @@ static inline void ev_sig(int fd, uint32_t sig)
 static inline uint32_t consume_ev_sig_nb(int fd)
 {
     uint32_t sig = 0;
-    __warnx("%s: consume sig fd %d", __func__, fd);
+    __warnx("%s: before consume sig fd %d", __func__, fd);
     (void) read(fd, &sig, sizeof(uint32_t));
+    __warnx("%s: after consume sig fd %d", __func__, fd);
     return (sig);
 }
 
@@ -673,7 +671,7 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
     SVCXPRT *xprt;
 
     int ix, code = 0;
-    int timeout_ms = 7*1000;
+    int timeout_ms = 30*1000;
     int n_events;
 
     for (;;) {

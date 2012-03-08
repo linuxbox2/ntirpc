@@ -91,7 +91,6 @@ struct svc_rqst_set
     rwlock_t lock;
     struct opr_rbtree t;
     uint32_t next_id;
-    int sv[2];
 };
 
 static inline int rqst_thrd_cmpf(const struct opr_rbtree_node *lhs,
