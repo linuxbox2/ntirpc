@@ -905,8 +905,8 @@ svc_vc_recv(xprt, msg)
 	xdrs = &(cd->xdrs);
 
 	if (cd->nonblock) {
-		if (!__xdrrec_getrec(xdrs, &cd->strm_stat, TRUE))
-			return FALSE;
+            if (!__xdrrec_getrec(xdrs, &cd->strm_stat, TRUE))
+                return FALSE;
 	}
 
 	xdrs->x_op = XDR_DECODE;
@@ -931,6 +931,7 @@ svc_vc_getargs(xprt, xdr_args, args_ptr)
 {
     CLIENT *cl;
     struct ct_data *ct;
+    bool_t rslt = TRUE;
 
     assert(xprt != NULL);
     /* args_ptr may be NULL */
@@ -948,12 +949,17 @@ svc_vc_getargs(xprt, xdr_args, args_ptr)
             if (! SVCAUTH_UNWRAP(xprt->xp_auth,
                                  &(ct->ct_xdrs),
                                  xdr_args, args_ptr)) {
-                return (FALSE);
+                rslt = FALSE;
             }
         }
+        rslt = FALSE;
     }
 
-    return TRUE;
+    /* XXX Ganesha */
+    if (! rslt)
+        svc_vc_freeargs(xprt, xdr_args, args_ptr);
+
+    return (rslt);
 }
 
 static bool_t
@@ -982,10 +988,9 @@ svc_vc_reply(xprt, msg)
 	struct cf_conn *cd;
 	xdrproc_t xdr_results;
 	caddr_t xdr_location;
+	bool_t rstat, has_args;
         CLIENT *cl; /* XXX duplex */
         struct ct_data *ct;
-
-	bool_t has_args, rstat;
 
 	assert(xprt != NULL);
 	assert(msg != NULL);
@@ -1002,14 +1007,17 @@ svc_vc_reply(xprt, msg)
 
 	if (msg->rm_reply.rp_stat == MSG_ACCEPTED &&
 	    msg->rm_reply.rp_acpt.ar_stat == SUCCESS) {
-		has_args = TRUE;
-		xdr_results = msg->acpted_rply.ar_results.proc;
-		xdr_location = msg->acpted_rply.ar_results.where;
-
-		msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
-		msg->acpted_rply.ar_results.where = NULL;
-	} else
-		has_args = FALSE;
+            has_args = TRUE;
+            xdr_results = msg->acpted_rply.ar_results.proc;
+            xdr_location = msg->acpted_rply.ar_results.where;
+            
+            msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
+            msg->acpted_rply.ar_results.where = NULL;
+	} else {
+            has_args = FALSE;
+            xdr_results = NULL;
+            xdr_location = NULL;
+        }
 
 	xdrs->x_op = XDR_ENCODE;
 	msg->rm_xid = cd->x_id;
