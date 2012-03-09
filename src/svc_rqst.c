@@ -508,7 +508,9 @@ int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
                 __warnx("%s: epoll del failed fd %d (%d)",
                         __func__, xprt->xp_fd, errno);
                 code = errno;
-            }
+            } else
+                __warnx("%s: epoll del fd %d epoll_fd %d",
+                        __func__, xprt->xp_fd, sr_rec->ev_u.epoll.epoll_fd);
         }
         break;
 #endif

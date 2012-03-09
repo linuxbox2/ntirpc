@@ -496,7 +496,7 @@ xdrrec_eof(xdrs)
 
 /*
  * The client must tell the package when an end-of-record has occurred.
- * The second paraemters tells whether the record should be flushed to the
+ * The second paramter tells whether the record should be flushed to the
  * (output) tcp stream.  (This let's the package support batched or
  * pipelined procedure calls.)  TRUE => immmediate flush to tcp connection.
  */
