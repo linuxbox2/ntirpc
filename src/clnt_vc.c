@@ -428,22 +428,25 @@ call_again:
         msg->acpted_rply.ar_results.where = NULL;
         msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
         if (! xdrrec_skiprecord(xdrs)) {
-            printf("error at skiprecord\n");
+            __warnx("%s: error at skiprecord",
+                    __func__);
             vc_call_return (ct->ct_error.re_status);
         }
         /* now decode and validate the response header */
         if (! xdr_dplx_msg(xdrs, msg)) {
-            printf("error at xdr_dplx_msg\n");
+            __warnx("%s: error at xdr_dplx_msg",
+                __func__);
             if (ct->ct_error.re_status == RPC_SUCCESS) {
-                printf("error at ct_error (direction == %d, status == %d)\n",
-                       msg->rm_direction,
-		       ct->ct_error.re_status);
+                __warnx("%s: error at ct_error (direction == %d, status == %d)",
+                        __func__,
+                        msg->rm_direction,
+                        ct->ct_error.re_status);
                 continue;
             }
             vc_call_return (ct->ct_error.re_status);
         }
-        printf("successful xdr_dplx_msg (direction==%d)\n",
-               msg->rm_direction);
+        __warnx("%s: successful xdr_dplx_msg (direction==%d)\n",
+                __func__, msg->rm_direction);
         /* switch on direction */
         switch (msg->rm_direction) {
         case REPLY:
@@ -459,8 +462,8 @@ call_again:
                 assert(duplex_xprt);
                 cd = (struct cf_conn *) duplex_xprt->xp_p1;
                 cd->x_id = msg->rm_xid;
-                printf("call intercepted, dispatching (x_id == %d)\n",
-                    cd->x_id);
+                __warnx("%s: call intercepted, dispatching (x_id == %d)\n",
+                        __func__, cd->x_id);
                 duplex_xprt->xp_ops2->xp_dispatch(duplex_xprt, &msg);
             }
             break;

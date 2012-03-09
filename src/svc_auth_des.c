@@ -66,7 +66,7 @@
 
 extern int key_decryptsession_pk(const char *, netobj *, des_block *);
 
-#define debug(msg)	 printf("svcauth_des: %s\n", msg) 
+#define debug(msg)	 __warnx("svcauth_des: %s\n", (msg)) 
 
 #define USEC_PER_SEC ((u_long) 1000000L)
 #define BEFORE(t1, t2) timercmp(t1, t2, <)

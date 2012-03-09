@@ -105,10 +105,10 @@ _svcauth_unix(rqst, msg)
 		 * timestamp, hostname len (0), uid, gid, and gids len (0).
 		 */
 		if ((5 + gid_len) * BYTES_PER_XDR_UNIT + str_len > auth_len) {
-			(void) printf("bad auth_len gid %ld str %ld auth %u\n",
+                    __warnx("bad auth_len gid %ld str %ld auth %u\n",
 			    (long)gid_len, (long)str_len, auth_len);
-			stat = AUTH_BADCRED;
-			goto done;
+                    stat = AUTH_BADCRED;
+                    goto done;
 		}
 	} else if (! xdr_authunix_parms(&xdrs, aup)) {
 		xdrs.x_op = XDR_FREE;

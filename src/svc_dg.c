@@ -548,10 +548,10 @@ svc_dg_cache_set(xprt, replylen)
 	    if (nconf) {
 		uaddr = taddr2uaddr(nconf, &xprt->xp_rtaddr);
 		freenetconfigent(nconf);
-		printf(
-		    "cache set for xid= %x prog=%d vers=%d proc=%d for rmtaddr=%s\n",
-		    su->su_xid, uc->uc_prog, uc->uc_vers,
-		    uc->uc_proc, uaddr);
+		__warnx("cache set for xid= %x prog=%d vers=%d proc=%d "
+                        "for rmtaddr=%s\n",
+                        su->su_xid, uc->uc_prog, uc->uc_vers,
+                        uc->uc_proc, uaddr);
 		__free(uaddr);
 	    }
 	} /* DEBUG_RPC_CACHE */
@@ -609,11 +609,11 @@ svc_dg_cache_get(xprt, msg, replyp, replylenp)
 			if (nconf) {
 			    uaddr = taddr2uaddr(nconf, &xprt->xp_rtaddr);
 			    freenetconfigent(nconf);
-			    printf(
-				"cache entry found for xid=%x prog=%d vers=%d proc=%d for rmtaddr=%s\n",
-				su->su_xid, msg->rm_call.cb_prog,
-				msg->rm_call.cb_vers,
-				msg->rm_call.cb_proc, uaddr);
+			    __warnx("cache entry found for xid=%x prog=%d "
+                                    "vers=%d proc=%d for rmtaddr=%s\n",
+                                    su->su_xid, msg->rm_call.cb_prog,
+                                    msg->rm_call.cb_vers,
+                                    msg->rm_call.cb_proc, uaddr);
 			    __free(uaddr);
 			}
 		    } /* RPC_CACHE_DEBUG */

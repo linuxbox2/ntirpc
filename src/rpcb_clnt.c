@@ -340,8 +340,9 @@ getclnthandle(host, nconf, targaddr)
 	hints.ai_protocol = si.si_proto;
 
 #ifdef CLNT_DEBUG
-	printf("trying netid %s family %d proto %d socktype %d\n",
-	    nconf->nc_netid, si.si_af, si.si_proto, si.si_socktype);
+	__warnx("%s: trying netid %s family %d proto %d socktype %d\n",
+                __func__, nconf->nc_netid, si.si_af, si.si_proto,
+                si.si_socktype);
 #endif
 
 	if (nconf->nc_protofmly != NULL && strcmp(nconf->nc_protofmly, NC_LOOPBACK) == 0) {

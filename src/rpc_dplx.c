@@ -74,7 +74,7 @@ xdr_dplx_msg(xdrs, dmsg)
                              + 2 * BYTES_PER_XDR_UNIT
                              + RNDUP(dmsg->rm_call.cb_verf.oa_length));
             if (buf != NULL) {
-                printf("%s XDR_ENCODE inline case\n", __func__);
+                __warnx("%s XDR_ENCODE inline case", __func__);
                 IXDR_PUT_INT32(buf, dmsg->rm_xid);
                 IXDR_PUT_ENUM(buf, dmsg->rm_direction);
                 switch (dmsg->rm_direction) {
@@ -104,7 +104,7 @@ xdr_dplx_msg(xdrs, dmsg)
                     return (TRUE);
                     break;
                 case REPLY:
-                    printf("%s unexpected (duplex) REPLY\n", __func__);
+                    __warnx("%s unexpected (duplex) REPLY", __func__);
                     return (xdr_union(xdrs,
                                       (enum_t *)&(dmsg->rm_reply.rp_stat),
                                       (caddr_t)(void *)&(dmsg->rm_reply.ru),
@@ -120,7 +120,7 @@ xdr_dplx_msg(xdrs, dmsg)
 	if (xdrs->x_op == XDR_DECODE) {
             buf = XDR_INLINE(xdrs, 8 * BYTES_PER_XDR_UNIT);
             if (buf != NULL) {
-                printf("%s XDR_DECODE inline case\n", __func__);
+                __warnx("%s XDR_DECODE inline case", __func__);
                 dmsg->rm_xid = IXDR_GET_U_INT32(buf);
                 dmsg->rm_direction = IXDR_GET_ENUM(buf, enum msg_type);
                 switch (dmsg->rm_direction) {
@@ -195,7 +195,7 @@ xdr_dplx_msg(xdrs, dmsg)
                     return (TRUE);
                     break;
                 case REPLY:
-                    printf("%s non-inline (duplex) REPLY 1\n", __func__);
+                    __warnx("%s non-inline (duplex) REPLY 1", __func__);
                     return (xdr_union(xdrs,
                                       (enum_t *)&(dmsg->rm_reply.rp_stat),
                                       (caddr_t)(void *)&(dmsg->rm_reply.ru),
@@ -226,7 +226,7 @@ xdr_dplx_msg(xdrs, dmsg)
                                             &(dmsg->rm_call.cb_verf)));
                     break;
                 case REPLY:
-                    printf("%s non-inline (duplex) REPLY 2\n", __func__);
+                    __warnx("%s non-inline (duplex) REPLY 2", __func__);
                     return (
                         xdr_union(xdrs,
                                   (enum_t *)&(dmsg->rm_reply.rp_stat),

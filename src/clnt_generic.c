@@ -196,7 +196,7 @@ clnt_create_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
 			break;
 		}
 #ifdef CLNT_DEBUG
-		printf("trying netid %s\n", nconf->nc_netid);
+		__warnx("%s: trying netid %s", __func__, nconf->nc_netid);
 #endif
 		clnt = clnt_tp_create_timed(hostname, prog, vers, nconf, tp);
 		if (clnt)
