@@ -1,5 +1,5 @@
 
 install: install-am
-	$(mkinstalldirs) $(DESTDIR)/etc
-	cp -p ./etc_netconfig $(DESTDIR)/etc/netconfig
-	chmod 0644 $(DESTDIR)/etc/netconfig
+	$(mkinstalldirs) $(DESTDIR)/$(sysconfdir)
+	cp -p ./etc_netconfig $(DESTDIR)/$(sysconfdir)/netconfig
+	chmod 0644 $(DESTDIR)/$(sysconfdir)/netconfig
