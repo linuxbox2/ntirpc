@@ -157,6 +157,8 @@ static inline void vc_fd_unlock_c(CLIENT *cl, sigset_t *mask)
     vc_fd_unlock_impl(ct->ct_crec, mask);
 }
 
+void vc_fd_wait(int fd, uint32_t wait_for);
+
 static inline void vc_fd_wait_c(CLIENT *cl, uint32_t wait_for)
 {
     struct ct_data *ct = (struct ct_data *) cl->cl_private;
@@ -164,6 +166,8 @@ static inline void vc_fd_wait_c(CLIENT *cl, uint32_t wait_for)
     vc_lock_init_cl(cl);
     vc_fd_wait_impl(ct->ct_crec, wait_for);
 }
+
+void vc_fd_signal(int fd, uint32_t flags);
 
 static inline void vc_fd_signal_c(CLIENT *cl, uint32_t flags)
 {
@@ -187,7 +191,7 @@ static inline void vc_fd_unlock_x(SVCXPRT *xprt, sigset_t *mask)
 
 static inline void vc_lock_unref_clnt(CLIENT *cl)
 {
-    int32_t refcount = 0;
+    int32_t refcount __attribute__((unused)) = 0;
     struct ct_data *ct = (struct ct_data *) cl->cl_private;
 
     if (ct->ct_crec) {
@@ -198,7 +202,7 @@ static inline void vc_lock_unref_clnt(CLIENT *cl)
 
 static inline void vc_lock_unref_xprt(SVCXPRT *xprt)
 {
-    int32_t refcount = 0;
+    int32_t refcount __attribute__((unused)) = 0;
 
     if (xprt->xp_p5) {
         refcount = vc_lock_unref((struct vc_fd_rec *) xprt->xp_p5,

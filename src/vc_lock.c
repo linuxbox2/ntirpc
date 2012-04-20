@@ -167,6 +167,18 @@ void vc_fd_unlock(int fd, sigset_t *mask)
     cond_signal(&crec->cv);
 }
 
+void vc_fd_wait(int fd, uint32_t wait_for)
+{
+    struct vc_fd_rec *crec = vc_lookup_fd_rec(fd);
+    vc_fd_wait_impl(crec, wait_for);
+}
+
+void vc_fd_signal(int fd, uint32_t flags)
+{
+    struct vc_fd_rec *crec = vc_lookup_fd_rec(fd);
+    vc_fd_signal_impl(crec, flags);
+}
+
 int32_t vc_lock_unref(struct vc_fd_rec *crec, u_int flags)
 {
     struct rbtree_x_part *t;

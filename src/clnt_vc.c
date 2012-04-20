@@ -532,21 +532,18 @@ clnt_vc_freeres(cl, xdr_res, res_ptr)
 	struct ct_data *ct;
 	XDR *xdrs;
 	bool_t dummy;
-	sigset_t mask;
-	sigset_t newmask;
+	sigset_t mask, newmask;
 
 	assert(cl != NULL);
 
 	ct = (struct ct_data *)cl->cl_private;
 	xdrs = &(ct->ct_xdrs);
 
-	sigfillset(&newmask);
-	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-
         /* Handle our own signal mask here, the signal section is
          * larger than the wait (not 100% clear why) */
 	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
+
         vc_fd_wait_c(cl, rpc_flag_clear);        
 
 	xdrs->x_op = XDR_FREE;
