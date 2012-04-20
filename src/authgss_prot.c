@@ -299,6 +299,9 @@ xdr_rpc_gss_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 #ifdef DEBUG
 #include <ctype.h>
 
+#define log_debug __warnx
+
+#if 0
 void
 log_debug(const char *fmt, ...)
 {
@@ -310,6 +313,7 @@ log_debug(const char *fmt, ...)
 	fprintf(stderr, "\n");
 	va_end(ap);
 }
+#endif
 
 void
 log_status(char *m, OM_uint32 maj_stat, OM_uint32 min_stat)
@@ -318,16 +322,16 @@ log_status(char *m, OM_uint32 maj_stat, OM_uint32 min_stat)
 	gss_buffer_desc msg;
 	int msg_ctx = 0;
 
-	fprintf(stderr, "rpcsec_gss: %s: ", m);
+	__warnx("rpcsec_gss: %s: ", m);
 
 	gss_display_status(&min, maj_stat, GSS_C_GSS_CODE, GSS_C_NULL_OID,
 			   &msg_ctx, &msg);
-	fprintf(stderr, "%s - ", (char *)msg.value);
+	__warnx("%s - ", (char *)msg.value);
 	gss_release_buffer(&min, &msg);
 
 	gss_display_status(&min, min_stat, GSS_C_MECH_CODE, GSS_C_NULL_OID,
 			   &msg_ctx, &msg);
-	fprintf(stderr, "%s\n", (char *)msg.value);
+	__warnx("%s\n", (char *)msg.value);
 	gss_release_buffer(&min, &msg);
 }
 
@@ -337,30 +341,30 @@ log_hexdump(const u_char *buf, int len, int offset)
 	u_int i, j, jm;
 	int c;
 
-	fprintf(stderr, "\n");
+	__warnx("\n");
 	for (i = 0; i < len; i += 0x10) {
-		fprintf(stderr, "  %04x: ", (u_int)(i + offset));
+		__warnx(stderr, "  %04x: ", (u_int)(i + offset));
 		jm = len - i;
 		jm = jm > 16 ? 16 : jm;
 
 		for (j = 0; j < jm; j++) {
 			if ((j % 2) == 1)
-				fprintf(stderr, "%02x ", (u_int) buf[i+j]);
+				__warnx("%02x ", (u_int) buf[i+j]);
 			else
-				fprintf(stderr, "%02x", (u_int) buf[i+j]);
+				__warnx(stderr, "%02x", (u_int) buf[i+j]);
 		}
 		for (; j < 16; j++) {
 			if ((j % 2) == 1) printf("   ");
-			else fprintf(stderr, "  ");
+			else __warnx("  ");
 		}
-		fprintf(stderr, " ");
+		__warnx(" ");
 
 		for (j = 0; j < jm; j++) {
 			c = buf[i+j];
 			c = isprint(c) ? c : '.';
-			fprintf(stderr, "%c", c);
+			__warnx("%c", c);
 		}
-		fprintf(stderr, "\n");
+		__warnx("\n");
 	}
 }
 

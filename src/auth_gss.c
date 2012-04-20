@@ -92,7 +92,7 @@ char *p;
 	if(ptr->mech == NULL)
 		log_debug("NULL gss_OID mech");
 	else {
-		fprintf(stderr, "     mechanism_OID: {");
+		__warnx("     mechanism_OID: {");
 		p = (char *)ptr->mech->elements;
 		for (i=0; i < ptr->mech->length; i++)
 			/* First byte of OIDs encoded to save a byte */
@@ -115,17 +115,17 @@ char *p;
 					first = -1;
 					second = -1;
 				}
-				fprintf(stderr, " %u %u", first, second);
+				__warnx(" %u %u", first, second);
 				p++;
 			}
 			else {
-				fprintf(stderr, " %u", (unsigned char)*p++);
+				__warnx(" %u", (unsigned char)*p++);
 			}
-		fprintf(stderr, " }\n");
+		__warnx(" }\n");
 	}
-	fprintf(stderr, "     qop: %d\n", ptr->qop);
-	fprintf(stderr, "     service: %d\n", ptr->svc);
-	fprintf(stderr, "     cred: %p\n", ptr->cred);
+	__warnx("     qop: %d\n", ptr->qop);
+	__warnx("     service: %d\n", ptr->svc);
+	__warnx("     cred: %p\n", ptr->cred);
 }
 #endif /*DEBUG*/
 
@@ -168,7 +168,7 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 		return (NULL);
 	}
 #ifdef DEBUG
-	fprintf(stderr, "authgss_create: name is %p\n", name);
+	__warnx("authgss_create: name is %p\n", name);
 #endif
 	if (name != GSS_C_NO_NAME) {
 		if (gss_duplicate_name(&min_stat, name, &gd->name)
@@ -183,7 +183,7 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 		gd->name = name;
 
 #ifdef DEBUG
-	fprintf(stderr, "authgss_create: gd->name is %p\n", gd->name);
+	__warnx("authgss_create: gd->name is %p\n", gd->name);
 #endif
 	gd->clnt = clnt;
 	gd->ctx = GSS_C_NO_CONTEXT;
@@ -237,7 +237,7 @@ authgss_create_default(CLIENT *clnt, char *service, struct rpc_gss_sec *sec)
 
 	if (name != GSS_C_NO_NAME) {
 #ifdef DEBUG
-	fprintf(stderr, "authgss_create_default: freeing name %p\n", name);
+		__warnx("authgss_create_default: freeing name %p\n", name);
 #endif
  		gss_release_name(&min_stat, &name);
 	}
@@ -357,7 +357,7 @@ authgss_validate(AUTH *auth, struct opaque_auth *verf)
 		 */
 		if ((gd->gc_wire_verf.value =
 				mem_alloc(verf->oa_length)) == NULL) {
-			fprintf(stderr, "gss_validate: out of memory\n");
+			__warnx("gss_validate: out of memory\n");
 			return (FALSE);
 		}
 		memcpy(gd->gc_wire_verf.value, verf->oa_base, verf->oa_length);
@@ -603,7 +603,7 @@ authgss_destroy(AUTH *auth)
 	authgss_destroy_context(auth);
 
 #ifdef DEBUG
-	fprintf(stderr, "authgss_destroy: freeing name %p\n", gd->name);
+	__warnx("authgss_destroy: freeing name %p\n", gd->name);
 #endif
 	if (gd->name != GSS_C_NO_NAME)
 		gss_release_name(&min_stat, &gd->name);
