@@ -341,184 +341,7 @@ err:
 	return ((CLIENT *)NULL);
 }
 
-#define vc_call_return(r) do { result=(r); goto out; } while (0);
-static enum clnt_stat
-clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
-	CLIENT *cl;
-	rpcproc_t proc;
-	xdrproc_t xdr_args;
-	void *args_ptr;
-	xdrproc_t xdr_results;
-	void *results_ptr;
-	struct timeval timeout;
-{
-    struct ct_data *ct = (struct ct_data *) cl->cl_private;
-    XDR *xdrs = &(ct->ct_xdrs);
-    struct rpc_msg *msg = alloc_rpc_msg();
-    enum clnt_stat result;
-    u_int32_t x_id;
-    u_int32_t *msg_x_id = &ct->ct_u.ct_mcalli;    /* yuk */
-    bool_t shipnow, ev_blocked, duplex;
-    SVCXPRT *duplex_xprt = NULL;
-    int refreshes = 2;
-    sigset_t mask;
-
-    assert(cl != NULL);
-    vc_fd_lock_c(cl, &mask);
-
-    /* two basic strategies are possible here--this stage
-     * assumes the cost of updating the epoll (or select)
-     * registration of the connected transport is preferable
-     * to muxing reply events with call events through the/a
-     * request dispatcher (in the common case).
-     *
-     * the CT_FLAG_EPOLL_ACTIVE is intended to indicate the
-     * inverse strategy, which would place the current thread
-     * on a waitq here (in the common case). */
-
-    duplex = ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX;
-    if (duplex)
-        duplex_xprt = ct->ct_duplex.ct_xprt;
-
-    ev_blocked = cond_block_events_client(cl);
-
-    if (!ct->ct_waitset) {
-        /* If time is not within limits, we ignore it. */
-        if (time_not_ok(&timeout) == FALSE)
-            ct->ct_wait = timeout;
-    }
-
-    shipnow =
-        (xdr_results == NULL && timeout.tv_sec == 0
-         && timeout.tv_usec == 0) ? FALSE : TRUE;
-
-call_again:
-    xdrs->x_op = XDR_ENCODE;
-    ct->ct_error.re_status = RPC_SUCCESS;
-    x_id = ntohl(--(*msg_x_id));
-
-    if ((! XDR_PUTBYTES(xdrs, ct->ct_u.ct_mcallc, ct->ct_mpos)) ||
-        (! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
-        (! AUTH_MARSHALL(cl->cl_auth, xdrs)) ||
-        (! AUTH_WRAP(cl->cl_auth, xdrs, xdr_args, args_ptr))) {
-        if (ct->ct_error.re_status == RPC_SUCCESS)
-            ct->ct_error.re_status = RPC_CANTENCODEARGS;
-        (void)xdrrec_endofrecord(xdrs, TRUE);
-        vc_call_return (ct->ct_error.re_status);
-    }
-    if (! xdrrec_endofrecord(xdrs, shipnow))
-        vc_call_return (ct->ct_error.re_status = RPC_CANTSEND);
-    if (! shipnow)
-        vc_call_return (RPC_SUCCESS);
-    /*
-     * Hack to provide rpc-based message passing
-     */
-    if (timeout.tv_sec == 0 && timeout.tv_usec == 0)
-        vc_call_return (ct->ct_error.re_status = RPC_TIMEDOUT);
-    /*
-     * Keep receiving until we get a valid transaction id
-     */
-    /*
-     * I think we -can- do this, but we need to queue any message
-     * that isn't the desired reply (Matt)
-     */
-    xdrs->x_op = XDR_DECODE;
-    while (TRUE) {
-        msg->acpted_rply.ar_verf = _null_auth;
-        msg->acpted_rply.ar_results.where = NULL;
-        msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
-        if (! xdrrec_skiprecord(xdrs)) {
-            __warnx("%s: error at skiprecord",
-                    __func__);
-            vc_call_return (ct->ct_error.re_status);
-        }
-        /* now decode and validate the response header */
-        if (! xdr_dplx_msg_decode_start(xdrs, msg)) {
-            __warnx("%s: error at xdr_dplx_msg_start", __func__);
-            vc_call_return (ct->ct_error.re_status);
-        }
-        if (! xdr_dplx_msg_decode_continue(xdrs, msg)) {
-            __warnx("%s: error at xdr_dplx_msg_continue", __func__);
-            vc_call_return (ct->ct_error.re_status);
-        }
-
-#if 0
-        if (! xdr_dplx_msg(xdrs, msg)) {
-            __warnx("%s: error at xdr_dplx_msg",
-                __func__);
-            if (ct->ct_error.re_status == RPC_SUCCESS) {
-                __warnx("%s: error at ct_error (direction == %d, status == %d)",
-                        __func__,
-                        msg->rm_direction,
-                        ct->ct_error.re_status);
-                continue;
-            }
-            vc_call_return (ct->ct_error.re_status);
-        }
-#endif
-        __warnx("%s: successful xdr_dplx_msg (direction==%d)\n",
-                __func__, msg->rm_direction);
-        /* switch on direction */
-        switch (msg->rm_direction) {
-        case REPLY:
-            if (msg->rm_xid == x_id)
-                goto replied;
-            break;
-        case CALL:
-            /* XXX queue or dispatch.  on return from xp_dispatch,
-             * duplex_msg points to a (potentially new, junk) rpc_msg
-             * object owned by this call path */
-            if (duplex) {
-                struct cf_conn *cd;
-                assert(duplex_xprt);
-                cd = (struct cf_conn *) duplex_xprt->xp_p1;
-                cd->x_id = msg->rm_xid;
-                __warnx("%s: call intercepted, dispatching (x_id == %d)\n",
-                        __func__, cd->x_id);
-                duplex_xprt->xp_ops2->xp_dispatch(duplex_xprt, &msg);
-            }
-            break;
-        default:
-            break;
-        }
-    } /* while (TRUE) */
-
-    /*
-     * process header
-     */
-replied:
-    _seterr_reply(msg, &(ct->ct_error));
-    if (ct->ct_error.re_status == RPC_SUCCESS) {
-        if (! AUTH_VALIDATE(cl->cl_auth, &msg->acpted_rply.ar_verf)) {
-            ct->ct_error.re_status = RPC_AUTHERROR;
-            ct->ct_error.re_why = AUTH_INVALIDRESP;
-        } else if (! AUTH_UNWRAP(cl->cl_auth, xdrs,
-                                 xdr_results, results_ptr)) {
-            if (ct->ct_error.re_status == RPC_SUCCESS)
-                ct->ct_error.re_status = RPC_CANTDECODERES;
-        }
-        /* free verifier ... */
-        if (msg->acpted_rply.ar_verf.oa_base != NULL) {
-            xdrs->x_op = XDR_FREE;
-            (void)xdr_opaque_auth(xdrs, &(msg->acpted_rply.ar_verf));
-        }
-    }  /* end successful completion */
-    else {
-        /* maybe our credentials need to be refreshed ... */
-        if (refreshes-- && AUTH_REFRESH(cl->cl_auth, &msg))
-            goto call_again;
-    }  /* end of unsuccessful completion */
-    vc_call_return (ct->ct_error.re_status);
-
-out:
-    if (ev_blocked)
-        cond_unblock_events_client(cl);
-
-    vc_fd_unlock_c(cl, &mask);
-    free_rpc_msg(msg);
-
-    return (result);
-}
+/* XXXX restore clnt_vc_call */
 
 static void
 clnt_vc_geterr(cl, errp)
@@ -531,7 +354,15 @@ clnt_vc_geterr(cl, errp)
 	assert(errp != NULL);
 
 	ct = (struct ct_data *) cl->cl_private;
-	*errp = ct->ct_error;
+        if (ct->ct_xdrs.x_public) {
+            rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_public;
+            *errp = ctx->error;
+        } else {
+            /* XXX we don't want (overhead of) an unsafe last-error value */
+            struct rpc_err err;
+            memset(&err, 0, sizeof(struct rpc_err));
+            *errp = err;
+        }
 }
 
 static bool_t
@@ -739,12 +570,17 @@ read_vc(ctp, buf, len)
 	int len;
 {
 	struct ct_data *ct = (struct ct_data *)ctp;
+        rpc_ctx_t *ctx = NULL;
 	struct pollfd fd;
 	int milliseconds = (int)((ct->ct_wait.tv_sec * 1000) +
 	    (ct->ct_wait.tv_usec / 1000));
 
 	if (len == 0)
 		return (0);
+
+        /* Though not previously used by TI-RPC, this is an ONC-compliant
+         * use of x_public */
+        ctx = (rpc_ctx_t *) ct->ct_xdrs.x_public;
 
         /* if ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX, in the current
          * strategy (cf. clnt_vc_call and the duplex-aware getreq
@@ -757,14 +593,14 @@ read_vc(ctp, buf, len)
         for (;;) {
             switch (poll(&fd, 1, milliseconds)) {
             case 0:
-                ct->ct_error.re_status = RPC_TIMEDOUT;
+                ctx->error.re_status = RPC_TIMEDOUT;
                 return (-1);
 
             case -1:
                 if (errno == EINTR)
                     continue;
-                ct->ct_error.re_status = RPC_CANTRECV;
-                ct->ct_error.re_errno = errno;
+                ctx->error.re_status = RPC_CANTRECV;
+                ctx->error.re_errno = errno;
                 return (-1);
             }
             break;
@@ -774,16 +610,16 @@ read_vc(ctp, buf, len)
 
 	switch (len) {
 	case 0:
-		/* premature eof */
-		ct->ct_error.re_errno = ECONNRESET;
-		ct->ct_error.re_status = RPC_CANTRECV;
-		len = -1;  /* it's really an error */
-		break;
+            /* premature eof */
+            ctx->error.re_errno = ECONNRESET;
+            ctx->error.re_status = RPC_CANTRECV;
+            len = -1;  /* it's really an error */
+            break;
 
 	case -1:
-		ct->ct_error.re_errno = errno;
-		ct->ct_error.re_status = RPC_CANTRECV;
-		break;
+            ctx->error.re_errno = errno;
+            ctx->error.re_status = RPC_CANTRECV;
+            break;
 	}
 	return (len);
 }
@@ -795,12 +631,14 @@ write_vc(ctp, buf, len)
 	int len;
 {
 	struct ct_data *ct = (struct ct_data *)ctp;
+        rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_public;
+
 	int i = 0, cnt;
 
 	for (cnt = len; cnt > 0; cnt -= i, buf += i) {
 	    if ((i = write(ct->ct_fd, buf, (size_t)cnt)) == -1) {
-		ct->ct_error.re_errno = errno;
-		ct->ct_error.re_status = RPC_CANTSEND;
+		ctx->error.re_errno = errno;
+		ctx->error.re_status = RPC_CANTSEND;
 		return (-1);
 	    }
 	}

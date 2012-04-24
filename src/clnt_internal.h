@@ -126,7 +126,9 @@ struct ct_data {
 	struct timeval	ct_wait;	/* wait interval in milliseconds */
 	bool_t          ct_waitset;	/* wait set by clnt_control? */
 	struct netbuf	ct_addr;	/* remote addr */
-	struct rpc_err	ct_error;
+#if 0
+	struct rpc_err	ct_error;       /* no. */
+#endif
 	union {
 		char	ct_mcallc[MCALL_MSG_SIZE];	/* marshalled callmsg */
 		u_int32_t ct_mcalli;
