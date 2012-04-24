@@ -81,8 +81,8 @@ static enum xprt_stat rendezvous_stat(SVCXPRT *);
 static void svc_vc_destroy(SVCXPRT *);
 static void __svc_vc_dodestroy (SVCXPRT *);
 /* XXX */
-/* static */ int read_vc(void *, void *, int);
-/* static */ int write_vc(void *, void *, int);
+static int read_vc(void *, void *, int);
+static int write_vc(void *, void *, int);
 static enum xprt_stat svc_vc_stat(SVCXPRT *);
 static bool_t svc_vc_recv(SVCXPRT *, struct rpc_msg *);
 static bool_t svc_vc_getargs(SVCXPRT *, xdrproc_t, void *);
@@ -765,7 +765,7 @@ svc_vc_rendezvous_control(xprt, rq, in)
  * All read operations timeout after 35 seconds.  A timeout is
  * fatal for the connection.
  */
-/* static */ int
+static int
 read_vc(xprtp, buf, len)
 	void *xprtp;
 	void *buf;
@@ -831,7 +831,7 @@ fatal_err:
  * writes data to the tcp connection.
  * Any error is fatal and the connection is closed.
  */
-/* static */ int
+static int
 write_vc(xprtp, buf, len)
 	void *xprtp;
 	void *buf;
