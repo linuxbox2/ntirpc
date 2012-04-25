@@ -44,6 +44,7 @@
 #include <assert.h>
 
 #include <rpc/rpc.h>
+#include <rpc/xdr_inline.h>
 
 static void accepted(enum accept_stat, struct rpc_err *);
 static void rejected(enum reject_stat, struct rpc_err *);
@@ -65,9 +66,9 @@ xdr_opaque_auth(xdrs, ap)
 	assert(xdrs != NULL);
 	assert(ap != NULL);
 
-	if (xdr_enum(xdrs, &(ap->oa_flavor)))
-		return (xdr_bytes(xdrs, &ap->oa_base,
-			&ap->oa_length, MAX_AUTH_BYTES));
+	if (inline_xdr_enum(xdrs, &(ap->oa_flavor)))
+            return (inline_xdr_bytes(
+                        xdrs, &ap->oa_base, &ap->oa_length, MAX_AUTH_BYTES));
 	return (FALSE);
 }
 
@@ -83,7 +84,8 @@ xdr_des_block(xdrs, blkp)
 	assert(xdrs != NULL);
 	assert(blkp != NULL);
 
-	return (xdr_opaque(xdrs, (caddr_t)(void *)blkp, sizeof(des_block)));
+	return (inline_xdr_opaque(
+                    xdrs, (caddr_t)(void *)blkp, sizeof(des_block)));
 }
 
 /* * * * * * * * * * * * * * XDR RPC MESSAGE * * * * * * * * * * * * * * * */
@@ -101,9 +103,9 @@ xdr_accepted_reply(xdrs, ar)
 	assert(ar != NULL);
 
 	/* personalized union, rather than calling xdr_union */
-	if (! xdr_opaque_auth(xdrs, &(ar->ar_verf)))
+	if (! inline_xdr_opaque_auth(xdrs, &(ar->ar_verf)))
 		return (FALSE);
-	if (! xdr_enum(xdrs, (enum_t *)&(ar->ar_stat)))
+	if (! inline_xdr_enum(xdrs, (enum_t *)&(ar->ar_stat)))
 		return (FALSE);
 	switch (ar->ar_stat) {
 
@@ -111,9 +113,9 @@ xdr_accepted_reply(xdrs, ar)
 		return ((*(ar->ar_results.proc))(xdrs, ar->ar_results.where));
 
 	case PROG_MISMATCH:
-		if (! xdr_u_int32_t(xdrs, &(ar->ar_vers.low)))
+		if (! inline_xdr_u_int32_t(xdrs, &(ar->ar_vers.low)))
 			return (FALSE);
-		return (xdr_u_int32_t(xdrs, &(ar->ar_vers.high)));
+		return (inline_xdr_u_int32_t(xdrs, &(ar->ar_vers.high)));
 
 	case GARBAGE_ARGS:
 	case SYSTEM_ERR:
@@ -137,17 +139,17 @@ xdr_rejected_reply(xdrs, rr)
 	assert(rr != NULL);
 
 	/* personalized union, rather than calling xdr_union */
-	if (! xdr_enum(xdrs, (enum_t *)&(rr->rj_stat)))
+	if (! inline_xdr_enum(xdrs, (enum_t *)&(rr->rj_stat)))
 		return (FALSE);
 	switch (rr->rj_stat) {
 
 	case RPC_MISMATCH:
-		if (! xdr_u_int32_t(xdrs, &(rr->rj_vers.low)))
+		if (! inline_xdr_u_int32_t(xdrs, &(rr->rj_vers.low)))
 			return (FALSE);
-		return (xdr_u_int32_t(xdrs, &(rr->rj_vers.high)));
+		return (inline_xdr_u_int32_t(xdrs, &(rr->rj_vers.high)));
 
 	case AUTH_ERROR:
-		return (xdr_enum(xdrs, (enum_t *)&(rr->rj_why)));
+		return (inline_xdr_enum(xdrs, (enum_t *)&(rr->rj_why)));
 	}
 	/* NOTREACHED */
 	assert(0);
@@ -171,12 +173,13 @@ xdr_replymsg(xdrs, rmsg)
 	assert(rmsg != NULL);
 
 	if (
-	    xdr_u_int32_t(xdrs, &(rmsg->rm_xid)) && 
-	    xdr_enum(xdrs, (enum_t *)&(rmsg->rm_direction)) &&
+	    inline_xdr_u_int32_t(xdrs, &(rmsg->rm_xid)) && 
+	    inline_xdr_enum(xdrs, (enum_t *)&(rmsg->rm_direction)) &&
 	    (rmsg->rm_direction == REPLY) )
-		return (xdr_union(xdrs, (enum_t *)&(rmsg->rm_reply.rp_stat),
-		   (caddr_t)(void *)&(rmsg->rm_reply.ru), reply_dscrm,
-		   NULL_xdrproc_t));
+		return (inline_xdr_union(
+                            xdrs, (enum_t *)&(rmsg->rm_reply.rp_stat),
+                            (caddr_t)(void *)&(rmsg->rm_reply.ru), reply_dscrm,
+                            NULL_xdrproc_t));
 	return (FALSE);
 }
 
@@ -198,11 +201,11 @@ xdr_callhdr(xdrs, cmsg)
 	cmsg->rm_call.cb_rpcvers = RPC_MSG_VERSION;
 	if (
 	    (xdrs->x_op == XDR_ENCODE) &&
-	    xdr_u_int32_t(xdrs, &(cmsg->rm_xid)) &&
-	    xdr_enum(xdrs, (enum_t *)&(cmsg->rm_direction)) &&
-	    xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_rpcvers)) &&
-	    xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_prog)) )
-		return (xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_vers)));
+	    inline_xdr_u_int32_t(xdrs, &(cmsg->rm_xid)) &&
+	    inline_xdr_enum(xdrs, (enum_t *)&(cmsg->rm_direction)) &&
+	    inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_rpcvers)) &&
+	    inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_prog)) )
+            return (inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_vers)));
 	return (FALSE);
 }
 

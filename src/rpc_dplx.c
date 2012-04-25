@@ -38,7 +38,7 @@
 #include <string.h>
 
 #include <rpc/rpc.h>
-#include <rpc/xdr.h>
+#include <rpc/xdr_inline.h>
 
 #include <sys/select.h>
 
@@ -105,11 +105,11 @@ xdr_dplx_msg(xdrs, dmsg)
                     break;
                 case REPLY:
                     __warnx("%s unexpected (duplex) REPLY", __func__);
-                    return (xdr_union(xdrs,
-                                      (enum_t *)&(dmsg->rm_reply.rp_stat),
-                                      (caddr_t)(void *)&(dmsg->rm_reply.ru),
-                                      reply_dscrm,
-                                      NULL_xdrproc_t));
+                    return (inline_xdr_union(
+                                xdrs, (enum_t *)&(dmsg->rm_reply.rp_stat),
+                                (caddr_t)(void *)&(dmsg->rm_reply.ru),
+                                reply_dscrm,
+                                NULL_xdrproc_t));
                     break;
                 default:
                     /* unlikely */
@@ -147,8 +147,9 @@ xdr_dplx_msg(xdrs, dmsg)
                         }
                         buf = XDR_INLINE(xdrs, RNDUP(oa->oa_length));
                         if (buf == NULL) {
-                            if (xdr_opaque(xdrs, oa->oa_base,
-                                           oa->oa_length) == FALSE) {
+                            if (inline_xdr_opaque(
+                                    xdrs, oa->oa_base,
+                                    oa->oa_length) == FALSE) {
                                 return (FALSE);
                             }
                         } else {
@@ -161,8 +162,8 @@ xdr_dplx_msg(xdrs, dmsg)
                     oa = &dmsg->rm_call.cb_verf;
                     buf = XDR_INLINE(xdrs, 2 * BYTES_PER_XDR_UNIT);
                     if (buf == NULL) {
-                        if (xdr_enum(xdrs, &oa->oa_flavor) == FALSE ||
-                            xdr_u_int(xdrs, &oa->oa_length) == FALSE) {
+                        if (inline_xdr_enum(xdrs, &oa->oa_flavor) == FALSE ||
+                            inline_xdr_u_int(xdrs, &oa->oa_length) == FALSE) {
                             return (FALSE);
                         }
                     } else {
@@ -181,8 +182,8 @@ xdr_dplx_msg(xdrs, dmsg)
                         }
                         buf = XDR_INLINE(xdrs, RNDUP(oa->oa_length));
                         if (buf == NULL) {
-                            if (xdr_opaque(xdrs, oa->oa_base,
-                                           oa->oa_length) == FALSE) {
+                            if (inline_xdr_opaque(xdrs, oa->oa_base,
+                                                  oa->oa_length) == FALSE) {
                                 return (FALSE);
                             }
                         } else {
@@ -196,11 +197,12 @@ xdr_dplx_msg(xdrs, dmsg)
                     break;
                 case REPLY:
                     __warnx("%s non-inline (duplex) REPLY 1", __func__);
-                    return (xdr_union(xdrs,
-                                      (enum_t *)&(dmsg->rm_reply.rp_stat),
-                                      (caddr_t)(void *)&(dmsg->rm_reply.ru),
-                                      reply_dscrm,
-                                      NULL_xdrproc_t));
+                    return (inline_xdr_union(
+                                xdrs,
+                                (enum_t *)&(dmsg->rm_reply.rp_stat),
+                                (caddr_t)(void *)&(dmsg->rm_reply.ru),
+                                reply_dscrm,
+                                NULL_xdrproc_t));
 
                     break;
                 default:
@@ -210,29 +212,34 @@ xdr_dplx_msg(xdrs, dmsg)
             } /* buf */
 	} /* XDR_DECODE */
 	if (
-	    xdr_u_int32_t(xdrs, &(dmsg->rm_xid)) &&
-	    xdr_enum(xdrs, (enum_t *)&(dmsg->rm_direction))) {
+	    inline_xdr_u_int32_t(xdrs, &(dmsg->rm_xid)) &&
+	    inline_xdr_enum(xdrs, (enum_t *)&(dmsg->rm_direction))) {
                 switch (dmsg->rm_direction) {
                 case CALL:
+                    __warnx("%s non-inline CALL 2", __func__);
                     if (
-                        xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_rpcvers)) &&
+                        inline_xdr_u_int32_t(
+                            xdrs, &(dmsg->rm_call.cb_rpcvers)) &&
                         (dmsg->rm_call.cb_rpcvers == RPC_MSG_VERSION) &&
-                        xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_prog)) &&
-                        xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_vers)) &&
-                        xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_proc)) &&
-                        xdr_opaque_auth(xdrs, &(dmsg->rm_call.cb_cred)) )
+                        inline_xdr_u_int32_t(
+                            xdrs, &(dmsg->rm_call.cb_prog)) &&
+                        inline_xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_vers)) &&
+                        inline_xdr_u_int32_t(xdrs, &(dmsg->rm_call.cb_proc)) &&
+                        inline_xdr_opaque_auth(
+                            xdrs, &(dmsg->rm_call.cb_cred)) )
                         return (
-                            xdr_opaque_auth(xdrs,
-                                            &(dmsg->rm_call.cb_verf)));
+                            inline_xdr_opaque_auth(
+                                xdrs, &(dmsg->rm_call.cb_verf)));
                     break;
                 case REPLY:
                     __warnx("%s non-inline (duplex) REPLY 2", __func__);
                     return (
-                        xdr_union(xdrs,
-                                  (enum_t *)&(dmsg->rm_reply.rp_stat),
-                                  (caddr_t)(void *)&(dmsg->rm_reply.ru),
-                                  reply_dscrm,
-                                  NULL_xdrproc_t));
+                        inline_xdr_union(
+                            xdrs,
+                            (enum_t *)&(dmsg->rm_reply.rp_stat),
+                            (caddr_t)(void *)&(dmsg->rm_reply.ru),
+                            reply_dscrm,
+                            NULL_xdrproc_t));
                 default:
                     /* unlikely */
                     return (FALSE);
