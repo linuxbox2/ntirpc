@@ -120,6 +120,24 @@ typedef struct __rpc_call_ctx {
     ct->ct_duplex.ct_xprt = NULL; \
     } while (0);
 
+static inline int
+call_xid_cmpf(const struct opr_rbtree_node *lhs,
+              const struct opr_rbtree_node *rhs)
+{
+    rpc_ctx_t *lk, *rk;
+
+    lk = opr_containerof(lhs, rpc_ctx_t, node_k);
+    rk = opr_containerof(rhs, rpc_ctx_t, node_k);
+
+    if (lk->xid < rk->xid)
+        return (-1);
+
+    if (lk->xid == rk->xid)
+        return (0);
+
+    return (1);
+}
+
 struct ct_data {
 	int		ct_fd;		/* connection's fd */
 	bool_t		ct_closeit;	/* close it on destroy */

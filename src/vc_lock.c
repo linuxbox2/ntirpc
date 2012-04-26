@@ -107,16 +107,24 @@ struct vc_fd_rec *vc_lookup_fd_rec(int fd)
     rwlock_rdlock(&t->lock);
     nv = opr_rbtree_lookup(&t->t, &ck.node_k);
 
+    /* XXX rework lock+insert case, so that new entries are inserted
+     * locked, and t->lock critical section is reduced */
+
     if (! nv) {
         rwlock_unlock(&t->lock);
         rwlock_wrlock(&t->lock);
         nv = opr_rbtree_lookup(&t->t, &ck.node_k);
         if (! nv) {
             crec = mem_alloc(sizeof(struct vc_fd_rec));
-            memset(crec, 0, sizeof(struct vc_fd_rec));
+
             mutex_init(&crec->mtx, NULL);
             cond_init(&crec->cv, 0, NULL);
             crec->fd_k = fd;
+
+            /* tracks outstanding calls */
+            opr_rbtree_init(&crec->calls.t, call_xid_cmpf);
+            crec->calls.xid = 0; /* next xid is 1 */
+
             if (opr_rbtree_insert(&t->t, &crec->node_k)) {
                 /* cant happen */
                 __warnx("%s: collision inserting in locked rbtree partition",
