@@ -87,13 +87,13 @@ svcauth_gss_set_svc_name(gss_name_t name)
 {
 	OM_uint32	maj_stat, min_stat;
 
-	log_debug("in svcauth_gss_set_svc_name()");
+	gss_log_debug("in svcauth_gss_set_svc_name()");
 
 	if (_svcauth_gss_name != NULL) {
 		maj_stat = gss_release_name(&min_stat, &_svcauth_gss_name);
 
 		if (maj_stat != GSS_S_COMPLETE) {
-			log_status("gss_release_name", maj_stat, min_stat);
+			gss_log_status("gss_release_name", maj_stat, min_stat);
 			return (FALSE);
 		}
 		_svcauth_gss_name = NULL;
@@ -101,7 +101,7 @@ svcauth_gss_set_svc_name(gss_name_t name)
 	maj_stat = gss_duplicate_name(&min_stat, name, &_svcauth_gss_name);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		log_status("gss_duplicate_name", maj_stat, min_stat);
+		gss_log_status("gss_duplicate_name", maj_stat, min_stat);
 		return (FALSE);
 	}
 
@@ -115,7 +115,7 @@ svcauth_gss_import_name(char *service)
 	gss_buffer_desc	namebuf;
 	OM_uint32	maj_stat, min_stat;
 
-	log_debug("in svcauth_gss_import_name()");
+	gss_log_debug("in svcauth_gss_import_name()");
 
 	namebuf.value = service;
 	namebuf.length = strlen(service);
@@ -124,7 +124,7 @@ svcauth_gss_import_name(char *service)
 				   (gss_OID)GSS_C_NT_HOSTBASED_SERVICE, &name);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		log_status("gss_import_name", maj_stat, min_stat);
+		gss_log_status("gss_import_name", maj_stat, min_stat);
 		return (FALSE);
 	}
 	if (svcauth_gss_set_svc_name(name) != TRUE) {
@@ -139,14 +139,14 @@ svcauth_gss_acquire_cred(void)
 {
 	OM_uint32	maj_stat, min_stat;
 
-	log_debug("in svcauth_gss_acquire_cred()");
+	gss_log_debug("in svcauth_gss_acquire_cred()");
 
 	maj_stat = gss_acquire_cred(&min_stat, _svcauth_gss_name, 0,
 				    GSS_C_NULL_OID_SET, GSS_C_ACCEPT,
 				    &_svcauth_gss_creds, NULL, NULL);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		log_status("gss_acquire_cred", maj_stat, min_stat);
+		gss_log_status("gss_acquire_cred", maj_stat, min_stat);
 		return (FALSE);
 	}
 	return (TRUE);
@@ -157,12 +157,12 @@ svcauth_gss_release_cred(void)
 {
 	OM_uint32	maj_stat, min_stat;
 
-	log_debug("in svcauth_gss_release_cred()");
+	gss_log_debug("in svcauth_gss_release_cred()");
 
 	maj_stat = gss_release_cred(&min_stat, &_svcauth_gss_creds);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		log_status("gss_release_cred", maj_stat, min_stat);
+		gss_log_status("gss_release_cred", maj_stat, min_stat);
 		return (FALSE);
 	}
 
@@ -181,7 +181,7 @@ svcauth_gss_accept_sec_context(struct svc_req *rqst,
 	gss_OID			 mech;
 	OM_uint32		 maj_stat = 0, min_stat = 0, ret_flags, seq;
 
-	log_debug("in svcauth_gss_accept_context()");
+	gss_log_debug("in svcauth_gss_accept_context()");
 
 	gd = SVCAUTH_PRIVATE(rqst->rq_xprt->xp_auth);
 	gc = (struct rpc_gss_cred *)rqst->rq_clntcred;
@@ -208,7 +208,7 @@ svcauth_gss_accept_sec_context(struct svc_req *rqst,
 
 	if (gr->gr_major != GSS_S_COMPLETE &&
 	    gr->gr_major != GSS_S_CONTINUE_NEEDED) {
-		log_status("accept_sec_context", gr->gr_major, gr->gr_minor);
+		gss_log_status("accept_sec_context", gr->gr_major, gr->gr_minor);
 		gd->ctx = GSS_C_NO_CONTEXT;
 		gss_release_buffer(&min_stat, &gr->gr_token);
 		return (FALSE);
@@ -238,7 +238,7 @@ svcauth_gss_accept_sec_context(struct svc_req *rqst,
 		maj_stat = gss_display_name(&min_stat, gd->client_name,
 					    &gd->cname, &gd->sec.mech);
 		if (maj_stat != GSS_S_COMPLETE) {
-			log_status("display_name", maj_stat, min_stat);
+			gss_log_status("display_name", maj_stat, min_stat);
 			return (FALSE);
 		}
 #ifdef DEBUG
@@ -248,19 +248,19 @@ svcauth_gss_accept_sec_context(struct svc_req *rqst,
 
 			gss_oid_to_str(&min_stat, mech, &mechname);
 
-			log_debug("accepted context for %.*s with "
-				  "<mech %.*s, qop %d, svc %d>",
-				  gd->cname.length, (char *)gd->cname.value,
-				  mechname.length, (char *)mechname.value,
-				  gd->sec.qop, gd->sec.svc);
+			gss_log_debug("accepted context for %.*s with "
+				      "<mech %.*s, qop %d, svc %d>",
+				      gd->cname.length, (char *)gd->cname.value,
+				      mechname.length, (char *)mechname.value,
+				      gd->sec.qop, gd->sec.svc);
 
 			gss_release_buffer(&min_stat, &mechname);
 		}
 #elif HAVE_HEIMDAL
-		log_debug("accepted context for %.*s with "
-			  "<mech {}, qop %d, svc %d>",
-			  gd->cname.length, (char *)gd->cname.value,
-			  gd->sec.qop, gd->sec.svc);
+		gss_log_debug("accepted context for %.*s with "
+			      "<mech {}, qop %d, svc %d>",
+			      gd->cname.length, (char *)gd->cname.value,
+			      gd->sec.qop, gd->sec.svc);
 #endif
 #endif /* DEBUG */
 		seq = htonl(gr->gr_win);
@@ -289,7 +289,7 @@ svcauth_gss_validate(struct svc_rpc_gss_data *gd, struct rpc_msg *msg)
 	u_char			 rpchdr[128];
 	int32_t			*buf;
 
-	log_debug("in svcauth_gss_validate()");
+	gss_log_debug("in svcauth_gss_validate()");
 
 	memset(rpchdr, 0, sizeof(rpchdr));
 
@@ -326,7 +326,7 @@ svcauth_gss_validate(struct svc_rpc_gss_data *gd, struct rpc_msg *msg)
 				  &qop_state);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		log_status("gss_verify_mic", maj_stat, min_stat);
+		gss_log_status("gss_verify_mic", maj_stat, min_stat);
 		return (FALSE);
 	}
 	return (TRUE);
@@ -339,7 +339,7 @@ svcauth_gss_nextverf(struct svc_req *rqst, u_int num)
 	gss_buffer_desc		 signbuf, checksum;
 	OM_uint32		 maj_stat, min_stat;
 
-	log_debug("in svcauth_gss_nextverf()");
+	gss_log_debug("in svcauth_gss_nextverf()");
 
 	if (rqst->rq_xprt->xp_auth == NULL)
 		return (FALSE);
@@ -353,7 +353,7 @@ svcauth_gss_nextverf(struct svc_req *rqst, u_int num)
 			       &signbuf, &checksum);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		log_status("gss_get_mic", maj_stat, min_stat);
+		gss_log_status("gss_get_mic", maj_stat, min_stat);
 		return (FALSE);
 	}
 	rqst->rq_xprt->xp_verf.oa_flavor = RPCSEC_GSS;
@@ -373,7 +373,7 @@ _svcauth_gss(struct svc_req *rqst, struct rpc_msg *msg, bool_t *no_dispatch)
 	struct rpc_gss_init_res	 gr;
 	int			 call_stat, offset;
 
-	log_debug("in svcauth_gss()");
+	gss_log_debug("in svcauth_gss()");
 
 	/* Initialize reply. */
 	rqst->rq_xprt->xp_verf = _null_auth;
@@ -519,7 +519,7 @@ svcauth_gss_destroy(SVCAUTH *auth)
 	struct svc_rpc_gss_data	*gd;
 	OM_uint32		 min_stat;
 
-	log_debug("in svcauth_gss_destroy()");
+	gss_log_debug("in svcauth_gss_destroy()");
 
 	gd = SVCAUTH_PRIVATE(auth);
 
@@ -540,7 +540,7 @@ svcauth_gss_wrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr)
 {
 	struct svc_rpc_gss_data	*gd;
 
-	log_debug("in svcauth_gss_wrap()");
+	gss_log_debug("in svcauth_gss_wrap()");
 
 	gd = SVCAUTH_PRIVATE(auth);
 
@@ -557,7 +557,7 @@ svcauth_gss_unwrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr
 {
 	struct svc_rpc_gss_data	*gd;
 
-	log_debug("in svcauth_gss_unwrap()");
+	gss_log_debug("in svcauth_gss_unwrap()");
 
 	gd = SVCAUTH_PRIVATE(auth);
 

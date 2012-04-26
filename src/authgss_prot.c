@@ -64,10 +64,10 @@ xdr_rpc_gss_buf(XDR *xdrs, gss_buffer_t buf, u_int maxsize)
 	if (xdr_stat && xdrs->x_op == XDR_DECODE)
 		buf->length = tmplen;
 
-	log_debug("xdr_rpc_gss_buf: %s %s (%p:%d)",
-		  (xdrs->x_op == XDR_ENCODE) ? "encode" : "decode",
-		  (xdr_stat == TRUE) ? "success" : "failure",
-		  buf->value, buf->length);
+	gss_log_debug("xdr_rpc_gss_buf: %s %s (%p:%d)",
+		      (xdrs->x_op == XDR_ENCODE) ? "encode" : "decode",
+		      (xdr_stat == TRUE) ? "success" : "failure",
+		      buf->value, buf->length);
 
 	return xdr_stat;
 }
@@ -83,12 +83,12 @@ xdr_rpc_gss_cred(XDR *xdrs, struct rpc_gss_cred *p)
 		    xdr_enum(xdrs, (enum_t *)&p->gc_svc) &&
 		    xdr_rpc_gss_buf(xdrs, &p->gc_ctx, MAX_AUTH_BYTES));
 
-	log_debug("xdr_rpc_gss_cred: %s %s "
-		  "(v %d, proc %d, seq %d, svc %d, ctx %p:%d)",
-		  (xdrs->x_op == XDR_ENCODE) ? "encode" : "decode",
-		  (xdr_stat == TRUE) ? "success" : "failure",
-		  p->gc_v, p->gc_proc, p->gc_seq, p->gc_svc,
-		  p->gc_ctx.value, p->gc_ctx.length);
+	gss_log_debug("xdr_rpc_gss_cred: %s %s "
+		      "(v %d, proc %d, seq %d, svc %d, ctx %p:%d)",
+		      (xdrs->x_op == XDR_ENCODE) ? "encode" : "decode",
+		      (xdr_stat == TRUE) ? "success" : "failure",
+		      p->gc_v, p->gc_proc, p->gc_seq, p->gc_svc,
+		      p->gc_ctx.value, p->gc_ctx.length);
 
 	return (xdr_stat);
 }
@@ -101,10 +101,10 @@ xdr_rpc_gss_init_args(XDR *xdrs, gss_buffer_desc *p)
 
 	xdr_stat = xdr_rpc_gss_buf(xdrs, p, maxlen);
 
-	log_debug("xdr_rpc_gss_init_args: %s %s (token %p:%d)",
-		  (xdrs->x_op == XDR_ENCODE) ? "encode" : "decode",
-		  (xdr_stat == TRUE) ? "success" : "failure",
-		  p->value, p->length);
+	gss_log_debug("xdr_rpc_gss_init_args: %s %s (token %p:%d)",
+		      (xdrs->x_op == XDR_ENCODE) ? "encode" : "decode",
+		      (xdr_stat == TRUE) ? "success" : "failure",
+		      p->value, p->length);
 
 	return (xdr_stat);
 }
@@ -123,13 +123,13 @@ xdr_rpc_gss_init_res(XDR *xdrs, struct rpc_gss_init_res *p)
 		    xdr_u_int(xdrs, &p->gr_win) &&
 		    xdr_rpc_gss_buf(xdrs, &p->gr_token, tok_maxlen));
 
-	log_debug("xdr_rpc_gss_init_res %s %s "
-		  "(ctx %p:%d, maj %d, min %d, win %d, token %p:%d)",
-		  (xdrs->x_op == XDR_ENCODE) ? "encode" : "decode",
-		  (xdr_stat == TRUE) ? "success" : "failure",
-		  p->gr_ctx.value, p->gr_ctx.length,
-		  p->gr_major, p->gr_minor, p->gr_win,
-		  p->gr_token.value, p->gr_token.length);
+	gss_log_debug("xdr_rpc_gss_init_res %s %s "
+		      "(ctx %p:%d, maj %d, min %d, win %d, token %p:%d)",
+		      (xdrs->x_op == XDR_ENCODE) ? "encode" : "decode",
+		      (xdr_stat == TRUE) ? "success" : "failure",
+		      p->gr_ctx.value, p->gr_ctx.length,
+		      p->gr_major, p->gr_minor, p->gr_win,
+		      p->gr_token.value, p->gr_token.length);
 
 	return (xdr_stat);
 }
@@ -175,7 +175,7 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 		maj_stat = gss_get_mic(&min_stat, ctx, qop,
 				       &databuf, &wrapbuf);
 		if (maj_stat != GSS_S_COMPLETE) {
-			log_debug("gss_get_mic failed");
+			gss_log_debug("gss_get_mic failed");
 			return (FALSE);
 		}
 		/* Marshal checksum. */
@@ -189,7 +189,7 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 		maj_stat = gss_wrap(&min_stat, ctx, TRUE, qop, &databuf,
 				    &conf_state, &wrapbuf);
 		if (maj_stat != GSS_S_COMPLETE) {
-			log_status("gss_wrap", maj_stat, min_stat);
+			gss_log_status("gss_wrap", maj_stat, min_stat);
 			return (FALSE);
 		}
 		/* Marshal databody_priv. */
@@ -222,13 +222,13 @@ xdr_rpc_gss_unwrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	if (svc == RPCSEC_GSS_SVC_INTEGRITY) {
 		/* Decode databody_integ. */
 		if (!xdr_rpc_gss_buf(xdrs, &databuf, (u_int)-1)) {
-			log_debug("xdr decode databody_integ failed");
+			gss_log_debug("xdr decode databody_integ failed");
 			return (FALSE);
 		}
 		/* Decode checksum. */
 		if (!xdr_rpc_gss_buf(xdrs, &wrapbuf, (u_int)-1)) {
 			gss_release_buffer(&min_stat, &databuf);
-			log_debug("xdr decode checksum failed");
+			gss_log_debug("xdr decode checksum failed");
 			return (FALSE);
 		}
 		/* Verify checksum and QOP. */
@@ -238,14 +238,14 @@ xdr_rpc_gss_unwrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 
 		if (maj_stat != GSS_S_COMPLETE || qop_state != qop) {
 			gss_release_buffer(&min_stat, &databuf);
-			log_status("gss_verify_mic", maj_stat, min_stat);
+			gss_log_status("gss_verify_mic", maj_stat, min_stat);
 			return (FALSE);
 		}
 	}
 	else if (svc == RPCSEC_GSS_SVC_PRIVACY) {
 		/* Decode databody_priv. */
 		if (!xdr_rpc_gss_buf(xdrs, &wrapbuf, (u_int)-1)) {
-			log_debug("xdr decode databody_priv failed");
+			gss_log_debug("xdr decode databody_priv failed");
 			return (FALSE);
 		}
 		/* Decrypt databody. */
@@ -258,7 +258,7 @@ xdr_rpc_gss_unwrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 		if (maj_stat != GSS_S_COMPLETE || qop_state != qop ||
 			conf_state != TRUE) {
 			gss_release_buffer(&min_stat, &databuf);
-			log_status("gss_unwrap", maj_stat, min_stat);
+			gss_log_status("gss_unwrap", maj_stat, min_stat);
 			return (FALSE);
 		}
 	}
@@ -271,7 +271,7 @@ xdr_rpc_gss_unwrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 
 	/* Verify sequence number. */
 	if (xdr_stat == TRUE && seq_num != seq) {
-		log_debug("wrong sequence number in databody");
+		gss_log_debug("wrong sequence number in databody");
 		return (FALSE);
 	}
 	return (xdr_stat);
@@ -300,7 +300,7 @@ xdr_rpc_gss_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 #include <ctype.h>
 
 void
-log_debug(const char *fmt, ...)
+gss_log_debug(const char *fmt, ...)
 {
 	va_list ap;
 
@@ -312,7 +312,7 @@ log_debug(const char *fmt, ...)
 }
 
 void
-log_status(char *m, OM_uint32 maj_stat, OM_uint32 min_stat)
+gss_log_status(char *m, OM_uint32 maj_stat, OM_uint32 min_stat)
 {
 	OM_uint32 min;
 	gss_buffer_desc msg;
@@ -332,7 +332,7 @@ log_status(char *m, OM_uint32 maj_stat, OM_uint32 min_stat)
 }
 
 void
-log_hexdump(const u_char *buf, int len, int offset)
+gss_log_hexdump(const u_char *buf, int len, int offset)
 {
 	u_int i, j, jm;
 	int c;
@@ -367,17 +367,17 @@ log_hexdump(const u_char *buf, int len, int offset)
 #else
 
 void
-log_debug(const char *fmt, ...)
+gss_log_debug(const char *fmt, ...)
 {
 }
 
 void
-log_status(char *m, OM_uint32 maj_stat, OM_uint32 min_stat)
+gss_log_status(char *m, OM_uint32 maj_stat, OM_uint32 min_stat)
 {
 }
 
 void
-log_hexdump(const u_char *buf, int len, int offset)
+gss_log_hexdump(const u_char *buf, int len, int offset)
 {
 }
 

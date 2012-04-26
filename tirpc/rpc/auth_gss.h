@@ -120,10 +120,10 @@ bool_t authgss_service		__P((AUTH *auth, int svc));
 bool_t authgss_get_private_data	__P((AUTH *auth,
 	    			     struct authgss_private_data *));
 
-void	log_debug		__P((const char *fmt, ...));
-void	log_status		__P((char *m, OM_uint32 major,
+void	gss_log_debug		__P((const char *fmt, ...));
+void	gss_log_status		__P((char *m, OM_uint32 major,
 				     OM_uint32 minor));
-void	log_hexdump		__P((const u_char *buf, int len, int offset));
+void	gss_log_hexdump		__P((const u_char *buf, int len, int offset));
 
 __END_DECLS
 
