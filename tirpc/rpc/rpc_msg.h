@@ -158,7 +158,7 @@ struct rpc_msg {
 #define	rm_call		ru.RM_cmb
 #define	rm_reply	ru.RM_rmb
 	caddr_t fr_vec[1];
-	int32_t* rm_ibuf;
+	int32_t *rm_ibuf;
 };
 #define	acpted_rply	ru.RM_rmb.ru.RP_ar
 #define	rjcted_rply	ru.RM_rmb.ru.RP_dr
@@ -178,9 +178,9 @@ extern bool_t	xdr_callmsg(XDR *, struct rpc_msg *);
  * 	XDR *xdrs;
  * 	struct rpc_msg *cmsg;
  */
-#define XDR_DPLX_FLAG_NONE 0x00000
-#define XDR_DPLX_FLAG_ONCE 0x00001
-extern bool_t	xdr_dplx_msg(XDR *, struct rpc_msg *);
+extern bool_t xdr_dplx_msg(XDR *, struct rpc_msg *);
+extern bool_t xdr_dplx_msg_decode_start(XDR *, struct rpc_msg *);
+extern bool_t xdr_dplx_msg_decode_continue(XDR *, struct rpc_msg *);
 
 /*
  * XDR routine to pre-serialize the static part of a rpc message.

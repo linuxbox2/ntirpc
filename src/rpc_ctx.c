@@ -154,9 +154,11 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 void
 free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
 {
-    /* Remove call from queues? */
-    /* XXXX free it */
+   struct ct_data *ct = (struct ct_data *) ctx->ctx_u.clnt.cl->cl_private;
+   struct vc_fd_rec *crec = ct->ct_crec;
 
-    free_rpc_msg(ctx->msg);
+   assert (flags & RPC_CTX_FLAG_LOCKED);
 
+   opr_rbtree_remove(&crec->calls.t, &crec->node_k);
+   free_rpc_msg(ctx->msg);
 }

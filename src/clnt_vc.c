@@ -69,6 +69,7 @@
 
 #include "clnt_internal.h"
 #include "vc_lock.h"
+#include "rpc_ctx.h"
 #include <rpc/svc_rqst.h>
 
 #define CMGROUP_MAX    16
@@ -341,7 +342,204 @@ err:
 	return ((CLIENT *)NULL);
 }
 
-/* XXXX restore clnt_vc_call */
+#define vc_call_return(r) do { result=(r); goto out; } while (0);
+
+static enum clnt_stat
+clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
+	CLIENT *cl;
+	rpcproc_t proc;
+	xdrproc_t xdr_args;
+	void *args_ptr;
+	xdrproc_t xdr_results;
+	void *results_ptr;
+	struct timeval timeout;
+{
+    struct ct_data *ct = (struct ct_data *) cl->cl_private;
+    enum clnt_stat result = RPC_SUCCESS;
+    bool_t shipnow, ev_blocked, duplex;
+    SVCXPRT *duplex_xprt = NULL;
+    XDR *xdrs = &(ct->ct_xdrs);
+    rpc_ctx_t *ctx = NULL;
+    int refreshes = 2;
+    sigset_t mask;
+
+    assert(cl != NULL);
+    vc_fd_lock_c(cl, &mask);
+
+    /* XXX presently, we take any svcxprt out of EPOLL during calls,
+     * this is harmless, but it may be less efficient than using the
+     * svc event loop for call wakeups. */
+    ev_blocked = cond_block_events_client(cl);
+
+    /* Create a call context.  A lot of TI-RPC decisions need to be
+     * looked at, including:
+     *
+     * 1. the client has a serialized call.  This looks harmless, so long
+     * as the xid is adjusted.
+     *
+     * 2. the last xid used is now saved in the shared crec structure, it
+     * will be incremented by rpc_call_create (successive calls).  There's no
+     * more reason to use the old time-dependent xid logic.  It should be
+     * preferable to count atomically from 1.
+     *
+     * 3. the client has an XDR structure, which contains the initialied
+     * xdrrec stream.  Since there is only one physical byte stream, it
+     * would potentially be worse to do anything else?  The main issue which
+     * will arise is the need to transition the stream between calls--which
+     * may require adjustment to xdrrec code.  But on review it seems to
+     * follow that one xdrrec stream would be parameterized by different call
+     * contexts.  We'll keep the call parameters, control transfer machinery,
+     * etc, in an rpc_ctx_t, to permit this.
+     */
+    ctx = alloc_rpc_call_ctx(cl, proc, xdr_args, args_ptr, xdr_results,
+                             results_ptr, timeout);
+
+    /* two basic strategies are possible here--this stage
+     * assumes the cost of updating the epoll (or select)
+     * registration of the connected transport is preferable
+     * to muxing reply events with call events through the/a
+     * request dispatcher (in the common case).
+     *
+     * the CT_FLAG_EPOLL_ACTIVE is intended to indicate the
+     * inverse strategy, which would place the current thread
+     * on a waitq here (in the common case). */
+    duplex = ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX;
+    if (duplex)
+        duplex_xprt = ct->ct_duplex.ct_xprt;
+
+    if (!ct->ct_waitset) {
+        /* If time is not within limits, we ignore it. */
+        if (time_not_ok(&timeout) == FALSE)
+            ct->ct_wait = timeout;
+    }
+
+    shipnow =
+        (xdr_results == NULL && timeout.tv_sec == 0
+         && timeout.tv_usec == 0) ? FALSE : TRUE;
+
+call_again:
+    xdrs->x_op = XDR_ENCODE;
+    xdrs->x_public = (void *) ctx; /* transiently thread call ctx */
+
+    ctx->error.re_status = RPC_SUCCESS;
+    ct->ct_u.ct_mcalli = ntohl(ctx->xid);
+
+    if ((! XDR_PUTBYTES(xdrs, ct->ct_u.ct_mcallc, ct->ct_mpos)) ||
+        (! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
+        (! AUTH_MARSHALL(cl->cl_auth, xdrs)) ||
+        (! AUTH_WRAP(cl->cl_auth, xdrs, xdr_args, args_ptr))) {
+        if (ctx->error.re_status == RPC_SUCCESS)
+            ctx->error.re_status = RPC_CANTENCODEARGS;
+        (void)xdrrec_endofrecord(xdrs, TRUE);
+        vc_call_return(ctx->error.re_status);
+    }
+
+    if (! xdrrec_endofrecord(xdrs, shipnow))
+        vc_call_return(ctx->error.re_status = RPC_CANTSEND);
+
+    if (! shipnow)
+        vc_call_return(RPC_SUCCESS);
+
+    /*
+     * Hack to provide rpc-based message passing
+     */
+    if (timeout.tv_sec == 0 && timeout.tv_usec == 0)
+        vc_call_return(ctx->error.re_status = RPC_TIMEDOUT);
+
+    /*
+     * Keep receiving until we get a valid transaction id.
+     *
+     * XXX This behavior is incompatible with duplex operation.  We'll
+     * remove it shortly.
+     */
+    xdrs->x_op = XDR_DECODE;
+    while (TRUE) {
+        ctx->msg->acpted_rply.ar_verf = _null_auth;
+        ctx->msg->acpted_rply.ar_results.where = NULL;
+        ctx->msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
+        if (! xdrrec_skiprecord(xdrs)) {
+            __warnx("%s: error at skiprecord",
+                    __func__);
+            vc_call_return(ctx->error.re_status);
+        }
+        /* now decode and validate the response header */
+        if (! xdr_dplx_msg_decode_start(xdrs, ctx->msg)) {
+            __warnx("%s: error at xdr_dplx_msg_start", __func__);
+            vc_call_return(ctx->error.re_status);
+        }
+        if (! xdr_dplx_msg_decode_continue(xdrs, ctx->msg)) {
+            __warnx("%s: error at xdr_dplx_msg_continue", __func__);
+            vc_call_return(ctx->error.re_status);
+        }
+
+        __warnx("%s: successful xdr_dplx_msg (direction==%d)\n",
+                __func__, ctx->msg->rm_direction);
+        /* switch on direction */
+        switch (ctx->msg->rm_direction) {
+        case REPLY:
+            if (ctx->msg->rm_xid == ctx->xid)
+                goto replied;
+            break;
+        case CALL:
+            /* XXX queue or dispatch.  on return from xp_dispatch,
+             * duplex_msg points to a (potentially new, junk) rpc_msg
+             * object owned by this call path */
+            if (duplex) {
+                struct cf_conn *cd;
+                assert(duplex_xprt);
+                cd = (struct cf_conn *) duplex_xprt->xp_p1;
+                /* XXX Ugh.  Here's another mt-unsafe copy of xid. */
+                cd->x_id = ctx->msg->rm_xid;
+                __warnx("%s: call intercepted, dispatching (x_id == %d)\n",
+                        __func__, cd->x_id);
+                duplex_xprt->xp_ops2->xp_dispatch(duplex_xprt, &ctx->msg);
+            }
+            break;
+        default:
+            break;
+        }
+    } /* while (TRUE) */
+
+    /*
+     * process header
+     */
+replied:
+    _seterr_reply(ctx->msg, &(ctx->error));
+    if (ctx->error.re_status == RPC_SUCCESS) {
+        if (! AUTH_VALIDATE(cl->cl_auth, &(ctx->msg->acpted_rply.ar_verf))) {
+            ctx->error.re_status = RPC_AUTHERROR;
+            ctx->error.re_why = AUTH_INVALIDRESP;
+        } else if (! AUTH_UNWRAP(cl->cl_auth, xdrs,
+                                 xdr_results, results_ptr)) {
+            if (ctx->error.re_status == RPC_SUCCESS)
+                ctx->error.re_status = RPC_CANTDECODERES;
+        }
+        /* free verifier ... */
+        if (ctx->msg->acpted_rply.ar_verf.oa_base != NULL) {
+            xdrs->x_op = XDR_FREE;
+            (void)xdr_opaque_auth(xdrs, &(ctx->msg->acpted_rply.ar_verf));
+        }
+    }  /* end successful completion */
+    else {
+        /* maybe our credentials need to be refreshed ... */
+        if (refreshes-- && AUTH_REFRESH(cl->cl_auth, &(ctx->msg))) {
+            rpc_ctx_next_xid(ctx, RPC_CTX_FLAG_LOCKED);
+            goto call_again;
+        }
+    }  /* end of unsuccessful completion */
+    vc_call_return(ctx->error.re_status);
+
+out:
+    if (ev_blocked)
+        cond_unblock_events_client(cl);
+
+    if (ctx)
+        free_rpc_call_ctx(ctx, RPC_CTX_FLAG_LOCKED);
+
+    vc_fd_unlock_c(cl, &mask);
+
+    return (result);
+}
 
 static void
 clnt_vc_geterr(cl, errp)
