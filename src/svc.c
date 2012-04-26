@@ -50,6 +50,8 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <signal.h>
 
 #include <rpc/rpc.h>
 #ifdef PORTMAP
@@ -63,6 +65,7 @@
 #include "clnt_internal.h"
 #include "svc_internal.h"
 #include "svc_xprt.h"
+#include "vc_lock.h"
 #include <rpc/svc_rqst.h>
 
 #define	RQCRED_SIZE	400	/* this size is excessive */
@@ -123,14 +126,8 @@ svc_init(svc_init_params * params)
 #if defined(TIRPC_EPOLL)
     if (params->flags & SVC_INIT_EPOLL) {
         __svc_params->ev_type = SVC_EVENT_EPOLL;
-        __svc_params->max_connections = params->max_connections; /* XXX going? */
-        __svc_params->ev_u.epoll.max_events = params->max_events;
-        __svc_params->ev_u.epoll.epoll_fd = epoll_create_wr(__svc_params->ev_u.epoll.max_events,
-							    EPOLL_CLOEXEC);
-        if (__svc_params->ev_u.epoll.epoll_fd == -1) {
-            __warnx("svc_init:  epoll_create failed");
-            return;
-        }
+        __svc_params->max_connections = params->max_connections;
+        __svc_params->ev_u.evchan.max_events = params->max_events;
     }
 #else
     /* XXX formerly select/fd_set case, now placeholder for new
@@ -201,9 +198,9 @@ __xprt_set_raddr(SVCXPRT *xprt, const struct sockaddr_storage *ss)
  * Activate a transport handle.
  */
 void
-xprt_register (SVCXPRT * xprt)
+xprt_register(SVCXPRT * xprt)
 {
-    int code;
+    int code __attribute__((unused));
 
     /* Use dedicated event channel if xprt is registered on one, otherwise
      * use the legacy/global mechanism. */
@@ -212,41 +209,26 @@ xprt_register (SVCXPRT * xprt)
         return;
     }
 
-    rwlock_wrlock (&svc_fd_lock); /* XXX protecting event registration */
-    switch (__svc_params->ev_type) {
-#if defined(TIRPC_EPOLL)
-    case SVC_EVENT_EPOLL:
-    {
-        struct svc_xprt_ev *xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
-        struct epoll_event *ev = &xp_ev->ev_u.epoll.event;
-
-        /* set up epoll user data */
-        ev->data.ptr = xprt;
-
-        /* wait for read events, level triggered */
-        ev->events = EPOLLIN;
-
-        /* add to epoll vector */
-        code = epoll_ctl(__svc_params->ev_u.epoll.epoll_fd,
-                         EPOLL_CTL_ADD,
-                         xprt->xp_fd,
-                         ev);
+    /* Create a legacy/global event channel */
+    if (! (__svc_params->ev_u.evchan.id)) {
+        code = svc_rqst_new_evchan(&(__svc_params->ev_u.evchan.id),
+                                   NULL /* u_data */,
+                                   SVC_RQST_FLAG_CHAN_AFFINITY);
+        assert(code == 0);
     }
-    break;
-#endif
-    default:
-        /* XXX formerly select/fd_set case, now placeholder for new
-         * event systems, reworked select, etc. */
-        break;
-    } /* switch */
-    rwlock_unlock (&svc_fd_lock);
+
+    /* and bind xprt to it */
+    code = svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+                               (SVC_RQST_FLAG_XPRT_GCHAN |
+                                SVC_RQST_FLAG_CHAN_AFFINITY));
+    assert(code == 0);
 
 } /* xprt_register */
 
 void
 xprt_unregister (SVCXPRT * xprt)
 {
-  __xprt_do_unregister (xprt, TRUE);
+  __xprt_do_unregister(xprt, TRUE);
 }
 
 void
@@ -259,39 +241,19 @@ __xprt_unregister_unlocked (SVCXPRT * xprt)
  * De-activate a transport handle.
  */
 static void
-__xprt_do_unregister (SVCXPRT *xprt, bool_t dolock)
+__xprt_do_unregister(SVCXPRT *xprt, bool_t dolock __attribute__((unused)))
 {
     int code = 0;
-    SVCXPRT *xprt2;
+    SVCXPRT *xprt2 __attribute__((unused));
 
     assert (xprt != NULL);
 
-    if (dolock)
-        rwlock_wrlock (&svc_fd_lock); /* XXX protect registration */
-
-    switch (__svc_params->ev_type) {
-#if defined(TIRPC_EPOLL)
-    case SVC_EVENT_EPOLL:
-        assert(xprt->xp_ev);
-        code = epoll_ctl(__svc_params->ev_u.epoll.epoll_fd,
-                         EPOLL_CTL_DEL,
-                         xprt->xp_fd,
-                         (struct epoll_event *) xprt->xp_ev);
-        break;
-#endif
-    default:
-        /* XXX formerly select/fd_set case, now placeholder for new
-         * event systems, reworked select, etc. */
-        break;
-    }
-
-    if (dolock)
-        rwlock_unlock (&svc_fd_lock);
+    (void) svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id, xprt,
+                                 SVC_RQST_FLAG_NONE);
 
     /* xprt2 holds the address we displaced, it would be of interest
      * if xprt2 != xprt */
     xprt2 = svc_xprt_clear(xprt);
-
 }
 
 /*

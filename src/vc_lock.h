@@ -211,4 +211,6 @@ static inline void vc_lock_unref_xprt(SVCXPRT *xprt)
     }
 }
 
+void vc_lock_shutdown();
+
 #endif /* TIRPC_VC_LOCK_H */

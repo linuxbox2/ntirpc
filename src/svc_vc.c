@@ -332,10 +332,6 @@ svc_fd_create2(fd, sendsize, recvsize, flags)
 	if (xprt == NULL)
 		return NULL;
 
-        /* conditional xprt_register */
-        if (flags & SVC_VC_CREATE_FLAG_XPRT_REGISTER)
-            svc_rqst_xprt_register_cl(NULL, xprt);
-
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
 		__warnx("svc_fd_create: could not retrieve local addr");
@@ -390,6 +386,10 @@ svc_fd_create2(fd, sendsize, recvsize, flags)
 	    __xprt_set_raddr(xprt, &ss);
 	}
 out:
+        /* conditional xprt_register */
+        if (flags & SVC_VC_CREATE_FLAG_XPRT_REGISTER)
+            xprt_register(xprt);
+
 	return xprt;
 
 freedata:
@@ -1314,10 +1314,6 @@ svc_vc_create_from_clnt(cl, sendsz, recvsz, flags)
     xprt = makefd_xprt(fd, sendsz, recvsz);
     if (! xprt)
         goto unlock;
-    
-    /* conditional xprt_register */
-    if (flags & SVC_VC_CREATE_FLAG_XPRT_REGISTER)
-        svc_rqst_xprt_register_cl(cl, xprt);
 
     len = sizeof (struct sockaddr_storage);
     if (getpeername(fd, (struct sockaddr *)(void *)&addr, &len) < 0) {
@@ -1361,6 +1357,13 @@ svc_vc_create_from_clnt(cl, sendsz, recvsz, flags)
 
     gettimeofday(&cd->last_recv_time, NULL);
 
+#if 0
+    /* conditional xprt_register */
+    if (flags & SVC_VC_CREATE_FLAG_XPRT_REGISTER)
+#endif
+        xprt_register(xprt);
+
+    /* XXX duplex */
     if (flags & SVC_VC_CREATE_FLAG_DPLX)
         SetDuplex(cl, xprt);
 

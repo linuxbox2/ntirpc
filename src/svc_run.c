@@ -39,6 +39,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #if defined(TIRPC_EPOLL)
 #include <sys/epoll.h> /* before rpc.h */
@@ -46,6 +47,12 @@
 #include <rpc/rpc.h>
 #include "rpc_com.h"
 #include <sys/select.h>
+
+#include "clnt_internal.h"
+#include "svc_internal.h"
+#include "svc_xprt.h"
+#include "vc_lock.h"
+#include <rpc/svc_rqst.h>
 
 extern struct svc_params __svc_params[1];
 
@@ -60,42 +67,9 @@ void svc_getreqset_epoll (struct epoll_event *events, int nfds);
 /* static */ void
 svc_run_epoll()
 {
-    int nfds;
-    int timeout_ms = 30*1000;
-    extern rwlock_t svc_fd_lock;
-
-    if (! __svc_params->ev_u.epoll.events)
-        __svc_params->ev_u.epoll.events =
-            (struct epoll_event *) mem_alloc(
-                __svc_params->ev_u.epoll.max_events * 
-                sizeof(struct epoll_event));
-
-    for (;;) {
-        rwlock_rdlock(&svc_fd_lock);
-        /* permit graceful shutdown */
-        if (__svc_run_flags & SVC_RUN_STOP) {
-            rwlock_unlock(&svc_fd_lock);
-            return;
-        }
-        rwlock_unlock(&svc_fd_lock);
-        switch (nfds = epoll_wait(
-                    __svc_params->ev_u.epoll.epoll_fd,
-                    __svc_params->ev_u.epoll.events, 
-                    __svc_params->ev_u.epoll.max_events, 
-                    timeout_ms)) {
-        case -1:
-            if (errno == EINTR)
-                continue;
-            /* XXX epoll_ctl del all events ? */
-            __pkg_params.warnx("svc_run: epoll_wait failed %d", nfds);
-            return;
-        case 0:
-            __svc_clean_idle2(30, FALSE);
-            continue;
-        default:
-            svc_getreqset_epoll(__svc_params->ev_u.epoll.events, nfds);
-        } /* switch */
-    } /* ;; */
+    /* TODO: rename */
+    (void) svc_rqst_thrd_run(__svc_params->ev_u.evchan.id,
+                             SVC_RQST_FLAG_NONE);
 }
 #endif /* TIRPC_EPOLL */
 
@@ -129,8 +103,9 @@ svc_exit()
     switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
     case SVC_EVENT_EPOLL:
-        __svc_run_flags |= SVC_RUN_STOP;
-        close(__svc_params->ev_u.epoll.epoll_fd);
+        /* signal shutdown backchannel */
+        (void) svc_rqst_thrd_signal(__svc_params->ev_u.evchan.id,
+                                    SVC_RQST_SIGNAL_SHUTDOWN);
         break;
 #endif
     default:

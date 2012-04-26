@@ -125,7 +125,7 @@ typedef struct svc_init_params
     u_int version;
     u_long flags;
     u_int max_connections; /* xprts */
-    u_int max_events;      /* epoll events */
+    u_int max_events;      /* evchan events */
     warnx_t warnx;
 } svc_init_params;
 
@@ -145,10 +145,9 @@ struct svc_params
     enum svc_event_type ev_type;
     union {
         struct {
-            int epoll_fd;
-            struct epoll_event *events;
-            u_int max_events; /* max epoll events */
-        } epoll;
+            uint32_t id;
+            uint32_t max_events;
+        } evchan;
         struct {
             fd_set set; /* select/fd_set (currently unhooked) */
         } fd;
@@ -173,7 +172,8 @@ struct svc_params
 #define SVC_XPRT_FLAG_SETNEWFDS          0x0001
 #define SVC_XPRT_FLAG_DONTCLOSE          0x0002
 #define SVC_XPRT_FLAG_EVCHAN             0x0004
-#define SVC_XPRT_FLAG_COPY               0x0008 /* XXX */
+#define SVC_XPRT_FLAG_GCHAN              0x0008
+#define SVC_XPRT_FLAG_COPY               0x0010 /* XXX */
 
 /* XXX Ganesha
  * Don't confuse with (currently incomplete) transport type, nee

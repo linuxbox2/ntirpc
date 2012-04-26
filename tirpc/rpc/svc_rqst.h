@@ -162,7 +162,6 @@ int svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt);
-int svc_rqst_xprt_register_cl(CLIENT *cl, SVCXPRT *newxprt);
 int svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags);
 int svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags);
@@ -193,6 +192,7 @@ int svc_rqst_foreach_xprt(uint32_t chan_id, svc_rqst_xprt_each_func_t each_f,
 
 #define SVC_RQST_FLAG_XPRT_UREG       0x04000
 #define SVC_RQST_FLAG_XPRT_DTOR       0x08000
+#define SVC_RQST_FLAG_XPRT_GCHAN      0x10000
 
 #define SVC_RQST_STATE_NONE           0x00000
 #define SVC_RQST_STATE_ACTIVE         0x00001 /* thrd in event loop */

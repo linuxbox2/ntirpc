@@ -220,7 +220,7 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
         sr_rec->ev_type = SVC_EVENT_EPOLL;
 
         /* XXX improve this too */
-        sr_rec->ev_u.epoll.max_events = __svc_params->ev_u.epoll.max_events;
+        sr_rec->ev_u.epoll.max_events = __svc_params->ev_u.evchan.max_events;
         sr_rec->ev_u.epoll.events = (struct epoll_event *)
             mem_alloc(
                 sr_rec->ev_u.epoll.max_events*sizeof(struct epoll_event));
@@ -422,7 +422,7 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 {
     struct svc_rqst_rec *sr_rec;
     struct svc_xprt_ev *xp_ev;
-    int code = EINVAL;
+    int code = 0;
 
     if (chan_id == 0) {
         __warnx("%s: called with chan_id 0, fatal (bug)", __func__);
@@ -451,8 +451,13 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     /* link from xprt */
     xp_ev->sr_rec = sr_rec;
 
+    /* XXXX check that we don't accidentally require EVCHAN to be
+     * discretionary EVCHAN */
     /* mark xprt */
-    xprt->xp_flags |= SVC_XPRT_FLAG_EVCHAN;
+    if (xprt->xp_flags & SVC_RQST_FLAG_XPRT_GCHAN)
+        xprt->xp_flags |= SVC_XPRT_FLAG_GCHAN;
+    else
+        xprt->xp_flags |= SVC_XPRT_FLAG_EVCHAN;
 
     mutex_unlock(&sr_rec->mtx);
 
@@ -618,29 +623,6 @@ int svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt)
 
 out:
     return (code);
-}
-
-/*
- * register newxprt associated with (connected, potentially duplex) client
- */
-int svc_rqst_xprt_register_cl(CLIENT *cl, SVCXPRT *newxprt)
-{
-    int code = 0;
-    struct ct_data *ct = (struct ct_data *) cl->cl_private;
-
-    cond_init_svc_rqst();
-
-    /* do nothing if event registration is globally disabled */
-    if (__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
-        goto out;
-
-    if (ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX)
-        code = svc_rqst_xprt_register(ct->ct_duplex.ct_xprt, newxprt);
-    else
-        xprt_register(newxprt);
-
-    out:
-        return (code);
 }
 
 int svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t flags)
