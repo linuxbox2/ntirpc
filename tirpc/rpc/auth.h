@@ -51,6 +51,7 @@
 #include <sys/cdefs.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <stdio.h>
 
 
 #define MAX_AUTH_BYTES	400
@@ -248,12 +249,18 @@ auth_put(AUTH *auth)
 #define auth_refresh(auth, msg)		\
 		((*((auth)->ah_ops->ah_refresh))(auth, msg))
 
+#if defined(__GNUC__) && defined(DEBUG)
+#define auth_log_debug(fmt,args...) printf(stderr, fmt, args)
+#else
+#define auth_log_debug(fmt,args...)
+#endif
+
 #define AUTH_DESTROY(auth)						\
 		do {							\
 			int refs;					\
 			if ((refs = auth_put((auth))) == 0)		\
 				((*((auth)->ah_ops->ah_destroy))(auth));\
-			log_debug("%s: auth_put(), refs %d\n",		\
+			auth_log_debug("%s: auth_put(), refs %d\n",	\
 				__func__, refs);			\
 		} while (0)
 
@@ -262,7 +269,7 @@ auth_put(AUTH *auth)
 			int refs;					\
 			if ((refs = auth_put((auth))) == 0)		\
 				((*((auth)->ah_ops->ah_destroy))(auth));\
-			log_debug("%s: auth_put(), refs %d\n",		\
+			auth_log_debug("%s: auth_put(), refs %d\n",	\
 				__func__, refs);			\
 		} while (0)
 
