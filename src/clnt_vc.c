@@ -433,6 +433,16 @@ call_again:
             vc_call_return (ct->ct_error.re_status);
         }
         /* now decode and validate the response header */
+        if (! xdr_dplx_msg_decode_start(xdrs, msg)) {
+            __warnx("%s: error at xdr_dplx_msg_start", __func__);
+            vc_call_return (ct->ct_error.re_status);
+        }
+        if (! xdr_dplx_msg_decode_continue(xdrs, msg)) {
+            __warnx("%s: error at xdr_dplx_msg_continue", __func__);
+            vc_call_return (ct->ct_error.re_status);
+        }
+
+#if 0
         if (! xdr_dplx_msg(xdrs, msg)) {
             __warnx("%s: error at xdr_dplx_msg",
                 __func__);
@@ -445,6 +455,7 @@ call_again:
             }
             vc_call_return (ct->ct_error.re_status);
         }
+#endif
         __warnx("%s: successful xdr_dplx_msg (direction==%d)\n",
                 __func__, msg->rm_direction);
         /* switch on direction */

@@ -158,6 +158,7 @@ struct rpc_msg {
 #define	rm_call		ru.RM_cmb
 #define	rm_reply	ru.RM_rmb
 	caddr_t fr_vec[1];
+	int32_t* rm_ibuf;
 };
 #define	acpted_rply	ru.RM_rmb.ru.RP_ar
 #define	rjcted_rply	ru.RM_rmb.ru.RP_dr
