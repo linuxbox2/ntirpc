@@ -40,7 +40,7 @@ lib_LTLIBRARIES = libtirpc.la
 # release number of your package. This is an abuse that only fosters
 # misunderstanding of the purpose of library versions."
 #
-libtirpc_la_LDFLAGS = -lnsl -lpthread -version-info 1:10:0
+libtirpc_la_LDFLAGS = -lpthread -version-info 1:10:0
 
 libtirpc_la_SOURCES = auth_none.c auth_unix.c authunix_prot.c bindresvport.c clnt_bcast.c \
         clnt_dg.c clnt_generic.c clnt_perror.c clnt_raw.c clnt_simple.c \
