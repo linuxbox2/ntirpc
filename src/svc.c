@@ -879,10 +879,9 @@ svc_getreq_default(SVCXPRT *xprt)
   r.rq_clntcred = &(cred_area[2 * MAX_AUTH_BYTES]);
 
   /* now receive msgs from xprt (support batch calls) */
-  do
-    {
-      if (SVC_RECV (xprt, &msg))
-        {
+  do {
+      if (SVC_RECV (xprt, &msg)) {
+
 	  /* now find the exported program and call it */
           svc_vers_range_t vrange;
           svc_lookup_result_t lkp_res;
@@ -896,57 +895,59 @@ svc_getreq_default(SVCXPRT *xprt)
 	  r.rq_cred = msg.rm_call.cb_cred;
 
 	  /* first authenticate the message */
-	  if ((why = _authenticate (&r, &msg)) != AUTH_OK)
-	    {
+	  if ((why = _authenticate (&r, &msg)) != AUTH_OK) {
 	      svcerr_auth (xprt, why);
 	      goto call_done;
-	    }
+          }
 
           lkp_res = svc_lookup(&svc_rec, &vrange, r.rq_prog, r.rq_vers,
                                NULL, 0);
           switch (lkp_res) {
           case SVC_LKP_SUCCESS:
-              (*svc_rec->sc_dispatch) (&r, xprt);
+              (*svc_rec->sc_dispatch)(&r, xprt);
               goto call_done;
               break;
           case SVC_LKP_VERS_NOTFOUND:
               __warnx("%s: dispatch prog vers notfound\n", __func__);
-              svcerr_progvers (xprt, vrange.lowvers, vrange.highvers);
+              svcerr_progvers(xprt, vrange.lowvers, vrange.highvers);
           default:
               __warnx("%s: dispatch prog notfound\n", __func__);
-              svcerr_noprog (xprt);
+              svcerr_noprog(xprt);
               break;
           }
-        } /* SVC_RECV again? */
+      } /* SVC_RECV again? */
 
-      /*
-       * Check if the xprt has been disconnected in a
-       * recursive call in the service dispatch routine.
-       * If so, then break.
-       */
-      if (! svc_validate_xprt_list(xprt))
+  call_done:
+      if ((stat = SVC_STAT (xprt)) == XPRT_DIED) {
+
+          /* XXX the xp_destroy methods call the new svc_rqst_xprt_unregister
+           * routine, so there shouldn't be internal references to xprt.  The
+           * API client could also override this routine.  Still, there may
+           * be a motivation for adding a lifecycle callback, since the API
+           * client can get a new-xprt callback, and could have kept the
+           * address (and should now be notified we are disposing it). */
+          __warnx("%s: stat == XPRT_DIED (%p) \n", __func__, xprt);
+          SVC_DESTROY(xprt);
           break;
 
-    call_done:
-      if ((stat = SVC_STAT (xprt)) == XPRT_DIED)
-	{
-            /* XXX the xp_destroy methods call the new svc_rqst_xprt_unregister
-             * routine, so there shouldn't be internal references to xprt.  The
-             * API client could also override this routine.  Still, there may
-             * be a motivation for adding a lifecycle callback, since the API
-             * client can get a new-xprt callback, and could have kept the
-             * address (and should now be notified we are disposing it). */
-            __warnx("%s: stat == XPRT_DIED (%p) \n", __func__, xprt);
-            SVC_DESTROY (xprt);
-            break;
-	}
-    else if ((xprt->xp_auth != NULL) &&
-	     (xprt->xp_auth->svc_ah_private == NULL))
-	{
-	  xprt->xp_auth = NULL;
-	}
-    }
-  while (stat == XPRT_MOREREQS);
+      } else {
+
+          /* XXX check */
+          if ((xprt->xp_auth != NULL) &&
+              (xprt->xp_auth->svc_ah_private == NULL)) {
+              xprt->xp_auth = NULL;
+          }
+
+          /*
+           * Check if the xprt has been disconnected in a
+           * recursive call in the service dispatch routine.
+           * If so, then break.
+           */
+          if (! svc_validate_xprt_list(xprt))
+              break;
+      }
+
+  } while (stat == XPRT_MOREREQS);
 
   return (stat);
 }

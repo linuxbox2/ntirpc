@@ -44,15 +44,20 @@ struct ct_wait_entry {
 
 #include <misc/rbtree_x.h>
 
-/* clnt_fd_lock complex */
+/* new unified client state */
 struct vc_fd_rec
 {
-    int32_t refcount;
-    struct opr_rbtree_node node_k;
     int fd_k;
-    int lock_flag_value; /* state of lock at fd */
+    int32_t refcount;
+    int32_t lock_flag_value; /* state of lock at fd */
+    struct opr_rbtree_node node_k;
     mutex_t mtx;
-    cond_t cv;
+    cond_t  cv;
+    struct {
+        uint32_t xid; /* current xid */
+        uint32_t depends_xid;
+        struct opr_rbtree t;
+    } calls;
 };
 
 #define MCALL_MSG_SIZE 24
@@ -62,6 +67,43 @@ struct vc_fd_rec
 #define CT_FLAG_EVENTS_BLOCKED    0x0002
 #define CT_FLAG_EPOLL_ACTIVE      0x0004
 #define CT_FLAG_XPRT_DESTROYED    0x0008
+
+/*
+ * A client call context.  Intended to enable efficient multiplexing of
+ * client calls sharing a client channel.
+ */
+enum rpc_ctx_state {
+    RPC_CTX_START,
+    RPC_CTX_REPLY_WAIT,
+    RPC_CTX_FINISHED
+};
+
+typedef struct __rpc_call_ctx {
+    struct opr_rbtree_node node_k;
+    struct {
+        mutex_t mtx;
+        cond_t  cv;
+    } we;
+    uint32_t xid;
+    enum rpc_ctx_state state;
+    uint32_t flags;
+    struct rpc_msg *msg;
+    struct rpc_err error;
+    union {
+        struct {
+            struct __rpc_client *cl;
+            rpcproc_t proc;
+            xdrproc_t xdr_args;
+            void *args_ptr;
+            xdrproc_t xdr_results;
+            void *results_ptr;
+        } clnt;
+        struct {
+            /* nothing */
+        } svc;
+    } ctx_u;
+    void *u_data[2]; /* caller user data */
+} rpc_ctx_t;
 
 #define SetDuplex(cl, xprt) do { \
         struct ct_data *ct = (struct ct_data *) (cl)->cl_private; \
