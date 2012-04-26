@@ -234,14 +234,17 @@ svc_vc_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 		goto cleanup_svc_vc_create;
 	}
 
-        /* Conditional xprt_register */
-        if (! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
+        /* conditional xprt_register */
+        if ((! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS)) &&
+            (! (flags & SVC_VC_CREATE_FLAG_XPRT_NOREG)))
             xprt_register(xprt);
 
 	return (xprt);
+
 cleanup_svc_vc_create:
 	if (r != NULL)
 		mem_free(r, sizeof(*r));
+
 	return (NULL);
 }
 
@@ -330,7 +333,7 @@ svc_fd_create2(fd, sendsize, recvsize, flags)
 
 	xprt = makefd_xprt(fd, sendsize, recvsize);
 	if (xprt == NULL)
-		return NULL;
+		return (NULL);
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
@@ -387,16 +390,17 @@ svc_fd_create2(fd, sendsize, recvsize, flags)
 	}
 out:
         /* conditional xprt_register */
-        if (flags & SVC_VC_CREATE_FLAG_XPRT_REGISTER)
+        if ((! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS)) &&
+            (! (flags & SVC_VC_CREATE_FLAG_XPRT_NOREG)))
             xprt_register(xprt);
 
-	return xprt;
+	return (xprt);
 
 freedata:
 	if (xprt->xp_ltaddr.buf != NULL)
 		mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
 
-	return NULL;
+	return (NULL);
 }
 
 SVCXPRT *
@@ -1357,10 +1361,9 @@ svc_vc_create_from_clnt(cl, sendsz, recvsz, flags)
 
     gettimeofday(&cd->last_recv_time, NULL);
 
-#if 0
     /* conditional xprt_register */
-    if (flags & SVC_VC_CREATE_FLAG_XPRT_REGISTER)
-#endif
+    if ((! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS)) &&
+        (! (flags & SVC_VC_CREATE_FLAG_XPRT_NOREG)))
         xprt_register(xprt);
 
     /* XXX duplex */
