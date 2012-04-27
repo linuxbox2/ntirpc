@@ -55,6 +55,24 @@ static struct vc_fd_rec_set vc_fd_rec_set = {
     { 0, NULL } /* xt */
 };
 
+static inline int
+vc_fd_cmpf(const struct opr_rbtree_node *lhs,
+           const struct opr_rbtree_node *rhs)
+{
+    struct vc_fd_rec *lk, *rk;
+
+    lk = opr_containerof(lhs, struct vc_fd_rec, node_k);
+    rk = opr_containerof(rhs, struct vc_fd_rec, node_k);
+
+    if (lk->fd_k < rk->fd_k)
+        return (-1);
+
+    if (lk->fd_k == rk->fd_k)
+        return (0);
+
+    return (1);
+}
+
 void vc_lock_init()
 {
     int code = 0;
@@ -66,7 +84,7 @@ void vc_lock_init()
 
     /* one of advantages of this RBT is convenience of external
      * iteration, we'll go to that shortly */
-    code = rbtx_init(&vc_fd_rec_set.xt, fd_cmpf /* NULL (inline) */,
+    code = rbtx_init(&vc_fd_rec_set.xt, vc_fd_cmpf /* NULL (inline) */,
                      VC_LOCK_PARTITIONS, RBT_X_FLAG_ALLOC);
     if (code)
         __warnx("vc_lock_init: rbtx_init failed");

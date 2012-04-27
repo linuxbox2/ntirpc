@@ -137,13 +137,14 @@ void svc_rqst_finalize_xprt(SVCXPRT *xprt)
 {
     if (! xprt->xp_ev)
         goto out;
-#if defined(TIRPC_EPOLL)
-#endif
+
+    /* remove xprt from xprt table */
+    svc_xprt_clear(xprt);
+
+    /* free state */
     if (xprt->xp_ev)
         mem_free(xprt->xp_ev, sizeof(struct svc_xprt_ev));
 
-    /* unreachable */
-    svc_xprt_clear(xprt);
 out:
     return;
 }
@@ -574,11 +575,7 @@ int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
         break;
     } /* switch */
 
-    __warnx("%s: before ev_sig", __func__);
-
     ev_sig(sr_rec->sv[0], 0); /* send wakeup */
-
-    __warnx("%s: after ev_sig", __func__);
 
     mutex_unlock(&sr_rec->mtx);
 

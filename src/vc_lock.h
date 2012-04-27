@@ -34,23 +34,6 @@ struct vc_fd_rec_set
     struct rbtree_x xt;
 };
 
-static inline int fd_cmpf(const struct opr_rbtree_node *lhs,
-                          const struct opr_rbtree_node *rhs)
-{
-    struct vc_fd_rec *lk, *rk;
-
-    lk = opr_containerof(lhs, struct vc_fd_rec, node_k);
-    rk = opr_containerof(rhs, struct vc_fd_rec, node_k);
-
-    if (lk->fd_k < rk->fd_k)
-        return (-1);
-
-    if (lk->fd_k == rk->fd_k)
-        return (0);
-
-    return (1);
-}
-
 /* XXX perhaps better off as a flag bit */
 #define rpc_flag_clear 0
 #define rpc_lock_value 1

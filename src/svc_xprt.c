@@ -64,6 +64,24 @@ static struct svc_xprt_set svc_xprt_set_ = {
     { 0, NULL } /* xt */
 };
 
+static inline int
+svc_xprt_fd_cmpf(const struct opr_rbtree_node *lhs,
+                 const struct opr_rbtree_node *rhs)
+{
+    struct svc_xprt_rec *lk, *rk;
+
+    lk = opr_containerof(lhs, struct svc_xprt_rec, node_k);
+    rk = opr_containerof(rhs, struct svc_xprt_rec, node_k);
+
+    if (lk->fd_k < rk->fd_k)
+        return (-1);
+
+    if (lk->fd_k == rk->fd_k)
+        return (0);
+
+    return (1);
+}
+
 void svc_xprt_init()
 {
     int code = 0;
@@ -75,7 +93,7 @@ void svc_xprt_init()
 
     /* one of advantages of this RBT is convenience of external
      * iteration, we'll go to that shortly */
-    code = rbtx_init(&svc_xprt_set_.xt, fd_cmpf /* NULL (inline) */,
+    code = rbtx_init(&svc_xprt_set_.xt, svc_xprt_fd_cmpf /* NULL (inline) */,
                      SVC_XPRT_PARTITIONS, RBT_X_FLAG_ALLOC);
     if (code)
         __warnx("svc_xprt_init: rbtx_init failed");
@@ -101,6 +119,7 @@ static inline struct svc_xprt_rec *svc_xprt_lookup(int fd)
 
     cond_init_svc_xprt();
 
+    memset(&sk, 0, sizeof(struct svc_xprt_rec));
     sk.fd_k = fd;
     t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, fd);
 
