@@ -102,6 +102,7 @@ u_int svc_shim_get_xid(SVCXPRT *xprt)
     return (0);
 }
 
+#if 0
 /* static */ int read_vc(void *, void *, int);
 /* static */ int write_vc(void *, void *, int);
 
@@ -240,3 +241,4 @@ svc_shim_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig)
   svcerr_systemerr(xprt_orig);
   return (NULL);
 }
+#endif
