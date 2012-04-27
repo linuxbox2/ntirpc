@@ -39,6 +39,7 @@
 
 #include <rpc/rpc.h>
 #include <rpc/xdr_inline.h>
+#include <rpc/auth_inline.h>
 
 #include <sys/select.h>
 

@@ -45,6 +45,7 @@
 
 #include <rpc/rpc.h>
 #include <rpc/xdr_inline.h>
+#include <rpc/auth_inline.h>
 
 static void accepted(enum accept_stat, struct rpc_err *);
 static void rejected(enum reject_stat, struct rpc_err *);

@@ -46,7 +46,7 @@
 #ifndef _TIRPC_AUTH_H
 #define  _TIRPC_AUTH_H
 
-#include <rpc/xdr_inline.h>
+#include <rpc/xdr.h>
 #include <rpc/clnt_stat.h>
 #include <sys/cdefs.h>
 #include <sys/socket.h>
@@ -414,51 +414,5 @@ __END_DECLS
 #define AUTH_DES	AUTH_DH		/* for backward compatibility */
 #define AUTH_KERB	4		/* kerberos style */
 #define RPCSEC_GSS	6		/* RPCSEC_GSS */
-
-/*
- * XDR xdr_opaque_auth
- */
-static inline bool_t 
-inline_xdr_opaque_auth(XDR *xdrs, struct opaque_auth *oa)
-{
-    if (! (inline_xdr_enum(xdrs, &oa->oa_flavor) &&
-           (inline_xdr_u_int(xdrs, &oa->oa_length))))
-        return (FALSE);
-
-    switch (xdrs->x_op) {
-    case XDR_DECODE:
-        if (oa->oa_length) {
-            if (oa->oa_length > MAX_AUTH_BYTES)
-                return (FALSE);
-            if (oa->oa_base == NULL) {
-                oa->oa_base = (caddr_t) mem_alloc(oa->oa_length);
-                if (oa->oa_base == NULL)
-                    return (FALSE);
-            }
-            return (inline_xdr_opaque(xdrs, oa->oa_base, oa->oa_length));
-        }
-        return (TRUE); /* 0 length succeeds */
-        break;
-    case XDR_ENCODE:
-        if (oa->oa_length) {
-            if (oa->oa_length > MAX_AUTH_BYTES)
-                return (FALSE);
-            return (inline_xdr_opaque(xdrs, oa->oa_base, oa->oa_length));
-        }
-        return (TRUE); /* 0 length succeeds */
-        break;
-    case XDR_FREE:
-        if (oa->oa_base != NULL) {
-            mem_free(oa->oa_base, oa->oa_length);
-            oa->oa_base = NULL;
-        }
-        return (TRUE);
-        break;
-    default:
-        break;
-    } /* x_op */
-
-    return (FALSE);
-}
 
 #endif /* !_TIRPC_AUTH_H */
