@@ -151,7 +151,7 @@ static const char __no_mem_str[] = "out of memory";
 bool_t
 cond_block_events_client(CLIENT *cl)
 {
-    struct ct_data *ct = (struct ct_data *) cl->cl_private;
+    struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
     if ((ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX) &&
         (! (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED))) {
         SVCXPRT *xprt = ct->ct_duplex.ct_xprt;
@@ -168,7 +168,7 @@ cond_block_events_client(CLIENT *cl)
 void
 cond_unblock_events_client(CLIENT *cl)
 {
-    struct ct_data *ct = (struct ct_data *) cl->cl_private;
+    struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
     if (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED) {
         SVCXPRT *xprt = ct->ct_duplex.ct_xprt;
         assert(xprt);
@@ -212,7 +212,7 @@ clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
 	u_int flags;
 {
 	CLIENT *cl;			/* client handle */
-	struct ct_data *ct = NULL;
+	struct cx_data *cx = NULL;
 	struct timeval now;
 	struct rpc_msg call_msg;
 	static u_int32_t disrupt;
@@ -226,15 +226,15 @@ clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
 		disrupt = (u_int32_t)(long)raddr;
 
 	cl = (CLIENT *)mem_alloc(sizeof (*cl));
-	ct = (struct ct_data *)mem_alloc(sizeof (*ct));
-	if ((cl == (CLIENT *)NULL) || (ct == (struct ct_data *)NULL)) {
+        cx = alloc_cx_data(CX_VC_DATA, 0, 0);
+        if ((cl == NULL) || (cx == NULL)) {
 		(void) syslog(LOG_ERR, clnt_vc_errstr,
 		    clnt_vc_str, __no_mem_str);
 		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 		rpc_createerr.cf_error.re_errno = errno;
 		goto err;
 	}
-	ct->ct_addr.buf = NULL;
+	CT_DATA(cx)->ct_addr.buf = NULL;
 	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 	mutex_lock(&clnt_fd_lock);
@@ -264,23 +264,23 @@ clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
 
 	mutex_unlock(&clnt_fd_lock);
 	if (!__rpc_fd2sockinfo(fd, &si))
-		goto err;
+            goto err;
 	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 
-	ct->ct_closeit = FALSE;
+	CT_DATA(cx)->ct_closeit = FALSE;
 
 	/*
 	 * Set up private data struct
 	 */
-	ct->ct_fd = fd;
-	ct->ct_wait.tv_usec = 0;
-	ct->ct_waitset = FALSE;
-	ct->ct_addr.buf = mem_alloc(raddr->maxlen);
-	if (ct->ct_addr.buf == NULL)
-		goto err;
-	memcpy(ct->ct_addr.buf, raddr->buf, raddr->len);
-	ct->ct_addr.len = raddr->len;
-	ct->ct_addr.maxlen = raddr->maxlen;
+	CT_DATA(cx)->ct_fd = fd;
+	CT_DATA(cx)->ct_wait.tv_usec = 0;
+	CT_DATA(cx)->ct_waitset = FALSE;
+	CT_DATA(cx)->ct_addr.buf = mem_alloc(raddr->maxlen);
+	if (CT_DATA(cx)->ct_addr.buf == NULL)
+            goto err;
+	memcpy(CT_DATA(cx)->ct_addr.buf, raddr->buf, raddr->len);
+	CT_DATA(cx)->ct_addr.len = raddr->len;
+	CT_DATA(cx)->ct_addr.maxlen = raddr->maxlen;
 
 	/*
 	 * Initialize call message
@@ -295,23 +295,23 @@ clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
 	/*
 	 * pre-serialize the static part of the call msg and stash it away
 	 */
-	xdrmem_create(&(ct->ct_xdrs), ct->ct_u.ct_mcallc, MCALL_MSG_SIZE,
-	    XDR_ENCODE);
-	if (! xdr_callhdr(&(ct->ct_xdrs), &call_msg)) {
-		if (ct->ct_closeit) {
-			(void)close(fd);
+	xdrmem_create(&(CT_DATA(cx)->ct_xdrs), CT_DATA(cx)->ct_u.ct_mcallc,
+                      MCALL_MSG_SIZE, XDR_ENCODE);
+	if (! xdr_callhdr(&(CT_DATA(cx)->ct_xdrs), &call_msg)) {
+		if (CT_DATA(cx)->ct_closeit) {
+                    (void)close(fd);
 		}
 		goto err;
 	}
-	ct->ct_mpos = XDR_GETPOS(&(ct->ct_xdrs));
-	XDR_DESTROY(&(ct->ct_xdrs));
+	CT_DATA(cx)->ct_mpos = XDR_GETPOS(&(CT_DATA(cx)->ct_xdrs));
+	XDR_DESTROY(&(CT_DATA(cx)->ct_xdrs));
 
 	/*
 	 * Create a client handle which uses xdrrec for serialization
 	 * and authnone for authentication.
 	 */
 	cl->cl_ops = clnt_vc_ops();
-	cl->cl_private = ct;
+	cl->cl_private = cx;
 
         /*
          * Register lock channel (sync)
@@ -325,19 +325,20 @@ clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
 
 	sendsz = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
 	recvsz = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
-	xdrrec_create(&(ct->ct_xdrs), sendsz, recvsz,
-	    cl->cl_private, read_vc, write_vc);
+	xdrrec_create(&(CT_DATA(cx)->ct_xdrs), sendsz, recvsz,
+                      CT_DATA(cx), read_vc, write_vc);
 	return (cl);
 
 err:
 	if (cl) {
-		if (ct) {
-			if (ct->ct_addr.len)
-				mem_free(ct->ct_addr.buf, ct->ct_addr.len);
-			mem_free(ct, sizeof (struct ct_data));
+		if (cx) {
+                    if (CT_DATA(cx)->ct_addr.len)
+                        mem_free(CT_DATA(cx)->ct_addr.buf,
+                                 CT_DATA(cx)->ct_addr.len);
+                    free_cx_data(cx);
 		}
 		if (cl)
-			mem_free(cl, sizeof (CLIENT));
+                    mem_free(cl, sizeof (CLIENT));
 	}
 	return ((CLIENT *)NULL);
 }
@@ -354,7 +355,7 @@ clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
 	void *results_ptr;
 	struct timeval timeout;
 {
-    struct ct_data *ct = (struct ct_data *) cl->cl_private;
+    struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
     enum clnt_stat result = RPC_SUCCESS;
     bool_t shipnow, ev_blocked, duplex;
     SVCXPRT *duplex_xprt = NULL;
@@ -546,21 +547,20 @@ clnt_vc_geterr(cl, errp)
 	CLIENT *cl;
 	struct rpc_err *errp;
 {
-	struct ct_data *ct;
+    struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
 
-	assert(cl != NULL);
-	assert(errp != NULL);
+    assert(cl != NULL);
+    assert(errp != NULL);
 
-	ct = (struct ct_data *) cl->cl_private;
-        if (ct->ct_xdrs.x_public) {
-            rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_public;
-            *errp = ctx->error;
-        } else {
-            /* XXX we don't want (overhead of) an unsafe last-error value */
-            struct rpc_err err;
-            memset(&err, 0, sizeof(struct rpc_err));
-            *errp = err;
-        }
+    if (ct->ct_xdrs.x_public) {
+        rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_public;
+        *errp = ctx->error;
+    } else {
+        /* XXX we don't want (overhead of) an unsafe last-error value */
+        struct rpc_err err;
+        memset(&err, 0, sizeof(struct rpc_err));
+        *errp = err;
+    }
 }
 
 static bool_t
@@ -576,7 +576,7 @@ clnt_vc_freeres(cl, xdr_res, res_ptr)
 
 	assert(cl != NULL);
 
-	ct = (struct ct_data *)cl->cl_private;
+	ct = CT_DATA((struct cx_data *)cl->cl_private);
 	xdrs = &(ct->ct_xdrs);
 
         /* Handle our own signal mask here, the signal section is
@@ -608,13 +608,11 @@ clnt_vc_control(cl, request, info)
 	u_int request;
 	void *info;
 {
-	struct ct_data *ct;
+	struct ct_data *ct = CT_DATA((struct cx_data *)cl->cl_private);
 	void *infop = info;
 	sigset_t mask;
 
 	assert(cl);
-
-	ct = (struct ct_data *)cl->cl_private;
         vc_fd_lock_c(cl, &mask);
 
 	switch (request) {
@@ -725,10 +723,8 @@ void
 clnt_vc_destroy(cl)
 	CLIENT *cl;
 {
-	struct ct_data *ct = (struct ct_data *) cl->cl_private;
+	struct cx_data *cx = (struct cx_data *) cl->cl_private;
 	sigset_t mask, newmask;
-
-	ct = (struct ct_data *) cl->cl_private;
 
         /* Handle our own signal mask here, the signal section is
          * larger than the wait (not 100% clear why) */
@@ -736,16 +732,16 @@ clnt_vc_destroy(cl)
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
         vc_fd_wait_c(cl, rpc_flag_clear);
 
-	if (ct->ct_closeit && ct->ct_fd != -1)
-            (void)close(ct->ct_fd);
-	XDR_DESTROY(&(ct->ct_xdrs));
-	if (ct->ct_addr.buf)
-            __free(ct->ct_addr.buf);
+	if (CT_DATA(cx)->ct_closeit && CT_DATA(cx)->ct_fd != -1)
+            (void)close(CT_DATA(cx)->ct_fd);
+	XDR_DESTROY(&(CT_DATA(cx)->ct_xdrs));
+	if (CT_DATA(cx)->ct_addr.buf)
+            __free(CT_DATA(cx)->ct_addr.buf);
 
         vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE); /* XXX moved before free */
         vc_lock_unref_clnt(cl);
 
-	mem_free(ct, sizeof(struct ct_data));
+        free_cx_data(cx);
 
 	if (cl->cl_netid && cl->cl_netid[0])
             mem_free(cl->cl_netid, strlen(cl->cl_netid) +1);

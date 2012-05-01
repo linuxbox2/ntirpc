@@ -59,7 +59,7 @@ alloc_rpc_call_ctx(CLIENT *cl, rpcproc_t proc, xdrproc_t xdr_args,
     if (! ctx)
         goto out;
 
-    ct = (struct ct_data *) cl->cl_private;
+    ct = CT_DATA((struct cx_data *) cl->cl_private);
     crec = ct->ct_crec;
     assert(crec);
 
@@ -94,7 +94,7 @@ out:
 
 void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
 {
-    struct ct_data *ct = (struct ct_data *) ctx->ctx_u.clnt.cl->cl_private;
+    struct ct_data *ct = CT_DATA((struct cx_data *) ctx->ctx_u.clnt.cl->cl_private);
     struct vc_fd_rec *crec = ct->ct_crec;
 
     assert (flags & RPC_CTX_FLAG_LOCKED);
@@ -113,10 +113,10 @@ void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
 enum clnt_stat
 rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 {
-   struct ct_data *ct = (struct ct_data *) ctx->ctx_u.clnt.cl->cl_private;
-   struct vc_fd_rec *crec = ct->ct_crec;
-   XDR *xdrs = &(ct->ct_xdrs);
-   enum clnt_stat stat;
+    struct ct_data *ct = CT_DATA((struct cx_data *) ctx->ctx_u.clnt.cl->cl_private);
+    struct vc_fd_rec *crec = ct->ct_crec;
+    XDR *xdrs = &(ct->ct_xdrs);
+    enum clnt_stat stat;
 
     assert (flags & RPC_CTX_FLAG_LOCKED);
 
@@ -154,11 +154,11 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 void
 free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
 {
-   struct ct_data *ct = (struct ct_data *) ctx->ctx_u.clnt.cl->cl_private;
-   struct vc_fd_rec *crec = ct->ct_crec;
+    struct ct_data *ct = CT_DATA((struct cx_data *) ctx->ctx_u.clnt.cl->cl_private);
+    struct vc_fd_rec *crec = ct->ct_crec;
 
-   assert (flags & RPC_CTX_FLAG_LOCKED);
+    assert (flags & RPC_CTX_FLAG_LOCKED);
 
-   opr_rbtree_remove(&crec->calls.t, &crec->node_k);
-   free_rpc_msg(ctx->msg);
+    opr_rbtree_remove(&crec->calls.t, &crec->node_k);
+    free_rpc_msg(ctx->msg);
 }

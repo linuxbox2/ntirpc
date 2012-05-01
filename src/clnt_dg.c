@@ -78,28 +78,6 @@ static void clnt_dg_destroy(CLIENT *);
 static const char mem_err_clnt_dg[] = "clnt_dg_create: out of memory";
 
 /*
- * Private data kept per client handle
- */
-struct cu_data {
-	int			cu_fd;		/* connections fd */
-	bool_t			cu_closeit;	/* opened by library */
-	struct sockaddr_storage	cu_raddr;	/* remote address */
-	int			cu_rlen;
-	struct timeval		cu_wait;	/* retransmit interval */
-	struct timeval		cu_total;	/* total time for the call */
-	struct rpc_err		cu_error;
-	XDR			cu_outxdrs;
-	u_int			cu_xdrpos;
-	u_int			cu_sendsz;	/* send size */
-	char			*cu_outbuf;
-	u_int			cu_recvsz;	/* recv size */
-	int			cu_async;
-	int			cu_connect;	/* Use connect(). */
-	int			cu_connected;	/* Have done connect(). */
-	char			cu_inbuf[1];
-};
-
-/*
  * Connection less client creation returns with client handle parameters.
  * Default options are set, which the user can change using clnt_control().
  * fd should be open and bound.
@@ -123,7 +101,7 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 	u_int recvsz;			/* buffer send size */
 {
 	CLIENT *cl = NULL;		/* client handle */
-	struct cu_data *cu = NULL;	/* private data */
+	struct cx_data *cx = NULL;	/* private data */
 	struct timeval now;
 	struct rpc_msg call_msg;
 	struct __rpc_sockinfo si;
@@ -157,33 +135,33 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 	 */
 	sendsz = ((sendsz + 3) / 4) * 4;
 	recvsz = ((recvsz + 3) / 4) * 4;
-	cu = mem_alloc(sizeof (*cu) + sendsz + recvsz);
-	if (cu == NULL)
+        cx = alloc_cx_data(CX_DG_DATA, sendsz, recvsz);
+	if (cx == NULL)
 		goto err1;
-	(void) memcpy(&cu->cu_raddr, svcaddr->buf, (size_t)svcaddr->len);
-	cu->cu_rlen = svcaddr->len;
-	cu->cu_outbuf = &cu->cu_inbuf[recvsz];
+	(void) memcpy(&CU_DATA(cx)->cu_raddr, svcaddr->buf, (size_t)svcaddr->len);
+	CU_DATA(cx)->cu_rlen = svcaddr->len;
 	/* Other values can also be set through clnt_control() */
-	cu->cu_wait.tv_sec = 15;	/* heuristically chosen */
-	cu->cu_wait.tv_usec = 0;
-	cu->cu_total.tv_sec = -1;
-	cu->cu_total.tv_usec = -1;
-	cu->cu_sendsz = sendsz;
-	cu->cu_recvsz = recvsz;
-	cu->cu_async = FALSE;
-	cu->cu_connect = FALSE;
-	cu->cu_connected = FALSE;
+	CU_DATA(cx)->cu_wait.tv_sec = 15; /* heuristically chosen */
+	CU_DATA(cx)->cu_wait.tv_usec = 0;
+	CU_DATA(cx)->cu_total.tv_sec = -1;
+	CU_DATA(cx)->cu_total.tv_usec = -1;
+	CU_DATA(cx)->cu_sendsz = sendsz;
+	CU_DATA(cx)->cu_recvsz = recvsz;
+	CU_DATA(cx)->cu_async = FALSE;
+	CU_DATA(cx)->cu_connect = FALSE;
+	CU_DATA(cx)->cu_connected = FALSE;
 	(void) gettimeofday(&now, NULL);
 	call_msg.rm_xid = __RPC_GETXID(&now);
 	call_msg.rm_call.cb_prog = program;
 	call_msg.rm_call.cb_vers = version;
-	xdrmem_create(&(cu->cu_outxdrs), cu->cu_outbuf, sendsz, XDR_ENCODE);
-	if (! xdr_callhdr(&(cu->cu_outxdrs), &call_msg)) {
+	xdrmem_create(&(CU_DATA(cx)->cu_outxdrs), CU_DATA(cx)->cu_outbuf,
+                      sendsz, XDR_ENCODE);
+	if (! xdr_callhdr(&(CU_DATA(cx)->cu_outxdrs), &call_msg)) {
 		rpc_createerr.cf_stat = RPC_CANTENCODEARGS;  /* XXX */
 		rpc_createerr.cf_error.re_errno = 0;
 		goto err2;
 	}
-	cu->cu_xdrpos = XDR_GETPOS(&(cu->cu_outxdrs));
+	CU_DATA(cx)->cu_xdrpos = XDR_GETPOS(&(CU_DATA(cx)->cu_outxdrs));
 
 	/* XXX fvdl - do we still want this? */
 #if 0
@@ -201,10 +179,10 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 	 * to do a close on it, else the user may use clnt_control
 	 * to let clnt_destroy do it for him/her.
 	 */
-	cu->cu_closeit = FALSE;
-	cu->cu_fd = fd;
+	CU_DATA(cx)->cu_closeit = FALSE;
+	CU_DATA(cx)->cu_fd = fd;
 	cl->cl_ops = clnt_dg_ops();
-	cl->cl_private = (caddr_t)(void *)cu;
+	cl->cl_private = (caddr_t)(void *) cx;
 	cl->cl_auth = authnone_create();
 	cl->cl_tp = NULL;
 	cl->cl_netid = NULL;
@@ -217,8 +195,8 @@ err1:
 err2:
 	if (cl) {
 		mem_free(cl, sizeof (CLIENT));
-		if (cu)
-			mem_free(cu, sizeof (*cu) + sendsz + recvsz);
+		if (cx)
+                    free_cx_data(cx);
 	}
 	return (NULL);
 }
@@ -233,7 +211,7 @@ clnt_dg_call(cl, proc, xargs, argsp, xresults, resultsp, utimeout)
 	void		*resultsp;	/* pointer to results */
 	struct timeval	utimeout;	/* seconds to wait before giving up */
 {
-	struct cu_data *cu = (struct cu_data *)cl->cl_private;
+        struct cu_data *cu = CU_DATA((struct cx_data *) cl->cl_private);
 	XDR *xdrs;
 	size_t outlen = 0;
 	struct rpc_msg reply_msg;
@@ -245,7 +223,7 @@ clnt_dg_call(cl, proc, xargs, argsp, xresults, resultsp, utimeout)
 	int total_time, nextsend_time, tv=0;
 	struct sockaddr *sa;
 	sigset_t mask;
-	socklen_t inlen, salen;
+	socklen_t  __attribute__((unused)) inlen, salen;
 	ssize_t recvlen = 0;
 	u_int32_t xid, inval, outval;
 
@@ -478,8 +456,7 @@ clnt_dg_geterr(cl, errp)
 	CLIENT *cl;
 	struct rpc_err *errp;
 {
-	struct cu_data *cu = (struct cu_data *)cl->cl_private;
-
+	struct cu_data *cu = CU_DATA((struct cx_data *) cl->cl_private);
 	*errp = cu->cu_error;
 }
 
@@ -489,7 +466,7 @@ clnt_dg_freeres(cl, xdr_res, res_ptr)
 	xdrproc_t xdr_res;
 	void *res_ptr;
 {
-	struct cu_data *cu = (struct cu_data *)cl->cl_private;
+	struct cu_data *cu = CU_DATA((struct cx_data *)cl->cl_private);
 	XDR *xdrs = &(cu->cu_outxdrs);
 	bool_t dummy;
 	sigset_t mask, newmask;
@@ -523,7 +500,7 @@ clnt_dg_control(cl, request, info)
 	u_int request;
 	void *info;
 {
-	struct cu_data *cu = (struct cu_data *)cl->cl_private;
+	struct cu_data *cu = CU_DATA((struct cx_data *) cl->cl_private);
 	struct netbuf *addr;
 	sigset_t mask;
         bool_t result = TRUE;
@@ -659,20 +636,20 @@ static void
 clnt_dg_destroy(cl)
 	CLIENT *cl;
 {
-	struct cu_data *cu = (struct cu_data *)cl->cl_private;
-	int cu_fd = cu->cu_fd;
+	struct cx_data *cx = (struct cx_data *)cl->cl_private;
+	int cu_fd = CU_DATA(cx)->cu_fd;
 	sigset_t mask, newmask;
 
         /* Handle our own signal mask here, the signal section is
          * larger than the wait (not 100% clear why) */
 	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-        vc_fd_wait(cu->cu_fd, rpc_flag_clear);
+        vc_fd_wait(CU_DATA(cx)->cu_fd, rpc_flag_clear);
 
-	if (cu->cu_closeit)
-		(void)close(cu_fd);
-	XDR_DESTROY(&(cu->cu_outxdrs));
-	mem_free(cu, (sizeof (*cu) + cu->cu_sendsz + cu->cu_recvsz));
+	if (CU_DATA(cx)->cu_closeit)
+            (void)close(cu_fd);
+	XDR_DESTROY(&(CU_DATA(cx)->cu_outxdrs));
+        free_cx_data(cx);
 	if (cl->cl_netid && cl->cl_netid[0])
 		mem_free(cl->cl_netid, strlen(cl->cl_netid) +1);
 	if (cl->cl_tp && cl->cl_tp[0])
@@ -680,7 +657,7 @@ clnt_dg_destroy(cl)
 	mem_free(cl, sizeof (CLIENT));
 
 	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
-        vc_fd_signal(cu->cu_fd, VC_LOCK_FLAG_NONE);
+        vc_fd_signal(cu_fd, VC_LOCK_FLAG_NONE);
 }
 
 static struct clnt_ops *

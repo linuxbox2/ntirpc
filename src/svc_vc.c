@@ -107,7 +107,7 @@ cond_block_events_svc(SVCXPRT *xprt)
 {
     if (xprt->xp_p4) {
         CLIENT *cl = (CLIENT *) xprt->xp_p4;
-        struct ct_data *ct = (struct ct_data *) cl->cl_private;
+        struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
         if ((ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX) &&
             (! (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED))) {
             ct->ct_duplex.ct_flags |= CT_FLAG_EVENTS_BLOCKED;
@@ -125,7 +125,7 @@ cond_unblock_events_svc(SVCXPRT *xprt)
 {
     if (xprt->xp_p4) {
         CLIENT *cl = (CLIENT *) xprt->xp_p4;
-        struct ct_data *ct = (struct ct_data *) cl->cl_private;
+        struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
         if (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED) {
             ct->ct_duplex.ct_flags &= ~CT_FLAG_EVENTS_BLOCKED;
             (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
@@ -946,7 +946,7 @@ svc_vc_getargs(xprt, xdr_args, args_ptr)
                          &(((struct cf_conn *)(xprt->xp_p1))->xdrs),
                          xdr_args, args_ptr)) {
         cl = (CLIENT *) xprt->xp_p4;
-        ct = (struct ct_data *) cl->cl_private;
+        ct = CT_DATA((struct cx_data *) cl->cl_private);
         if (ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX) {
                 
             if (! SVCAUTH_UNWRAP(xprt->xp_auth,
@@ -1004,7 +1004,7 @@ svc_vc_reply(xprt, msg)
 #if 1 /* XXX duplex debugging */
         if (xprt->xp_p4) {
             cl = (CLIENT *) xprt->xp_p4;
-            ct = (struct ct_data *) cl->cl_private;
+            ct = CT_DATA((struct cx_data *) cl->cl_private);
         }
 #endif
 
@@ -1305,7 +1305,7 @@ svc_vc_create_from_clnt(cl, sendsz, recvsz, flags)
     sigset_t mask;
     SVCXPRT *xprt = NULL;
 
-    ct = (struct ct_data *) cl->cl_private;
+    ct = CT_DATA((struct cx_data *) cl->cl_private);
     fd = ct->ct_fd;
 
     vc_fd_lock_c(cl, &mask);

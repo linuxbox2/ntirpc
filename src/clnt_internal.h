@@ -138,30 +138,110 @@ call_xid_cmpf(const struct opr_rbtree_node *lhs,
     return (1);
 }
 
-struct ct_data {
-	int		ct_fd;		/* connection's fd */
-	bool_t		ct_closeit;	/* close it on destroy */
-	struct timeval	ct_wait;	/* wait interval in milliseconds */
-	bool_t          ct_waitset;	/* wait set by clnt_control? */
-	struct netbuf	ct_addr;	/* remote addr */
-#if 0
-	struct rpc_err	ct_error;       /* no. */
-#endif
-	union {
-		char	ct_mcallc[MCALL_MSG_SIZE];	/* marshalled callmsg */
-		u_int32_t ct_mcalli;
-	} ct_u;
-	u_int		ct_mpos;	/* pos after marshal */
-	XDR		ct_xdrs;	/* XDR stream */
-	uint32_t	ct_xid;
-        struct vc_fd_rec *ct_crec;      /* unified sync */
-	struct rpc_msg	ct_reply;       /* async reply */
-	struct ct_wait_entry ct_sync;   /* wait for completion */
-	struct ct_duplex {
-		void *ct_xprt; /* duplex integration */
-		u_int ct_flags;
-	} ct_duplex;
+/* unify client private data  */
+
+struct cu_data {
+    int cu_fd;          /* connections fd */
+    bool_t cu_closeit;	/* opened by library */
+    struct sockaddr_storage cu_raddr; /* remote address */
+    int	cu_rlen;
+    struct timeval cu_wait; /* retransmit interval */
+    struct timeval cu_total; /* total time for the call */
+    struct rpc_err cu_error;
+    XDR	cu_outxdrs;
+    u_int cu_xdrpos;
+    u_int cu_sendsz;	/* send size */
+    u_int cu_recvsz;	/* recv size */
+    int	cu_async;
+    int	cu_connect;	/* Use connect(). */
+    int	cu_connected;	/* Have done connect(). */
+    /* formerly, buffers were tacked onto the end */
+    char *cu_inbuf;
+    char *cu_outbuf;
 };
+
+struct ct_data {
+    int		ct_fd;  /* connection's fd */
+    bool_t		ct_closeit; /* close it on destroy */
+    struct timeval	ct_wait; /* wait interval in milliseconds */
+    bool_t          ct_waitset;	/* wait set by clnt_control? */
+    struct netbuf	ct_addr; /* remote addr */
+#if 0
+    struct rpc_err	ct_error; /* no. */
+#endif
+    union {
+        char	ct_mcallc[MCALL_MSG_SIZE]; /* marshalled callmsg */
+        u_int32_t ct_mcalli;
+    } ct_u;
+    u_int ct_mpos;      /* pos after marshal */
+    XDR	ct_xdrs;        /* XDR stream */
+    uint32_t ct_xid;
+    /* XXXX move: */
+    struct vc_fd_rec *ct_crec; /* unified sync */
+    struct rpc_msg	ct_reply; /* async reply */
+    struct ct_wait_entry ct_sync; /* wait for completion */
+    struct ct_duplex {
+        void *ct_xprt;  /* duplex integration */
+        u_int ct_flags;
+    } ct_duplex;
+};
+
+enum CX_TYPE
+{
+    CX_DG_DATA,
+    CX_VC_DATA
+};
+
+struct cx_data
+{
+    enum CX_TYPE type;
+    union {
+        struct cu_data cu;
+        struct ct_data ct;
+    } c_u;
+};
+
+#define CU_DATA(cx) (& (cx)->c_u.cu)
+#define CT_DATA(cx) (& (cx)->c_u.ct)
+
+/* compartmentalize a bit */
+static inline struct cx_data *
+alloc_cx_data(enum CX_TYPE type, uint32_t sendsz, uint32_t recvsz)
+{
+    struct cx_data *cx = mem_alloc(sizeof(struct cx_data));
+    cx->type = type;
+    switch (type) {
+    case CX_DG_DATA:
+        cx->c_u.cu.cu_inbuf = mem_alloc(recvsz);
+        cx->c_u.cu.cu_outbuf = mem_alloc(sendsz);
+    case CX_VC_DATA:
+        break;
+    default:
+        /* err */
+        __warnx("%s: asked to allocate cx_data of unknown type (BUG)",
+                __func__);
+        break;
+    };
+    return (cx);
+}
+
+static inline void
+free_cx_data(struct cx_data *cx)
+{
+    switch (cx->type) {
+    case CX_DG_DATA:
+        mem_free(cx->c_u.cu.cu_inbuf, cx->c_u.cu.cu_recvsz);
+        mem_free(cx->c_u.cu.cu_outbuf, cx->c_u.cu.cu_sendsz);
+    case CX_VC_DATA:
+        break;
+    default:
+        /* err */
+        __warnx("%s: asked to free cx_data of unknown type (BUG)",
+                __func__);
+        break;
+    };
+    mem_free(cx, sizeof(struct cx_data));
+}
 
 /* events */
 bool_t cond_block_events_client(CLIENT *cl);
