@@ -4,7 +4,7 @@
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
- * - Redistributions of source code must retain the above copyright notice,
+ * - Redistributions of source code mut retain the above copyright notice,
  *   this list of conditions and the following disclaimer.
  * - Redistributions in binary form must reproduce the above copyright notice,
  *   this list of conditions and the following disclaimer in the documentation
@@ -677,58 +677,62 @@ uaddr2taddr(const struct netconfig *nconf, const char *uaddr)
 char *
 __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 {
-	char *ret;
-	struct sockaddr_in *sin;
-	struct sockaddr_un *sun;
-	char namebuf[INET_ADDRSTRLEN];
+    char *ret = NULL;
+    struct sockaddr_in *sin;
+    struct sockaddr_un *sun;
+    char namebuf[INET_ADDRSTRLEN];
 #ifdef INET6
-	struct sockaddr_in6 *sin6;
-	char namebuf6[INET6_ADDRSTRLEN];
+    struct sockaddr_in6 *sin6;
+    char namebuf6[INET6_ADDRSTRLEN];
 #endif
-	u_int16_t port;
+    u_int16_t port;
 
-	if (nbuf->len <= 0)
-		return NULL;
+    if (nbuf->len <= 0)
+        goto out;
 
-	switch (af) {
-	case AF_INET:
-		sin = nbuf->buf;
-		if (inet_ntop(af, &sin->sin_addr, namebuf, sizeof namebuf)
-		    == NULL)
-			return NULL;
-		port = ntohs(sin->sin_port);
-		if (asprintf(&ret, "%s.%u.%u", namebuf, ((u_int32_t)port) >> 8,
-		    port & 0xff) < 0)
-			return NULL;
-		break;
+    /* XXX check (fix) this */
+    ret = mem_alloc(INET6_ADDRSTRLEN + (2*6) + 1);
+
+    switch (af) {
+    case AF_INET:
+        sin = nbuf->buf;
+        if (inet_ntop(af, &sin->sin_addr, namebuf, sizeof namebuf)
+            == NULL)
+            return NULL;
+        port = ntohs(sin->sin_port);
+        if (sprintf(ret, "%s.%u.%u", namebuf, ((u_int32_t)port) >> 8,
+                    port & 0xff) < 0)
+            return NULL;
+        break;
 #ifdef INET6
-	case AF_INET6:
-		sin6 = nbuf->buf;
-		if (inet_ntop(af, &sin6->sin6_addr, namebuf6, sizeof namebuf6)
-		    == NULL)
-			return NULL;
-		port = ntohs(sin6->sin6_port);
-		if (asprintf(&ret, "%s.%u.%u", namebuf6, ((u_int32_t)port) >> 8,
-		    port & 0xff) < 0)
-			return NULL;
-		break;
+    case AF_INET6:
+        sin6 = nbuf->buf;
+        if (inet_ntop(af, &sin6->sin6_addr, namebuf6, sizeof namebuf6)
+            == NULL)
+            return NULL;
+        port = ntohs(sin6->sin6_port);
+        if (sprintf(ret, "%s.%u.%u", namebuf6, ((u_int32_t)port) >> 8,
+                    port & 0xff) < 0)
+            return NULL;
+        break;
 #endif
-	case AF_LOCAL:
-		sun = nbuf->buf;
-		/*	if (asprintf(&ret, "%.*s", (int)(sun->sun_len -
-		    offsetof(struct sockaddr_un, sun_path)),
-		    sun->sun_path) < 0)*/
-		if (asprintf(&ret, "%.*s", (int)(sizeof(*sun) -
-						 offsetof(struct sockaddr_un, sun_path)),
-			     sun->sun_path) < 0)
+    case AF_LOCAL:
+        sun = nbuf->buf;
+        /*	if (asprintf(&ret, "%.*s", (int)(sun->sun_len -
+                offsetof(struct sockaddr_un, sun_path)),
+                sun->sun_path) < 0)*/
+        if (sprintf(ret, "%.*s", (int)(sizeof(*sun) -
+                                       offsetof(struct sockaddr_un, sun_path)),
+                    sun->sun_path) < 0)
+            
+            return (NULL);
+        break;
+    default:
+        return NULL;
+    }
 
-			return (NULL);
-		break;
-	default:
-		return NULL;
-	}
-
-	return ret;
+out:
+    return ret;
 }
 
 struct netbuf *
