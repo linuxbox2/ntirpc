@@ -102,6 +102,7 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 {
 	CLIENT *cl = NULL;		/* client handle */
 	struct cx_data *cx = NULL;	/* private data */
+        struct cu_data *cu = NULL;
 	struct timeval now;
 	struct rpc_msg call_msg;
 	struct __rpc_sockinfo si;
@@ -138,30 +139,31 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
         cx = alloc_cx_data(CX_DG_DATA, sendsz, recvsz);
 	if (cx == NULL)
 		goto err1;
-	(void) memcpy(&CU_DATA(cx)->cu_raddr, svcaddr->buf, (size_t)svcaddr->len);
-	CU_DATA(cx)->cu_rlen = svcaddr->len;
+        cu = CU_DATA(cx);
+	(void) memcpy(&cu->cu_raddr, svcaddr->buf, (size_t)svcaddr->len);
+	cu->cu_rlen = svcaddr->len;
 	/* Other values can also be set through clnt_control() */
-	CU_DATA(cx)->cu_wait.tv_sec = 15; /* heuristically chosen */
-	CU_DATA(cx)->cu_wait.tv_usec = 0;
-	CU_DATA(cx)->cu_total.tv_sec = -1;
-	CU_DATA(cx)->cu_total.tv_usec = -1;
-	CU_DATA(cx)->cu_sendsz = sendsz;
-	CU_DATA(cx)->cu_recvsz = recvsz;
-	CU_DATA(cx)->cu_async = FALSE;
-	CU_DATA(cx)->cu_connect = FALSE;
-	CU_DATA(cx)->cu_connected = FALSE;
+	cu->cu_wait.tv_sec = 15; /* heuristically chosen */
+	cu->cu_wait.tv_usec = 0;
+	cu->cu_total.tv_sec = -1;
+	cu->cu_total.tv_usec = -1;
+	cu->cu_sendsz = sendsz;
+	cu->cu_recvsz = recvsz;
+	cu->cu_async = FALSE;
+	cu->cu_connect = FALSE;
+	cu->cu_connected = FALSE;
 	(void) gettimeofday(&now, NULL);
 	call_msg.rm_xid = __RPC_GETXID(&now);
 	call_msg.rm_call.cb_prog = program;
 	call_msg.rm_call.cb_vers = version;
-	xdrmem_create(&(CU_DATA(cx)->cu_outxdrs), CU_DATA(cx)->cu_outbuf,
+	xdrmem_create(&(cu->cu_outxdrs), cu->cu_outbuf,
                       sendsz, XDR_ENCODE);
-	if (! xdr_callhdr(&(CU_DATA(cx)->cu_outxdrs), &call_msg)) {
+	if (! xdr_callhdr(&(cu->cu_outxdrs), &call_msg)) {
 		rpc_createerr.cf_stat = RPC_CANTENCODEARGS;  /* XXX */
 		rpc_createerr.cf_error.re_errno = 0;
 		goto err2;
 	}
-	CU_DATA(cx)->cu_xdrpos = XDR_GETPOS(&(CU_DATA(cx)->cu_outxdrs));
+	cu->cu_xdrpos = XDR_GETPOS(&(cu->cu_outxdrs));
 
 	/* XXX fvdl - do we still want this? */
 #if 0
@@ -179,8 +181,8 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 	 * to do a close on it, else the user may use clnt_control
 	 * to let clnt_destroy do it for him/her.
 	 */
-	CU_DATA(cx)->cu_closeit = FALSE;
-	CU_DATA(cx)->cu_fd = fd;
+	cu->cu_closeit = FALSE;
+	cu->cu_fd = fd;
 	cl->cl_ops = clnt_dg_ops();
 	cl->cl_private = (caddr_t)(void *) cx;
 	cl->cl_auth = authnone_create();
@@ -228,7 +230,7 @@ clnt_dg_call(cl, proc, xargs, argsp, xresults, resultsp, utimeout)
 	u_int32_t xid, inval, outval;
 
 	outlen = 0;
-        vc_fd_lock(cu->cu_fd, &mask);
+        vc_fd_lock_c(cl, &mask);
 	if (cu->cu_total.tv_usec == -1) {
 		timeout = utimeout;	/* use supplied timeout */
 	} else {
@@ -365,7 +367,7 @@ get_reply:
 		{
 		  e = (struct sock_extended_err *) CMSG_DATA(cmsg);
 		  cu->cu_error.re_errno = e->ee_errno;
-                  vc_fd_unlock(cu->cu_fd, &mask);
+                  vc_fd_unlock_c(cl, &mask);
 		  return (cu->cu_error.re_status = RPC_CANTRECV);
 		}
 	}
@@ -447,7 +449,7 @@ get_reply:
 
 	}
 out:
-        vc_fd_unlock(cu->cu_fd, &mask);
+        vc_fd_unlock_c(cl, &mask);
 	return (cu->cu_error.re_status);
 }
 
@@ -476,13 +478,13 @@ clnt_dg_freeres(cl, xdr_res, res_ptr)
 	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 
-        vc_fd_wait(cu->cu_fd, rpc_flag_clear);        
+        vc_fd_wait_c(cl, rpc_flag_clear);        
 
 	xdrs->x_op = XDR_FREE;
 	dummy = (*xdr_res)(xdrs, res_ptr);
 
 	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
-        vc_fd_signal(cu->cu_fd, VC_LOCK_FLAG_NONE);
+        vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE);
 
 	return (dummy);
 }
@@ -505,7 +507,7 @@ clnt_dg_control(cl, request, info)
 	sigset_t mask;
         bool_t result = TRUE;
 
-        vc_fd_lock(cu->cu_fd, &mask);
+        vc_fd_lock_c(cl, &mask);
 
 	switch (request) {
 	case CLSET_FD_CLOSE:
@@ -628,7 +630,7 @@ clnt_dg_control(cl, request, info)
 	}
 
 unlock:
-        vc_fd_unlock(cu->cu_fd, &mask);
+        vc_fd_unlock_c(cl, &mask);
 	return (result);
 }
 
@@ -644,20 +646,22 @@ clnt_dg_destroy(cl)
          * larger than the wait (not 100% clear why) */
 	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-        vc_fd_wait(CU_DATA(cx)->cu_fd, rpc_flag_clear);
+        vc_fd_wait_c(cl, rpc_flag_clear);
 
 	if (CU_DATA(cx)->cu_closeit)
             (void)close(cu_fd);
 	XDR_DESTROY(&(CU_DATA(cx)->cu_outxdrs));
+
+	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
+        vc_fd_signal(cu_fd, VC_LOCK_FLAG_NONE);
+
         free_cx_data(cx);
+
 	if (cl->cl_netid && cl->cl_netid[0])
 		mem_free(cl->cl_netid, strlen(cl->cl_netid) +1);
 	if (cl->cl_tp && cl->cl_tp[0])
 		mem_free(cl->cl_tp, strlen(cl->cl_tp) +1);
 	mem_free(cl, sizeof (CLIENT));
-
-	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
-        vc_fd_signal(cu_fd, VC_LOCK_FLAG_NONE);
 }
 
 static struct clnt_ops *
