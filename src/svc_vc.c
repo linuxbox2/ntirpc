@@ -932,9 +932,6 @@ svc_vc_getargs(xprt, xdr_args, args_ptr)
 	xdrproc_t xdr_args;
 	void *args_ptr;
 {
-    CLIENT *cl;
-    struct cx_data *cx = (struct cx_data *) cl->cl_private;
-    struct ct_data *ct = CT_DATA(cx);
     bool_t rslt = TRUE;
 
     assert(xprt != NULL);
@@ -945,7 +942,10 @@ svc_vc_getargs(xprt, xdr_args, args_ptr)
     if (! SVCAUTH_UNWRAP(xprt->xp_auth,
                          &(((struct cf_conn *)(xprt->xp_p1))->xdrs),
                          xdr_args, args_ptr)) {
+        CLIENT *cl;
         cl = (CLIENT *) xprt->xp_p4;
+        struct cx_data *cx = (struct cx_data *) cl->cl_private;
+        struct ct_data *ct = CT_DATA(cx);
         if (cx->cx_duplex.flags & CT_FLAG_DUPLEX) {                
             if (! SVCAUTH_UNWRAP(xprt->xp_auth,
                                  &(ct->ct_xdrs),
