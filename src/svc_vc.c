@@ -107,10 +107,10 @@ cond_block_events_svc(SVCXPRT *xprt)
 {
     if (xprt->xp_p4) {
         CLIENT *cl = (CLIENT *) xprt->xp_p4;
-        struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
-        if ((ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX) &&
-            (! (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED))) {
-            ct->ct_duplex.ct_flags |= CT_FLAG_EVENTS_BLOCKED;
+        struct cx_data *cx = (struct cx_data *) cl->cl_private;
+        if ((cx->cx_duplex.flags & CT_FLAG_DUPLEX) &&
+            (! (cx->cx_duplex.flags & CT_FLAG_EVENTS_BLOCKED))) {
+            cx->cx_duplex.flags |= CT_FLAG_EVENTS_BLOCKED;
             (void) svc_rqst_block_events(xprt, SVC_RQST_FLAG_NONE);
             return (TRUE);
         }
@@ -125,9 +125,9 @@ cond_unblock_events_svc(SVCXPRT *xprt)
 {
     if (xprt->xp_p4) {
         CLIENT *cl = (CLIENT *) xprt->xp_p4;
-        struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
-        if (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED) {
-            ct->ct_duplex.ct_flags &= ~CT_FLAG_EVENTS_BLOCKED;
+        struct cx_data *cx = (struct cx_data *) cl->cl_private;
+        if (cx->cx_duplex.flags & CT_FLAG_EVENTS_BLOCKED) {
+            cx->cx_duplex.flags &= ~CT_FLAG_EVENTS_BLOCKED;
             (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
         }
     }
@@ -933,22 +933,20 @@ svc_vc_getargs(xprt, xdr_args, args_ptr)
 	void *args_ptr;
 {
     CLIENT *cl;
-    struct ct_data *ct;
+    struct cx_data *cx = (struct cx_data *) cl->cl_private;
+    struct ct_data *ct = CT_DATA(cx);
     bool_t rslt = TRUE;
 
     assert(xprt != NULL);
     /* args_ptr may be NULL */
 
-    /* XXXX ok, this needs major cleanup (no heuristic detection
-     * of correct decoder, etc), but, it actually works */
+    /* XXXX TODO: duplex unification (xdrs)  */
 
     if (! SVCAUTH_UNWRAP(xprt->xp_auth,
                          &(((struct cf_conn *)(xprt->xp_p1))->xdrs),
                          xdr_args, args_ptr)) {
         cl = (CLIENT *) xprt->xp_p4;
-        ct = CT_DATA((struct cx_data *) cl->cl_private);
-        if (ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX) {
-                
+        if (cx->cx_duplex.flags & CT_FLAG_DUPLEX) {                
             if (! SVCAUTH_UNWRAP(xprt->xp_auth,
                                  &(ct->ct_xdrs),
                                  xdr_args, args_ptr)) {
@@ -992,8 +990,10 @@ svc_vc_reply(xprt, msg)
 	xdrproc_t xdr_results;
 	caddr_t xdr_location;
 	bool_t rstat, has_args;
+#if 0
         CLIENT *cl; /* XXX duplex */
         struct ct_data *ct;
+#endif
 
 	assert(xprt != NULL);
 	assert(msg != NULL);
@@ -1001,7 +1001,7 @@ svc_vc_reply(xprt, msg)
 	cd = (struct cf_conn *)(xprt->xp_p1);
 	xdrs = &(cd->xdrs);
 
-#if 1 /* XXX duplex debugging */
+#if 0 /* XXX duplex debugging */
         if (xprt->xp_p4) {
             cl = (CLIENT *) xprt->xp_p4;
             ct = CT_DATA((struct cx_data *) cl->cl_private);
@@ -1299,14 +1299,15 @@ svc_vc_create_from_clnt(cl, sendsz, recvsz, flags)
     int fd, fflags;
     socklen_t len;
     struct cf_conn *cd;
-    struct ct_data *ct;
+    struct cx_data *cx = (struct cx_data *) cl->cl_private;
+    struct ct_data *ct = CT_DATA(cx);
     struct sockaddr_storage addr;
     struct __rpc_sockinfo si;
     sigset_t mask;
     SVCXPRT *xprt = NULL;
 
-    ct = CT_DATA((struct cx_data *) cl->cl_private);
-    fd = ct->ct_fd;
+
+    fd = cx->cx_fd;
 
     vc_fd_lock_c(cl, &mask);
 

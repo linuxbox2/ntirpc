@@ -65,10 +65,10 @@ struct vc_fd_rec *vc_lookup_fd_rec(int fd);
 static inline void vc_lock_init_cl(CLIENT *cl)
 {
     /* XXX switch */
-    struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
-    if (! ct->ct_crec) {
+    struct cx_data *cx = (struct cx_data *) cl->cl_private;
+    if (! cx->cx_crec) {
         /* many clients (and xprts) shall point to crec */
-        ct->ct_crec = vc_lookup_fd_rec(ct->ct_fd); /* ref+1 */
+        cx->cx_crec = vc_lookup_fd_rec(cx->cx_fd); /* ref+1 */
     }
 }
 
@@ -128,38 +128,38 @@ static inline void vc_fd_signal_impl(struct vc_fd_rec *crec, uint32_t flags)
 static inline void vc_fd_lock_c(CLIENT *cl, sigset_t *mask)
 {
     /* XXX switch */
-    struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
+    struct cx_data *cx = (struct cx_data *) cl->cl_private;
 
     vc_lock_init_cl(cl);
-    vc_fd_lock_impl(ct->ct_crec, mask);
+    vc_fd_lock_impl(cx->cx_crec, mask);
 }
 
 static inline void vc_fd_unlock_c(CLIENT *cl, sigset_t *mask)
 {
-    struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
+    struct cx_data *cx = (struct cx_data *) cl->cl_private;
 
     /* unless lock order violation, cl is lock-initialized */
-    vc_fd_unlock_impl(ct->ct_crec, mask);
+    vc_fd_unlock_impl(cx->cx_crec, mask);
 }
 
 void vc_fd_wait(int fd, uint32_t wait_for);
 
 static inline void vc_fd_wait_c(CLIENT *cl, uint32_t wait_for)
 {
-    struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
+    struct cx_data *cx = (struct cx_data *) cl->cl_private;
 
     vc_lock_init_cl(cl);
-    vc_fd_wait_impl(ct->ct_crec, wait_for);
+    vc_fd_wait_impl(cx->cx_crec, wait_for);
 }
 
 void vc_fd_signal(int fd, uint32_t flags);
 
 static inline void vc_fd_signal_c(CLIENT *cl, uint32_t flags)
 {
-    struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
+    struct cx_data *cx = (struct cx_data *) cl->cl_private;
 
     vc_lock_init_cl(cl);
-    vc_fd_signal_impl(ct->ct_crec, flags);
+    vc_fd_signal_impl(cx->cx_crec, flags);
 }
 
 static inline void vc_fd_lock_x(SVCXPRT *xprt, sigset_t *mask)
@@ -177,11 +177,11 @@ static inline void vc_fd_unlock_x(SVCXPRT *xprt, sigset_t *mask)
 static inline void vc_lock_unref_clnt(CLIENT *cl)
 {
     int32_t refcount __attribute__((unused)) = 0;
-    struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
+    struct cx_data *cx = (struct cx_data *) cl->cl_private;
 
-    if (ct->ct_crec) {
-        refcount = vc_lock_unref(ct->ct_crec, VC_LOCK_FLAG_NONE);
-        ct->ct_crec = NULL;
+    if (cx->cx_crec) {
+        refcount = vc_lock_unref(cx->cx_crec, VC_LOCK_FLAG_NONE);
+        cx->cx_crec = NULL;
     }
 }
 

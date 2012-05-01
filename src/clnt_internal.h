@@ -106,18 +106,18 @@ typedef struct __rpc_call_ctx {
 } rpc_ctx_t;
 
 #define SetDuplex(cl, xprt) do { \
-        struct ct_data *ct = (struct ct_data *) (cl)->cl_private; \
-        ct->ct_duplex.ct_xprt = (xprt); \
-        ct->ct_duplex.ct_flags |= CT_FLAG_DUPLEX; \
-        ct->ct_duplex.ct_flags &= ~CT_FLAG_XPRT_DESTROYED; \
+        struct cx_data *cx = (struct cx_data *) (cl)->cl_private; \
+        cx->cx_duplex.xprt = (xprt); \
+        cx->cx_duplex.flags |= CT_FLAG_DUPLEX; \
+        cx->cx_duplex.flags &= ~CT_FLAG_XPRT_DESTROYED; \
 	(xprt)->xp_p4 = (cl); \
     } while (0);
 
 #define SetDestroyed(cl) do { \
-    struct ct_data *ct = (struct ct_data *) (cl)->cl_private; \
-    ct->ct_duplex.ct_flags &= ~CT_FLAG_DUPLEX; \
-    ct->ct_duplex.ct_flags |= CT_FLAG_XPRT_DESTROYED; \
-    ct->ct_duplex.ct_xprt = NULL; \
+    struct cx_data *cx = (struct cx_data *) (cl)->cl_private; \
+    cx->cx_duplex.flags &= ~CT_FLAG_DUPLEX; \
+    cx->cx_duplex.flags |= CT_FLAG_XPRT_DESTROYED; \
+    cx->cx_duplex.xprt = NULL; \
     } while (0);
 
 static inline int
@@ -161,7 +161,6 @@ struct cu_data {
 };
 
 struct ct_data {
-    int		ct_fd;  /* connection's fd */
     bool_t		ct_closeit; /* close it on destroy */
     struct timeval	ct_wait; /* wait interval in milliseconds */
     bool_t          ct_waitset;	/* wait set by clnt_control? */
@@ -176,14 +175,8 @@ struct ct_data {
     u_int ct_mpos;      /* pos after marshal */
     XDR	ct_xdrs;        /* XDR stream */
     uint32_t ct_xid;
-    /* XXXX move: */
-    struct vc_fd_rec *ct_crec; /* unified sync */
     struct rpc_msg	ct_reply; /* async reply */
     struct ct_wait_entry ct_sync; /* wait for completion */
-    struct ct_duplex {
-        void *ct_xprt;  /* duplex integration */
-        u_int ct_flags;
-    } ct_duplex;
 };
 
 enum CX_TYPE
@@ -199,6 +192,12 @@ struct cx_data
         struct cu_data cu;
         struct ct_data ct;
     } c_u;
+    int	cx_fd;                  /* connection's fd */
+    struct vc_fd_rec *cx_crec;  /* unified sync */
+    struct {
+        void *xprt;             /* duplex integration */
+        uint32_t flags;
+    } cx_duplex;
 };
 
 #define CU_DATA(cx) (& (cx)->c_u.cu)

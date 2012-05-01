@@ -151,12 +151,12 @@ static const char __no_mem_str[] = "out of memory";
 bool_t
 cond_block_events_client(CLIENT *cl)
 {
-    struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
-    if ((ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX) &&
-        (! (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED))) {
-        SVCXPRT *xprt = ct->ct_duplex.ct_xprt;
+    struct cx_data *cx = (struct cx_data *) cl->cl_private;
+    if ((cx->cx_duplex.flags & CT_FLAG_DUPLEX) &&
+        (! (cx->cx_duplex.flags & CT_FLAG_EVENTS_BLOCKED))) {
+        SVCXPRT *xprt = cx->cx_duplex.xprt;
         assert(xprt);
-        ct->ct_duplex.ct_flags |= CT_FLAG_EVENTS_BLOCKED;
+        cx->cx_duplex.flags |= CT_FLAG_EVENTS_BLOCKED;
         (void) svc_rqst_block_events(xprt, SVC_RQST_FLAG_NONE);
         return (TRUE);
     }
@@ -168,11 +168,11 @@ cond_block_events_client(CLIENT *cl)
 void
 cond_unblock_events_client(CLIENT *cl)
 {
-    struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
-    if (ct->ct_duplex.ct_flags & CT_FLAG_EVENTS_BLOCKED) {
-        SVCXPRT *xprt = ct->ct_duplex.ct_xprt;
+    struct cx_data *cx = (struct cx_data *) cl->cl_private;
+    if (cx->cx_duplex.flags & CT_FLAG_EVENTS_BLOCKED) {
+        SVCXPRT *xprt = cx->cx_duplex.xprt;
         assert(xprt);
-        ct->ct_duplex.ct_flags &= ~CT_FLAG_EVENTS_BLOCKED;
+        cx->cx_duplex.flags &= ~CT_FLAG_EVENTS_BLOCKED;
         (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
     }
 }
@@ -213,6 +213,7 @@ clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
 {
 	CLIENT *cl;			/* client handle */
 	struct cx_data *cx = NULL;
+        struct ct_data *ct = NULL;
 	struct timeval now;
 	struct rpc_msg call_msg;
 	static u_int32_t disrupt;
@@ -234,7 +235,8 @@ clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
 		rpc_createerr.cf_error.re_errno = errno;
 		goto err;
 	}
-	CT_DATA(cx)->ct_addr.buf = NULL;
+        ct = CT_DATA(cx);
+	ct->ct_addr.buf = NULL;
 	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 	mutex_lock(&clnt_fd_lock);
@@ -267,20 +269,20 @@ clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
             goto err;
 	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 
-	CT_DATA(cx)->ct_closeit = FALSE;
+	ct->ct_closeit = FALSE;
 
 	/*
 	 * Set up private data struct
 	 */
-	CT_DATA(cx)->ct_fd = fd;
-	CT_DATA(cx)->ct_wait.tv_usec = 0;
-	CT_DATA(cx)->ct_waitset = FALSE;
-	CT_DATA(cx)->ct_addr.buf = mem_alloc(raddr->maxlen);
-	if (CT_DATA(cx)->ct_addr.buf == NULL)
+	cx->cx_fd = fd;
+	ct->ct_wait.tv_usec = 0;
+	ct->ct_waitset = FALSE;
+	ct->ct_addr.buf = mem_alloc(raddr->maxlen);
+	if (ct->ct_addr.buf == NULL)
             goto err;
-	memcpy(CT_DATA(cx)->ct_addr.buf, raddr->buf, raddr->len);
-	CT_DATA(cx)->ct_addr.len = raddr->len;
-	CT_DATA(cx)->ct_addr.maxlen = raddr->maxlen;
+	memcpy(ct->ct_addr.buf, raddr->buf, raddr->len);
+	ct->ct_addr.len = raddr->len;
+	ct->ct_addr.maxlen = raddr->maxlen;
 
 	/*
 	 * Initialize call message
@@ -295,16 +297,16 @@ clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
 	/*
 	 * pre-serialize the static part of the call msg and stash it away
 	 */
-	xdrmem_create(&(CT_DATA(cx)->ct_xdrs), CT_DATA(cx)->ct_u.ct_mcallc,
+	xdrmem_create(&(ct->ct_xdrs), ct->ct_u.ct_mcallc,
                       MCALL_MSG_SIZE, XDR_ENCODE);
-	if (! xdr_callhdr(&(CT_DATA(cx)->ct_xdrs), &call_msg)) {
-		if (CT_DATA(cx)->ct_closeit) {
+	if (! xdr_callhdr(&(ct->ct_xdrs), &call_msg)) {
+		if (ct->ct_closeit) {
                     (void)close(fd);
 		}
 		goto err;
 	}
-	CT_DATA(cx)->ct_mpos = XDR_GETPOS(&(CT_DATA(cx)->ct_xdrs));
-	XDR_DESTROY(&(CT_DATA(cx)->ct_xdrs));
+	ct->ct_mpos = XDR_GETPOS(&(ct->ct_xdrs));
+	XDR_DESTROY(&(ct->ct_xdrs));
 
 	/*
 	 * Create a client handle which uses xdrrec for serialization
@@ -325,16 +327,20 @@ clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
 
 	sendsz = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
 	recvsz = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
-	xdrrec_create(&(CT_DATA(cx)->ct_xdrs), sendsz, recvsz,
-                      CT_DATA(cx), read_vc, write_vc);
+
+        /*
+         * Create XDRS.  TODO:  duplex unification
+         */
+	xdrrec_create(&(ct->ct_xdrs), sendsz, recvsz,
+                      cx, read_vc, write_vc);
 	return (cl);
 
 err:
 	if (cl) {
 		if (cx) {
-                    if (CT_DATA(cx)->ct_addr.len)
-                        mem_free(CT_DATA(cx)->ct_addr.buf,
-                                 CT_DATA(cx)->ct_addr.len);
+                    if (ct->ct_addr.len)
+                        mem_free(ct->ct_addr.buf,
+                                 ct->ct_addr.len);
                     free_cx_data(cx);
 		}
 		if (cl)
@@ -355,7 +361,8 @@ clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
 	void *results_ptr;
 	struct timeval timeout;
 {
-    struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
+    struct cx_data *cx = (struct cx_data *) cl->cl_private;
+    struct ct_data *ct = CT_DATA(cx);
     enum clnt_stat result = RPC_SUCCESS;
     bool_t shipnow, ev_blocked, duplex;
     SVCXPRT *duplex_xprt = NULL;
@@ -404,9 +411,9 @@ clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
      * the CT_FLAG_EPOLL_ACTIVE is intended to indicate the
      * inverse strategy, which would place the current thread
      * on a waitq here (in the common case). */
-    duplex = ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX;
+    duplex = cx->cx_duplex.flags & CT_FLAG_DUPLEX;
     if (duplex)
-        duplex_xprt = ct->ct_duplex.ct_xprt;
+        duplex_xprt = cx->cx_duplex.xprt;
 
     if (!ct->ct_waitset) {
         /* If time is not within limits, we ignore it. */
@@ -608,7 +615,8 @@ clnt_vc_control(cl, request, info)
 	u_int request;
 	void *info;
 {
-	struct ct_data *ct = CT_DATA((struct cx_data *)cl->cl_private);
+	struct cx_data *cx = (struct cx_data *)cl->cl_private;
+	struct ct_data *ct = CT_DATA(cx);
 	void *infop = info;
 	sigset_t mask;
 
@@ -649,7 +657,7 @@ clnt_vc_control(cl, request, info)
             (void) memcpy(info, ct->ct_addr.buf, (size_t)ct->ct_addr.len);
             break;
 	case CLGET_FD:
-            *(int *)info = ct->ct_fd;
+            *(int *)info = cx->cx_fd;
             break;
 	case CLGET_SVC_ADDR:
             /* The caller should not free this memory area */
@@ -732,8 +740,8 @@ clnt_vc_destroy(cl)
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
         vc_fd_wait_c(cl, rpc_flag_clear);
 
-	if (CT_DATA(cx)->ct_closeit && CT_DATA(cx)->ct_fd != -1)
-            (void)close(CT_DATA(cx)->ct_fd);
+	if (CT_DATA(cx)->ct_closeit && cx->cx_fd != -1)
+            (void)close(cx->cx_fd);
 	XDR_DESTROY(&(CT_DATA(cx)->ct_xdrs));
 	if (CT_DATA(cx)->ct_addr.buf)
             __free(CT_DATA(cx)->ct_addr.buf);
@@ -763,7 +771,8 @@ read_vc(ctp, buf, len)
 	void *buf;
 	int len;
 {
-	struct ct_data *ct = (struct ct_data *)ctp;
+	struct cx_data *cx = (struct cx_data *)ctp;
+	struct ct_data *ct = CT_DATA(cx);
         rpc_ctx_t *ctx = NULL;
 	struct pollfd fd;
 	int milliseconds = (int)((ct->ct_wait.tv_sec * 1000) +
@@ -782,7 +791,7 @@ read_vc(ctp, buf, len)
          * block in poll (though we are not constrained to blocking
          * semantics) */
 
-        fd.fd = ct->ct_fd;
+        fd.fd = cx->cx_fd;
         fd.events = POLLIN;
         for (;;) {
             switch (poll(&fd, 1, milliseconds)) {
@@ -800,7 +809,7 @@ read_vc(ctp, buf, len)
             break;
         }
 
-	len = read(ct->ct_fd, buf, (size_t)len);
+	len = read(cx->cx_fd, buf, (size_t)len);
 
 	switch (len) {
 	case 0:
@@ -824,13 +833,14 @@ write_vc(ctp, buf, len)
 	void *buf;
 	int len;
 {
-	struct ct_data *ct = (struct ct_data *)ctp;
+	struct cx_data *cx = (struct ct_data *)ctp;
+	struct ct_data *ct = CT_DATA(cx);
         rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_public;
 
 	int i = 0, cnt;
 
 	for (cnt = len; cnt > 0; cnt -= i, buf += i) {
-	    if ((i = write(ct->ct_fd, buf, (size_t)cnt)) == -1) {
+	    if ((i = write(cx->cx_fd, buf, (size_t)cnt)) == -1) {
 		ctx->error.re_errno = errno;
 		ctx->error.re_status = RPC_CANTSEND;
 		return (-1);

@@ -53,14 +53,12 @@ alloc_rpc_call_ctx(CLIENT *cl, rpcproc_t proc, xdrproc_t xdr_args,
                        void *args_ptr, xdrproc_t xdr_results, void *results_ptr,
                        struct timeval timeout)
 {
-    struct ct_data *ct;
-    struct vc_fd_rec *crec;
+    struct cx_data *cx = (struct cx_data *) cl->cl_private;
+    struct vc_fd_rec *crec = cx->cx_crec;
     rpc_ctx_t *ctx = mem_alloc(sizeof(rpc_ctx_t));
     if (! ctx)
         goto out;
 
-    ct = CT_DATA((struct cx_data *) cl->cl_private);
-    crec = ct->ct_crec;
     assert(crec);
 
     /* XXX we hold the client-fd lock */
@@ -94,8 +92,8 @@ out:
 
 void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
 {
-    struct ct_data *ct = CT_DATA((struct cx_data *) ctx->ctx_u.clnt.cl->cl_private);
-    struct vc_fd_rec *crec = ct->ct_crec;
+    struct cx_data *cx = (struct cx_data *) ctx->ctx_u.clnt.cl->cl_private;
+    struct vc_fd_rec *crec = cx->cx_crec;
 
     assert (flags & RPC_CTX_FLAG_LOCKED);
 
@@ -113,9 +111,10 @@ void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
 enum clnt_stat
 rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 {
-    struct ct_data *ct = CT_DATA((struct cx_data *) ctx->ctx_u.clnt.cl->cl_private);
-    struct vc_fd_rec *crec = ct->ct_crec;
-    XDR *xdrs = &(ct->ct_xdrs);
+    struct cx_data *cx = (struct cx_data *) ctx->ctx_u.clnt.cl->cl_private;
+    struct ct_data *ct = CT_DATA(cx);
+    struct vc_fd_rec *crec __attribute__((unused)) = cx->cx_crec;
+    XDR *xdrs __attribute__((unused)) = &(ct->ct_xdrs);
     enum clnt_stat stat;
 
     assert (flags & RPC_CTX_FLAG_LOCKED);
@@ -154,8 +153,8 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 void
 free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
 {
-    struct ct_data *ct = CT_DATA((struct cx_data *) ctx->ctx_u.clnt.cl->cl_private);
-    struct vc_fd_rec *crec = ct->ct_crec;
+    struct cx_data *cx = (struct cx_data *) ctx->ctx_u.clnt.cl->cl_private;
+    struct vc_fd_rec *crec = cx->cx_crec;
 
     assert (flags & RPC_CTX_FLAG_LOCKED);
 
