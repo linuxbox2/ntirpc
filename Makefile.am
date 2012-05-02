@@ -2,14 +2,20 @@ SUBDIRS = src man doc
 ACLOCAL_AMFLAGS = -I m4
 
 nobase_include_HEADERS = tirpc/netconfig.h \
+			 tirpc/reentrant.h \
+			 tirpc/misc/rbtree_x.h \
+			 tirpc/misc/rbtree.h \
 			 tirpc/rpcsvc/crypt.x \
 			 tirpc/rpcsvc/crypt.h \
 			 tirpc/rpc/xdr.h \
+			 tirpc/rpc/xdr_inline.h \
 			 tirpc/rpc/types.h \
 			 tirpc/rpc/svc_soc.h \
 			 tirpc/rpc/svc.h \
 			 tirpc/rpc/svc_dg.h \
 			 tirpc/rpc/svc_auth.h \
+			 tirpc/rpc/svc_dplx.h \
+			 tirpc/rpc/svc_rqst.h \
 			 tirpc/rpc/rpc_msg.h \
 			 tirpc/rpc/rpc.h \
 			 tirpc/rpc/rpcent.h \
@@ -30,6 +36,7 @@ nobase_include_HEADERS = tirpc/netconfig.h \
 			 tirpc/rpc/auth_unix.h \
 			 tirpc/rpc/auth_kerb.h \
 			 tirpc/rpc/auth.h \
+			 tirpc/rpc/auth_inline.h \
 			 tirpc/rpc/auth_gss.h \
 			 tirpc/rpc/auth_des.h
     
