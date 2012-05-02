@@ -48,7 +48,6 @@
 #include <rpc/xdr_inline.h>
 #include <rpc/rpc.h>
 
-#if 0 /* xdr_inline.h */
 typedef quad_t          longlong_t;     /* ANSI long long type */
 typedef u_quad_t        u_longlong_t;   /* ANSI unsigned long long type */
 
@@ -58,7 +57,6 @@ typedef u_quad_t        u_longlong_t;   /* ANSI unsigned long long type */
 #define XDR_FALSE	((long) 0)
 #define XDR_TRUE	((long) 1)
 #define LASTUNSIGNED	((u_int) 0-1)
-#endif /* 0 (xdr_inline.h) */
 
 /*
  * for unit alignment

@@ -49,9 +49,6 @@
 #include <rpc/types.h>
 #include <rpc/xdr.h>
 
-typedef quad_t          longlong_t;     /* ANSI long long type */
-typedef u_quad_t        u_longlong_t;   /* ANSI unsigned long long type */
-
 /*
  * constants specific to the xdr "protocol"
  */
@@ -813,7 +810,7 @@ inline_xdr_u_int64_t(xdrs, ullp)
 static inline bool_t
 inline_xdr_hyper(xdrs, llp)
 	XDR *xdrs;
-	longlong_t *llp;
+	quad_t *llp;
 {
 
 	/*
@@ -830,7 +827,7 @@ inline_xdr_hyper(xdrs, llp)
 static inline bool_t
 inline_xdr_u_hyper(xdrs, ullp)
 	XDR *xdrs;
-	u_longlong_t *ullp;
+	u_quad_t *ullp;
 {
 
 	/*
@@ -847,7 +844,7 @@ inline_xdr_u_hyper(xdrs, ullp)
 static inline bool_t
 inline_xdr_longlong_t(xdrs, llp)
 	XDR *xdrs;
-	longlong_t *llp;
+	quad_t *llp;
 {
 
 	/*
@@ -864,7 +861,7 @@ inline_xdr_longlong_t(xdrs, llp)
 static inline bool_t
 inline_xdr_u_longlong_t(xdrs, ullp)
 	XDR *xdrs;
-	u_longlong_t *ullp;
+	u_quad_t *ullp;
 {
 
 	/*
