@@ -42,7 +42,8 @@
 #include <string.h>
 #include <errno.h>
 #include <rpc/types.h>
-#include <rpc/xdr.h>
+#include <rpc/xdr_inline.h>
+#include <rpc/auth_inline.h>
 #include <rpc/rpc.h>
 #include <rpc/auth.h>
 #include <rpc/auth_gss.h>
@@ -303,12 +304,12 @@ authgss_marshal(AUTH *auth, XDR *xdrs)
 
 	XDR_DESTROY(&tmpxdrs);
 
-	if (!xdr_opaque_auth(xdrs, &auth->ah_cred))
+	if (!inline_xdr_opaque_auth(xdrs, &auth->ah_cred))
 		return (FALSE);
 
 	if (gd->gc.gc_proc == RPCSEC_GSS_INIT ||
 	    gd->gc.gc_proc == RPCSEC_GSS_CONTINUE_INIT) {
-		return (xdr_opaque_auth(xdrs, &_null_auth));
+		return (inline_xdr_opaque_auth(xdrs, &_null_auth));
 	}
 	/* Checksum serialized RPC header, up to and including credential. */
 	rpcbuf.length = XDR_GETPOS(xdrs);

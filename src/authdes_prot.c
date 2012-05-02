@@ -36,7 +36,7 @@
 
 #include <rpc/types.h>
 
-#include <rpc/xdr.h>
+#include <rpc/xdr_inline.h>
 #include <rpc/auth.h>
 #include <rpc/auth_des.h>
 
@@ -50,18 +50,18 @@ xdr_authdes_cred(xdrs, cred)
 	/*
 	 * Unrolled xdr
 	 */
-	ATTEMPT(xdr_enum(xdrs, (enum_t *)&cred->adc_namekind));
+	ATTEMPT(inline_xdr_enum(xdrs, (enum_t *)&cred->adc_namekind));
 	switch (cred->adc_namekind) {
 	case ADN_FULLNAME:
-		ATTEMPT(xdr_string(xdrs, &cred->adc_fullname.name,
+		ATTEMPT(inline_xdr_string(xdrs, &cred->adc_fullname.name,
 		    MAXNETNAMELEN));
-		ATTEMPT(xdr_opaque(xdrs, (caddr_t)&cred->adc_fullname.key,
+		ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&cred->adc_fullname.key,
 		    sizeof(des_block)));
-		ATTEMPT(xdr_opaque(xdrs, (caddr_t)&cred->adc_fullname.window,
+		ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&cred->adc_fullname.window,
 		    sizeof(cred->adc_fullname.window)));
 		return (TRUE);
 	case ADN_NICKNAME:
-		ATTEMPT(xdr_opaque(xdrs, (caddr_t)&cred->adc_nickname,
+		ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&cred->adc_nickname,
 		    sizeof(cred->adc_nickname)));
 		return (TRUE);
 	default:
@@ -78,9 +78,9 @@ xdr_authdes_verf(xdrs, verf)
 	/*
  	 * Unrolled xdr
  	 */
-	ATTEMPT(xdr_opaque(xdrs, (caddr_t)&verf->adv_xtimestamp,
+	ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&verf->adv_xtimestamp,
 	    sizeof(des_block)));
-	ATTEMPT(xdr_opaque(xdrs, (caddr_t)&verf->adv_int_u,
+	ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&verf->adv_int_u,
 	    sizeof(verf->adv_int_u)));
 	return (TRUE);
 }

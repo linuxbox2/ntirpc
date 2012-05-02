@@ -38,7 +38,8 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <rpc/types.h>
-#include <rpc/xdr.h>
+#include <rpc/xdr_inline.h>
+#include <rpc/auth_inline.h>
 #include <rpc/auth.h>
 #include <rpc/auth_gss.h>
 #include <rpc/rpc.h>
@@ -59,7 +60,7 @@ xdr_rpc_gss_buf(XDR *xdrs, gss_buffer_t buf, u_int maxsize)
 		else
 			tmplen = buf->length;
 	}
-	xdr_stat = xdr_bytes(xdrs, (char **)&buf->value, &tmplen, maxsize);
+	xdr_stat = inline_xdr_bytes(xdrs, (char **)&buf->value, &tmplen, maxsize);
 
 	if (xdr_stat && xdrs->x_op == XDR_DECODE)
 		buf->length = tmplen;
@@ -77,10 +78,10 @@ xdr_rpc_gss_cred(XDR *xdrs, struct rpc_gss_cred *p)
 {
 	bool_t xdr_stat;
 
-	xdr_stat = (xdr_u_int(xdrs, &p->gc_v) &&
-		    xdr_enum(xdrs, (enum_t *)&p->gc_proc) &&
-		    xdr_u_int(xdrs, &p->gc_seq) &&
-		    xdr_enum(xdrs, (enum_t *)&p->gc_svc) &&
+	xdr_stat = (inline_xdr_u_int(xdrs, &p->gc_v) &&
+		    inline_xdr_enum(xdrs, (enum_t *)&p->gc_proc) &&
+		    inline_xdr_u_int(xdrs, &p->gc_seq) &&
+		    inline_xdr_enum(xdrs, (enum_t *)&p->gc_svc) &&
 		    xdr_rpc_gss_buf(xdrs, &p->gc_ctx, MAX_AUTH_BYTES));
 
 	log_debug("xdr_rpc_gss_cred: %s %s "
@@ -118,9 +119,9 @@ xdr_rpc_gss_init_res(XDR *xdrs, struct rpc_gss_init_res *p)
 	u_int tok_maxlen = (u_int)(p->gr_token.length + RPC_SLACK_SPACE);
 
 	xdr_stat = (xdr_rpc_gss_buf(xdrs, &p->gr_ctx, ctx_maxlen) &&
-		    xdr_u_int(xdrs, &p->gr_major) &&
-		    xdr_u_int(xdrs, &p->gr_minor) &&
-		    xdr_u_int(xdrs, &p->gr_win) &&
+		    inline_xdr_u_int(xdrs, &p->gr_major) &&
+		    inline_xdr_u_int(xdrs, &p->gr_minor) &&
+		    inline_xdr_u_int(xdrs, &p->gr_win) &&
 		    xdr_rpc_gss_buf(xdrs, &p->gr_token, tok_maxlen));
 
 	log_debug("xdr_rpc_gss_init_res %s %s "
@@ -153,7 +154,7 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	memset(&wrapbuf, 0, sizeof(wrapbuf));
 
 	/* Marshal rpc_gss_data_t (sequence number + arguments). */
-	if (!xdr_u_int(xdrs, &seq) || !(*xdr_func)(xdrs, xdr_ptr))
+	if (!inline_xdr_u_int(xdrs, &seq) || !(*xdr_func)(xdrs, xdr_ptr))
 		return (FALSE);
 	end = XDR_GETPOS(xdrs);
 
@@ -168,7 +169,7 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	if (svc == RPCSEC_GSS_SVC_INTEGRITY) {
 		/* Marshal databody_integ length. */
 		XDR_SETPOS(xdrs, start);
-		if (!xdr_u_int(xdrs, (u_int *)&databuflen))
+		if (!inline_xdr_u_int(xdrs, (u_int *)&databuflen))
 			return (FALSE);
 
 		/* Checksum rpc_gss_data_t. */

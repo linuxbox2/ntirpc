@@ -38,7 +38,7 @@
 #include <assert.h>
 
 #include <rpc/types.h>
-#include <rpc/xdr.h>
+#include <rpc/xdr_inline.h>
 #include <rpc/auth.h>
 #include <rpc/auth_unix.h>
 
@@ -54,10 +54,10 @@ xdr_authunix_parms(xdrs, p)
 	assert(xdrs != NULL);
 	assert(p != NULL);
 
-	if (xdr_u_long(xdrs, &(p->aup_time))
-	    && xdr_string(xdrs, &(p->aup_machname), MAX_MACHINE_NAME)
-	    && xdr_u_int(xdrs, &(p->aup_uid))
-	    && xdr_u_int(xdrs, &(p->aup_gid))
+	if (inline_xdr_u_long(xdrs, &(p->aup_time))
+	    && inline_xdr_string(xdrs, &(p->aup_machname), MAX_MACHINE_NAME)
+	    && inline_xdr_u_int(xdrs, &(p->aup_uid))
+	    && inline_xdr_u_int(xdrs, &(p->aup_gid))
 	    && xdr_array(xdrs, (caddr_t *)&(p->aup_gids),
 		    &(p->aup_len), NGRPS, sizeof(int), (xdrproc_t)xdr_int) ) {
 		return (TRUE);

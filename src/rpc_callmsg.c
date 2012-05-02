@@ -38,7 +38,8 @@
 #include <string.h>
 
 #include <rpc/rpc.h>
-#include <rpc/xdr.h>
+#include <rpc/xdr_inline.h>
+#include <rpc/auth_inline.h>
 
 #include <sys/select.h>
 
@@ -145,8 +146,8 @@ xdr_callmsg(xdrs, cmsg)
 			oa = &cmsg->rm_call.cb_verf;
 			buf = XDR_INLINE(xdrs, 2 * BYTES_PER_XDR_UNIT);
 			if (buf == NULL) {
-				if (xdr_enum(xdrs, &oa->oa_flavor) == FALSE ||
-				    xdr_u_int(xdrs, &oa->oa_length) == FALSE) {
+				if (inline_xdr_enum(xdrs, &oa->oa_flavor) == FALSE ||
+				    inline_xdr_u_int(xdrs, &oa->oa_length) == FALSE) {
 					return (FALSE);
 				}
 			} else {
@@ -165,7 +166,7 @@ xdr_callmsg(xdrs, cmsg)
 				}
 				buf = XDR_INLINE(xdrs, RNDUP(oa->oa_length));
 				if (buf == NULL) {
-					if (xdr_opaque(xdrs, oa->oa_base,
+					if (inline_xdr_opaque(xdrs, oa->oa_base,
 					    oa->oa_length) == FALSE) {
 						return (FALSE);
 					}
@@ -182,15 +183,15 @@ xdr_callmsg(xdrs, cmsg)
 		}
 	}
 	if (
-	    xdr_u_int32_t(xdrs, &(cmsg->rm_xid)) &&
-	    xdr_enum(xdrs, (enum_t *)&(cmsg->rm_direction)) &&
+	    inline_xdr_u_int32_t(xdrs, &(cmsg->rm_xid)) &&
+	    inline_xdr_enum(xdrs, (enum_t *)&(cmsg->rm_direction)) &&
 	    (cmsg->rm_direction == CALL) &&
-	    xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_rpcvers)) &&
+	    inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_rpcvers)) &&
 	    (cmsg->rm_call.cb_rpcvers == RPC_MSG_VERSION) &&
-	    xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_prog)) &&
-	    xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_vers)) &&
-	    xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_proc)) &&
-	    xdr_opaque_auth(xdrs, &(cmsg->rm_call.cb_cred)) )
-		return (xdr_opaque_auth(xdrs, &(cmsg->rm_call.cb_verf)));
+	    inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_prog)) &&
+	    inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_vers)) &&
+	    inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_proc)) &&
+	    inline_xdr_opaque_auth(xdrs, &(cmsg->rm_call.cb_cred)) )
+		return (inline_xdr_opaque_auth(xdrs, &(cmsg->rm_call.cb_verf)));
 	return (FALSE);
 }

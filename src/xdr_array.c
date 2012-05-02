@@ -46,7 +46,7 @@
 #include <string.h>
 
 #include <rpc/types.h>
-#include <rpc/xdr.h>
+#include <rpc/xdr_inline.h>
 #include <rpc/rpc.h>
 #include "un-namespace.h"
 
@@ -73,7 +73,7 @@ xdr_array(xdrs, addrp, sizep, maxsize, elsize, elproc)
 	u_int nodesize;
 
 	/* like strings, arrays are really counted arrays */
-	if (!xdr_u_int(xdrs, sizep)) {
+	if (!inline_xdr_u_int(xdrs, sizep)) {
 		return (FALSE);
 	}
 	c = *sizep;

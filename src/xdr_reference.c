@@ -45,7 +45,7 @@
 #include <string.h>
 
 #include <rpc/types.h>
-#include <rpc/xdr.h>
+#include <rpc/xdr_inline.h>
 #include <rpc/rpc.h>
 
 #if defined(__FreeBSD__) || defined(__NetBSD__)
@@ -129,7 +129,7 @@ xdr_pointer(xdrs,objpp,obj_size,xdr_obj)
 	bool_t more_data;
 
 	more_data = (*objpp != NULL);
-	if (! xdr_bool(xdrs,&more_data)) {
+	if (! inline_xdr_bool(xdrs,&more_data)) {
 		return (FALSE);
 	}
 	if (! more_data) {
