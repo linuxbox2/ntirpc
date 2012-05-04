@@ -280,8 +280,7 @@ typedef struct __rpc_svcxprt {
 	u_int		xp_flags;	 /* flags */
 	uint64_t        xp_gen;          /* svc_xprt generation number */
 
-    /* XXXX doing anything?  prefer mutex? */
-	rwlock_t lock;                   /* XXXX xprt lock */
+	rwlock_t lock;
 
 } SVCXPRT;
 

@@ -243,7 +243,6 @@ __xprt_unregister_unlocked (SVCXPRT * xprt)
 static void
 __xprt_do_unregister(SVCXPRT *xprt, bool_t dolock __attribute__((unused)))
 {
-    int code = 0;
     SVCXPRT *xprt2 __attribute__((unused));
 
     assert (xprt != NULL);
@@ -785,7 +784,7 @@ svc_getreqset (readfds)
 void
 svc_getreqset_epoll (struct epoll_event *events, int nfds)
 {
-    int ix, code = 0;
+    int ix, code __attribute__((unused)) = 0;
     SVCXPRT *xprt;
 
     assert (events != NULL);
@@ -803,7 +802,7 @@ svc_getreq_common (fd)
      int fd;
 {
   SVCXPRT *xprt;
-  bool_t code;
+  bool_t code __attribute__((unused));
 
   xprt = svc_xprt_get(fd);
 
