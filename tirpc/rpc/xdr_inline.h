@@ -656,7 +656,7 @@ inline_xdr_string(xdrs, cpp, maxsize)
 	u_int maxsize;
 {
 	char *sp = *cpp;  /* sp is the actual string pointer */
-	u_int size;
+	u_int size = 0; /* XXX remove warning */
 	u_int nodesize;
 
 	/*
