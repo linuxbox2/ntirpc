@@ -53,10 +53,10 @@
 
 static void	authgss_nextverf();
 static bool_t	authgss_marshal();
-static bool_t	authgss_refresh();
+static bool_t	authgss_refresh(AUTH *auth, void *arg);
 static bool_t	authgss_validate();
-static void	authgss_destroy();
-static void	authgss_destroy_context();
+static void	authgss_destroy(AUTH *auth);
+static void	authgss_destroy_context(AUTH *auth);
 static bool_t	authgss_wrap();
 static bool_t	authgss_unwrap();
 
@@ -200,7 +200,7 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 	save_auth = clnt->cl_auth;
 	clnt->cl_auth = auth;
 
-	if (!authgss_refresh(auth))
+	if (!authgss_refresh(auth, NULL))
 		auth = NULL;
 	else
 		auth_get(auth); /* Reference for caller */
@@ -392,7 +392,7 @@ authgss_validate(AUTH *auth, struct opaque_auth *verf)
 }
 
 static bool_t
-authgss_refresh(AUTH *auth)
+authgss_refresh(AUTH *auth, void *arg)
 {
 	struct rpc_gss_data	*gd;
 	struct rpc_gss_init_res	 gr;

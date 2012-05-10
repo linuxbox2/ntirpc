@@ -353,6 +353,7 @@ extern int key_encryptsession(const char *, des_block *);
 extern int key_gendes(des_block *);
 extern int key_setsecret(const char *);
 extern int key_secretkey_is_set(void);
+extern int key_encryptsession_pk(char *, netobj *,des_block *);
 __END_DECLS
 
 /*
