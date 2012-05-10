@@ -108,6 +108,7 @@ void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
     }
 }
 
+#if 0
 enum clnt_stat
 rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 {
@@ -121,34 +122,33 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 
     ctx->state = RPC_CTX_REPLY_WAIT;
 
-#if 0
         /* switch on direction */
-        switch (msg->rm_direction) {
-        case REPLY:
-            if (msg->rm_xid == ctx->xid)
-                goto replied;
-            break;
-        case CALL:
-            /* XXX queue or dispatch.  on return from xp_dispatch,
-             * duplex_msg points to a (potentially new, junk) rpc_msg
-             * object owned by this call path */
-            if (duplex) {
-                struct cf_conn *cd;
-                assert(duplex_xprt);
-                cd = (struct cf_conn *) duplex_xprt->xp_p1;
-                cd->x_id = msg->rm_xid;
-                __warnx("%s: call intercepted, dispatching (x_id == %d)\n",
-                        __func__, cd->x_id);
-                duplex_xprt->xp_ops2->xp_dispatch(duplex_xprt, &msg);
-            }
-            break;
-        default:
-            break;
+    switch (msg->rm_direction) {
+    case REPLY:
+        if (msg->rm_xid == ctx->xid)
+            goto replied;
+        break;
+    case CALL:
+        /* XXX queue or dispatch.  on return from xp_dispatch,
+         * duplex_msg points to a (potentially new, junk) rpc_msg
+         * object owned by this call path */
+        if (duplex) {
+            struct cf_conn *cd;
+            assert(duplex_xprt);
+            cd = (struct cf_conn *) duplex_xprt->xp_p1;
+            cd->x_id = msg->rm_xid;
+            __warnx("%s: call intercepted, dispatching (x_id == %d)\n",
+                    __func__, cd->x_id);
+            duplex_xprt->xp_ops2->xp_dispatch(duplex_xprt, &msg);
         }
-#endif
+        break;
+    default:
+        break;
+    }
 
     return (stat);
 }
+#endif
 
 void
 free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)

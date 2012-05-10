@@ -253,20 +253,22 @@ svc_dg_reply(xprt, msg)
 	bool_t stat = FALSE;
 	size_t slen;
 
-	xdrproc_t xdr_results; /* XXX used uninitialized? */
-	caddr_t xdr_location; /* XXX used uninitialized? */
+	xdrproc_t xdr_results;
+	caddr_t xdr_location;
 	bool_t has_args;
 
 	if (msg->rm_reply.rp_stat == MSG_ACCEPTED &&
 	    msg->rm_reply.rp_acpt.ar_stat == SUCCESS) {
-		has_args = TRUE;
-		xdr_results = msg->acpted_rply.ar_results.proc;
-		xdr_location = msg->acpted_rply.ar_results.where;
-
-		msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
-		msg->acpted_rply.ar_results.where = NULL;
-	} else
-		has_args = FALSE;
+            has_args = TRUE;
+            xdr_results = msg->acpted_rply.ar_results.proc;
+            xdr_location = msg->acpted_rply.ar_results.where;
+            msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
+            msg->acpted_rply.ar_results.where = NULL;
+	} else {
+            xdr_results = NULL;
+            xdr_location = NULL;
+            has_args = FALSE;
+        }
 
 	xdrs->x_op = XDR_ENCODE;
 	XDR_SETPOS(xdrs, 0);
