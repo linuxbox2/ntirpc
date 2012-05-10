@@ -688,16 +688,19 @@ clnt_vc_control(cl, request, info)
              * begining of the RPC header. MUST be changed if the
              * call_struct is changed
              */
-            *(u_int32_t *)info =
-                ntohl(*(u_int32_t *)(void *)
-                      (ct->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT));
+            {
+                u_int32_t *tmp =
+                    (u_int32_t *)(ct->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT);
+                *(u_int32_t *)info = ntohl(*tmp);
+            }
             break;
 
 	case CLSET_VERS:
-            *(u_int32_t *)(void *)
-                (ct->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT) =
-                htonl(*(u_int32_t *)info);
-		break;
+            {
+                u_int32_t tmp = htonl(*(u_int32_t *)info);
+                *(ct->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT) = tmp;
+            }
+            break;
 
 	case CLGET_PROG:
             /*
@@ -706,15 +709,18 @@ clnt_vc_control(cl, request, info)
              * begining of the RPC header. MUST be changed if the
              * call_struct is changed
              */
-            *(u_int32_t *)info =
-                ntohl(*(u_int32_t *)(void *)
-                      (ct->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT));
+            {
+                u_int32_t *tmp =
+                    (u_int32_t *)(ct->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT);
+                *(u_int32_t *)info = ntohl(*tmp);
+            }
             break;
 
 	case CLSET_PROG:
-            *(u_int32_t *)(void *)
-                (ct->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT) =
-                htonl(*(u_int32_t *)info);
+            {
+                u_int32_t tmp = htonl(*(u_int32_t *)info);
+                *(ct->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT) = tmp;
+            }
             break;
 
 	default:
@@ -833,7 +839,7 @@ write_vc(ctp, buf, len)
 	void *buf;
 	int len;
 {
-	struct cx_data *cx = (struct ct_data *)ctp;
+	struct cx_data *cx = (struct cx_data *)ctp;
 	struct ct_data *ct = CT_DATA(cx);
         rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_public;
 

@@ -56,9 +56,6 @@
 
 extern struct svc_params __svc_params[1];
 
-#define SVC_RUN_STOP 0x0001
-static u_long __svc_run_flags = 0;
-
 bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
 
 #if defined(TIRPC_EPOLL)

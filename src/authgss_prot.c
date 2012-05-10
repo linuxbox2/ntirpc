@@ -52,7 +52,7 @@ bool_t
 xdr_rpc_gss_buf(XDR *xdrs, gss_buffer_t buf, u_int maxsize)
 {
 	bool_t xdr_stat;
-	u_int tmplen;
+	u_int tmplen = 0;
 
 	if (xdrs->x_op != XDR_DECODE) {
 		if (buf->length > UINT_MAX)

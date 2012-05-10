@@ -31,17 +31,23 @@
  * Copyright (c) 1986-1991 by Sun Microsystems Inc.
  */
 
-#include <sys/cdefs.h>
+#include <config.h>
 
 /*
  * svc_dg.c, Server side for connectionless RPC.
  *
  * Does some caching in the hopes of achieving execute-at-most-once semantics.
  */
+#include <sys/cdefs.h>
 #include <pthread.h>
 #include <reentrant.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/param.h>
+#include <sys/poll.h>
+#if defined(TIRPC_EPOLL)
+#include <sys/epoll.h> /* before rpc.h */
+#endif
 #include <rpc/rpc.h>
 #include <rpc/svc_dg.h>
 #include <errno.h>

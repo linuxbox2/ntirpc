@@ -58,7 +58,6 @@ xdr_dplx_msg(xdrs, dmsg)
 {
 	int32_t *buf;
 	struct opaque_auth *oa;
-        bool_t rslt;
 
 	assert(xdrs != NULL);
 	assert(dmsg != NULL);

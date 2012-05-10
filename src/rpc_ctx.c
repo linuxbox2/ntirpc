@@ -115,7 +115,7 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
     struct ct_data *ct = CT_DATA(cx);
     struct vc_fd_rec *crec __attribute__((unused)) = cx->cx_crec;
     XDR *xdrs __attribute__((unused)) = &(ct->ct_xdrs);
-    enum clnt_stat stat;
+    enum clnt_stat stat = RPC_SUCCESS;
 
     assert (flags & RPC_CTX_FLAG_LOCKED);
 
