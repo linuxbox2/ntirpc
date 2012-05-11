@@ -9,7 +9,7 @@
 INCLUDES = -I$(top_srcdir)/tirpc -DPORTMAP -DINET6 -DVERSION="\"$(VERSION)\"" \
 		-D_GNU_SOURCE -Wall -pipe  
 
-lib_LTLIBRARIES = libtirpc.la
+lib_LTLIBRARIES = libntirpc.la
 
 #
 # Set the library version information
@@ -40,12 +40,12 @@ lib_LTLIBRARIES = libtirpc.la
 # release number of your package. This is an abuse that only fosters
 # misunderstanding of the purpose of library versions."
 #
-libtirpc_la_LDFLAGS = -lnsl -lpthread -version-info 1:10:0
+libntirpc_la_LDFLAGS = -lnsl -lpthread -version-info 1:10:0
 
 include_HEADERS = clnt_internal.h rpc_com.h svc_internal.h \
 	svc_xprt.h vc_lock.h rpc_ctx.h
 
-libtirpc_la_SOURCES = auth_none.c auth_unix.c authunix_prot.c bindresvport.c \
+libntirpc_la_SOURCES = auth_none.c auth_unix.c authunix_prot.c bindresvport.c \
 	clnt_bcast.c clnt_dg.c clnt_generic.c clnt_perror.c clnt_raw.c \
 	clnt_simple.c clnt_vc.c rpc_dtablesize.c getnetconfig.c getnetpath.c \
 	getrpcent.c getrpcport.c mt_misc.c pmap_clnt.c pmap_getmaps.c \
@@ -58,16 +58,17 @@ libtirpc_la_SOURCES = auth_none.c auth_unix.c authunix_prot.c bindresvport.c \
 	svc_dplx.c svc_shim.c rpc_ctx.c
 
 ## XDR
-libtirpc_la_SOURCES += xdr.c xdr_rec.c xdr_array.c xdr_float.c xdr_mem.c xdr_reference.c xdr_stdio.c
+libntirpc_la_SOURCES += xdr.c xdr_rec.c xdr_array.c xdr_float.c xdr_mem.c \
+	xdr_reference.c xdr_stdio.c
 
 ## Secure-RPC
 if GSS
-    libtirpc_la_SOURCES += auth_gss.c authgss_prot.c svc_auth_gss.c
-    libtirpc_la_LDFLAGS += $(GSSGLUE_LIBS)
-    libtirpc_la_CFLAGS = -DHAVE_RPCSEC_GSS $(GSSGLUE_CFLAGS)
+    libntirpc_la_SOURCES += auth_gss.c authgss_prot.c svc_auth_gss.c
+    libntirpc_la_LDFLAGS += $(GSSGLUE_LIBS)
+    libntirpc_la_CFLAGS = -DHAVE_RPCSEC_GSS $(GSSGLUE_CFLAGS)
 endif
 
-## libtirpc_a_SOURCES += key_call.c key_prot_xdr.c getpublickey.c
-## libtirpc_a_SOURCES += netname.c netnamer.c rpcdname.c \
-## libtirpc_a_SOURCES += rtime.c \
+## libntirpc_a_SOURCES += key_call.c key_prot_xdr.c getpublickey.c
+## libntirpc_a_SOURCES += netname.c netnamer.c rpcdname.c \
+## libntirpc_a_SOURCES += rtime.c \
 ## auth_time.c auth_des.c authdes_prot.c 

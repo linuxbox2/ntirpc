@@ -41,4 +41,4 @@ nobase_include_HEADERS = tirpc/netconfig.h \
 			 tirpc/rpc/auth_des.h
     
 pkgconfigdir=$(libdir)/pkgconfig
-pkgconfig_DATA = libtirpc.pc
+pkgconfig_DATA = libntirpc.pc

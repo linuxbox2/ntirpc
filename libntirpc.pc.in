@@ -3,9 +3,9 @@ exec_prefix=@exec_prefix@
 libdir=@libdir@
 includedir=@includedir@
 
-Name: libtirpc
-Description: Transport Independent RPC Library
+Name: libntirpc
+Description: New Transport Independent RPC Library
 Requires:
 Version: @PACKAGE_VERSION@
-Libs: -L@libdir@ -ltirpc
+Libs: -L@libdir@ -lintirpc
 Cflags: -I@includedir@/tirpc
