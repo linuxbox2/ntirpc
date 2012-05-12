@@ -554,12 +554,41 @@ svc_sendreply (xprt, xdr_results, xdr_location)
 
   rply.rm_direction = REPLY;
   rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.rm_flags = RPC_MSG_FLAG_NONE;
   rply.acpted_rply.ar_verf = xprt->xp_verf;
   rply.acpted_rply.ar_stat = SUCCESS;
   rply.acpted_rply.ar_results.where = xdr_location;
   rply.acpted_rply.ar_results.proc = xdr_results;
   return (SVC_REPLY (xprt, &rply));
 }
+
+/*
+ * Send a reply to an rpc request (MT-SAFE).
+ *
+ * XXX Rather than marshal an rpc_msg on the stack, we may
+ * want another variant which takes a message, perhaps one from
+ * a reply cache (e.g., CITI Windows NFS client).
+ *
+ */
+bool_t
+svc_sendreply2 (SVCXPRT *xprt, struct svc_req *req,
+                xdrproc_t xdr_results, void *xdr_location)
+{
+  struct rpc_msg rply;
+
+  assert (xprt != NULL);
+
+  rply.rm_direction = REPLY;
+  rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.rm_flags = RPC_MSG_FLAG_MT_XID;
+  rply.rm_xid = req->rq_xid;
+  rply.acpted_rply.ar_verf = xprt->xp_verf;
+  rply.acpted_rply.ar_stat = SUCCESS;
+  rply.acpted_rply.ar_results.where = xdr_location;
+  rply.acpted_rply.ar_results.proc = xdr_results;
+  return (SVC_REPLY (xprt, &rply));
+}
+
 
 /*
  * No procedure error reply
@@ -842,6 +871,7 @@ svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg)
     r.rq_vers = msg->rm_call.cb_vers;
     r.rq_proc = msg->rm_call.cb_proc;
     r.rq_cred = msg->rm_call.cb_cred;
+    r.rq_xid = msg->rm_xid;
 
     /* first authenticate the message */
     if ((why = _authenticate (&r, msg)) != AUTH_OK)
@@ -892,6 +922,7 @@ svc_getreq_default(SVCXPRT *xprt)
 	  r.rq_vers = msg.rm_call.cb_vers;
 	  r.rq_proc = msg.rm_call.cb_proc;
 	  r.rq_cred = msg.rm_call.cb_cred;
+          r.rq_xid = msg.rm_xid;
 
 	  /* first authenticate the message */
 	  if ((why = _authenticate (&r, &msg)) != AUTH_OK) {

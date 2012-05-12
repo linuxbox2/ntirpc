@@ -919,8 +919,9 @@ svc_vc_recv(xprt, msg)
 	if (cd->nonblock == FALSE)
 		(void)xdrrec_skiprecord(xdrs);
 	if (xdr_dplx_msg(xdrs, msg)) {
-		cd->x_id = msg->rm_xid;
-		return (TRUE);
+            /* XXX actually using cd->x_id !MT-SAFE */
+            cd->x_id = msg->rm_xid;
+            return (TRUE);
 	}
 	cd->strm_stat = XPRT_DIED;
 	return (FALSE);
@@ -1025,7 +1026,11 @@ svc_vc_reply(xprt, msg)
         }
 
 	xdrs->x_op = XDR_ENCODE;
-	msg->rm_xid = cd->x_id;
+
+        /* MT-SAFE */
+        if (! (msg->rm_flags & RPC_MSG_FLAG_MT_XID))
+            msg->rm_xid = cd->x_id;
+
 	rstat = FALSE;
 	if (xdr_replymsg(xdrs, msg) &&
 	    (!has_args || (xprt->xp_auth &&

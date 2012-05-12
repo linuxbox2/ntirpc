@@ -231,6 +231,7 @@ again:
 	if (! xdr_callmsg(xdrs, msg)) {
 		return (FALSE);
 	}
+        /* XXX actually using su->su_xid !MT-SAFE */
 	su->su_xid = msg->rm_xid;
 	if (su->su_cache != NULL) {
             if (svc_dg_cache_get(xprt, msg, &reply, &replylen)) {
@@ -272,7 +273,11 @@ svc_dg_reply(xprt, msg)
 
 	xdrs->x_op = XDR_ENCODE;
 	XDR_SETPOS(xdrs, 0);
-	msg->rm_xid = su->su_xid;
+
+        /* MT-SAFE */
+        if (! (msg->rm_flags & RPC_MSG_FLAG_MT_XID))
+            msg->rm_xid = su->su_xid;
+
 	if (xdr_replymsg(xdrs, msg) &&
 	    (!has_args || (xprt->xp_auth &&
 	     SVCAUTH_WRAP(xprt->xp_auth, xdrs, xdr_results, xdr_location)))) {

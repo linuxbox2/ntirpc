@@ -332,6 +332,10 @@ struct svc_req {
 	/* New with TI-RPC */
 	caddr_t		rq_clntname;	/* read only client name */
 	caddr_t		rq_svcname;	/* read only cooked service cred */
+
+	/* New with N TI-RPC */
+	u_int32_t       rq_xid;         /* xid */
+	void            *rq_u1;         /* user data */
 };
 
 /*
@@ -519,6 +523,8 @@ __END_DECLS
 
 __BEGIN_DECLS
 extern bool_t	svc_sendreply(SVCXPRT *, xdrproc_t, void *);
+extern bool_t   svc_sendreply2 (SVCXPRT *, struct svc_req *, xdrproc_t,
+                                void *);
 extern void	svcerr_decode(SVCXPRT *);
 extern void	svcerr_weakauth(SVCXPRT *);
 extern void	svcerr_noproc(SVCXPRT *);

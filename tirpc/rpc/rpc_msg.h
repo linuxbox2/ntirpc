@@ -148,6 +148,10 @@ struct call_body {
 /*
  * The rpc message
  */
+
+#define RPC_MSG_FLAG_NONE       0x0000
+#define RPC_MSG_FLAG_MT_XID     0x0001 /* replymsg rm_xid is preset */
+
 struct rpc_msg {
 	u_int32_t		rm_xid;
 	enum msg_type		rm_direction;
@@ -159,6 +163,7 @@ struct rpc_msg {
 #define	rm_reply	ru.RM_rmb
 	caddr_t fr_vec[1];
 	int32_t *rm_ibuf;
+	uint32_t rm_flags;
 };
 #define	acpted_rply	ru.RM_rmb.ru.RP_ar
 #define	rjcted_rply	ru.RM_rmb.ru.RP_dr
