@@ -532,6 +532,16 @@ extern void	svcerr_progvers(SVCXPRT *, rpcvers_t, rpcvers_t);
 extern void	svcerr_auth(SVCXPRT *, enum auth_stat);
 extern void	svcerr_noprog(SVCXPRT *);
 extern void	svcerr_systemerr(SVCXPRT *);
+
+extern void	svcerr_decode2(SVCXPRT *, struct svc_req *);
+extern void	svcerr_weakauth2(SVCXPRT *, struct svc_req *);
+extern void	svcerr_noproc2(SVCXPRT *, struct svc_req *);
+extern void	svcerr_progvers2(SVCXPRT *, struct svc_req *, rpcvers_t,
+                                rpcvers_t);
+extern void	svcerr_auth2(SVCXPRT *, struct svc_req *, enum auth_stat);
+extern void	svcerr_noprog2(SVCXPRT *, struct svc_req *);
+extern void	svcerr_systemerr2(SVCXPRT *, struct svc_req *);
+
 extern int	rpc_reg(rpcprog_t, rpcvers_t, rpcproc_t,
 			char *(*)(char *), xdrproc_t, xdrproc_t,
 			char *);

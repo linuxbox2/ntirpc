@@ -571,8 +571,8 @@ svc_sendreply (xprt, xdr_results, xdr_location)
  *
  */
 bool_t
-svc_sendreply2 (SVCXPRT *xprt, struct svc_req *req,
-                xdrproc_t xdr_results, void *xdr_location)
+svc_sendreply2(SVCXPRT *xprt, struct svc_req *req,
+               xdrproc_t xdr_results, void *xdr_location)
 {
   struct rpc_msg rply;
 
@@ -589,7 +589,6 @@ svc_sendreply2 (SVCXPRT *xprt, struct svc_req *req,
   return (SVC_REPLY (xprt, &rply));
 }
 
-
 /*
  * No procedure error reply
  */
@@ -603,6 +602,25 @@ svcerr_noproc (xprt)
 
   rply.rm_direction = REPLY;
   rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.acpted_rply.ar_verf = xprt->xp_verf;
+  rply.acpted_rply.ar_stat = PROC_UNAVAIL;
+  SVC_REPLY (xprt, &rply);
+}
+
+/*
+ * No procedure error reply (MT-SAFE)
+ */
+void
+svcerr_noproc2(SVCXPRT *xprt, struct svc_req *req)
+{
+  struct rpc_msg rply;
+
+  assert (xprt != NULL);
+
+  rply.rm_direction = REPLY;
+  rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.rm_flags = RPC_MSG_FLAG_MT_XID;
+  rply.rm_xid = req->rq_xid;
   rply.acpted_rply.ar_verf = xprt->xp_verf;
   rply.acpted_rply.ar_stat = PROC_UNAVAIL;
   SVC_REPLY (xprt, &rply);
@@ -627,6 +645,25 @@ svcerr_decode (xprt)
 }
 
 /*
+ * Can't decode args error reply (MT-SAFE)
+ */
+void
+svcerr_decode2(SVCXPRT *xprt, struct svc_req *req)
+{
+  struct rpc_msg rply;
+
+  assert (xprt != NULL);
+
+  rply.rm_direction = REPLY;
+  rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.rm_flags = RPC_MSG_FLAG_MT_XID;
+  rply.rm_xid = req->rq_xid;
+  rply.acpted_rply.ar_verf = xprt->xp_verf;
+  rply.acpted_rply.ar_stat = GARBAGE_ARGS;
+  SVC_REPLY (xprt, &rply);
+}
+
+/*
  * Some system error
  */
 void
@@ -639,6 +676,25 @@ svcerr_systemerr (xprt)
 
   rply.rm_direction = REPLY;
   rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.acpted_rply.ar_verf = xprt->xp_verf;
+  rply.acpted_rply.ar_stat = SYSTEM_ERR;
+  SVC_REPLY (xprt, &rply);
+}
+
+/*
+ * Some system error (MT-SAFE)
+ */
+void
+svcerr_systemerr2(SVCXPRT *xprt, struct svc_req *req)
+{
+  struct rpc_msg rply;
+
+  assert (xprt != NULL);
+
+  rply.rm_direction = REPLY;
+  rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.rm_flags = RPC_MSG_FLAG_MT_XID;
+  rply.rm_xid = req->rq_xid;
   rply.acpted_rply.ar_verf = xprt->xp_verf;
   rply.acpted_rply.ar_stat = SYSTEM_ERR;
   SVC_REPLY (xprt, &rply);
@@ -706,6 +762,25 @@ svcerr_auth (xprt, why)
 }
 
 /*
+ * Authentication error reply (MT-SAFE)
+ */
+void
+svcerr_auth2(SVCXPRT *xprt, struct svc_req *req, enum auth_stat why)
+{
+  struct rpc_msg rply;
+
+  assert (xprt != NULL);
+
+  rply.rm_direction = REPLY;
+  rply.rm_reply.rp_stat = MSG_DENIED;
+  rply.rm_flags = RPC_MSG_FLAG_MT_XID;
+  rply.rm_xid = req->rq_xid;
+  rply.rjcted_rply.rj_stat = AUTH_ERROR;
+  rply.rjcted_rply.rj_why = why;
+  SVC_REPLY (xprt, &rply);
+}
+
+/*
  * Auth too weak error reply
  */
 void
@@ -716,6 +791,18 @@ svcerr_weakauth (xprt)
   assert (xprt != NULL);
 
   svcerr_auth (xprt, AUTH_TOOWEAK);
+}
+
+/*
+ * Auth too weak error reply (MT-SAFE)
+ */
+void
+svcerr_weakauth2(SVCXPRT *xprt, struct svc_req *req)
+{
+
+  assert(xprt != NULL);
+
+  svcerr_auth2(xprt, req, AUTH_TOOWEAK);
 }
 
 /*
@@ -737,6 +824,25 @@ svcerr_noprog (xprt)
 }
 
 /*
+ * Program unavailable error reply (MT-SAFE)
+ */
+void
+svcerr_noprog2(SVCXPRT *xprt, struct svc_req *req)
+{
+  struct rpc_msg rply;
+
+  assert (xprt != NULL);
+
+  rply.rm_direction = REPLY;
+  rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.rm_flags = RPC_MSG_FLAG_MT_XID;
+  rply.rm_xid = req->rq_xid;
+  rply.acpted_rply.ar_verf = xprt->xp_verf;
+  rply.acpted_rply.ar_stat = PROG_UNAVAIL;
+  SVC_REPLY (xprt, &rply);
+}
+
+/*
  * Program version mismatch error reply
  */
 void
@@ -751,6 +857,28 @@ svcerr_progvers (xprt, low_vers, high_vers)
 
   rply.rm_direction = REPLY;
   rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.acpted_rply.ar_verf = xprt->xp_verf;
+  rply.acpted_rply.ar_stat = PROG_MISMATCH;
+  rply.acpted_rply.ar_vers.low = (u_int32_t) low_vers;
+  rply.acpted_rply.ar_vers.high = (u_int32_t) high_vers;
+  SVC_REPLY (xprt, &rply);
+}
+
+/*
+ * Program version mismatch error reply
+ */
+void
+svcerr_progvers2(SVCXPRT *xprt, struct svc_req *req, rpcvers_t low_vers,
+                 rpcvers_t high_vers)
+{
+  struct rpc_msg rply;
+
+  assert (xprt != NULL);
+
+  rply.rm_direction = REPLY;
+  rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.rm_flags = RPC_MSG_FLAG_MT_XID;
+  rply.rm_xid = req->rq_xid;
   rply.acpted_rply.ar_verf = xprt->xp_verf;
   rply.acpted_rply.ar_stat = PROG_MISMATCH;
   rply.acpted_rply.ar_vers.low = (u_int32_t) low_vers;
@@ -876,7 +1004,7 @@ svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg)
     /* first authenticate the message */
     if ((why = _authenticate (&r, msg)) != AUTH_OK)
     {
-        svcerr_auth (xprt, why);
+        svcerr_auth2(xprt, &r, why);
         return;
     }
 
@@ -888,9 +1016,9 @@ svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg)
         (*svc_rec->sc_dispatch) (&r, xprt);
         return;
     case SVC_LKP_VERS_NOTFOUND:
-        svcerr_progvers (xprt, vrange.lowvers, vrange.highvers);
+        svcerr_progvers2(xprt, &r, vrange.lowvers, vrange.highvers);
     default:
-        svcerr_noprog (xprt);
+        svcerr_noprog2(xprt, &r);
         break;
     }
 }
@@ -926,7 +1054,7 @@ svc_getreq_default(SVCXPRT *xprt)
 
 	  /* first authenticate the message */
 	  if ((why = _authenticate (&r, &msg)) != AUTH_OK) {
-	      svcerr_auth (xprt, why);
+	      svcerr_auth2(xprt, &r, why);
 	      goto call_done;
           }
 
@@ -939,10 +1067,10 @@ svc_getreq_default(SVCXPRT *xprt)
               break;
           case SVC_LKP_VERS_NOTFOUND:
               __warnx("%s: dispatch prog vers notfound\n", __func__);
-              svcerr_progvers(xprt, vrange.lowvers, vrange.highvers);
+              svcerr_progvers2(xprt, &r, vrange.lowvers, vrange.highvers);
           default:
               __warnx("%s: dispatch prog notfound\n", __func__);
-              svcerr_noprog(xprt);
+              svcerr_noprog2(xprt, &r);
               break;
           }
       } /* SVC_RECV again? */
