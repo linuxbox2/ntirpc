@@ -493,7 +493,8 @@ again:
                     switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
                     case SVC_EVENT_EPOLL:
-                        /* XXX implement a plug-out strategy for this? */
+                        /* XXX we did implement a plug-out strategy for this--check
+                         * whether svc_clean_idle2 should be called */
                         break;
 #endif
                     default:
@@ -959,7 +960,8 @@ svc_vc_getargs(xprt, xdr_args, args_ptr)
         rslt = FALSE;
     }
 
-    /* XXX Ganesha */
+    /* XXX Upstream TI-RPC lacks this call, but -does- call svc_dg_freeargs
+     * in svc_dg_getargs if SVCAUTH_UNWRAP fails. */
     if (! rslt)
         svc_vc_freeargs(xprt, xdr_args, args_ptr);
 
