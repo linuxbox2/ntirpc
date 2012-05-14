@@ -94,9 +94,6 @@ svc_run()
 void
 svc_exit()
 {
-    extern rwlock_t svc_fd_lock;
-
-    rwlock_wrlock(&svc_fd_lock);
     switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
     case SVC_EVENT_EPOLL:
@@ -110,5 +107,4 @@ svc_exit()
          * event systems, reworked select, etc. */
         break;
     } /* switch */
-    rwlock_unlock(&svc_fd_lock);
 }

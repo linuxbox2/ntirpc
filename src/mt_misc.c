@@ -12,9 +12,6 @@
 /* protects the services list (svc.c) */
 pthread_rwlock_t	svc_lock = PTHREAD_RWLOCK_INITIALIZER;
 
-/* protected svc_fdset and the xprts[] array, now event registrations */
-pthread_rwlock_t	svc_fd_lock = PTHREAD_RWLOCK_INITIALIZER;
-
 /* protects the RPCBIND address cache */
 pthread_rwlock_t	rpcbaddr_cache_lock = PTHREAD_RWLOCK_INITIALIZER;
 
@@ -39,9 +36,6 @@ pthread_mutex_t	authnone_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* protects the Auths list (svc_auth.c) */
 pthread_mutex_t	authsvc_lock = PTHREAD_MUTEX_INITIALIZER;
-
-/* protects client-side fd lock array */
-pthread_mutex_t	clnt_fd_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* clnt_raw.c serialization */
 pthread_mutex_t	clntraw_lock = PTHREAD_MUTEX_INITIALIZER;

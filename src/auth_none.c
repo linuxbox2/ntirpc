@@ -115,6 +115,7 @@ authnone_marshal(AUTH *client, XDR *xdrs)
 
 	assert(xdrs != NULL);
 
+	mutex_lock(&authnone_lock);
 	ap = authnone_private;
 	if (ap == NULL) {
 		mutex_unlock(&authnone_lock);

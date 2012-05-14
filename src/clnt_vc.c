@@ -117,11 +117,11 @@ static int write_vc(void *, void *, int);
  *      it.  Therfore, we allocate an array of flags (vc_fd_locks), protected
  *      by the clnt_fd_lock mutex, and an array (vc_cv) of condition variables
  *      similarly protected.  Vc_fd_lock[fd] == 1 => a call is active on some
- *      CLIENT handle created for that fd.
+ *      CLIENT handle created for that fd.  (Historical interest only.)
  *
  *      The current implementation holds locks across the entire RPC and reply.
  *      Yes, this is silly, and as soon as this code is proven to work, this
- *      should be the first thing fixed.  One step at a time.
+ *      should be the first thing fixed.  One step at a time.  (Fixing this.)
  *
  *      The ONC RPC record marking (RM) standard (RFC 5531, s. 11) does not
  *      provide for mixed call and reply fragment reassembly, so writes to the 
@@ -133,7 +133,6 @@ static int write_vc(void *, void *, int);
  *      duplex channels, full coordination is required between client and
  *      server tranpsorts sharing an underlying bytestream (Matt).
  */
-extern mutex_t  clnt_fd_lock; /* XXX still protects creation */
 
 static const char clnt_vc_errstr[] = "%s : %s";
 static const char clnt_vc_str[] = "clnt_vc_create";
@@ -239,7 +238,6 @@ clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
 	ct->ct_addr.buf = NULL;
 	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-	mutex_lock(&clnt_fd_lock);
 
 	/*
 	 * XXX - fvdl connecting while holding a mutex?
@@ -250,21 +248,18 @@ clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz, flags)
 		if (errno != ENOTCONN) {
 		    rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 		    rpc_createerr.cf_error.re_errno = errno;
-		    mutex_unlock(&clnt_fd_lock);
 		    thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 		    goto err;
 		}
 		if (connect(fd, (struct sockaddr *)raddr->buf, raddr->len) < 0){
 		    rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 		    rpc_createerr.cf_error.re_errno = errno;
-		    mutex_unlock(&clnt_fd_lock);
 		    thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 		    goto err;
 		}
 	    }
 	} /* FLAG_CONNECT */
 
-	mutex_unlock(&clnt_fd_lock);
 	if (!__rpc_fd2sockinfo(fd, &si))
             goto err;
 	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
@@ -762,7 +757,6 @@ clnt_vc_destroy(cl)
 	if (cl->cl_tp && cl->cl_tp[0])
             mem_free(cl->cl_tp, strlen(cl->cl_tp) +1);
 	mem_free(cl, sizeof(CLIENT));
-	mutex_unlock(&clnt_fd_lock);
 	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 }
 

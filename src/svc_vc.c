@@ -74,7 +74,6 @@
 #include <getpeereid.h>
 
 extern struct svc_params __svc_params[1];
-extern rwlock_t svc_fd_lock;
 
 static bool_t rendezvous_request(SVCXPRT *, struct rpc_msg *);
 static enum xprt_stat rendezvous_stat(SVCXPRT *);
