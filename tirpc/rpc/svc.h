@@ -91,6 +91,8 @@
 #define SVCSET_XP_DISPATCH      12
 #define SVCGET_XP_RDVS          13
 #define SVCSET_XP_RDVS          14
+#define SVCGET_XP_FREE_XPRT     15
+#define SVCSET_XP_FREE_XPRT     16
 
 /*
  * Operations for rpc_control().
@@ -313,9 +315,9 @@ typedef enum svc_lookup_result
 typedef bool_t (*xp_recv_t)(struct __rpc_svcxprt *, struct rpc_msg *);
 typedef bool_t (*xp_getreq_t)(struct __rpc_svcxprt *);
 typedef void (*xp_dispatch_t)(struct __rpc_svcxprt *, struct rpc_msg **);
-/* XXX args */
 typedef u_int (*xp_rdvs_t)(struct __rpc_svcxprt *, struct __rpc_svcxprt *,
                            const u_int, void *);
+typedef bool_t  (*xp_free_xprt_t)(struct __rpc_svcxprt *);
 
 /*
  * Service request

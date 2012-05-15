@@ -691,6 +691,16 @@ svc_vc_control(xprt, rq, in)
 	    xprt->xp_ops2->xp_rdvs = *(xp_rdvs_t)in;
             mutex_unlock(&ops_lock);
 	    break;
+	case SVCGET_XP_FREE_XPRT:
+            mutex_lock(&ops_lock);
+	    *(xp_free_xprt_t *)in = xprt->xp_ops2->xp_free_xprt;
+            mutex_unlock(&ops_lock);
+	    break;
+	case SVCSET_XP_FREE_XPRT:
+            mutex_lock(&ops_lock);
+	    xprt->xp_ops2->xp_free_xprt = *(xp_free_xprt_t)in;
+            mutex_unlock(&ops_lock);
+	    break;
 	default:
 	    return (FALSE);
 	}

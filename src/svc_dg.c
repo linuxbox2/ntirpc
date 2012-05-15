@@ -402,6 +402,16 @@ svc_dg_control(xprt, rq, in)
 	    xprt->xp_ops2->xp_dispatch = *(xp_dispatch_t)in;
             mutex_unlock(&ops_lock);
 	    break;
+	case SVCGET_XP_FREE_XPRT:
+            mutex_lock(&ops_lock);
+	    *(xp_free_xprt_t *)in = xprt->xp_ops2->xp_free_xprt;
+            mutex_unlock(&ops_lock);
+	    break;
+	case SVCSET_XP_FREE_XPRT:
+            mutex_lock(&ops_lock);
+	    xprt->xp_ops2->xp_free_xprt = *(xp_free_xprt_t)in;
+            mutex_unlock(&ops_lock);
+	    break;
 	default:
 	    return (FALSE);
 	}
@@ -433,6 +443,7 @@ svc_dg_ops(xprt)
 		ops2.xp_getreq = svc_getreq_default;
                 ops2.xp_dispatch = svc_dispatch_default;
                 ops2.xp_rdvs = NULL; /* no default */
+                ops2.xp_free_xprt = NULL; /* no default */
 	}
 	xprt->xp_ops = &ops;
 	xprt->xp_ops2 = &ops2;
