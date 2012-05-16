@@ -230,6 +230,7 @@ clnt_dg_call(cl, proc, xargs, argsp, xresults, resultsp, utimeout)
 	u_int32_t xid, inval, outval;
 
 	outlen = 0;
+        thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
         vc_fd_lock_c(cl, &mask);
 	if (cu->cu_total.tv_usec == -1) {
 		timeout = utimeout;	/* use supplied timeout */
@@ -507,6 +508,7 @@ clnt_dg_control(cl, request, info)
 	sigset_t mask;
         bool_t result = TRUE;
 
+        thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
         vc_fd_lock_c(cl, &mask);
 
 	switch (request) {

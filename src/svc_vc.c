@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
  * All rights reserved.
@@ -1324,8 +1323,8 @@ svc_vc_create_from_clnt(cl, sendsz, recvsz, flags)
     sigset_t mask;
     SVCXPRT *xprt = NULL;
 
-
     fd = cx->cx_fd;
+    thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask);
 
     vc_fd_lock_c(cl, &mask);
 

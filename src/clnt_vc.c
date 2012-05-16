@@ -367,6 +367,7 @@ clnt_vc_call(cl, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout)
     sigset_t mask;
 
     assert(cl != NULL);
+    thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
     vc_fd_lock_c(cl, &mask);
 
     /* XXX presently, we take any svcxprt out of EPOLL during calls,
@@ -616,6 +617,7 @@ clnt_vc_control(cl, request, info)
 	sigset_t mask;
 
 	assert(cl);
+        thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
         vc_fd_lock_c(cl, &mask);
 
 	switch (request) {
