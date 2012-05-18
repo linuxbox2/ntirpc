@@ -80,10 +80,15 @@ static inline void vc_lock_init_xprt(SVCXPRT *xprt)
     }
 }
 
+#define AMTX 1
+
 static inline void vc_fd_lock_impl(struct vc_fd_rec *crec, sigset_t *mask)
 {
     sigset_t newmask;
 
+#if AMTX
+    mutex_lock(&crec->mtx);
+#else
     sigfillset(&newmask);
     sigdelset(&newmask, SIGINT); /* XXXX debugger */
     thr_sigsetmask(SIG_SETMASK, &newmask, mask);
@@ -93,23 +98,24 @@ static inline void vc_fd_lock_impl(struct vc_fd_rec *crec, sigset_t *mask)
         cond_wait(&crec->cv, &crec->mtx);
     crec->lock_flag_value = rpc_lock_value;
     mutex_unlock(&crec->mtx);
+#endif
 }
 
 static inline void vc_fd_unlock_impl(struct vc_fd_rec *crec, sigset_t *mask)
 {
-    /* XXX I -think- this need not be clnt_fd_lock, however this is a
-     * significant unserialization */
+#if AMTX
+    mutex_unlock(&crec->mtx);
+#else
     mutex_lock(&crec->mtx);
     crec->lock_flag_value = rpc_flag_clear;
     cond_signal(&crec->cv);
     mutex_unlock(&crec->mtx);
     thr_sigsetmask(SIG_SETMASK, mask, (sigset_t *) NULL);
+#endif
 }
 
 static inline void vc_fd_wait_impl(struct vc_fd_rec *crec, uint32_t wait_for)
 {
-    /* XXX hopefully this need NOT be clnt_fd_lock, however this is a
-     * significant unserialization */
     mutex_lock(&crec->mtx);
     while (crec->lock_flag_value != rpc_flag_clear)
         cond_wait(&crec->cv, &crec->mtx);
@@ -127,7 +133,6 @@ static inline void vc_fd_signal_impl(struct vc_fd_rec *crec, uint32_t flags)
 
 static inline void vc_fd_lock_c(CLIENT *cl, sigset_t *mask)
 {
-    /* XXX switch */
     struct cx_data *cx = (struct cx_data *) cl->cl_private;
 
     vc_lock_init_cl(cl);
