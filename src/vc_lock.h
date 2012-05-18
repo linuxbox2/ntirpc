@@ -101,9 +101,9 @@ static inline void vc_fd_unlock_impl(struct vc_fd_rec *crec, sigset_t *mask)
      * significant unserialization */
     mutex_lock(&crec->mtx);
     crec->lock_flag_value = rpc_flag_clear;
+    cond_signal(&crec->cv);
     mutex_unlock(&crec->mtx);
     thr_sigsetmask(SIG_SETMASK, mask, (sigset_t *) NULL);
-    cond_signal(&crec->cv);
 }
 
 static inline void vc_fd_wait_impl(struct vc_fd_rec *crec, uint32_t wait_for)
