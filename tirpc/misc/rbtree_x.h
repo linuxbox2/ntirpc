@@ -10,8 +10,9 @@
 struct rbtree_x_part
 {
     CACHE_PAD(0);
-    rwlock_t lock;
+    pthread_rwlock_t lock;
     struct opr_rbtree t;
+    struct opr_rbtree_node **cache;
     CACHE_PAD(1);
 };
 
