@@ -27,6 +27,7 @@
 #define TIRPC_SVC_RQST_H
 
 #include <misc/rbtree.h>
+#include <sys/epoll.h> /* before rpc.h */
 
 struct svc_rqst_rec; /* forward decl */
 

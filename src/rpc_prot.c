@@ -39,6 +39,7 @@
  * routines are also in this program.
  */
 
+#include <config.h>
 #include <sys/param.h>
 
 #include <assert.h>

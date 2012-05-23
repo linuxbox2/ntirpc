@@ -24,6 +24,7 @@
  * SUCH DAMAGE.
  */
 
+#include <config.h>
 #include <sys/cdefs.h>
 
 #include <sys/param.h>

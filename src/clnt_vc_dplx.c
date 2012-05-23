@@ -44,6 +44,7 @@
  *
  * Now go hang yourself.
  */
+#include <config.h>
 #include <pthread.h>
 
 /* placeholder */

@@ -34,6 +34,7 @@
  * Copyright (C) 1984, Sun Microsystems, Inc.
  */
 
+#include <config.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/poll.h>

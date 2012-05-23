@@ -31,6 +31,7 @@
  *     *) Use 'NULL' to represent empty nodes, rather than a magic pointer
  */
 
+#include <config.h>
 #include <stdlib.h>
 #include "misc/rbtree.h"
 

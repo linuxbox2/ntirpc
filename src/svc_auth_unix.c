@@ -36,6 +36,7 @@
  *
  * Copyright (C) 1984, Sun Microsystems, Inc.
  */
+#include <config.h>
 #include <pthread.h>
 #include <assert.h>
 #include <stdio.h>

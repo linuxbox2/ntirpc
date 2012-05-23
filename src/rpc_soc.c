@@ -42,6 +42,7 @@
  * Based on berkeley socket abstraction, now implemented on the top
  * of TLI/Streams
  */
+#include <config.h>
 #include <pthread.h>
 #include <reentrant.h>
 #include <sys/types.h>

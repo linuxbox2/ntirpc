@@ -32,6 +32,7 @@
 /*
  * Implements a connectionless client side RPC.
  */
+#include <config.h>
 #include <pthread.h>
 #include <reentrant.h>
 #include <sys/types.h>

@@ -35,6 +35,7 @@
  * svc_generic.c, Server side for RPC.
  *
  */
+#include <config.h>
 #include <pthread.h>
 #include <reentrant.h>
 #include <sys/types.h>

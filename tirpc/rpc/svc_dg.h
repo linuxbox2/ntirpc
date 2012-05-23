@@ -35,6 +35,9 @@
  * rpcb_svc_com.c in the rpcbind code.
  */
 
+#ifndef _TIRPC_SVC_DG_H_
+#define _TIRPC_SVC_DG_H_
+
 /*
  * kept in xprt->xp_p2
  */
@@ -51,3 +54,5 @@ struct svc_dg_data {
 };
 
 #define __rpcb_get_dg_xidp(x)	(&((struct svc_dg_data *)(x)->xp_p2)->su_xid)
+
+#endif

@@ -37,6 +37,7 @@
  * any interference from the kernel.
  *
  */
+#include <config.h>
 #include <pthread.h>
 #include <reentrant.h>
 #include <rpc/rpc.h>

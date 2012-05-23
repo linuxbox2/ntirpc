@@ -31,6 +31,7 @@
 /*
  * auth_des.c, client-side implementation of DES authentication
  */
+#include <config.h>
 #include <pthread.h>
 #include <reentrant.h>
 #include <err.h>

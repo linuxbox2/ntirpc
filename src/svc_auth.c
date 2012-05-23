@@ -34,6 +34,7 @@
  * svc_auth.c, Server-side rpc authenticator interface.
  *
  */
+#include <config.h>
 #include <pthread.h>
 #include <reentrant.h>
 #include <sys/types.h>

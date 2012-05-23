@@ -26,6 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <config.h>
 #include <sys/cdefs.h>
 
 /*
@@ -42,6 +43,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(TIRPC_EPOLL)
+#include <sys/epoll.h> /* before rpc.h */
+#endif
 
 #include <rpc/types.h>
 #include <rpc/xdr.h>

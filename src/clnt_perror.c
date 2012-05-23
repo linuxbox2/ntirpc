@@ -35,6 +35,7 @@
  * Copyright (C) 1984, Sun Microsystems, Inc.
  *
  */
+#include <config.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

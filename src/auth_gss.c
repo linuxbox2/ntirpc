@@ -36,6 +36,7 @@
 
 */
 
+#include <config.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -420,7 +421,7 @@ authgss_refresh(AUTH *auth, void *arg)
 		if (recv_tokenp != GSS_C_NO_BUFFER) {
 			log_debug("The token we just received (length %d):",
 				  recv_tokenp->length);
-			log_hexdump(recv_tokenp->value, recv_tokenp->length, 0);
+			gss_log_hexdump(recv_tokenp->value, recv_tokenp->length, 0);
 		}
 #endif
 		maj_stat = gss_init_sec_context(&min_stat,
@@ -453,7 +454,7 @@ authgss_refresh(AUTH *auth, void *arg)
 			/* print the token we are about to send */
 			log_debug("The token being sent (length %d):",
 				  send_token.length);
-			log_hexdump(send_token.value, send_token.length, 0);
+			gss_log_hexdump(send_token.value, send_token.length, 0);
 #endif
 
 			call_stat = clnt_call(gd->clnt, NULLPROC,

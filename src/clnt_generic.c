@@ -26,6 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <config.h>
 #include <pthread.h>
 #include <reentrant.h>
 #include <sys/types.h>

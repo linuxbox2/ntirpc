@@ -76,7 +76,7 @@ svc_run()
     switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
     case SVC_EVENT_EPOLL:
-        return (svc_run_epoll());
+        svc_run_epoll();
         break;
 #endif
     default:

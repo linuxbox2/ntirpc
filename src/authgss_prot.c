@@ -34,6 +34,7 @@
 
 */
 
+#include <config.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -337,14 +338,14 @@ log_status(char *m, OM_uint32 maj_stat, OM_uint32 min_stat)
 }
 
 void
-log_hexdump(const u_char *buf, int len, int offset)
+gss_log_hexdump(const u_char *buf, int len, int offset)
 {
 	u_int i, j, jm;
 	int c;
 
 	__warnx("\n");
 	for (i = 0; i < len; i += 0x10) {
-		__warnx(stderr, "  %04x: ", (u_int)(i + offset));
+		__warnx("  %04x: ", (u_int)(i + offset));
 		jm = len - i;
 		jm = jm > 16 ? 16 : jm;
 
@@ -352,7 +353,7 @@ log_hexdump(const u_char *buf, int len, int offset)
 			if ((j % 2) == 1)
 				__warnx("%02x ", (u_int) buf[i+j]);
 			else
-				__warnx(stderr, "%02x", (u_int) buf[i+j]);
+				__warnx("%02x", (u_int) buf[i+j]);
 		}
 		for (; j < 16; j++) {
 			if ((j % 2) == 1) printf("   ");
@@ -382,7 +383,7 @@ log_status(char *m, OM_uint32 maj_stat, OM_uint32 min_stat)
 }
 
 void
-log_hexdump(const u_char *buf, int len, int offset)
+loggss__hexdump(const u_char *buf, int len, int offset)
 {
 }
 

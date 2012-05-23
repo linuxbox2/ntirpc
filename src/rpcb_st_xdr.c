@@ -35,6 +35,7 @@
  * routines used with the rpcbind stats facility.
  */
 
+#include <config.h>
 #include <sys/cdefs.h>
 
 #include <rpc/rpc.h>

@@ -31,6 +31,7 @@
  * Copyright (c) 1985 by Sun Microsystems, Inc.
  */
 
+#include <config.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 

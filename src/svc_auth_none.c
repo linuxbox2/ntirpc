@@ -35,6 +35,7 @@
   $Id: svc_auth_none.c,v 1.1 2004/10/22 17:24:30 bfields Exp $
  */
 
+#include <config.h>
 #include <rpc/rpc.h>
 
 static bool_t	svcauth_none_destroy();

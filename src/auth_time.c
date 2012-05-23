@@ -25,6 +25,7 @@
  *	needed to deal with TCP connections.
  */
 
+#include <config.h>
 #include <sys/cdefs.h>
 #include <stdio.h>
 #include <string.h>

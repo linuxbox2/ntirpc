@@ -36,6 +36,7 @@
  * This lets us similate rpc and get round trip overhead, without
  * any interference from the kernel.
  */
+#include <config.h>
 #include <pthread.h>
 #include <reentrant.h>
 #include <assert.h>

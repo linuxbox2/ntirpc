@@ -43,6 +43,7 @@ __FBSDID("$FreeBSD: src/lib/libc/rpc/auth_none.c,v 1.12 2002/03/22 23:18:35 obri
  *
  * Copyright (C) 1984, Sun Microsystems, Inc.
  */
+#include <config.h>
 #include <pthread.h>
 #include <reentrant.h>
 #include <assert.h>
