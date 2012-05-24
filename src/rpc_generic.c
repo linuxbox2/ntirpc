@@ -69,9 +69,7 @@ tirpc_pkg_params __pkg_params = {
 };
 
 bool_t
-tirpc_control(rq, in)
-	const u_int rq;
-	void *in;
+tirpc_control(const u_int rq, void *in)
 {
 	switch (rq) {
 	case TIRPC_GET_MALLOC:
@@ -154,16 +152,13 @@ static const struct netid_af na_cvt[] = {
 };
 
 void *
-__mem_alloc(size)
-	size_t size;
+__mem_alloc(size_t size)
 {
     return (calloc(1, size));
 }
 
 void
-__mem_free(ptr, bsize)
-	void *ptr;
-	size_t bsize;
+__mem_free(void *ptr, size_t bsize)
 {
     free(ptr);
 }
@@ -184,7 +179,7 @@ static int getnettype(const char *);
  * expensive call every time.
  */
 int
-__rpc_dtbsize()
+__rpc_dtbsize(void)
 {
 	static int tbsize;
 	struct rlimit rl;
@@ -208,9 +203,7 @@ __rpc_dtbsize()
  */
 u_int
 /*ARGSUSED*/
-__rpc_get_t_size(af, proto, size)
-	int af, proto;
-	int size;	/* Size requested */
+__rpc_get_t_size(int af, int proto, int size)
 {
 	int maxsize, defsize;
 
@@ -237,8 +230,7 @@ __rpc_get_t_size(af, proto, size)
  * Find the appropriate address buffer size
  */
 u_int
-__rpc_get_a_size(af)
-	int af;
+__rpc_get_a_size(int af)
 {
 	switch (af) {
 	case AF_INET:
@@ -257,8 +249,7 @@ __rpc_get_a_size(af)
 
 #if 0
 static char *
-strlocase(p)
-	char *p;
+strlocase(char *p)
 {
 	char *t = p;
 
@@ -274,8 +265,7 @@ strlocase(p)
  * If nettype is NULL, it defaults to NETPATH.
  */
 static int
-getnettype(nettype)
-	const char *nettype;
+getnettype(const char *nettype)
 {
 	int i;
 
@@ -298,8 +288,7 @@ getnettype(nettype)
  * This should be freed by calling freenetconfigent()
  */
 struct netconfig *
-__rpc_getconfip(nettype)
-	const char *nettype;
+__rpc_getconfip(const char *nettype)
 {
 	char *netid;
 	char *netid_tcp = (char *) NULL;
@@ -368,8 +357,7 @@ __rpc_getconfip(nettype)
  * __rpc_getconf().
  */
 void *
-__rpc_setconf(nettype)
-	const char *nettype;
+__rpc_setconf(const char *nettype)
 {
 	struct handle *handle;
 
@@ -411,8 +399,7 @@ __rpc_setconf(nettype)
  * __rpc_setconf() should have been called previously.
  */
 struct netconfig *
-__rpc_getconf(vhandle)
-	void *vhandle;
+__rpc_getconf(void *vhandle)
 {
 	struct handle *handle;
 	struct netconfig *nconf;
@@ -510,8 +497,7 @@ __rpc_endconf(vhandle)
  * Returns NULL if fails, else a non-NULL pointer.
  */
 void *
-rpc_nullproc(clnt)
-	CLIENT *clnt;
+rpc_nullproc(CLIENT *clnt)
 {
 	struct timeval TIMEOUT = {25, 0};
 
@@ -527,8 +513,7 @@ rpc_nullproc(clnt)
  * one succeeds in finding the netconf for the given fd.
  */
 struct netconfig *
-__rpcgettp(fd)
-	int fd;
+__rpcgettp(int fd)
 {
 	const char *netid;
 	struct __rpc_sockinfo si;

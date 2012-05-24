@@ -77,7 +77,7 @@ char *_get_next_token(char *, int);
  */
 
 void *
-setnetpath()
+setnetpath(void)
 {
 
     struct netpath_vars *np_sessionp;   /* this session's variables */
@@ -133,8 +133,7 @@ setnetpath()
  */
 
 struct netconfig *
-getnetpath(handlep)
-    void *handlep;
+getnetpath(void *handlep)
 {
     struct netpath_vars *np_sessionp = (struct netpath_vars *)handlep;
     struct netconfig *ncp = NULL;   /* temp. holds a netconfig session */
@@ -189,8 +188,7 @@ getnetpath(handlep)
  * (e.g. if setnetpath() was not called previously.
  */
 int
-endnetpath(handlep)
-    void *handlep;
+endnetpath(void *handlep)
 {
     struct netpath_vars *np_sessionp = (struct netpath_vars *)handlep;
     struct netpath_chain *chainp, *lastp;
@@ -228,9 +226,8 @@ endnetpath(handlep)
  */
 
 char *
-_get_next_token(npp, token)
-char *npp;		/* string */
-int token;		/* char to parse string for */
+_get_next_token(char *npp, /* string */
+                int token  /* char to parse string for */)
 {
     char  *cp;		/* char pointer */
     char  *np;		/* netpath pointer */

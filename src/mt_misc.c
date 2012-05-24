@@ -93,7 +93,7 @@ pthread_mutex_t serialize_pkey = PTHREAD_MUTEX_INITIALIZER;
 struct rpc_createerr rpc_createerr;
 
 struct rpc_createerr *
-__rpc_createerr()
+__rpc_createerr(void)
 {
 	struct rpc_createerr *rce_addr;
 

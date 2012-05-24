@@ -42,11 +42,11 @@ getpeereid(int s, uid_t *euid, gid_t *egid)
 	int error;
 
 	uclen = sizeof(uc); 
-	error = getsockopt(s, SOL_SOCKET, SO_PEERCRED, &uc, &uclen); /*  SCM_CREDENTIALS */
+	error = getsockopt(s, SOL_SOCKET, SO_PEERCRED, &uc, &uclen); /* SCM_CREDENTIALS */
 	if (error != 0)
 		return (error);
-	//	if (uc.cr_version != XUCRED_VERSION)
-	//	return (EINVAL);
+	/*	if (uc.cr_version != XUCRED_VERSION) */
+	/*	return (EINVAL); */
 	*euid = uc.uid;
 	*egid = uc.gid;
 	return (0);

@@ -83,9 +83,7 @@ static struct authsvc *Auths = NULL;
  * invalid.
  */
 enum auth_stat
-_authenticate(rqst, msg)
-	struct svc_req *rqst;
-	struct rpc_msg *msg;
+_authenticate(struct svc_req *rqst, struct rpc_msg *msg)
 {
 	int cred_flavor;
 	struct authsvc *asp;
@@ -148,9 +146,8 @@ _authenticate(rqst, msg)
  */
 
 int
-svc_auth_reg(cred_flavor, handler)
-	int cred_flavor;
-	enum auth_stat (*handler)(struct svc_req *, struct rpc_msg *);
+svc_auth_reg(int cred_flavor,
+             enum auth_stat (*handler)(struct svc_req *, struct rpc_msg *))
 {
 	struct authsvc *asp;
 	extern mutex_t authsvc_lock;

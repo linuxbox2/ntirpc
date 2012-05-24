@@ -99,9 +99,9 @@ static struct svc_callout
 extern rwlock_t svc_lock;
 extern rwlock_t svc_fd_lock;
 
-static struct svc_callout *svc_find (rpcprog_t, rpcvers_t,
-				     struct svc_callout **, char *);
-static void __xprt_do_unregister (SVCXPRT * xprt, bool_t dolock);
+static struct svc_callout *svc_find(rpcprog_t, rpcvers_t,
+                                    struct svc_callout **, char *);
+static void __xprt_do_unregister(SVCXPRT * xprt, bool_t dolock);
 
 /* Package init function.
  * It is intended that applications which must make use of global state
@@ -261,12 +261,11 @@ __xprt_do_unregister(SVCXPRT *xprt, bool_t dolock __attribute__((unused)))
  * program number comes in.
  */
 bool_t
-svc_reg(xprt, prog, vers, dispatch, nconf)
-     SVCXPRT *xprt;
-     const rpcprog_t prog;
-     const rpcvers_t vers;
-     void (*dispatch) (struct svc_req *, SVCXPRT *);
-     const struct netconfig *nconf;
+svc_reg(SVCXPRT *xprt,
+        const rpcprog_t prog,
+        const rpcvers_t vers,
+        void (*dispatch) (struct svc_req *, SVCXPRT *),
+        const struct netconfig *nconf)
 {
   bool_t dummy;
   struct svc_callout *prev;

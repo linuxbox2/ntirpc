@@ -62,7 +62,7 @@ bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
 void svc_getreqset_epoll (struct epoll_event *events, int nfds);
 
 /* static */ void
-svc_run_epoll()
+svc_run_epoll(void)
 {
     /* TODO: rename */
     (void) svc_rqst_thrd_run(__svc_params->ev_u.evchan.id,
@@ -71,7 +71,7 @@ svc_run_epoll()
 #endif /* TIRPC_EPOLL */
 
 void
-svc_run()
+svc_run(void)
 {
     switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)

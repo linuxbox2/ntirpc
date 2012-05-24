@@ -84,7 +84,7 @@ static inline void vc_lock_init_xprt(SVCXPRT *xprt)
 
 static inline void vc_fd_lock_impl(struct vc_fd_rec *crec, sigset_t *mask)
 {
-    sigset_t newmask;
+    sigset_t __attribute__((unused)) newmask;
 
 #if AMTX
     mutex_lock(&crec->mtx);

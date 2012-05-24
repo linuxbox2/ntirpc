@@ -76,10 +76,7 @@ static const struct xdr_ops	xdrstdio_ops = {
  * Operation flag is set to op.
  */
 void
-xdrstdio_create(xdrs, file, op)
-	XDR *xdrs;
-	FILE *file;
-	enum xdr_op op;
+xdrstdio_create(XDR *xdrs, FILE *file, enum xdr_op op)
 {
 
 	xdrs->x_op = op;
@@ -94,17 +91,14 @@ xdrstdio_create(xdrs, file, op)
  * Cleans up the xdr stream handle xdrs previously set up by xdrstdio_create.
  */
 static void
-xdrstdio_destroy(xdrs)
-	XDR *xdrs;
+xdrstdio_destroy(XDR *xdrs)
 {
 	(void)fflush((FILE *)xdrs->x_private);
 		/* XXX: should we close the file ?? */
 }
 
 static bool_t
-xdrstdio_getlong(xdrs, lp)
-	XDR *xdrs;
-	long *lp;
+xdrstdio_getlong(XDR *xdrs, long *lp)
 {
 
 	if (fread(lp, sizeof(int32_t), 1, (FILE *)xdrs->x_private) != 1)
@@ -114,9 +108,7 @@ xdrstdio_getlong(xdrs, lp)
 }
 
 static bool_t
-xdrstdio_putlong(xdrs, lp)
-	XDR *xdrs;
-	const long *lp;
+xdrstdio_putlong(XDR *xdrs, const long *lp)
 {
 	long mycopy = (long)htonl((u_int32_t)*lp);
 
@@ -138,10 +130,7 @@ xdrstdio_getbytes(xdrs, addr, len)
 }
 
 static bool_t
-xdrstdio_putbytes(xdrs, addr, len)
-	XDR *xdrs;
-	const char *addr;
-	u_int len;
+xdrstdio_putbytes(XDR *xdrs, const char *addr, u_int len)
 {
 
 	if ((len != 0) && (fwrite(addr, (size_t)len, 1,
@@ -151,17 +140,14 @@ xdrstdio_putbytes(xdrs, addr, len)
 }
 
 static u_int
-xdrstdio_getpos(xdrs)
-	XDR *xdrs;
+xdrstdio_getpos(XDR *xdrs)
 {
 
 	return ((u_int) ftell((FILE *)xdrs->x_private));
 }
 
 static bool_t
-xdrstdio_setpos(xdrs, pos) 
-	XDR *xdrs;
-	u_int pos;
+xdrstdio_setpos(XDR *xdrs, u_int pos)
 { 
 
 	return ((fseek((FILE *)xdrs->x_private, (long)pos, 0) < 0) ?
@@ -170,9 +156,7 @@ xdrstdio_setpos(xdrs, pos)
 
 /* ARGSUSED */
 static int32_t *
-xdrstdio_inline(xdrs, len)
-	XDR *xdrs;
-	u_int len;
+xdrstdio_inline(XDR *xdrs, u_int len)
 {
 
 	/*

@@ -56,9 +56,11 @@ typedef struct gss_union_ctx_id_t {
 
 
 
-static bool_t	svcauth_gss_destroy();
-static bool_t   svcauth_gss_wrap();
-static bool_t   svcauth_gss_unwrap();
+static bool_t svcauth_gss_destroy(SVCAUTH *auth);
+static bool_t svcauth_gss_wrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func,
+                               caddr_t xdr_ptr);
+static bool_t svcauth_gss_unwrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func,
+                                 caddr_t xdr_ptr);
 
 struct svc_auth_ops svc_auth_gss_ops = {
 	svcauth_gss_wrap,

@@ -53,9 +53,7 @@ static const struct xdr_discrim reply_dscrm[3] = {
  * XDR a duplex call message
  */
 bool_t
-xdr_dplx_msg(xdrs, dmsg)
-	XDR *xdrs;
-	struct rpc_msg *dmsg;
+xdr_dplx_msg(XDR *xdrs, struct rpc_msg *dmsg)
 {
 	int32_t *buf;
 	struct opaque_auth *oa;

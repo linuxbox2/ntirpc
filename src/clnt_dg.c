@@ -93,13 +93,12 @@ static const char mem_err_clnt_dg[] = "clnt_dg_create: out of memory";
  * If svcaddr is NULL, returns NULL.
  */
 CLIENT *
-clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
-	int fd;				/* open file descriptor */
-	const struct netbuf *svcaddr;	/* servers address */
-	rpcprog_t program;		/* program number */
-	rpcvers_t version;		/* version number */
-	u_int sendsz;			/* buffer recv size */
-	u_int recvsz;			/* buffer send size */
+clnt_dg_create(int fd,			        /* open file descriptor */
+               const struct netbuf *svcaddr,	/* servers address */
+               rpcprog_t program,		/* program number */
+               rpcvers_t version,		/* version number */
+               u_int sendsz,			/* buffer recv size */
+               u_int recvsz			/* buffer send size */)
 {
 	CLIENT *cl = NULL;		/* client handle */
 	struct cx_data *cx = NULL;	/* private data */
@@ -205,14 +204,13 @@ err2:
 }
 
 static enum clnt_stat
-clnt_dg_call(cl, proc, xargs, argsp, xresults, resultsp, utimeout)
-	CLIENT	*cl;			/* client handle */
-	rpcproc_t	proc;		/* procedure number */
-	xdrproc_t	xargs;		/* xdr routine for args */
-	void		*argsp;		/* pointer to args */
-	xdrproc_t	xresults;	/* xdr routine for results */
-	void		*resultsp;	/* pointer to results */
-	struct timeval	utimeout;	/* seconds to wait before giving up */
+clnt_dg_call(CLIENT *cl,             /* client handle */
+             rpcproc_t proc,         /* procedure number */
+             xdrproc_t xargs,        /* xdr routine for args */
+             void *argsp,            /* pointer to args */
+             xdrproc_t xresults,     /* xdr routine for results */
+             void *resultsp,         /* pointer to results */
+             struct timeval utimeout /* seconds to wait before giving up */)
 {
         struct cu_data *cu = CU_DATA((struct cx_data *) cl->cl_private);
 	XDR *xdrs;
@@ -456,19 +454,14 @@ out:
 }
 
 static void
-clnt_dg_geterr(cl, errp)
-	CLIENT *cl;
-	struct rpc_err *errp;
+clnt_dg_geterr(CLIENT *cl, struct rpc_err *errp)
 {
 	struct cu_data *cu = CU_DATA((struct cx_data *) cl->cl_private);
 	*errp = cu->cu_error;
 }
 
 static bool_t
-clnt_dg_freeres(cl, xdr_res, res_ptr)
-	CLIENT *cl;
-	xdrproc_t xdr_res;
-	void *res_ptr;
+clnt_dg_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
 {
 	struct cu_data *cu = CU_DATA((struct cx_data *)cl->cl_private);
 	XDR *xdrs = &(cu->cu_outxdrs);
@@ -493,16 +486,12 @@ clnt_dg_freeres(cl, xdr_res, res_ptr)
 
 /*ARGSUSED*/
 static void
-clnt_dg_abort(h)
-	CLIENT *h;
+clnt_dg_abort(CLIENT *h)
 {
 }
 
 static bool_t
-clnt_dg_control(cl, request, info)
-	CLIENT *cl;
-	u_int request;
-	void *info;
+clnt_dg_control(CLIENT *cl, u_int request, void *info)
 {
 	struct cu_data *cu = CU_DATA((struct cx_data *) cl->cl_private);
 	struct netbuf *addr;
@@ -638,8 +627,7 @@ unlock:
 }
 
 static void
-clnt_dg_destroy(cl)
-	CLIENT *cl;
+clnt_dg_destroy(CLIENT *cl)
 {
 	struct cx_data *cx = (struct cx_data *)cl->cl_private;
 	int cu_fd = CU_DATA(cx)->cu_fd;
@@ -668,7 +656,7 @@ clnt_dg_destroy(cl)
 }
 
 static struct clnt_ops *
-clnt_dg_ops()
+clnt_dg_ops(void)
 {
 	static struct clnt_ops ops;
 	extern mutex_t	ops_lock;
@@ -697,8 +685,7 @@ clnt_dg_ops()
  * Make sure that the time is not garbage.  -1 value is allowed.
  */
 static bool_t
-time_not_ok(t)
-	struct timeval *t;
+time_not_ok(struct timeval *t)
 {
 	return (t->tv_sec < -1 || t->tv_sec > 100000000 ||
 		t->tv_usec < -1 || t->tv_usec > 1000000);

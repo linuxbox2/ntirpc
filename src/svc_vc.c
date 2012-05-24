@@ -256,10 +256,7 @@ svc_vc_create(int fd, u_int sendsize, u_int recvsize)
  * descriptor as its first input.
  */
 SVCXPRT *
-svc_fd_create(fd, sendsize, recvsize)
-	int fd;
-	u_int sendsize;
-	u_int recvsize;
+svc_fd_create(int fd, u_int sendsize, u_int recvsize)
 {
 	struct sockaddr_storage ss;
 	socklen_t slen;
@@ -313,11 +310,7 @@ freedata:
  * because no longer called in Ganesha.
  */
 SVCXPRT *
-svc_fd_create2(fd, sendsize, recvsize, flags)
-	int fd;
-	u_int sendsize;
-	u_int recvsize;
-	u_int flags;
+svc_fd_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 {
 	struct sockaddr_storage ss;
 	struct sockaddr_in6 sin6;
@@ -401,10 +394,7 @@ freedata:
 }
 
 SVCXPRT *
-makefd_xprt(fd, sendsize, recvsize)
-	int fd;
-	u_int sendsize;
-	u_int recvsize;
+makefd_xprt(int fd, u_int sendsize, u_int recvsize)
 {
 	SVCXPRT *xprt;
 	struct cf_conn *cd;
@@ -461,9 +451,7 @@ done:
 
 /*ARGSUSED*/
 static bool_t
-rendezvous_request(xprt, msg)
-	SVCXPRT *xprt;
-	struct rpc_msg *msg;
+rendezvous_request(SVCXPRT *xprt, struct rpc_msg *msg)
 {
 	int sock, flags;
 	struct cf_rendezvous *r;
@@ -561,16 +549,14 @@ again:
 
 /*ARGSUSED*/
 static enum xprt_stat
-rendezvous_stat(xprt)
-	SVCXPRT *xprt;
+rendezvous_stat(SVCXPRT *xprt)
 {
 
 	return (XPRT_IDLE);
 }
 
 static void
-svc_vc_destroy(xprt)
-	SVCXPRT *xprt;
+svc_vc_destroy(SVCXPRT *xprt)
 {
 	assert(xprt != NULL);
 	(void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
@@ -578,8 +564,7 @@ svc_vc_destroy(xprt)
 }
 
 static void
-__svc_vc_dodestroy(xprt)
-	SVCXPRT *xprt;
+__svc_vc_dodestroy(SVCXPRT *xprt)
 {
 	struct cf_conn *cd;
 	struct cf_rendezvous *r;
@@ -638,10 +623,7 @@ extern mutex_t ops_lock;
 
 /*ARGSUSED*/
 static bool_t
-svc_vc_control(xprt, rq, in)
-	SVCXPRT *xprt;
-	const u_int rq;
-	void *in;
+svc_vc_control(SVCXPRT *xprt, const u_int rq, void *in)
 {
 	switch (rq) {
 	case SVCGET_XP_FLAGS:
@@ -707,10 +689,7 @@ svc_vc_control(xprt, rq, in)
 }
 
 static bool_t
-svc_vc_rendezvous_control(xprt, rq, in)
-	SVCXPRT *xprt;
-	const u_int rq;
-	void *in;
+svc_vc_rendezvous_control(SVCXPRT *xprt, const u_int rq, void *in)
 {
 	struct cf_rendezvous *cfp;
 
@@ -774,10 +753,7 @@ svc_vc_rendezvous_control(xprt, rq, in)
  * fatal for the connection.
  */
 static int
-read_vc(xprtp, buf, len)
-	void *xprtp;
-	void *buf;
-	int len;
+read_vc(void *xprtp, void *buf, int len)
 {
 	SVCXPRT *xprt;
 	int sock;
@@ -840,10 +816,7 @@ fatal_err:
  * Any error is fatal and the connection is closed.
  */
 static int
-write_vc(xprtp, buf, len)
-	void *xprtp;
-	void *buf;
-	int len;
+write_vc(void *xprtp, void *buf, int len)
 {
 	SVCXPRT *xprt;
 	int i, cnt;
@@ -886,8 +859,7 @@ write_vc(xprtp, buf, len)
 }
 
 static enum xprt_stat
-svc_vc_stat(xprt)
-	SVCXPRT *xprt;
+svc_vc_stat(SVCXPRT *xprt)
 {
 	struct cf_conn *cd;
 
@@ -903,9 +875,7 @@ svc_vc_stat(xprt)
 }
 
 static bool_t
-svc_vc_recv(xprt, msg)
-	SVCXPRT *xprt;
-	struct rpc_msg *msg;
+svc_vc_recv(SVCXPRT *xprt, struct rpc_msg *msg)
 {
 	struct cf_conn *cd;
 	XDR *xdrs;
@@ -937,10 +907,7 @@ svc_vc_recv(xprt, msg)
 }
 
 static bool_t
-svc_vc_getargs(xprt, xdr_args, args_ptr)
-	SVCXPRT *xprt;
-	xdrproc_t xdr_args;
-	void *args_ptr;
+svc_vc_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
     bool_t rslt = TRUE;
 
@@ -977,10 +944,7 @@ svc_vc_getargs(xprt, xdr_args, args_ptr)
 }
 
 static bool_t
-svc_vc_freeargs(xprt, xdr_args, args_ptr)
-	SVCXPRT *xprt;
-	xdrproc_t xdr_args;
-	void *args_ptr;
+svc_vc_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
 	XDR *xdrs;
 
@@ -994,9 +958,7 @@ svc_vc_freeargs(xprt, xdr_args, args_ptr)
 }
 
 static bool_t
-svc_vc_reply(xprt, msg)
-	SVCXPRT *xprt;
-	struct rpc_msg *msg;
+svc_vc_reply(SVCXPRT *xprt, struct rpc_msg *msg)
 {
 	XDR *xdrs;
 	struct cf_conn *cd;
@@ -1052,8 +1014,7 @@ svc_vc_reply(xprt, msg)
 }
 
 static void
-svc_vc_ops(xprt)
-	SVCXPRT *xprt;
+svc_vc_ops(SVCXPRT *xprt)
 {
 	static struct xp_ops ops;
 	static struct xp_ops2 ops2;
@@ -1091,8 +1052,7 @@ svc_vc_override_ops(SVCXPRT *xprt, SVCXPRT *newxprt)
 }
 
 static void
-svc_vc_rendezvous_ops(xprt)
-	SVCXPRT *xprt;
+svc_vc_rendezvous_ops(SVCXPRT *xprt)
 {
 	static struct xp_ops ops;
 	static struct xp_ops2 ops2;
@@ -1243,11 +1203,10 @@ __svc_clean_idle2(int timeout, bool_t cleanblock)
  * unregistered and disposed inline.
  */
 CLIENT *
-clnt_vc_create_from_svc(xprt, prog, vers, flags)
-	SVCXPRT *xprt;
-	const rpcprog_t prog;
-	const rpcvers_t vers;
-	const uint32_t flags;
+clnt_vc_create_from_svc(SVCXPRT *xprt,
+                        const rpcprog_t prog,
+                        const rpcvers_t vers,
+                        const uint32_t flags)
 {
 
         struct cf_conn *cd;
@@ -1306,11 +1265,10 @@ unlock:
  * deallocated without closing cl->cl_private->ct_fd.
  */
 SVCXPRT *
-svc_vc_create_from_clnt(cl, sendsz, recvsz, flags)
-	CLIENT *cl;
-	const u_int sendsz;
-	const u_int recvsz;
-	const uint32_t flags;
+svc_vc_create_from_clnt(CLIENT *cl,
+                        const u_int sendsz,
+                        const u_int recvsz,
+                        const uint32_t flags)
 {
 
     int fd, fflags;
