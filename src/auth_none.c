@@ -49,7 +49,8 @@ __FBSDID("$FreeBSD: src/lib/libc/rpc/auth_none.c,v 1.12 2002/03/22 23:18:35 obri
 #include <assert.h>
 #include <stdlib.h>
 #include <rpc/types.h>
-#include <rpc/xdr.h>
+#include <rpc/xdr_inline.h>
+#include <rpc/auth_inline.h>
 #include <rpc/auth.h>
 
 #define MAX_MARSHAL_SIZE 20
@@ -64,9 +65,7 @@ static bool_t authnone_validate (AUTH *, struct opaque_auth *);
 static bool_t authnone_refresh (AUTH *, void *);
 static void authnone_destroy (AUTH *);
 
-extern bool_t xdr_opaque_auth();
-
-static struct auth_ops *authnone_ops();
+static struct auth_ops *authnone_ops(void);
 
 static struct authnone_private {
 	AUTH	no_client;
@@ -75,7 +74,7 @@ static struct authnone_private {
 } *authnone_private;
 
 AUTH *
-authnone_create()
+authnone_create(void)
 {
 	struct authnone_private *ap = authnone_private;
 	XDR xdr_stream;
@@ -97,8 +96,8 @@ authnone_create()
 		xdrs = &xdr_stream;
 		xdrmem_create(xdrs, ap->marshalled_client,
 		    (u_int)MAX_MARSHAL_SIZE, XDR_ENCODE);
-		(void)xdr_opaque_auth(xdrs, &ap->no_client.ah_cred);
-		(void)xdr_opaque_auth(xdrs, &ap->no_client.ah_verf);
+		(void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_cred);
+		(void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_verf);
 		ap->mcnt = XDR_GETPOS(xdrs);
 		XDR_DESTROY(xdrs);
 	}
@@ -164,7 +163,7 @@ authnone_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xfunc, caddr_t xwhere)
 }
 
 static struct auth_ops *
-authnone_ops()
+authnone_ops(void)
 {
 	static struct auth_ops ops;
 	extern mutex_t ops_lock;

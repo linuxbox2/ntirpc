@@ -52,15 +52,16 @@
 #include <netinet/in.h>
 #include <gssapi/gssapi.h>
 
-static void	authgss_nextverf();
-static bool_t	authgss_marshal();
-static bool_t	authgss_refresh(AUTH *auth, void *arg);
-static bool_t	authgss_validate();
-static void	authgss_destroy(AUTH *auth);
-static void	authgss_destroy_context(AUTH *auth);
-static bool_t	authgss_wrap();
-static bool_t	authgss_unwrap();
-
+static void authgss_nextverf(AUTH *auth);
+static bool_t authgss_marshal(AUTH *auth, XDR *xdrs);
+static bool_t authgss_refresh(AUTH *auth, void *arg);
+static bool_t authgss_validate(AUTH *auth, struct opaque_auth *verf);
+static void authgss_destroy(AUTH *auth);
+static void authgss_destroy_context(AUTH *auth);
+static bool_t authgss_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func,
+                           caddr_t xdr_ptr);
+static bool_t authgss_unwrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func,
+                             caddr_t xdr_ptr);
 
 /*
  * from mit-krb5-1.2.1 mechglue/mglueP.h:
