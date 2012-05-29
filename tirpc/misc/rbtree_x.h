@@ -30,4 +30,67 @@ struct rbtree_x
 extern int rbtx_init(struct rbtree_x *xt, opr_rbtree_cmpf_t cmpf,
                      uint32_t npart, uint32_t flags);
 
+
+static inline struct opr_rbtree_node *
+rbtree_x_cached_lookup(struct rbtree_x *xt, struct rbtree_x_part *t,
+                       struct opr_rbtree_node *nk, uint64_t hk)
+{
+    struct opr_rbtree_node *nv, *nv_cached;
+
+    if (! t)
+        t = rbtx_partition_of_scalar(xt, hk);
+    nv_cached = t->cache[(hk % xt->npart)];
+    if (nv_cached) {
+        if (t->t.cmpf(nv_cached, nk) == 0)
+            nv = nv_cached;
+        else
+            nv = NULL;
+    } else
+        nv = opr_rbtree_lookup(&t->t, nk);
+
+    return (nv);
+}
+
+/*
+ * Write through strategy.  In this model, t->cache and t->tree
+ * partition t, and t->cache is always consulted first.
+ */
+static inline struct opr_rbtree_node *
+rbtree_x_cached_insert_wt(struct rbtree_x *xt, struct rbtree_x_part *t,
+                          struct opr_rbtree_node *nk, uint64_t hk)
+{
+    struct opr_rbtree_node *v_cached, *nv = NULL;
+    uint32_t offset;
+
+    offset = hk % xt->npart;
+    if (! t)
+        t = rbtx_partition_of_scalar(xt, hk);
+    v_cached = t->cache[offset];
+    if (! v_cached)
+        nv = t->cache[offset] = nk;
+    else {
+        nv = opr_rbtree_insert(&t->t, nk);
+    }
+
+    return (nv);
+}
+
+static inline void /* XXX */
+rbtree_x_cached_remove_wt(struct rbtree_x *xt, struct rbtree_x_part *t,
+                          struct opr_rbtree_node *nk, uint64_t hk)
+{
+    struct opr_rbtree_node *v_cached;
+    uint32_t offset;
+
+    offset = hk % xt->npart;
+    if (! t)
+        t = rbtx_partition_of_scalar(xt, hk);
+    v_cached = t->cache[offset];
+    if (v_cached)
+        t->cache[offset] = NULL;
+    else {
+        return (opr_rbtree_remove(&t->t, nk));
+    }
+}
+
 #endif /* _RBTREE_X_H */
