@@ -511,7 +511,7 @@ inline_xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 			return (TRUE);
 		}
 		if (sp == NULL) {
-			*cpp = sp = mem_alloc(nodesize);
+		    *cpp = sp = (char*)mem_alloc(nodesize);
 		}
 		if (sp == NULL) {
 			__warnx("xdr_bytes: out of memory");
@@ -647,7 +647,7 @@ inline_xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 
 	case XDR_DECODE:
 		if (sp == NULL)
-			*cpp = sp = mem_alloc(nodesize);
+		    *cpp = sp = (char*)mem_alloc(nodesize);
 		if (sp == NULL) {
 			warnx("xdr_string: out of memory");
 			return (FALSE);
