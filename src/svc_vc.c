@@ -497,6 +497,8 @@ again:
 	 * make a new transporter (re-uses xprt)
 	 */
 	newxprt = makefd_xprt(sock, r->sendsize, r->recvsize);
+        if (! newxprt)
+            return (FALSE);
 
         /*
          * propagate special ops
