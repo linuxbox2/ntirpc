@@ -4,11 +4,12 @@ AM_MAINTAINER_MODE
 AC_CONFIG_SRCDIR([src/auth_des.c])
 AC_CONFIG_MACRO_DIR([m4])
 
+dnl GSS enabled by default
 AC_ARG_ENABLE(gss,[  --enable-gss            Turn on gss api], [case "${enableval}" in
         yes) gss=true ; AC_CHECK_LIB([gssapi],[gss_init_sec_context]) ;;
         no)  gss=false ;;
         *) AC_MSG_ERROR(bad value ${enableval} for --enable-gss) ;;
-      esac],[gss=false])
+      esac],[gss=true])
 AM_CONDITIONAL(GSS, test x$gss = xtrue)
 if test x$gss = xtrue; then
 	AC_DEFINE(HAVE_LIBGSSAPI, 1, [])
@@ -16,15 +17,8 @@ if test x$gss = xtrue; then
 	AC_MSG_ERROR([Unable to locate information required to use libgssglue.]))
 fi
 
-AC_ARG_ENABLE(epoll,[  --enable-epoll          Support Linux EPOLL notifications], [case "${enableval}" in
-        yes) epoll=true ;;
-        no)  epoll=false ;;
-        *) AC_MSG_ERROR(bad value ${enableval} for --enable-epoll) ;;
-      esac],[epll=false])
-AM_CONDITIONAL(EPOLL, test x$gss = xtrue)
-if test x$epoll = xtrue; then
-	AC_DEFINE(TIRPC_EPOLL, 1, [Linux EPOLL notifications])
-fi
+dnl EPOLL always enabled for now
+AC_DEFINE(TIRPC_EPOLL, 1, [Linux EPOLL notifications])
 
 AC_PROG_CC
 AM_CONFIG_HEADER(config.h)
