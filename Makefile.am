@@ -3,8 +3,14 @@ ACLOCAL_AMFLAGS = -I m4
 
 nobase_include_HEADERS = tirpc/netconfig.h \
 			 tirpc/reentrant.h \
+			 tirpc/getpeereid.h \
+			 tirpc/namespace.h \
+			 tirpc/un-namespace.h \
 			 tirpc/misc/rbtree_x.h \
 			 tirpc/misc/rbtree.h \
+			 tirpc/misc/event.h \
+			 tirpc/misc/opr_queue.h \
+			 tirpc/misc/queue.h \
 			 tirpc/rpcsvc/crypt.x \
 			 tirpc/rpcsvc/crypt.h \
 			 tirpc/rpc/xdr.h \
