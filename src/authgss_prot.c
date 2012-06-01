@@ -48,6 +48,7 @@
 
 /* additional space needed for encoding */
 #define RPC_SLACK_SPACE 1024
+#define AUTHGSS_MAX_TOKEN_SIZE 24576 /* default MS PAC is 12000 bytes */
 
 bool_t
 xdr_rpc_gss_buf(XDR *xdrs, gss_buffer_t buf, u_int maxsize)
@@ -99,7 +100,7 @@ bool_t
 xdr_rpc_gss_init_args(XDR *xdrs, gss_buffer_desc *p)
 {
 	bool_t xdr_stat;
-	u_int maxlen = (u_int)(p->length + RPC_SLACK_SPACE);
+	u_int maxlen = AUTHGSS_MAX_TOKEN_SIZE;
 
 	xdr_stat = xdr_rpc_gss_buf(xdrs, p, maxlen);
 
