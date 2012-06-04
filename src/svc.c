@@ -342,9 +342,7 @@ rpcb_it:
  * Remove a service program from the callout list.
  */
 void
-svc_unreg (prog, vers)
-     const rpcprog_t prog;
-     const rpcvers_t vers;
+svc_unreg(const rpcprog_t prog, const rpcvers_t vers)
 {
   struct svc_callout *prev;
   struct svc_callout *s;
@@ -379,12 +377,11 @@ svc_unreg (prog, vers)
  * program number comes in.
  */
 bool_t
-svc_register (xprt, prog, vers, dispatch, protocol)
-     SVCXPRT *xprt;
-     u_long prog;
-     u_long vers;
-     void (*dispatch) (struct svc_req *, SVCXPRT *);
-     int protocol;
+svc_register(SVCXPRT *xprt,
+             u_long prog,
+             u_long vers,
+             void (*dispatch) (struct svc_req *, SVCXPRT *),
+             int protocol)
 {
   struct svc_callout *prev;
   struct svc_callout *s;
@@ -422,9 +419,7 @@ pmap_it:
  * Remove a service program from the callout list.
  */
 void
-svc_unregister (prog, vers)
-     u_long prog;
-     u_long vers;
+svc_unregister(u_long prog, u_long vers)
 {
   struct svc_callout *prev;
   struct svc_callout *s;
@@ -452,11 +447,10 @@ svc_unregister (prog, vers)
  * struct.
  */
 static struct svc_callout *
-svc_find (prog, vers, prev, netid)
-     rpcprog_t prog;
-     rpcvers_t vers;
-     struct svc_callout **prev;
-     char *netid;
+svc_find(rpcprog_t prog,
+         rpcvers_t vers,
+         struct svc_callout **prev,
+         char *netid)
 {
   struct svc_callout *s, *p;
 
@@ -542,10 +536,7 @@ out:
  * Send a reply to an rpc request
  */
 bool_t
-svc_sendreply (xprt, xdr_results, xdr_location)
-     SVCXPRT *xprt;
-     xdrproc_t xdr_results;
-     void *xdr_location;
+svc_sendreply(SVCXPRT *xprt, xdrproc_t xdr_results, void *xdr_location)
 {
   struct rpc_msg rply;
 
@@ -592,8 +583,7 @@ svc_sendreply2(SVCXPRT *xprt, struct svc_req *req,
  * No procedure error reply
  */
 void
-svcerr_noproc (xprt)
-     SVCXPRT *xprt;
+svcerr_noproc(SVCXPRT *xprt)
 {
   struct rpc_msg rply;
 
@@ -630,8 +620,7 @@ svcerr_noproc2(SVCXPRT *xprt, struct svc_req *req)
  * Can't decode args error reply
  */
 void
-svcerr_decode (xprt)
-     SVCXPRT *xprt;
+svcerr_decode(SVCXPRT *xprt)
 {
   struct rpc_msg rply;
 
@@ -668,8 +657,7 @@ svcerr_decode2(SVCXPRT *xprt, struct svc_req *req)
  * Some system error
  */
 void
-svcerr_systemerr (xprt)
-     SVCXPRT *xprt;
+svcerr_systemerr(SVCXPRT *xprt)
 {
   struct rpc_msg rply;
 
@@ -748,9 +736,7 @@ __svc_versquiet_get (xprt)
  * Authentication error reply
  */
 void
-svcerr_auth (xprt, why)
-     SVCXPRT *xprt;
-     enum auth_stat why;
+svcerr_auth(SVCXPRT *xprt, enum auth_stat why)
 {
   struct rpc_msg rply;
 
@@ -787,10 +773,8 @@ svcerr_auth2(SVCXPRT *xprt, struct svc_req *req, enum auth_stat why)
  * Auth too weak error reply
  */
 void
-svcerr_weakauth (xprt)
-     SVCXPRT *xprt;
+svcerr_weakauth (SVCXPRT *xprt)
 {
-
   assert (xprt != NULL);
 
   svcerr_auth (xprt, AUTH_TOOWEAK);
@@ -802,7 +786,6 @@ svcerr_weakauth (xprt)
 void
 svcerr_weakauth2(SVCXPRT *xprt, struct svc_req *req)
 {
-
   assert(xprt != NULL);
 
   svcerr_auth2(xprt, req, AUTH_TOOWEAK);
@@ -812,8 +795,7 @@ svcerr_weakauth2(SVCXPRT *xprt, struct svc_req *req)
  * Program unavailable error reply
  */
 void
-svcerr_noprog (xprt)
-     SVCXPRT *xprt;
+svcerr_noprog(SVCXPRT *xprt)
 {
   struct rpc_msg rply;
 
@@ -850,10 +832,9 @@ svcerr_noprog2(SVCXPRT *xprt, struct svc_req *req)
  * Program version mismatch error reply
  */
 void
-svcerr_progvers (xprt, low_vers, high_vers)
-     SVCXPRT *xprt;
-     rpcvers_t low_vers;
-     rpcvers_t high_vers;
+svcerr_progvers(SVCXPRT *xprt,
+                rpcvers_t low_vers,
+                rpcvers_t high_vers)
 {
   struct rpc_msg rply;
 
@@ -910,8 +891,7 @@ svcerr_progvers2(SVCXPRT *xprt, struct svc_req *req, rpcvers_t low_vers,
  */
 
 void
-svc_getreq (rdfds)
-     int rdfds;
+svc_getreq(int rdfds)
 {
   fd_set readfds;
 
@@ -921,8 +901,7 @@ svc_getreq (rdfds)
 }
 
 void
-svc_getreqset (readfds)
-     fd_set *readfds;
+svc_getreqset(fd_set *readfds)
 {
   int bit, fd;
   fd_mask mask, *maskp;
@@ -944,7 +923,7 @@ svc_getreqset (readfds)
 
 #if defined(TIRPC_EPOLL)
 void
-svc_getreqset_epoll (struct epoll_event *events, int nfds)
+svc_getreqset_epoll(struct epoll_event *events, int nfds)
 {
     int ix, code __attribute__((unused)) = 0;
     SVCXPRT *xprt;
@@ -960,8 +939,7 @@ svc_getreqset_epoll (struct epoll_event *events, int nfds)
 #endif /* TIRPC_EPOLL */
 
 void
-svc_getreq_common (fd)
-     int fd;
+svc_getreq_common(int fd)
 {
   SVCXPRT *xprt;
   bool_t code __attribute__((unused));
@@ -1116,9 +1094,7 @@ svc_getreq_default(SVCXPRT *xprt)
 }
 
 void
-svc_getreq_poll (pfdp, pollretval)
-     struct pollfd *pfdp;
-     int pollretval;
+svc_getreq_poll(struct pollfd *pfdp, int pollretval)
 {
   int i;
   int fds_found;
