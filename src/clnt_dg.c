@@ -476,7 +476,9 @@ clnt_dg_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
         vc_fd_wait_c(cl, rpc_flag_clear);        
 
 	xdrs->x_op = XDR_FREE;
-	dummy = (*xdr_res)(xdrs, res_ptr);
+	dummy = 0;
+	if (xdr_res)
+		dummy = (*xdr_res)(xdrs, res_ptr);
 
 	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
         vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE);
