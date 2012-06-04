@@ -601,6 +601,7 @@ svcerr_noproc (xprt)
 
   rply.rm_direction = REPLY;
   rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.rm_flags = RPC_MSG_FLAG_NONE;
   rply.acpted_rply.ar_verf = xprt->xp_verf;
   rply.acpted_rply.ar_stat = PROC_UNAVAIL;
   SVC_REPLY (xprt, &rply);
@@ -638,6 +639,7 @@ svcerr_decode (xprt)
 
   rply.rm_direction = REPLY;
   rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.rm_flags = RPC_MSG_FLAG_NONE;
   rply.acpted_rply.ar_verf = xprt->xp_verf;
   rply.acpted_rply.ar_stat = GARBAGE_ARGS;
   SVC_REPLY (xprt, &rply);
@@ -675,6 +677,7 @@ svcerr_systemerr (xprt)
 
   rply.rm_direction = REPLY;
   rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.rm_flags = RPC_MSG_FLAG_NONE;
   rply.acpted_rply.ar_verf = xprt->xp_verf;
   rply.acpted_rply.ar_stat = SYSTEM_ERR;
   SVC_REPLY (xprt, &rply);
@@ -755,6 +758,7 @@ svcerr_auth (xprt, why)
 
   rply.rm_direction = REPLY;
   rply.rm_reply.rp_stat = MSG_DENIED;
+  rply.rm_flags = RPC_MSG_FLAG_NONE;
   rply.rjcted_rply.rj_stat = AUTH_ERROR;
   rply.rjcted_rply.rj_why = why;
   SVC_REPLY (xprt, &rply);
@@ -817,6 +821,7 @@ svcerr_noprog (xprt)
 
   rply.rm_direction = REPLY;
   rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.rm_flags = RPC_MSG_FLAG_NONE;
   rply.acpted_rply.ar_verf = xprt->xp_verf;
   rply.acpted_rply.ar_stat = PROG_UNAVAIL;
   SVC_REPLY (xprt, &rply);
@@ -856,6 +861,7 @@ svcerr_progvers (xprt, low_vers, high_vers)
 
   rply.rm_direction = REPLY;
   rply.rm_reply.rp_stat = MSG_ACCEPTED;
+  rply.rm_flags = RPC_MSG_FLAG_NONE;
   rply.acpted_rply.ar_verf = xprt->xp_verf;
   rply.acpted_rply.ar_stat = PROG_MISMATCH;
   rply.acpted_rply.ar_vers.low = (u_int32_t) low_vers;
