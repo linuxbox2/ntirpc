@@ -464,9 +464,15 @@ static bool_t
 clnt_dg_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
 {
 	struct cu_data *cu = CU_DATA((struct cx_data *)cl->cl_private);
-	XDR *xdrs = &(cu->cu_outxdrs);
-	bool_t dummy;
+	XDR *xdrs;
 	sigset_t mask, newmask;
+	bool_t dummy;
+
+        /* XXX guard against illegal invocation from libc (will fix) */
+	if (! xdr_res)
+		goto out;
+
+        xdrs = &(cu->cu_outxdrs);
 
         /* Handle our own signal mask here, the signal section is
          * larger than the wait (not 100% clear why) */
@@ -483,6 +489,7 @@ clnt_dg_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
 	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
         vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE);
 
+out:
 	return (dummy);
 }
 
