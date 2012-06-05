@@ -11,6 +11,7 @@ struct rbtree_x_part
 {
     CACHE_PAD(0);
     pthread_rwlock_t lock;
+    pthread_mutex_t mtx;
     struct opr_rbtree t;
     struct opr_rbtree_node **cache;
     CACHE_PAD(1);
@@ -29,7 +30,6 @@ struct rbtree_x
 
 extern int rbtx_init(struct rbtree_x *xt, opr_rbtree_cmpf_t cmpf,
                      uint32_t npart, uint32_t flags);
-
 
 static inline struct opr_rbtree_node *
 rbtree_x_cached_lookup(struct rbtree_x *xt, struct rbtree_x_part *t,
