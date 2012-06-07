@@ -1,7 +1,9 @@
-SUBDIRS = src man doc
+SUBDIRS = src doc
 ACLOCAL_AMFLAGS = -I m4
 
-nobase_include_HEADERS = tirpc/netconfig.h \
+nobase_include_HEADERS = m4/.dummy \
+			 autogen.sh \
+			 tirpc/netconfig.h \
 			 tirpc/reentrant.h \
 			 tirpc/getpeereid.h \
 			 tirpc/namespace.h \

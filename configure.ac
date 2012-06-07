@@ -1,6 +1,7 @@
 AC_INIT(libntirpc, 0.7.0)
 AM_INIT_AUTOMAKE(libntirpc, 0.7.0)
 AM_MAINTAINER_MODE
+AC_CONFIG_SRCDIR([m4])
 AC_CONFIG_SRCDIR([src/auth_des.c])
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -29,5 +30,5 @@ AC_CHECK_HEADERS([arpa/inet.h fcntl.h libintl.h limits.h locale.h netdb.h netine
 AC_CHECK_LIB([pthread], [pthread_create])
 
 
-AC_CONFIG_FILES([Makefile src/Makefile man/Makefile doc/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile doc/Makefile])
 AC_OUTPUT(libntirpc.pc)
