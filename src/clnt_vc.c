@@ -103,7 +103,7 @@ static void clnt_vc_geterr(CLIENT *, struct rpc_err *);
 static bool_t clnt_vc_freeres(CLIENT *, xdrproc_t, void *);
 static void clnt_vc_abort(CLIENT *);
 static bool_t clnt_vc_control(CLIENT *, u_int, void *);
-void clnt_vc_destroy(CLIENT *);
+static void clnt_vc_destroy(CLIENT *);
 static struct clnt_ops *clnt_vc_ops(void);
 static bool_t time_not_ok(struct timeval *);
 static int read_vc(void *, void *, int);
@@ -721,7 +721,7 @@ clnt_vc_control(CLIENT *cl, u_int request, void *info)
 }
 
 
-void
+static void
 clnt_vc_destroy(CLIENT *cl)
 {
 	struct cx_data *cx = (struct cx_data *) cl->cl_private;
