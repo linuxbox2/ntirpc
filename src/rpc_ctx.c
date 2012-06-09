@@ -158,6 +158,9 @@ free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
 
     assert (flags & RPC_CTX_FLAG_LOCKED);
 
-    opr_rbtree_remove(&crec->calls.t, &crec->node_k);
-    free_rpc_msg(ctx->msg);
+    opr_rbtree_remove(&crec->calls.t, &ctx->node_k);
+    if (ctx->msg)
+        free_rpc_msg(ctx->msg);
+    mem_free(ctx, sizeof(rpc_ctx_t));
+    
 }
