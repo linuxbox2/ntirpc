@@ -317,7 +317,7 @@ clnt_tp_create_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
 CLIENT *
 clnt_tli_create(int fd, const struct netconfig *nconf,
 	struct netbuf *svcaddr, rpcprog_t prog, rpcvers_t vers,
-	uint sendsz, uint recvsz)
+	u_int sendsz, u_int recvsz)
 {
 	CLIENT *cl;			/* client handle */
 	bool_t madefd = FALSE;		/* whether fd opened here */
