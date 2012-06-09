@@ -97,8 +97,7 @@ void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
 
     assert (flags & RPC_CTX_FLAG_LOCKED);
 
-    opr_rbtree_remove(&crec->calls.t, &crec->node_k);
-
+    opr_rbtree_remove(&crec->calls.t, &ctx->node_k);
     ctx->xid = ++(crec->calls.xid);
     if (opr_rbtree_insert(&crec->calls.t, &ctx->node_k)) {
         __warnx("%s: call ctx insert failed (xid %d client %p)",
