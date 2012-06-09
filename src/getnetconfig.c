@@ -333,8 +333,7 @@ getnetconfig(void *handlep)
  * previously).
  */
 int
-endnetconfig(handlep)
-void *handlep;
+endnetconfig(void *handlep)
 {
     struct netconfig_vars *nc_handlep = (struct netconfig_vars *)handlep;
 
