@@ -91,7 +91,6 @@ static void svc_vc_override_ops(SVCXPRT *xprt, SVCXPRT *newxprt);
 static bool_t svc_vc_control(SVCXPRT *xprt, const u_int rq, void *in);
 static bool_t svc_vc_rendezvous_control (SVCXPRT *xprt, const u_int rq,
 				   	     void *in);
-void clnt_vc_destroy(CLIENT *);
 bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
 
 /*
@@ -1352,7 +1351,7 @@ svc_vc_create_from_clnt(CLIENT *cl,
     if ((flags & SVC_VC_CREATE_FLAG_SPLX) &&
         (flags & SVC_VC_CREATE_FLAG_DISPOSE)) {
 	ct->ct_closeit = FALSE; /* must not close */	
-	clnt_vc_destroy(cl); /* clean up immediately */
+	CLNT_DESTROY(cl); /* clean up immediately */
     }
 
 unlock:
