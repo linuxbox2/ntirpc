@@ -119,7 +119,6 @@ static inline struct svc_xprt_rec *svc_xprt_lookup(int fd)
 
     cond_init_svc_xprt();
 
-    memset(&sk, 0, sizeof(struct svc_xprt_rec));
     sk.fd_k = fd;
     t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, fd);
 
@@ -173,9 +172,19 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
 {
     SVCXPRT *xprt2 = NULL;
     struct rbtree_x_part *t;
-    struct svc_xprt_rec *srec = svc_xprt_lookup(xprt->xp_fd);
+    struct svc_xprt_rec sk, *srec, *srec2;
+    struct opr_rbtree_node *ov;
 
-    if (srec) {
+    cond_init_svc_xprt();
+
+    sk.fd_k = xprt->xp_fd;
+    t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, sk.fd_k);
+
+    rwlock_rdlock(&t->lock);
+    ov = opr_rbtree_lookup(&t->t, &sk.node_k);
+
+    if (ov) {
+        srec = opr_containerof(ov, struct svc_xprt_rec, node_k);
         mutex_lock(&srec->mtx);
         /* XXX state flags and refcount here? */
         if (! srec->xprt) {
@@ -189,13 +198,17 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
             if (flags & SVC_XPRT_FLAG_CLEAR) {
                 srec->xprt = NULL;
                 /* XXX avoid bloat, remove cleared entries */
-                t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, srec->fd_k);
-                rwlock_wrlock(&t->lock);
-                opr_rbtree_remove(&t->t, &srec->node_k);
                 rwlock_unlock(&t->lock);
-                mutex_unlock(&srec->mtx);
-                mem_free(srec, sizeof(struct svc_xprt_rec));  
-                goto out;
+                rwlock_wrlock(&t->lock);
+                ov = opr_rbtree_lookup(&t->t, &sk.node_k);
+                srec2 = opr_containerof(ov, struct svc_xprt_rec, node_k);
+                if (srec2 == srec) {
+                    opr_rbtree_remove(&t->t, &srec->node_k);
+                    rwlock_unlock(&t->lock);
+                    mutex_unlock(&srec->mtx);
+                    mem_free(srec, sizeof(struct svc_xprt_rec));  
+                    goto out;
+                }
             }
             else
                 srec->xprt = xprt;
@@ -203,8 +216,12 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
         mutex_unlock(&srec->mtx);
     } else {
         /* no srec */
+        rwlock_unlock(&t->lock);
         xprt2 = svc_xprt_insert(xprt);
+        goto out;
     }
+
+    rwlock_unlock(&t->lock);
 
 out:
     return (xprt2);
