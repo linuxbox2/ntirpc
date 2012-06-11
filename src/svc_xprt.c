@@ -190,7 +190,9 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
                 srec->xprt = NULL;
                 /* XXX avoid bloat, remove cleared entries */
                 t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, srec->fd_k);
+                rwlock_wrlock(&t->lock);
                 opr_rbtree_remove(&t->t, &srec->node_k);
+                rwlock_unlock(&t->lock);
                 mutex_unlock(&srec->mtx);
                 mem_free(srec, sizeof(struct svc_xprt_rec));  
                 goto out;
