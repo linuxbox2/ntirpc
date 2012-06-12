@@ -53,18 +53,21 @@
 #define mutex_init(m, a)	pthread_mutex_init(m, a)
 #define mutex_lock(m)		pthread_mutex_lock(m)
 #define mutex_unlock(m)		pthread_mutex_unlock(m)
+#define mutex_destroy(m)	pthread_mutex_destroy(m)
 
 #define cond_init(c, a, p)	pthread_cond_init(c, a)
 #define cond_signal(m)		pthread_cond_signal(m)
 #define cond_broadcast(m)	pthread_cond_broadcast(m)
 #define cond_wait(c, m)		pthread_cond_wait(c, m)
 #define cond_timedwait(c, m, a)	pthread_cond_timedwait(c, m, a)
+#define cond_destroy(c)		pthread_cond_destroy(c)
 
 #define rwlock_init(l, a)	pthread_rwlock_init(l, a)
 #define rwlock_rdlock(l)	pthread_rwlock_rdlock(l)
 #define rwlock_wrlock(l)	pthread_rwlock_wrlock(l)
 #define rwlock_unlock(l)	pthread_rwlock_unlock(l)
 #define rwlockattr_init(a)      pthread_rwlockattr_init(a)
+#define rwlock_destroy(l)	pthread_rwlock_destroy(l)
 
 #define thr_keycreate(k, d)	pthread_key_create(k, d)
 #define thr_setspecific(k, p)	pthread_setspecific(k, p)

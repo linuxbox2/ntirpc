@@ -110,7 +110,27 @@ do { \
  * to them in private data, and we can make the lock/unlock ops inline,
  * so amortized cost of this change for locks is 0. */
 
-struct vc_fd_rec *vc_lookup_fd_rec(int fd)
+static inline struct vc_fd_rec *
+alloc_fd_rec(void)
+{
+    struct vc_fd_rec *crec = mem_alloc(sizeof(struct vc_fd_rec));
+    if (crec) {
+        mutex_init(&crec->mtx, NULL);
+        cond_init(&crec->cv, 0, NULL);
+    }
+    return (crec);
+}
+
+static inline void
+free_fd_rec(struct vc_fd_rec *crec)
+{
+    mutex_destroy(&crec->mtx);
+    cond_destroy(&crec->cv);
+    mem_free(crec, sizeof(struct vc_fd_rec));
+}
+
+struct vc_fd_rec *
+vc_lookup_fd_rec(int fd)
 {
     struct rbtree_x_part *t;
     struct vc_fd_rec ck, *crec = NULL;
@@ -133,10 +153,13 @@ struct vc_fd_rec *vc_lookup_fd_rec(int fd)
         rwlock_wrlock(&t->lock);
         nv = opr_rbtree_lookup(&t->t, &ck.node_k);
         if (! nv) {
-            crec = mem_alloc(sizeof(struct vc_fd_rec));
+            crec = alloc_fd_rec();
+            if (! crec) {
+                __warnx("%s: failed allocating vc_fd_rec", __func__);
+                goto unlock;
+            }
 
-            mutex_init(&crec->mtx, NULL);
-            cond_init(&crec->cv, 0, NULL);
+            /* XXX allocation fail */
             crec->fd_k = fd;
 
             /* tracks outstanding calls */
@@ -147,7 +170,7 @@ struct vc_fd_rec *vc_lookup_fd_rec(int fd)
                 /* cant happen */
                 __warnx("%s: collision inserting in locked rbtree partition",
                         __func__);
-                mem_free(crec, sizeof(struct vc_fd_rec));
+                free_fd_rec(crec);
             }
         }
     }
@@ -156,6 +179,7 @@ struct vc_fd_rec *vc_lookup_fd_rec(int fd)
 
     vc_lock_ref(crec, VC_LOCK_FLAG_NONE);
 
+unlock:
     rwlock_unlock(&t->lock);
 
     return (crec);    
@@ -227,7 +251,7 @@ int32_t vc_lock_unref(struct vc_fd_rec *crec, u_int flags)
             if (crec->refcount == 0) {
                 (void) opr_rbtree_remove(&t->t, &crec->node_k);
                 mutex_unlock(&crec->mtx);
-                mem_free(crec, sizeof(struct vc_fd_rec));
+                free_fd_rec(crec);
                 crec = NULL;
             } else
                 refcount = crec->refcount;
@@ -259,10 +283,11 @@ void vc_lock_shutdown()
         while (n != NULL) {
             crec = opr_containerof(n, struct vc_fd_rec, node_k);
             opr_rbtree_remove(&t->t, &crec->node_k);
-            mem_free(crec, sizeof(struct vc_fd_rec));
+            free_fd_rec(crec);
             n = opr_rbtree_first(&t->t);
         } /* curr partition */
         rwlock_unlock(&t->lock); /* t !LOCKED */
+        rwlock_destroy(&t->lock);
         p_ix++;
     } /* VC_LOCK_PARTITIONS */
 

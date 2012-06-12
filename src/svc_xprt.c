@@ -164,6 +164,7 @@ static inline SVCXPRT *svc_xprt_insert(SVCXPRT *xprt, uint32_t flags)
             /* cant happen */
             __warnx("%s: collision inserting in locked rbtree partition",
                     __func__);
+            mutex_destroy(&srec->mtx);
             mem_free(srec, sizeof(struct svc_xprt_rec));
         }
     }
@@ -206,6 +207,7 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
                 /* XXX avoid bloat, remove cleared entries */
                 opr_rbtree_remove(&t->t, &srec->node_k);
                 mutex_unlock(&srec->mtx);
+                mutex_destroy(&srec->mtx);
                 mem_free(srec, sizeof(struct svc_xprt_rec));  
                 goto unlock;
             }
@@ -359,6 +361,7 @@ void svc_xprt_shutdown()
                 SVC_DESTROY(srec->xprt);
                 srec->xprt = NULL;
                 mutex_unlock(&srec->mtx);
+                mutex_destroy(&srec->mtx);
             }
             /* now remove srec */
             opr_rbtree_remove(&t->t, &srec->node_k);
@@ -367,6 +370,7 @@ void svc_xprt_shutdown()
             n = opr_rbtree_first(&t->t);
         } /* curr partition */
         rwlock_unlock(&t->lock); /* t !LOCKED */
+        rwlock_destroy(&t->lock);
         p_ix++;
     } /* SVC_XPRT_PARTITIONS */
 
