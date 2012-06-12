@@ -150,7 +150,7 @@ static inline SVCXPRT *svc_xprt_insert(SVCXPRT *xprt, uint32_t flags)
     sk.fd_k = xprt->xp_fd;
     t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, xprt->xp_fd);
 
-    if (! flags & SVC_XPRT_FLAG_WLOCKED)
+    if (! (flags & SVC_XPRT_FLAG_WLOCKED))
         rwlock_wrlock(&t->lock);
 
     nv = opr_rbtree_lookup(&t->t, &sk.node_k);
