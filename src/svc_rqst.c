@@ -277,6 +277,7 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
                              sr_rec->sv[1],
                              &sr_rec->ev_u.epoll.ctrl_ev);
 #endif
+        mutex_destroy(&sr_rec->mtx);
         mem_free(sr_rec, sizeof(struct svc_rqst_rec));
         n_id = 0; /* invalid value */
     }    
@@ -412,6 +413,7 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
     sr_rec->states = SVC_RQST_STATE_DESTROYED;
     sr_rec->id_k = 0; /* no chan */
     mutex_unlock(&sr_rec->mtx);
+    mutex_destroy(&sr_rec->mtx);
     mem_free(sr_rec, sizeof(struct svc_rqst_rec));
 
 unlock:
