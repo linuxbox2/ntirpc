@@ -176,7 +176,8 @@ svc_vc_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 
 	r = mem_alloc(sizeof(*r));
 	if (r == NULL) {
-		__warnx("svc_vc_create: out of memory");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_vc_create: out of memory");
 		goto cleanup_svc_vc_create;
 	}
 	if (!__rpc_fd2sockinfo(fd, &si))
@@ -186,7 +187,8 @@ svc_vc_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	r->maxrec = __svc_maxrec;
 	xprt = mem_alloc(sizeof(SVCXPRT));
 	if (xprt == NULL) {
-		__warnx("svc_vc_create: out of memory");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_vc_create: out of memory");
 		goto cleanup_svc_vc_create;
 	}
 	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
@@ -206,7 +208,8 @@ svc_vc_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&sslocal, &slen) < 0) {
-		__warnx("svc_vc_create: could not retrieve local addr");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_vc_create: could not retrieve local addr");
 		goto cleanup_svc_vc_create;
 	}
 #if 0
@@ -226,7 +229,8 @@ svc_vc_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
         }
 #endif
 	if (!__rpc_set_netbuf(&xprt->xp_ltaddr, &sslocal, sizeof(sslocal))) {
-		__warnx("svc_vc_create: no mem for local addr");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_vc_create: no mem for local addr");
 		goto cleanup_svc_vc_create;
 	}
 
@@ -273,21 +277,25 @@ svc_fd_create(int fd, u_int sendsize, u_int recvsize)
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-            __warnx("svc_fd_create: could not retrieve local addr");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_fd_create: could not retrieve local addr");
             goto freedata;
 	}
 	if (!__rpc_set_netbuf(&xprt->xp_ltaddr, &ss, sizeof(ss))) {
-            __warnx("svc_fd_create: no mem for local addr");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_fd_create: no mem for local addr");
             goto freedata;
 	}
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-            __warnx("svc_fd_create: could not retrieve remote addr");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_fd_create: could not retrieve remote addr");
             goto freedata;
 	}
 	if (!__rpc_set_netbuf(&xprt->xp_rtaddr, &ss, sizeof(ss))) {
-            __warnx("svc_fd_create: no mem for local addr");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_fd_create: no mem for local addr");
             goto freedata;
 	}
 
@@ -326,17 +334,20 @@ svc_fd_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		__warnx("svc_fd_create: could not retrieve local addr");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_fd_create: could not retrieve local addr");
 		goto freedata;
 	}
 	if (!__rpc_set_netbuf(&xprt->xp_ltaddr, &ss, sizeof(ss))) {
-		__warnx("svc_fd_create: no mem for local addr");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_fd_create: no mem for local addr");
 		goto freedata;
 	}
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		__warnx("svc_fd_create: could not retrieve remote addr");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_fd_create: could not retrieve remote addr");
 		goto freedata;
 	}
 	af = ss.ss_family;
@@ -352,7 +363,8 @@ svc_fd_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	} else
 	    addr = __rpc_set_netbuf(&xprt->xp_rtaddr, &ss, sizeof(ss));
 	if (!addr) {
-		__warnx("svc_fd_create: no mem for local addr");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_fd_create: no mem for local addr");
 		goto freedata;
 	}
 
@@ -406,21 +418,24 @@ makefd_xprt(int fd, u_int sendsize, u_int recvsize)
             __svc_params->max_connections = FD_SETSIZE;
 
         if (fd >= __svc_params->max_connections) {
-                __warnx("svc_vc: makefd_xprt: fd too high\n");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_vc: makefd_xprt: fd too high\n");
                 xprt = NULL;
                 goto done;
         }
 
 	xprt = mem_alloc(sizeof(SVCXPRT));
 	if (xprt == NULL) {
-		__warnx("svc_vc: makefd_xprt: out of memory");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_vc: makefd_xprt: out of memory");
 		goto done;
 	}
 	memset(xprt, 0, sizeof *xprt);
 	rwlock_init(&xprt->lock, NULL);
 	cd = mem_alloc(sizeof(struct cf_conn));
 	if (cd == NULL) {
-		__warnx("svc_tcp: makefd_xprt: out of memory");
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_tcp: makefd_xprt: out of memory");
 		mem_free(xprt, sizeof(SVCXPRT));
 		xprt = NULL;
 		goto done;
@@ -1237,7 +1252,8 @@ clnt_vc_create_from_svc(SVCXPRT *xprt,
             goto unlock; /* XXX should probably warn here */
 
         if (flags & SVC_VC_CREATE_FLAG_DPLX) {
-            __warnx("%s:  disposing--calls SetDuplex\n", __func__);
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "%s:  disposing--calls SetDuplex\n", __func__);
             SetDuplex(cl, xprt);
         }
 
@@ -1250,7 +1266,8 @@ unlock:
         /* for a dedicated channel, unregister and free xprt */
 	if ((flags & SVC_VC_CREATE_FLAG_SPLX) &&
             (flags & SVC_VC_CREATE_FLAG_DISPOSE)) {
-            __warnx("%s:  disposing--calls svc_vc_destroy_xprt\n",
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "%s:  disposing--calls svc_vc_destroy_xprt\n",
                     __func__);
             svc_vc_destroy(xprt);
         }
@@ -1297,7 +1314,8 @@ svc_vc_create_from_clnt(CLIENT *cl,
 
     len = sizeof (struct sockaddr_storage);
     if (getpeername(fd, (struct sockaddr *)(void *)&addr, &len) < 0) {
-        __warnx("%s: could not retrieve remote addr",
+        __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                "%s: could not retrieve remote addr",
                 __func__);
         svc_vc_destroy_xprt(xprt);
         goto unlock;

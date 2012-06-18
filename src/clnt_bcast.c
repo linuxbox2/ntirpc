@@ -458,8 +458,8 @@ rpc_broadcast_exp(rpcprog_t prog,		/* program number */
 #ifdef RPC_DEBUG
 						perror("sendto");
 #endif
-						__warnx("clnt_bcast: cannot send"
-						      "broadcast packet");
+						__warnx(TIRPC_DEBUG_FLAG_CLNT_BCAST,
+                                                        "clnt_bcast: cannot send broadcast packet");
 						stat = RPC_CANTSEND;
 						continue;
 					};
@@ -480,8 +480,8 @@ rpc_broadcast_exp(rpcprog_t prog,		/* program number */
 					    outlen_pmap, 0, addr,
 					    (size_t)fdlist[i].asize) !=
 						outlen_pmap) {
-						__warnx("clnt_bcast: "
-						    "Cannot send broadcast packet");
+                                            __warnx(TIRPC_DEBUG_FLAG_CLNT_BCAST,
+                                                    "clnt_bcast: Cannot send broadcast packet");
 						stat = RPC_CANTSEND;
 						continue;
 					}
@@ -544,8 +544,8 @@ rpc_broadcast_exp(rpcprog_t prog,		/* program number */
 			if (inlen < 0) {
 				if (errno == EINTR)
 					goto try_again;
-				__warnx("clnt_bcast: Cannot receive reply to "
-					"broadcast");
+				__warnx(TIRPC_DEBUG_FLAG_CLNT_BCAST,
+                                        "clnt_bcast: Cannot receive reply to broadcast");
 				stat = RPC_CANTRECV;
 				continue;
 			}

@@ -87,7 +87,8 @@ void vc_lock_init()
     code = rbtx_init(&vc_fd_rec_set.xt, vc_fd_cmpf /* NULL (inline) */,
                      VC_LOCK_PARTITIONS, RBT_X_FLAG_ALLOC);
     if (code)
-        __warnx("vc_lock_init: rbtx_init failed");
+        __warnx(TIRPC_DEBUG_FLAG_LOCK,
+                "vc_lock_init: rbtx_init failed");
 
     initialized = TRUE;
 
@@ -155,7 +156,8 @@ vc_lookup_fd_rec(int fd)
         if (! nv) {
             crec = alloc_fd_rec();
             if (! crec) {
-                __warnx("%s: failed allocating vc_fd_rec", __func__);
+                __warnx(TIRPC_DEBUG_FLAG_LOCK,
+                        "%s: failed allocating vc_fd_rec", __func__);
                 goto unlock;
             }
 
@@ -168,7 +170,8 @@ vc_lookup_fd_rec(int fd)
 
             if (opr_rbtree_insert(&t->t, &crec->node_k)) {
                 /* cant happen */
-                __warnx("%s: collision inserting in locked rbtree partition",
+                __warnx(TIRPC_DEBUG_FLAG_LOCK,
+                        "%s: collision inserting in locked rbtree partition",
                         __func__);
                 free_fd_rec(crec);
             }

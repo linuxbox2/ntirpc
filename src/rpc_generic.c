@@ -60,8 +60,8 @@
 #include "rpc_com.h"
     
 tirpc_pkg_params __pkg_params = {
-    TIRPC_FLAGS_NONE,
-    TIRPC_DEBUG_FLAGS_NONE,
+    TIRPC_FLAG_NONE,
+    TIRPC_DEBUG_FLAG_NONE,
     __mem_alloc,
     __mem_free,
     __rpc_free,
@@ -316,7 +316,8 @@ __rpc_getconfip(const char *nettype)
 		void *confighandle;
 
 		if (!(confighandle = setnetconfig())) {
-		    __warnx ("rpc: failed to open %s", NETCONFIG);
+		    __warnx (TIRPC_DEBUG_FLAG_DEFAULT,
+                             "rpc: failed to open %s", NETCONFIG);
 		    return (NULL);
 		}
 		while ((nconf = getnetconfig(confighandle)) != NULL) {
@@ -381,7 +382,8 @@ __rpc_setconf(const char *nettype)
 	case _RPC_TCP:
 	case _RPC_UDP:
 		if (!(handle->nhandle = setnetconfig())) {
-		    __warnx("rpc: failed to open %s", NETCONFIG);
+		    __warnx(TIRPC_DEBUG_FLAG_DEFAULT,
+                            "rpc: failed to open %s", NETCONFIG);
 		    __free(handle);
 		    return (NULL);
 		}

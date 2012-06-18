@@ -101,7 +101,8 @@ void svc_xprt_init()
     code = rbtx_init(&svc_xprt_set_.xt, svc_xprt_fd_cmpf /* NULL (inline) */,
                      SVC_XPRT_PARTITIONS, RBT_X_FLAG_ALLOC);
     if (code)
-        __warnx("svc_xprt_init: rbtx_init failed");
+        __warnx(TIRPC_DEBUG_FLAG_SVC_XPRT,
+                "svc_xprt_init: rbtx_init failed");
 
     initialized = TRUE;
 
@@ -162,7 +163,8 @@ static inline SVCXPRT *svc_xprt_insert(SVCXPRT *xprt, uint32_t flags)
         srec->gen = 1;
         if (opr_rbtree_insert(&t->t, &srec->node_k)) {
             /* cant happen */
-            __warnx("%s: collision inserting in locked rbtree partition",
+            __warnx(TIRPC_DEBUG_FLAG_SVC_XPRT,
+                    "%s: collision inserting in locked rbtree partition",
                     __func__);
             mutex_destroy(&srec->mtx);
             mem_free(srec, sizeof(struct svc_xprt_rec));
@@ -322,11 +324,13 @@ void svc_xprt_dump_xprts(const char *tag)
     while (p_ix < SVC_XPRT_PARTITIONS) {
         t = &svc_xprt_set_.xt.tree[p_ix];
         rwlock_rdlock(&t->lock); /* t RLOCKED */
-        __warnx("xprts at %s: tree %d size %d", tag, p_ix, t->t.size);
+        __warnx(TIRPC_DEBUG_FLAG_SVC_XPRT,
+                "xprts at %s: tree %d size %d", tag, p_ix, t->t.size);
         n = opr_rbtree_first(&t->t);
         while (n != NULL) {
             srec = opr_containerof(n, struct svc_xprt_rec, node_k);
-            __warnx("xprts at %s:  srec %p fd %d xprt %p xp_fd %d", tag, srec,
+            __warnx(TIRPC_DEBUG_FLAG_SVC_XPRT,
+                    "xprts at %s:  srec %p fd %d xprt %p xp_fd %d", tag, srec,
                     srec->fd_k, srec->xprt,
                     (srec->xprt) ? srec->xprt->xp_fd : 0);
             n = opr_rbtree_next(n);

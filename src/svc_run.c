@@ -82,7 +82,8 @@ svc_run(void)
     default:
         /* XXX formerly select/fd_set case, now placeholder for new
          * event systems, reworked select, etc. */
-        __warnx("svc_run: unsupported event type");
+        __warnx(TIRPC_DEBUG_FLAG_SVC,
+                "svc_run: unsupported event type");
         break;
     } /* switch */
 }

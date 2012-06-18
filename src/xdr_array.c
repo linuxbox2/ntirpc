@@ -94,7 +94,8 @@ xdr_array(XDR *xdrs,
 				return (TRUE);
 			*addrp = target = mem_alloc(nodesize);
 			if (target == NULL) {
-				__warnx("xdr_array: out of memory");
+				__warnx(TIRPC_DEBUG_FLAG_XDR,
+                                        "xdr_array: out of memory");
 				return (FALSE);
 			}
 			memset(target, 0, nodesize);

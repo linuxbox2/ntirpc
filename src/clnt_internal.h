@@ -217,7 +217,8 @@ alloc_cx_data(enum CX_TYPE type, uint32_t sendsz, uint32_t recvsz)
         break;
     default:
         /* err */
-        __warnx("%s: asked to allocate cx_data of unknown type (BUG)",
+        __warnx(TIRPC_DEBUG_FLAG_MEM,
+                "%s: asked to allocate cx_data of unknown type (BUG)",
                 __func__);
         break;
     };
@@ -235,7 +236,8 @@ free_cx_data(struct cx_data *cx)
         break;
     default:
         /* err */
-        __warnx("%s: asked to free cx_data of unknown type (BUG)",
+        __warnx(TIRPC_DEBUG_FLAG_MEM,
+                "%s: asked to free cx_data of unknown type (BUG)",
                 __func__);
         break;
     };

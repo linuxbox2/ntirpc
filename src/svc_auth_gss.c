@@ -221,7 +221,8 @@ svcauth_gss_accept_sec_context(struct svc_req *rqst,
 	/* ANDROS: krb5 mechglue returns ctx of size 8 - two pointers,
 	 * one to the mechanism oid, one to the internal_ctx_id */
 	if ((gr->gr_ctx.value = mem_alloc(sizeof(gss_union_ctx_id_desc))) == NULL) {
-		__warnx("svcauth_gss_accept_context: out of memory\n");
+            __warnx(TIRPC_DEBUG_FLAG_AUTH,
+                    "svcauth_gss_accept_context: out of memory\n");
 		return (FALSE);
 	}
 	memcpy(gr->gr_ctx.value, gd->ctx, sizeof(gss_union_ctx_id_desc));
@@ -387,11 +388,13 @@ _svcauth_gss(struct svc_req *rqst, struct rpc_msg *msg, bool_t *no_dispatch)
 	if (rqst->rq_xprt->xp_auth == NULL ||
 	    rqst->rq_xprt->xp_auth == &svc_auth_none) {
 		if ((auth = mem_alloc(sizeof(*auth))) == NULL) {
-			__warnx("svcauth_gss: out_of_memory\n");
+                    __warnx(TIRPC_DEBUG_FLAG_AUTH,
+                            "svcauth_gss: out_of_memory\n");
 			return (AUTH_FAILED);
 		}
 		if ((gd = mem_alloc(sizeof(*gd))) == NULL) {
-			__warnx("svcauth_gss: out_of_memory\n");
+                    __warnx(TIRPC_DEBUG_FLAG_AUTH,
+                            "svcauth_gss: out_of_memory\n");
 			return (AUTH_FAILED);
 		}
 		auth->svc_ah_ops = &svc_auth_gss_ops;

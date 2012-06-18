@@ -111,7 +111,8 @@ clnt_raw_create(rpcprog_t prog, rpcvers_t vers)
 	call_msg.rm_call.cb_vers = (u_int32_t)vers;
 	xdrmem_create(xdrs, clp->u.mashl_callmsg, MCALL_MSG_SIZE, XDR_ENCODE); 
 	if (! xdr_callhdr(xdrs, &call_msg))
-		__warnx("clntraw_create - Fatal header serialization error.");
+            __warnx(TIRPC_DEBUG_FLAG_CLNT_RAW,
+                    "clntraw_create - Fatal header serialization error.");
 	clp->mcnt = XDR_GETPOS(xdrs);
 	XDR_DESTROY(xdrs);
 

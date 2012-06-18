@@ -95,7 +95,8 @@ char *p;
 	if(ptr->mech == NULL)
 		log_debug("NULL gss_OID mech");
 	else {
-		__warnx("     mechanism_OID: {");
+            __warnx(TIRPC_DEBUG_FLAG_AUTH,
+                    "     mechanism_OID: {");
 		p = (char *)ptr->mech->elements;
 		for (i=0; i < ptr->mech->length; i++)
 			/* First byte of OIDs encoded to save a byte */
@@ -118,17 +119,22 @@ char *p;
 					first = -1;
 					second = -1;
 				}
-				__warnx(" %u %u", first, second);
+				__warnx(TIRPC_DEBUG_FLAG_AUTH,
+                                        " %u %u", first, second);
 				p++;
 			}
 			else {
-				__warnx(" %u", (unsigned char)*p++);
+                            __warnx(TIRPC_DEBUG_FLAG_AUTH,
+                                    " %u", (unsigned char)*p++);
 			}
 		__warnx(" }\n");
 	}
-	__warnx("     qop: %d\n", ptr->qop);
-	__warnx("     service: %d\n", ptr->svc);
-	__warnx("     cred: %p\n", ptr->cred);
+	__warnx(TIRPC_DEBUG_FLAG_AUTH,
+                "     qop: %d\n", ptr->qop);
+	__warnx(TIRPC_DEBUG_FLAG_AUTH,
+                "     service: %d\n", ptr->svc);
+	__warnx(TIRPC_DEBUG_FLAG_AUTH,
+                "     cred: %p\n", ptr->cred);
 }
 #endif /*DEBUG*/
 
@@ -171,7 +177,8 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 		return (NULL);
 	}
 #ifdef DEBUG
-	__warnx("authgss_create: name is %p\n", name);
+	__warnx(TIRPC_DEBUG_FLAG_AUTH,
+                "authgss_create: name is %p\n", name);
 #endif
 	if (name != GSS_C_NO_NAME) {
 		if (gss_duplicate_name(&min_stat, name, &gd->name)
@@ -186,7 +193,8 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 		gd->name = name;
 
 #ifdef DEBUG
-	__warnx("authgss_create: gd->name is %p\n", gd->name);
+	__warnx(TIRPC_DEBUG_FLAG_AUTH,
+                "authgss_create: gd->name is %p\n", gd->name);
 #endif
 	gd->clnt = clnt;
 	gd->ctx = GSS_C_NO_CONTEXT;
@@ -240,7 +248,8 @@ authgss_create_default(CLIENT *clnt, char *service, struct rpc_gss_sec *sec)
 
 	if (name != GSS_C_NO_NAME) {
 #ifdef DEBUG
-		__warnx("authgss_create_default: freeing name %p\n", name);
+            __warnx(TIRPC_DEBUG_FLAG_AUTH,
+                    "authgss_create_default: freeing name %p\n", name);
 #endif
  		gss_release_name(&min_stat, &name);
 	}
@@ -360,7 +369,8 @@ authgss_validate(AUTH *auth, struct opaque_auth *verf)
 		 */
 		if ((gd->gc_wire_verf.value =
 				mem_alloc(verf->oa_length)) == NULL) {
-			__warnx("gss_validate: out of memory\n");
+                    __warnx(TIRPC_DEBUG_FLAG_AUTH,
+                            "gss_validate: out of memory\n");
 			return (FALSE);
 		}
 		memcpy(gd->gc_wire_verf.value, verf->oa_base, verf->oa_length);
@@ -606,7 +616,8 @@ authgss_destroy(AUTH *auth)
 	authgss_destroy_context(auth);
 
 #ifdef DEBUG
-	__warnx("authgss_destroy: freeing name %p\n", gd->name);
+	__warnx(TIRPC_DEBUG_FLAG_AUTH,
+                "authgss_destroy: freeing name %p\n", gd->name);
 #endif
 	if (gd->name != GSS_C_NO_NAME)
 		gss_release_name(&min_stat, &gd->name);

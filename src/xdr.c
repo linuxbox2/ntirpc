@@ -554,7 +554,8 @@ xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 			*cpp = sp = mem_alloc(nodesize);
 		}
 		if (sp == NULL) {
-			__warnx("xdr_bytes: out of memory");
+			__warnx(TIRPC_DEBUG_FLAG_XDR,
+                                "xdr_bytes: out of memory");
 			return (FALSE);
 		}
 		/* FALLTHROUGH */
@@ -690,7 +691,8 @@ xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 		if (sp == NULL)
 			*cpp = sp = mem_alloc(nodesize);
 		if (sp == NULL) {
-			__warnx("xdr_string: out of memory");
+			__warnx(TIRPC_DEBUG_FLAG_XDR,
+                                "xdr_string: out of memory");
 			return (FALSE);
 		}
 		sp[size] = 0;

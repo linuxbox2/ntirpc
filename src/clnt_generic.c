@@ -197,7 +197,8 @@ clnt_create_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
 			break;
 		}
 #ifdef CLNT_DEBUG
-		__warnx("%s: trying netid %s", __func__, nconf->nc_netid);
+		__warnx(TIRPC_DEBUG_FLAG_CLNT_GEN,
+                        "%s: trying netid %s", __func__, nconf->nc_netid);
 #endif
 		clnt = clnt_tp_create_timed(hostname, prog, vers, nconf, tp);
 		if (clnt)
@@ -428,7 +429,8 @@ __rpc_raise_fd(int fd)
 
 	if (close(fd) == -1) {
 	    /* this is okay, we will log an error, then use the new fd */
-	    __warnx("could not close() fd %d; mem & fd leak", fd);
+	    __warnx(TIRPC_DEBUG_FLAG_CLNT_GEN,
+                    "could not close() fd %d; mem & fd leak", fd);
 	}
 
 	return (nfd);

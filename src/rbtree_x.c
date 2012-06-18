@@ -47,9 +47,10 @@ int rbtx_init(struct rbtree_x *xt, opr_rbtree_cmpf_t cmpf, uint32_t npart,
 
     if ((npart > RBTX_REC_MAXPART) ||
         (npart % 2 == 0)) {
-            __warnx("rbtx_init: value %d is an unlikely value for npart "
-                    "(suggest a small prime)",
-                    npart);
+        __warnx(TIRPC_DEBUG_FLAG_RBTREE,
+                "rbtx_init: value %d is an unlikely value for npart "
+                "(suggest a small prime)",
+                npart);
         }
 
     if (flags & RBT_X_FLAG_ALLOC)

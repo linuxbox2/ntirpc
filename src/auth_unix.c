@@ -382,9 +382,9 @@ marshal_new_auth(AUTH *auth)
 	xdrmem_create(xdrs, au->au_marshed, MAX_AUTH_BYTES, XDR_ENCODE);
 	if ((! xdr_opaque_auth(xdrs, &(auth->ah_cred))) ||
 	    (! xdr_opaque_auth(xdrs, &(auth->ah_verf))))
-		__warnx("auth_none.c - Fatal marshalling problem");
+		__warnx(TIRPC_DEBUG_FLAG_AUTH, "auth_none.c - Fatal marshalling problem");
 	else
-		au->au_mpos = XDR_GETPOS(xdrs);
+            au->au_mpos = XDR_GETPOS(xdrs);
 	XDR_DESTROY(xdrs);
 }
 

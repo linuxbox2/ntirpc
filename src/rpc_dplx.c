@@ -77,7 +77,8 @@ xdr_dplx_msg(XDR *xdrs, struct rpc_msg *dmsg)
                 IXDR_PUT_ENUM(buf, dmsg->rm_direction);
                 switch (dmsg->rm_direction) {
                 case CALL:
-                    __warnx("%s 1: XDR_ENCODE INLINE CALL", __func__);
+                    __warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+                            "%s 1: XDR_ENCODE INLINE CALL", __func__);
                     IXDR_PUT_INT32(buf, dmsg->rm_call.cb_rpcvers);
                     if (dmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION) {
                         return (FALSE);
@@ -103,7 +104,8 @@ xdr_dplx_msg(XDR *xdrs, struct rpc_msg *dmsg)
                     return (TRUE);
                     break;
                 case REPLY:
-                    __warnx("%s 2: INLINE un impl. XDR_ENCODE REPLY", __func__);
+                    __warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+                            "%s 2: INLINE un impl. XDR_ENCODE REPLY", __func__);
                     return (inline_xdr_union(
                                 xdrs, (enum_t *)&(dmsg->rm_reply.rp_stat),
                                 (caddr_t)(void *)&(dmsg->rm_reply.ru),
@@ -121,7 +123,8 @@ xdr_dplx_msg(XDR *xdrs, struct rpc_msg *dmsg)
                     inline_xdr_enum(xdrs, (enum_t *)&(dmsg->rm_direction))) {
                     switch (dmsg->rm_direction) {
                     case CALL:
-                        __warnx("%s 3: non-INLINE inline XDR_ENCODE CALL",
+                        __warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+                                "%s 3: non-INLINE inline XDR_ENCODE CALL",
                                 __func__);
                     if (
                         inline_xdr_u_int32_t(
@@ -138,7 +141,8 @@ xdr_dplx_msg(XDR *xdrs, struct rpc_msg *dmsg)
                                 xdrs, &(dmsg->rm_call.cb_verf)));
                     break;
                 case REPLY:
-                    __warnx("%s 4: non INLINE need inline impl. "
+                    __warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+                            "%s 4: non INLINE need inline impl. "
                             "XDR_ENCODE REPLY",
                             __func__);
                     return (
@@ -162,7 +166,8 @@ xdr_dplx_msg(XDR *xdrs, struct rpc_msg *dmsg)
                 dmsg->rm_direction = IXDR_GET_ENUM(buf, enum msg_type);
                 switch (dmsg->rm_direction) {
                 case CALL:
-                    __warnx("%s 5: XDR_DECODE INLINE CALL", __func__);
+                    __warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+                            "%s 5: XDR_DECODE INLINE CALL", __func__);
                     dmsg->rm_call.cb_rpcvers = IXDR_GET_U_INT32(buf);
                     if (dmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION) {
                         return (FALSE);
@@ -234,7 +239,8 @@ xdr_dplx_msg(XDR *xdrs, struct rpc_msg *dmsg)
                     return (TRUE);
                     break;
                 case REPLY:
-                    __warnx("%s 6: INLINE XDR_ENCODE REPLY (not properly "
+                    __warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+                            "%s 6: INLINE XDR_ENCODE REPLY (not properly "
                             "INLINE, not reached?)", __func__);
                     return (inline_xdr_union(
                                 xdrs,
@@ -255,7 +261,8 @@ xdr_dplx_msg(XDR *xdrs, struct rpc_msg *dmsg)
                     inline_xdr_enum(xdrs, (enum_t *)&(dmsg->rm_direction))) {
                     switch (dmsg->rm_direction) {
                     case CALL:
-                        __warnx("%s 7: non-inline CALL", __func__);
+                        __warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+                                "%s 7: non-inline CALL", __func__);
                         if (
                             inline_xdr_u_int32_t(
                                 xdrs, &(dmsg->rm_call.cb_rpcvers)) &&
@@ -273,8 +280,8 @@ xdr_dplx_msg(XDR *xdrs, struct rpc_msg *dmsg)
                                     xdrs, &(dmsg->rm_call.cb_verf)));
                         break;
                     case REPLY:
-                        __warnx("%s 8: non-INLINE REPLY", __func__);
-
+                        __warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+                                "%s 8: non-INLINE REPLY", __func__);
                             if (! inline_xdr_enum(
                                     xdrs, (enum_t *) &(dmsg->rm_reply.rp_stat)))
                                 return (FALSE);
@@ -317,7 +324,8 @@ xdr_dplx_msg(XDR *xdrs, struct rpc_msg *dmsg)
                             case MSG_DENIED:
                             {
                                 /* XXX branch not verified */
-                                __warnx("non-inline MSG_DENIED not verified");
+                                __warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+                                        "non-inline MSG_DENIED not verified");
                                 struct rejected_reply *rr =
                                     (struct rejected_reply *)
                                     &(dmsg->rm_reply.ru);
@@ -508,7 +516,8 @@ xdr_dplx_msg_decode_continue(xdrs, dmsg)
                 return (TRUE);
                 break;
             case REPLY:
-                __warnx("%s 6: INLINE XDR_ENCODE REPLY (not properly "
+                __warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+                        "%s 6: INLINE XDR_ENCODE REPLY (not properly "
                         "INLINE, not reached?)", __func__);
                 return (inline_xdr_union(
                             xdrs,
@@ -526,7 +535,8 @@ xdr_dplx_msg_decode_continue(xdrs, dmsg)
             /* ! inline */
             switch (dmsg->rm_direction) {
             case CALL:
-                __warnx("%s 7: non-inline CALL", __func__);
+                __warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+                        "%s 7: non-inline CALL", __func__);
                 if (inline_xdr_opaque_auth(
                         xdrs, &(dmsg->rm_call.cb_cred)) )
                     return (
@@ -534,7 +544,8 @@ xdr_dplx_msg_decode_continue(xdrs, dmsg)
                             xdrs, &(dmsg->rm_call.cb_verf)));
                 break;
             case REPLY:
-                __warnx("%s 8: non-INLINE REPLY", __func__);
+                __warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+                        "%s 8: non-INLINE REPLY", __func__);
                 if (! inline_xdr_enum(
                         xdrs, (enum_t *) &(dmsg->rm_reply.rp_stat)))
                     return (FALSE);
@@ -577,7 +588,8 @@ xdr_dplx_msg_decode_continue(xdrs, dmsg)
                 case MSG_DENIED:
                 {
                     /* XXX branch not verified */
-                    __warnx("non-inline MSG_DENIED not verified");
+                    __warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+                            "non-inline MSG_DENIED not verified");
                     struct rejected_reply *rr =
                         (struct rejected_reply *)
                         &(dmsg->rm_reply.ru);

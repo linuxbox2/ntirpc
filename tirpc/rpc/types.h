@@ -83,9 +83,33 @@ typedef int32_t rpc_inline_t;
  * Debug flags support
  */
 
-#define TIRPC_FLAGS_NONE                 0x00000
-#define TIRPC_DEBUG_FLAGS_NONE           0x00000
-#define TIRPC_DEBUG_FLAGS_RPC_CACHE      0x00001
+#define TIRPC_FLAG_NONE                 0x0000000
+#define TIRPC_DEBUG_FLAG_NONE           0x0000000
+#define TIRPC_DEBUG_FLAG_DEFAULT        0x0000001
+#define TIRPC_DEBUG_FLAG_RPC_CACHE      0x0000002
+#define TIRPC_DEBUG_FLAG_RPC_MSG        0x0000004
+#define TIRPC_DEBUG_FLAG_LOCK           0x0000008
+#define TIRPC_DEBUG_FLAG_MEM            0x0000010
+#define TIRPC_DEBUG_FLAG_XDR            0x0000020
+#define TIRPC_DEBUG_FLAG_RPCB           0x0000040
+#define TIRPC_DEBUG_FLAG_AUTH           0x0000080
+#define TIRPC_DEBUG_FLAG_CLNT_BCAST     0x0000100
+#define TIRPC_DEBUG_FLAG_CLNT_DG        0x0000200
+#define TIRPC_DEBUG_FLAG_CLNT_GEN       0x0000400
+#define TIRPC_DEBUG_FLAG_CLNT_RAW       0x0000800
+#define TIRPC_DEBUG_FLAG_CLNT_RDMA      0x0001000
+#define TIRPC_DEBUG_FLAG_CLNT_SCTP      0x0002000
+#define TIRPC_DEBUG_FLAG_CLNT_VC        0x0004000
+#define TIRPC_DEBUG_FLAG_SVC            0x0008000
+#define TIRPC_DEBUG_FLAG_SVC_DG         0x0010000
+#define TIRPC_DEBUG_FLAG_SVC_RQST       0x0020000
+#define TIRPC_DEBUG_FLAG_SVC_XPRT       0x0040000
+#define TIRPC_DEBUG_FLAG_SVC_RDMA       0x0080000
+#define TIRPC_DEBUG_FLAG_SVC_SCTP       0x0100000
+#define TIRPC_DEBUG_FLAG_SVC_VC         0x0200000
+#define TIRPC_DEBUG_FLAG_XDRREC         0x0400000
+#define TIRPC_DEBUG_FLAG_RBTREE         0x0800000
+#define TIRPC_DEBUG_FLAG_RPC_CTX        0x1000000
 
 typedef void *(*mem_alloc_t)(size_t);
 typedef void (*mem_free_t)(void *, size_t);
@@ -106,7 +130,12 @@ typedef struct tirpc_pkg_params {
 
 extern tirpc_pkg_params __pkg_params;
 
-#define __warnx(...) __pkg_params.warnx(__VA_ARGS__)
+#define __warnx(flags, ...) \
+    do { \
+        if (__pkg_params.debug_flags & (flags)) \
+            __pkg_params.warnx(__VA_ARGS__); \
+    } while (0)
+
 #define mem_alloc(size) __pkg_params.mem_alloc((size))
 #define mem_free(ptr, size) __pkg_params.mem_free((ptr),(size))
 #define __free(ptr) __pkg_params.free((ptr))

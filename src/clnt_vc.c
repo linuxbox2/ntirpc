@@ -460,21 +460,24 @@ call_again:
         ctx->msg->acpted_rply.ar_results.where = NULL;
         ctx->msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
         if (! xdrrec_skiprecord(xdrs)) {
-            __warnx("%s: error at skiprecord",
-                    __func__);
+            __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+                    "%s: error at skiprecord", __func__);
             vc_call_return(ctx->error.re_status);
         }
         /* now decode and validate the response header */
         if (! xdr_dplx_msg_decode_start(xdrs, ctx->msg)) {
-            __warnx("%s: error at xdr_dplx_msg_start", __func__);
+            __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+                    "%s: error at xdr_dplx_msg_start", __func__);
             vc_call_return(ctx->error.re_status);
         }
         if (! xdr_dplx_msg_decode_continue(xdrs, ctx->msg)) {
-            __warnx("%s: error at xdr_dplx_msg_continue", __func__);
+            __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+                    "%s: error at xdr_dplx_msg_continue", __func__);
             vc_call_return(ctx->error.re_status);
         }
 
-        __warnx("%s: successful xdr_dplx_msg (direction==%d)\n",
+        __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+                "%s: successful xdr_dplx_msg (direction==%d)\n",
                 __func__, ctx->msg->rm_direction);
         /* switch on direction */
         switch (ctx->msg->rm_direction) {
@@ -492,7 +495,8 @@ call_again:
                 cd = (struct cf_conn *) duplex_xprt->xp_p1;
                 /* XXX Ugh.  Here's another mt-unsafe copy of xid. */
                 cd->x_id = ctx->msg->rm_xid;
-                __warnx("%s: call intercepted, dispatching (x_id == %d)\n",
+                __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+                        "%s: call intercepted, dispatching (x_id == %d)\n",
                         __func__, cd->x_id);
                 duplex_xprt->xp_ops2->xp_dispatch(duplex_xprt, &ctx->msg);
             }

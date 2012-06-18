@@ -191,7 +191,7 @@ clnt_dg_create(int fd,			        /* open file descriptor */
 	
 	return (cl);
 err1:
-	__warnx(mem_err_clnt_dg);
+	__warnx(TIRPC_DEBUG_FLAG_CLNT_DG, mem_err_clnt_dg);
 	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 	rpc_createerr.cf_error.re_errno = errno;
 err2:

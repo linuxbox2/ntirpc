@@ -79,7 +79,8 @@ alloc_rpc_call_ctx(CLIENT *cl, rpcproc_t proc, xdrproc_t xdr_args,
 
     /* stash it */
     if (opr_rbtree_insert(&crec->calls.t, &ctx->node_k)) {
-        __warnx("%s: call ctx insert failed (xid %d client %p)",
+        __warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
+                "%s: call ctx insert failed (xid %d client %p)",
                 __func__,
                 ctx->xid, cl);
         mem_free(ctx, sizeof(rpc_ctx_t));
@@ -100,7 +101,8 @@ void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
     opr_rbtree_remove(&crec->calls.t, &ctx->node_k);
     ctx->xid = ++(crec->calls.xid);
     if (opr_rbtree_insert(&crec->calls.t, &ctx->node_k)) {
-        __warnx("%s: call ctx insert failed (xid %d client %p)",
+        __warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
+                "%s: call ctx insert failed (xid %d client %p)",
                 __func__,
                 ctx->xid,
                 ctx->ctx_u.clnt.cl);
@@ -136,7 +138,8 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
             assert(duplex_xprt);
             cd = (struct cf_conn *) duplex_xprt->xp_p1;
             cd->x_id = msg->rm_xid;
-            __warnx("%s: call intercepted, dispatching (x_id == %d)\n",
+            __warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
+                    "%s: call intercepted, dispatching (x_id == %d)\n",
                     __func__, cd->x_id);
             duplex_xprt->xp_ops2->xp_dispatch(duplex_xprt, &msg);
         }

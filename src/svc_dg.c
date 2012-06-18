@@ -112,7 +112,8 @@ svc_dg_create(int fd, u_int sendsize, u_int recvsize)
 	socklen_t slen;
 
 	if (!__rpc_fd2sockinfo(fd, &si)) {
-		__warnx(svc_dg_str, svc_dg_err1);
+            __warnx(TIRPC_DEBUG_FLAG_SVC_DG,
+                    svc_dg_str, svc_dg_err1);
 		return (NULL);
 	}
 	/*
@@ -121,7 +122,8 @@ svc_dg_create(int fd, u_int sendsize, u_int recvsize)
 	sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsize);
 	recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsize);
 	if ((sendsize == 0) || (recvsize == 0)) {
-		__warnx(svc_dg_str, svc_dg_err2);
+            __warnx(TIRPC_DEBUG_FLAG_SVC_DG,
+                    svc_dg_str, svc_dg_err2);
 		return (NULL);
 	}
 
@@ -164,7 +166,8 @@ svc_dg_create(int fd, u_int sendsize, u_int recvsize)
 
 	return (xprt);
 freedata:
-	(void) __warnx(svc_dg_str, __no_mem_str);
+	__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
+                svc_dg_str, __no_mem_str);
 	if (xprt) {
             if (su)
                 (void) mem_free(su, sizeof (*su));
@@ -448,13 +451,15 @@ svc_dg_enablecache(SVCXPRT *transp, u_int size)
 
 	mutex_lock(&dupreq_lock);
 	if (su->su_cache != NULL) {
-		(void) __warnx(cache_enable_str, enable_err, " ");
+		__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
+                           cache_enable_str, enable_err, " ");
 		mutex_unlock(&dupreq_lock);
 		return (0);
 	}
 	uc = ALLOC(struct cl_cache, 1);
 	if (uc == NULL) {
-		__warnx(cache_enable_str, alloc_err, " ");
+		__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
+                    cache_enable_str, alloc_err, " ");
 		mutex_unlock(&dupreq_lock);
 		return (0);
 	}
@@ -462,7 +467,8 @@ svc_dg_enablecache(SVCXPRT *transp, u_int size)
 	uc->uc_nextvictim = 0;
 	uc->uc_entries = ALLOC(cache_ptr, size * SPARSENESS);
 	if (uc->uc_entries == NULL) {
-		__warnx(cache_enable_str, alloc_err, "data");
+		__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
+                    cache_enable_str, alloc_err, "data");
 		FREE(uc, struct cl_cache, 1);
 		mutex_unlock(&dupreq_lock);
 		return (0);
@@ -470,7 +476,8 @@ svc_dg_enablecache(SVCXPRT *transp, u_int size)
 	MEMZERO(uc->uc_entries, cache_ptr, size * SPARSENESS);
 	uc->uc_fifo = ALLOC(cache_ptr, size);
 	if (uc->uc_fifo == NULL) {
-		__warnx(cache_enable_str, alloc_err, "fifo");
+		__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
+                    cache_enable_str, alloc_err, "fifo");
 		FREE(uc->uc_entries, cache_ptr, size * SPARSENESS);
 		FREE(uc, struct cl_cache, 1);
 		mutex_unlock(&dupreq_lock);
@@ -520,7 +527,8 @@ svc_dg_cache_set(SVCXPRT *xprt, size_t replylen)
 			vicp = &(*vicp)->cache_next)
 			;
 		if (*vicp == NULL) {
-			__warnx(cache_set_str, cache_set_err1);
+			__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
+                            cache_set_str, cache_set_err1);
 			mutex_unlock(&dupreq_lock);
 			return;
 		}
@@ -529,13 +537,15 @@ svc_dg_cache_set(SVCXPRT *xprt, size_t replylen)
 	} else {
 		victim = ALLOC(struct cache_node, 1);
 		if (victim == NULL) {
-			__warnx(cache_set_str, cache_set_err2);
+			__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
+                            cache_set_str, cache_set_err2);
 			mutex_unlock(&dupreq_lock);
 			return;
 		}
 		newbuf = mem_alloc(su->su_iosz);
 		if (newbuf == NULL) {
-			__warnx(cache_set_str, cache_set_err3);
+			__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
+                            cache_set_str, cache_set_err3);
 			FREE(victim, struct cache_node, 1);
 			mutex_unlock(&dupreq_lock);
 			return;
@@ -545,12 +555,13 @@ svc_dg_cache_set(SVCXPRT *xprt, size_t replylen)
 	/*
 	 * Store it away
 	 */
-	if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAGS_RPC_CACHE) {
+	if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_RPC_CACHE) {
 	    nconf = getnetconfigent(xprt->xp_netid);
 	    if (nconf) {
 		uaddr = taddr2uaddr(nconf, &xprt->xp_rtaddr);
 		freenetconfigent(nconf);
-		__warnx("cache set for xid= %x prog=%d vers=%d proc=%d "
+			__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
+                        "cache set for xid= %x prog=%d vers=%d proc=%d "
                         "for rmtaddr=%s\n",
                         su->su_xid, uc->uc_prog, uc->uc_vers,
                         uc->uc_proc, uaddr);
@@ -603,12 +614,13 @@ svc_dg_cache_get(SVCXPRT *xprt, struct rpc_msg *msg, char **replyp,
 			ent->cache_addr.len == xprt->xp_rtaddr.len &&
 			(memcmp(ent->cache_addr.buf, xprt->xp_rtaddr.buf,
 				xprt->xp_rtaddr.len) == 0)) {
-		    if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAGS_RPC_CACHE) {
+		    if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_RPC_CACHE) {
 			nconf = getnetconfigent(xprt->xp_netid);
 			if (nconf) {
 			    uaddr = taddr2uaddr(nconf, &xprt->xp_rtaddr);
 			    freenetconfigent(nconf);
-			    __warnx("cache entry found for xid=%x prog=%d "
+			    __warnx(TIRPC_DEBUG_FLAG_SVC_DG,
+                                    "cache entry found for xid=%x prog=%d "
                                     "vers=%d proc=%d for rmtaddr=%s\n",
                                     su->su_xid, msg->rm_call.cb_prog,
                                     msg->rm_call.cb_vers,

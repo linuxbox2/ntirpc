@@ -514,7 +514,7 @@ inline_xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 		    *cpp = sp = (char*)mem_alloc(nodesize);
 		}
 		if (sp == NULL) {
-			__warnx("xdr_bytes: out of memory");
+			__warnx(TIRPC_DEBUG_FLAG_XDR, "xdr_bytes: out of memory");
 			return (FALSE);
 		}
 		/* FALLTHROUGH */

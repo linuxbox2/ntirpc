@@ -99,7 +99,8 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 	extern mutex_t proglst_lock;
 
 	if (procnum == NULLPROC) {
-		__warnx("%s can't reassign procedure number %u", rpc_reg_msg,
+            __warnx(TIRPC_DEBUG_FLAG_SVC,
+                    "%s can't reassign procedure number %u", rpc_reg_msg,
 			NULLPROC);
 		return (-1);
 	}
@@ -107,7 +108,8 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 	if (nettype == NULL)
 		nettype = "netpath";		/* The default behavior */
 	if ((handle = __rpc_setconf(nettype)) == NULL) {
-		__warnx(rpc_reg_err, rpc_reg_msg, __reg_err1);
+            __warnx(TIRPC_DEBUG_FLAG_SVC,
+                    rpc_reg_err, rpc_reg_msg, __reg_err1);
 		return (-1);
 	}
 /* VARIABLES PROTECTED BY proglst_lock: proglst */
@@ -141,19 +143,22 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 			if (svcxprt == NULL)
 				continue;
 			if (!__rpc_fd2sockinfo(svcxprt->xp_fd, &si)) {
-				__warnx(rpc_reg_err, rpc_reg_msg, __reg_err2);
+                            __warnx(TIRPC_DEBUG_FLAG_SVC,
+                                    rpc_reg_err, rpc_reg_msg, __reg_err2);
 				SVC_DESTROY(svcxprt);
 				continue;
 			}
 			recvsz = __rpc_get_t_size(si.si_af, si.si_proto, 0);
 			if (recvsz == 0) {
-				__warnx(rpc_reg_err, rpc_reg_msg, __reg_err3);
+                            __warnx(TIRPC_DEBUG_FLAG_SVC,
+                                    rpc_reg_err, rpc_reg_msg, __reg_err3);
 				SVC_DESTROY(svcxprt);
 				continue;
 			}
 			if (((xdrbuf = mem_alloc((unsigned)recvsz)) == NULL) ||
                             ((netid = rpc_strdup(nconf->nc_netid)) == NULL)) {
-				__warnx(rpc_reg_err, rpc_reg_msg, __no_mem_str);
+                            __warnx(TIRPC_DEBUG_FLAG_SVC,
+                                    rpc_reg_err, rpc_reg_msg, __no_mem_str);
 				SVC_DESTROY(svcxprt);
 				break;
 			}
@@ -176,7 +181,8 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 		}
 
 		if (!svc_reg(svcxprt, prognum, versnum, universal, nconf)) {
-			__warnx("%s couldn't register prog %u vers %u for %s",
+                    __warnx(TIRPC_DEBUG_FLAG_SVC,
+                            "%s couldn't register prog %u vers %u for %s",
 				rpc_reg_msg, (unsigned)prognum,
 				(unsigned)versnum, netid);
 			if (madenow) {
@@ -189,7 +195,8 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 
 		pl = mem_alloc(sizeof (struct proglst));
 		if (pl == NULL) {
-			__warnx(rpc_reg_err, rpc_reg_msg, __no_mem_str);
+                    __warnx(TIRPC_DEBUG_FLAG_SVC,
+                            rpc_reg_err, rpc_reg_msg, __no_mem_str);
 			if (madenow) {
 				SVC_DESTROY(svcxprt);
 				__free(xdrbuf);
@@ -215,8 +222,9 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 	mutex_unlock(&proglst_lock);
 
 	if (done == FALSE) {
-		__warnx("%s cant find suitable transport for %s",
-			rpc_reg_msg, nettype);
+            __warnx(TIRPC_DEBUG_FLAG_SVC,
+                    "%s cant find suitable transport for %s",
+                    rpc_reg_msg, nettype);
 		return (-1);
 	}
 	return (0);
@@ -244,7 +252,8 @@ universal(struct svc_req *rqstp, SVCXPRT *transp)
 	if (rqstp->rq_proc == NULLPROC) {
 		if (svc_sendreply(transp, (xdrproc_t) xdr_void, NULL) ==
 		    FALSE) {
-			__warnx("svc_sendreply failed");
+                    __warnx(TIRPC_DEBUG_FLAG_SVC,
+                            "svc_sendreply failed");
 		}
 		return;
 	}
@@ -278,8 +287,8 @@ universal(struct svc_req *rqstp, SVCXPRT *transp)
 				return;
 			}
 			if (!svc_sendreply(transp, pl->p_outproc, outdata)) {
-				__warnx(
-			"rpc: rpc_reg trouble replying to prog %u vers %u",
+                            __warnx(TIRPC_DEBUG_FLAG_SVC,
+                                    "rpc: rpc_reg trouble replying to prog %u vers %u",
 				(unsigned)prog, (unsigned)vers);
 				mutex_unlock(&proglst_lock);
 				return;
@@ -291,7 +300,8 @@ universal(struct svc_req *rqstp, SVCXPRT *transp)
 		}
 	mutex_unlock(&proglst_lock);
 	/* This should never happen */
-	__warnx("rpc: rpc_reg: never registered prog %u vers %u",
+	__warnx(TIRPC_DEBUG_FLAG_SVC,
+                "rpc: rpc_reg: never registered prog %u vers %u",
 		(unsigned)prog, (unsigned)vers);
 	return;
 }

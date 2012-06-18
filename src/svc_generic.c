@@ -84,7 +84,8 @@ svc_create(void (*dispatch)(struct svc_req *, SVCXPRT *),
 /* VARIABLES PROTECTED BY xprtlist_lock: xprtlist */
 
 	if ((handle = __rpc_setconf(nettype)) == NULL) {
-		__warnx("svc_create: unknown protocol");
+            __warnx(TIRPC_DEBUG_FLAG_SVC,
+                    "svc_create: unknown protocol");
 		return (0);
 	}
 	while ((nconf = __rpc_getconf(handle)) != NULL) {
@@ -95,8 +96,9 @@ svc_create(void (*dispatch)(struct svc_req *, SVCXPRT *),
 				(void) rpcb_unset(prognum, versnum, nconf);
 				if (svc_reg(l->xprt, prognum, versnum,
 					dispatch, nconf) == FALSE)
-					__warnx(
-		"svc_create: could not register prog %u vers %u on %s",
+                                    __warnx(TIRPC_DEBUG_FLAG_SVC,
+                                            "svc_create: could not register "
+                                            "prog %u vers %u on %s",
 					(unsigned)prognum, (unsigned)versnum,
 					 nconf->nc_netid);
 				else
@@ -110,7 +112,8 @@ svc_create(void (*dispatch)(struct svc_req *, SVCXPRT *),
 			if (xprt) {
 				l = (struct xlist *) mem_alloc(sizeof (*l));
 				if (l == NULL) {
-					__warnx("svc_create: no memory");
+                                    __warnx(TIRPC_DEBUG_FLAG_SVC,
+                                            "svc_create: no memory");
 					mutex_unlock(&xprtlist_lock);
 					return (0);
 				}
@@ -144,8 +147,8 @@ svc_tp_create(void (*dispatch)(struct svc_req *, SVCXPRT *),
 	SVCXPRT *xprt;
 
 	if (nconf == NULL) {
-		__warnx(
-	"svc_tp_create: invalid netconfig structure for prog %u vers %u",
+            __warnx(TIRPC_DEBUG_FLAG_SVC,
+                    "svc_tp_create: invalid netconfig structure for prog %u vers %u",
 				(unsigned)prognum, (unsigned)versnum);
 		return (NULL);
 	}
@@ -156,8 +159,8 @@ svc_tp_create(void (*dispatch)(struct svc_req *, SVCXPRT *),
 	/*LINTED const castaway*/
 	(void) rpcb_unset(prognum, versnum, (struct netconfig *) nconf);
 	if (svc_reg(xprt, prognum, versnum, dispatch, nconf) == FALSE) {
-		__warnx(
-		"svc_tp_create: Could not register prog %u vers %u on %s",
+            __warnx(TIRPC_DEBUG_FLAG_SVC,
+                    "svc_tp_create: Could not register prog %u vers %u on %s",
 				(unsigned)prognum, (unsigned)versnum,
 				nconf->nc_netid);
 		SVC_DESTROY(xprt);
@@ -190,12 +193,13 @@ svc_tli_create(int fd,				/* Connection end point */
 
 	if (fd == RPC_ANYFD) {
 		if (nconf == NULL) {
-			__warnx("svc_tli_create: invalid netconfig");
+                    __warnx(TIRPC_DEBUG_FLAG_SVC,
+                            "svc_tli_create: invalid netconfig");
 			return (NULL);
 		}
 		fd = __rpc_nconf2fd(nconf);
 		if (fd == -1) {
-			__warnx(
+                    __warnx(TIRPC_DEBUG_FLAG_SVC,
 			    "svc_tli_create: could not open connection for %s",
 					nconf->nc_netid);
 			return (NULL);
@@ -207,8 +211,8 @@ svc_tli_create(int fd,				/* Connection end point */
 		 * It is an open descriptor. Get the transport info.
 		 */
 		if (!__rpc_fd2sockinfo(fd, &si)) {
-			__warnx(
-		"svc_tli_create: could not get transport information");
+                    __warnx(TIRPC_DEBUG_FLAG_SVC,
+                            "svc_tli_create: could not get transport information");
 			return (NULL);
 		}
 	}
@@ -223,8 +227,9 @@ svc_tli_create(int fd,				/* Connection end point */
 				ss.ss_family = si.si_af;
 				if (bind(fd, (struct sockaddr *)(void *)&ss,
 				    (socklen_t)si.si_alen) < 0) {
-					__warnx(
-			"svc_tli_create: could not bind to anonymous port");
+                                    __warnx(TIRPC_DEBUG_FLAG_SVC,
+                                            "svc_tli_create: could not bind to "
+                                            "anonymous port");
 					goto freedata;
 				}
 			}
@@ -233,8 +238,9 @@ svc_tli_create(int fd,				/* Connection end point */
 			if (bind(fd,
 			    (struct sockaddr *)bindaddr->addr.buf,
 			    (socklen_t)si.si_alen) < 0) {
-				__warnx(
-		"svc_tli_create: could not bind to requested address");
+                            __warnx(TIRPC_DEBUG_FLAG_SVC,
+                                    "svc_tli_create: could not bind to requested "
+                                    "address");
 				goto freedata;
 			}
 			listen(fd, (int)bindaddr->qlen);
@@ -266,7 +272,8 @@ svc_tli_create(int fd,				/* Connection end point */
             xprt = svc_dg_create(fd, sendsz, recvsz);
             break;
         default:
-            __warnx("svc_tli_create: bad service type");
+            __warnx(TIRPC_DEBUG_FLAG_SVC,
+                    "svc_tli_create: bad service type");
             goto freedata;
 	}
 

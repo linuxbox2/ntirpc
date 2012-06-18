@@ -112,7 +112,8 @@ void
 svc_init(svc_init_params * params)
 {
     if (__svc_params->initialized) {
-        __warnx("svc_init: multiple initialization attempt (nothing happens)");
+        __warnx(TIRPC_DEBUG_FLAG_SVC,
+                "svc_init: multiple initialization attempt (nothing happens)");
         return;
     }
 
@@ -1049,10 +1050,12 @@ svc_getreq_default(SVCXPRT *xprt)
               goto call_done;
               break;
           case SVC_LKP_VERS_NOTFOUND:
-              __warnx("%s: dispatch prog vers notfound\n", __func__);
+              __warnx(TIRPC_DEBUG_FLAG_SVC,
+                      "%s: dispatch prog vers notfound\n", __func__);
               svcerr_progvers2(xprt, &r, vrange.lowvers, vrange.highvers);
           default:
-              __warnx("%s: dispatch prog notfound\n", __func__);
+              __warnx(TIRPC_DEBUG_FLAG_SVC,
+                      "%s: dispatch prog notfound\n", __func__);
               svcerr_noprog2(xprt, &r);
               break;
           }
@@ -1067,7 +1070,8 @@ svc_getreq_default(SVCXPRT *xprt)
            * be a motivation for adding a lifecycle callback, since the API
            * client can get a new-xprt callback, and could have kept the
            * address (and should now be notified we are disposing it). */
-          __warnx("%s: stat == XPRT_DIED (%p) \n", __func__, xprt);
+          __warnx(TIRPC_DEBUG_FLAG_SVC,
+                  "%s: stat == XPRT_DIED (%p) \n", __func__, xprt);
           SVC_DESTROY(xprt);
           break;
 

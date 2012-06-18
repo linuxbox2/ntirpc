@@ -79,8 +79,8 @@ xdr_reference(XDR *xdrs,
 		case XDR_DECODE:
 			*pp = loc = (caddr_t) mem_alloc(size);
 			if (loc == NULL) {
-				__warnx("xdr_reference: out of memory");
-				return (FALSE);
+                            __warnx(TIRPC_DEBUG_FLAG_XDR, "xdr_reference: out of memory");
+                            return (FALSE);
 			}
 			memset(loc, 0, size);
 			break;
