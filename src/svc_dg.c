@@ -140,6 +140,7 @@ svc_dg_create(int fd, u_int sendsize, u_int recvsize)
 		goto freedata;
 	xdrmem_create(&(su->su_xdrs), rpc_buffer(xprt), su->su_iosz,
 		XDR_DECODE);
+
 	su->su_cache = NULL;
 	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
 	xprt->xp_fd = fd;
@@ -152,7 +153,24 @@ svc_dg_create(int fd, u_int sendsize, u_int recvsize)
 	slen = sizeof ss;
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0)
 		goto freedata;
+
 	__rpc_set_netbuf(&xprt->xp_ltaddr, &ss, slen);
+
+	switch (ss.ss_family) {
+		case AF_INET:
+                    xprt->xp_port = ntohs(((struct sockaddr_in *) &ss)->sin_port);
+                    break;
+#ifdef INET6
+		case AF_INET6:
+                    xprt->xp_port = ntohs(((struct sockaddr_in6 *) &ss)->sin6_port);
+                    break;
+#endif
+		case AF_LOCAL:
+                    /* no port */
+                    break;
+		default:
+			break;
+	}
 
 	/* Enable reception of IP*_PKTINFO control msgs */
 	svc_dg_enable_pktinfo(fd, &si);
