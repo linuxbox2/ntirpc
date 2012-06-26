@@ -304,7 +304,7 @@ static inline void evchan_unreg_impl(struct svc_rqst_rec *sr_rec,
     struct svc_xprt_ev *xp_ev;
     struct opr_rbtree_node *nx;
 
-    if (! (flags & SVC_RQST_FLAG_SREC_LOCK))
+    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
         mutex_lock(&sr_rec->mtx);
 
     assert(xprt->xp_ev); /* cf. svc_rqst_init_xprt */
@@ -327,7 +327,7 @@ static inline void evchan_unreg_impl(struct svc_rqst_rec *sr_rec,
     /* unlink from xprt */
     xp_ev->sr_rec = NULL;
 
-    if (! (flags & SVC_RQST_FLAG_SREC_LOCK))
+    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
         mutex_unlock(&sr_rec->mtx);
 }
 
@@ -381,7 +381,7 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
         xprt = opr_containerof(n, struct svc_xprt_ev, node_k)->xprt;
         /* stop processing events */
         evchan_unreg_impl(sr_rec, xprt,
-                          (SVC_RQST_FLAG_RLOCK | SVC_RQST_FLAG_SREC_LOCK));
+                          (SVC_RQST_FLAG_RLOCK | SVC_RQST_FLAG_SREC_LOCKED));
 
         /* wake up*/
         ev_sig(sr_rec->sv[0], 0);
@@ -392,10 +392,13 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
                              EPOLL_CTL_DEL,
                              sr_rec->sv[1],
                              &sr_rec->ev_u.epoll.ctrl_ev);
-            if (code == -1)
+            if (code == -1) {
+                /* XXX this may be typical atm, since we close xprt->xp_fd
+                 * first, which removes fd from the kernels' epoll set */
                 __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
                         "%s: epoll del control socket failed (%d)",
                         __func__, errno);
+            }
             break;
 #endif
         default:
@@ -474,10 +477,10 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     else
         xprt->xp_flags |= SVC_XPRT_FLAG_EVCHAN;
 
-    mutex_unlock(&sr_rec->mtx);
-
     /* register on event mux */
-    (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
+    (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_SREC_LOCKED);
+
+    mutex_unlock(&sr_rec->mtx);
 
 unlock:
     rwlock_unlock(&svc_rqst_set_.lock);
@@ -558,7 +561,8 @@ int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
 
     assert(sr_rec);
 
-    mutex_lock(&sr_rec->mtx);
+    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
+        mutex_lock(&sr_rec->mtx);
 
     switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
@@ -594,7 +598,8 @@ int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
 
     ev_sig(sr_rec->sv[0], 0); /* send wakeup */
 
-    mutex_unlock(&sr_rec->mtx);
+    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
+        mutex_unlock(&sr_rec->mtx);
 
     return (0);
 }
