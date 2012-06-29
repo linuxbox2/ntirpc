@@ -44,6 +44,7 @@ int rbtx_init(struct rbtree_x *xt, opr_rbtree_cmpf_t cmpf, uint32_t npart,
 {
     int ix, code = 0;
     pthread_rwlockattr_t rwlock_attr;
+    struct rbtree_x_part *t;
 
     if ((npart > RBTX_REC_MAXPART) ||
         (npart % 2 == 0)) {
@@ -68,9 +69,10 @@ int rbtx_init(struct rbtree_x *xt, opr_rbtree_cmpf_t cmpf, uint32_t npart,
     xt->npart = npart;
 
     for (ix = 0; ix < npart; ++ix) {
-        mutex_init(&xt->tree[ix].mtx, NULL);
-        rwlock_init(&xt->tree[ix].lock, &rwlock_attr);
-        opr_rbtree_init(&xt->tree[ix].t, cmpf /* may be NULL */);
+        t = &xt->tree[ix];
+        mutex_init(&t->mtx, NULL);
+        rwlock_init(&t->lock, &rwlock_attr);
+        opr_rbtree_init(&t->t, cmpf /* may be NULL */);
     }
 
     return (code);
