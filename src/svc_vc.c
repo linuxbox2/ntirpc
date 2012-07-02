@@ -1190,24 +1190,31 @@ out:
 bool_t
 __svc_clean_idle2(int timeout, bool_t cleanblock)
 {
-        struct svc_clean_idle_arg acc;
+    struct svc_clean_idle_arg acc;
+    static mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
 
-        memset(&acc, 0, sizeof(struct svc_clean_idle_arg));
-	gettimeofday(&acc.tv, NULL);
-        acc.timeout = timeout;
+    if (mutex_trylock(&mtx) != 0)
+        goto out;
 
-        /* XXX refcounting, state? */
-        svc_xprt_foreach(svc_clean_idle2_func, (void *) &acc);
+    memset(&acc, 0, sizeof(struct svc_clean_idle_arg));
+    gettimeofday(&acc.tv, NULL);
+    acc.timeout = timeout;
 
-	if (timeout == 0 && acc.least_active != NULL) {
-            (void) svc_rqst_xprt_unregister(
-                acc.least_active, SVC_RQST_FLAG_NONE);
-            /* __xprt_unregister_unlocked(acc.least_active); */
-            __svc_vc_dodestroy(acc.least_active);
-            acc.ncleaned++;
-	}
+    /* XXX refcounting, state? */
+    svc_xprt_foreach(svc_clean_idle2_func, (void *) &acc);
 
-	return (acc.ncleaned > 0) ? TRUE : FALSE;
+    if (timeout == 0 && acc.least_active != NULL) {
+        (void) svc_rqst_xprt_unregister(
+            acc.least_active, SVC_RQST_FLAG_NONE);
+        /* __xprt_unregister_unlocked(acc.least_active); */
+        __svc_vc_dodestroy(acc.least_active);
+        acc.ncleaned++;
+    }
+
+    mutex_unlock(&mtx);
+
+out:
+    return (acc.ncleaned > 0) ? TRUE : FALSE;
 
 } /* __svc_clean_idle2 */
 

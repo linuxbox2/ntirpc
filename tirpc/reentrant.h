@@ -52,6 +52,7 @@
 
 #define mutex_init(m, a)	pthread_mutex_init(m, a)
 #define mutex_lock(m)		pthread_mutex_lock(m)
+#define mutex_trylock(m)		pthread_mutex_trylock(m)
 #define mutex_unlock(m)		pthread_mutex_unlock(m)
 #define mutex_destroy(m)	pthread_mutex_destroy(m)
 
