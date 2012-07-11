@@ -79,6 +79,7 @@ static enum xprt_stat svc_dg_stat(SVCXPRT *);
 static bool_t svc_dg_recv(SVCXPRT *, struct rpc_msg *);
 static bool_t svc_dg_reply(SVCXPRT *, struct rpc_msg *);
 static bool_t svc_dg_getargs(SVCXPRT *, xdrproc_t, void *);
+static bool_t svc_dg_getargs2(SVCXPRT *, xdrproc_t, void *, void *);
 static bool_t svc_dg_freeargs(SVCXPRT *, xdrproc_t, void *);
 static void svc_dg_destroy(SVCXPRT *);
 static bool_t svc_dg_control(SVCXPRT *, const u_int, void *);
@@ -327,6 +328,24 @@ svc_dg_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 }
 
 static bool_t
+svc_dg_getargs2(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr,
+                void *u_data)
+{
+    struct svc_dg_data *su = su_data(xprt);
+    XDR *xdrs = &(su->su_xdrs);
+
+    /* threads u_data for advanced decoders */
+    xdrs->x_public = u_data;
+
+    if (! SVCAUTH_UNWRAP(xprt->xp_auth, &(su_data(xprt)->su_xdrs),
+                         xdr_args, args_ptr)) {
+        (void)svc_freeargs(xprt, xdr_args, args_ptr);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static bool_t
 svc_dg_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
 	XDR *xdrs = &(su_data(xprt)->su_xdrs);
@@ -439,6 +458,7 @@ svc_dg_ops(SVCXPRT *xprt)
 		ops.xp_recv = svc_dg_recv;
 		ops.xp_stat = svc_dg_stat;
 		ops.xp_getargs = svc_dg_getargs;
+		ops.xp_getargs2 = svc_dg_getargs2;
 		ops.xp_reply = svc_dg_reply;
 		ops.xp_freeargs = svc_dg_freeargs;
 		ops.xp_destroy = svc_dg_destroy;

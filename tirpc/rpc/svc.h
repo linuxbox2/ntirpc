@@ -236,6 +236,9 @@ typedef struct __rpc_svcxprt {
 				void *);
 	    /* destroy this struct */
 	    void	(*xp_destroy)(struct __rpc_svcxprt *);
+	    /* get arguments, thread u_data in arg4*/
+            bool_t(*xp_getargs2)(struct __rpc_svcxprt *, xdrproc_t,
+                                 void *, void *);
 	} *xp_ops;
 	int		xp_addrlen;	 /* length of remote address */
 	struct sockaddr_in6 xp_raddr;	 /* remote addr (backward ABI compat) */
@@ -243,21 +246,16 @@ typedef struct __rpc_svcxprt {
 	struct xp_ops2 {
 		/* catch-all function */
             bool_t  (*xp_control)(struct __rpc_svcxprt *, const u_int,
-				void *);
+                                  void *);
             /* handle incoming requests (calls xp_recv) */
             bool_t  (*xp_getreq)(struct __rpc_svcxprt *);
-
             /* call dispatch strategy function */
             void (*xp_dispatch)(struct __rpc_svcxprt *, struct rpc_msg **);
-
             /* rendezvous (epilogue) */
             u_int (*xp_rdvs)(struct __rpc_svcxprt *, struct __rpc_svcxprt *,
                              const u_int, void *);
-
             /* xprt free hook */
             bool_t  (*xp_free_xprt)(struct __rpc_svcxprt *);
-
-
 	} *xp_ops2;
 	char		*xp_tp;		 /* transport provider device name */
 	char		*xp_netid;	 /* network token */
@@ -390,6 +388,11 @@ extern SVCXPRT *svc_shim_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig);
 	(*(xprt)->xp_ops->xp_getargs)((xprt), (xargs), (argsp))
 #define svc_getargs(xprt, xargs, argsp)			\
 	(*(xprt)->xp_ops->xp_getargs)((xprt), (xargs), (argsp))
+
+#define SVC_GETARGS2(xprt, xargs, argsp) \
+    (*(xprt)->xp_ops->xp_getargs2)((xprt), (xargs), (argsp))
+#define svc_getargs2(xprt, xargs, argsp, u_data) \
+    (*(xprt)->xp_ops->xp_getargs2)((xprt), (xargs), (argsp), (u_data))
 
 #define SVC_REPLY(xprt, msg)				\
 	(*(xprt)->xp_ops->xp_reply) ((xprt), (msg))

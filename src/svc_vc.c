@@ -83,6 +83,7 @@ static int write_vc(void *, void *, int);
 static enum xprt_stat svc_vc_stat(SVCXPRT *);
 static bool_t svc_vc_recv(SVCXPRT *, struct rpc_msg *);
 static bool_t svc_vc_getargs(SVCXPRT *, xdrproc_t, void *);
+static bool_t svc_vc_getargs2(SVCXPRT *, xdrproc_t, void *, void *);
 static bool_t svc_vc_freeargs(SVCXPRT *, xdrproc_t, void *);
 static bool_t svc_vc_reply(SVCXPRT *, struct rpc_msg *);
 static void svc_vc_rendezvous_ops(SVCXPRT *);
@@ -90,7 +91,7 @@ static void svc_vc_ops(SVCXPRT *);
 static void svc_vc_override_ops(SVCXPRT *xprt, SVCXPRT *newxprt);
 static bool_t svc_vc_control(SVCXPRT *xprt, const u_int rq, void *in);
 static bool_t svc_vc_rendezvous_control (SVCXPRT *xprt, const u_int rq,
-				   	     void *in);
+                                         void *in);
 bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
 
 /*
@@ -940,7 +941,47 @@ svc_vc_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
         if (cl) {
             struct cx_data *cx = (struct cx_data *) cl->cl_private;
             struct ct_data *ct = CT_DATA(cx);
-            if (cx->cx_duplex.flags & CT_FLAG_DUPLEX) {                
+            if (cx->cx_duplex.flags & CT_FLAG_DUPLEX) {
+                if (! SVCAUTH_UNWRAP(xprt->xp_auth,
+                                     &(ct->ct_xdrs),
+                                     xdr_args, args_ptr)) {
+                    rslt = FALSE;
+                }
+            }
+        }
+        rslt = FALSE;
+    }
+
+    /* XXX Upstream TI-RPC lacks this call, but -does- call svc_dg_freeargs
+     * in svc_dg_getargs if SVCAUTH_UNWRAP fails. */
+    if (! rslt)
+        svc_vc_freeargs(xprt, xdr_args, args_ptr);
+
+    return (rslt);
+}
+
+static bool_t
+svc_vc_getargs2(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr,
+                void *u_data)
+{
+    bool_t rslt = TRUE;
+    struct cf_conn *cd = (struct cf_conn *) xprt->xp_p1;
+    XDR *xdrs = &cd->xdrs;
+
+    /* threads u_data for advanced decoders*/
+    xdrs->x_public = u_data;
+
+    /* XXX TODO: duplex unification (xdrs)  */
+
+    if (! SVCAUTH_UNWRAP(xprt->xp_auth,
+                         &(((struct cf_conn *)(xprt->xp_p1))->xdrs),
+                         xdr_args, args_ptr)) {
+        CLIENT *cl;
+        cl = (CLIENT *) xprt->xp_p4;
+        if (cl) {
+            struct cx_data *cx = (struct cx_data *) cl->cl_private;
+            struct ct_data *ct = CT_DATA(cx);
+            if (cx->cx_duplex.flags & CT_FLAG_DUPLEX) {
                 if (! SVCAUTH_UNWRAP(xprt->xp_auth,
                                      &(ct->ct_xdrs),
                                      xdr_args, args_ptr)) {
@@ -1043,6 +1084,7 @@ svc_vc_ops(SVCXPRT *xprt)
 		ops.xp_recv = svc_vc_recv;
 		ops.xp_stat = svc_vc_stat;
 		ops.xp_getargs = svc_vc_getargs;
+		ops.xp_getargs2 = svc_vc_getargs2;
 		ops.xp_reply = svc_vc_reply;
 		ops.xp_freeargs = svc_vc_freeargs;
 		ops.xp_destroy = svc_vc_destroy;
