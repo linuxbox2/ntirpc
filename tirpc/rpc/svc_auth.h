@@ -1,4 +1,4 @@
-/*	$NetBSD: svc_auth.h,v 1.8 2000/06/02 22:57:57 fvdl Exp $	*/
+/* $NetBSD: svc_auth.h,v 1.8 2000/06/02 22:57:57 fvdl Exp $ */
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
@@ -27,8 +27,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *	from: @(#)svc_auth.h 1.6 86/07/16 SMI
- *	@(#)svc_auth.h	2.1 88/07/29 4.0 RPCSRC
+ * from: @(#)svc_auth.h 1.6 86/07/16 SMI
+ * @(#)svc_auth.h 2.1 88/07/29 4.0 RPCSRC
  * $FreeBSD: src/include/rpc/svc_auth.h,v 1.14 2002/03/23 17:24:55 imp Exp $
  */
 
@@ -45,22 +45,22 @@
  * Interface to server-side authentication flavors.
  */
 typedef struct SVCAUTH {
-	struct svc_auth_ops {
-		int     (*svc_ah_wrap)(struct SVCAUTH *, XDR *, xdrproc_t,
-				       caddr_t);
-		int     (*svc_ah_unwrap)(struct SVCAUTH *, XDR *, xdrproc_t,
-					 caddr_t);
-		int     (*svc_ah_destroy)(struct SVCAUTH *);
-		} *svc_ah_ops;
-	caddr_t svc_ah_private;
+    struct svc_auth_ops {
+        bool     (*svc_ah_wrap)(struct SVCAUTH *, XDR *, xdrproc_t,
+                               caddr_t);
+        bool     (*svc_ah_unwrap)(struct SVCAUTH *, XDR *, xdrproc_t,
+                                 caddr_t);
+        bool     (*svc_ah_destroy)(struct SVCAUTH *);
+    } *svc_ah_ops;
+    caddr_t svc_ah_private;
 } SVCAUTH;
 
-#define SVCAUTH_WRAP(auth, xdrs, xfunc, xwhere) \
-	((*((auth)->svc_ah_ops->svc_ah_wrap))(auth, xdrs, xfunc, xwhere))
-#define SVCAUTH_UNWRAP(auth, xdrs, xfunc, xwhere) \
-	((*((auth)->svc_ah_ops->svc_ah_unwrap))(auth, xdrs, xfunc, xwhere))
-#define SVCAUTH_DESTROY(auth) \
-	((*((auth)->svc_ah_ops->svc_ah_destroy))(auth))
+#define SVCAUTH_WRAP(auth, xdrs, xfunc, xwhere)                         \
+    ((*((auth)->svc_ah_ops->svc_ah_wrap))(auth, xdrs, xfunc, xwhere))
+#define SVCAUTH_UNWRAP(auth, xdrs, xfunc, xwhere)                       \
+    ((*((auth)->svc_ah_ops->svc_ah_unwrap))(auth, xdrs, xfunc, xwhere))
+#define SVCAUTH_DESTROY(auth)                           \
+    ((*((auth)->svc_ah_ops->svc_ah_destroy))(auth))
 
 /*
  * Server side authenticator
@@ -68,7 +68,7 @@ typedef struct SVCAUTH {
 __BEGIN_DECLS
 extern enum auth_stat _authenticate(struct svc_req *, struct rpc_msg *);
 extern int svc_auth_reg(int, enum auth_stat (*)(struct svc_req *,
-			  struct rpc_msg *));
+                                                struct rpc_msg *));
 
 __END_DECLS
 

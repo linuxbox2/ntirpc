@@ -48,7 +48,7 @@
 
 #define VC_LOCK_PARTITIONS 17
 
-static bool_t initialized = FALSE;
+static bool initialized = FALSE;
 
 static struct vc_fd_rec_set vc_fd_rec_set = {
     PTHREAD_MUTEX_INITIALIZER /* clnt_fd_lock */,
@@ -96,12 +96,12 @@ unlock:
     mutex_unlock(&vc_fd_rec_set.clnt_fd_lock);
 }
 
-#define cond_init_vc_lock() { \
-do { \
-    if (! initialized) \
-        vc_lock_init(); \
-    } while (0); \
-}
+#define cond_init_vc_lock() {                   \
+        do {                                    \
+            if (! initialized)                  \
+                vc_lock_init();                 \
+        } while (0);                            \
+    }
 
 /* vc_fd_lock has the same semantics as legacy clnt_fd_lock mechanism,
  * but greater concurrency */
@@ -185,7 +185,7 @@ vc_lookup_fd_rec(int fd)
 unlock:
     rwlock_unlock(&t->lock);
 
-    return (crec);    
+    return (crec);
 }
 
 void vc_fd_lock(int fd, sigset_t *mask)

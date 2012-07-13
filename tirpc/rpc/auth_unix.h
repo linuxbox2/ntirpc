@@ -25,8 +25,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *	from: @(#)auth_unix.h 1.8 88/02/08 SMI
- *	from: @(#)auth_unix.h	2.2 88/07/29 4.0 RPCSRC
+ * from: @(#)auth_unix.h 1.8 88/02/08 SMI
+ * from: @(#)auth_unix.h 2.2 88/07/29 4.0 RPCSRC
  * $FreeBSD: src/include/rpc/auth_unix.h,v 1.11 2002/03/23 17:24:55 imp Exp $
  */
 
@@ -57,18 +57,18 @@
  * Unix style credentials.
  */
 struct authunix_parms {
-	u_long	 aup_time;
-	char	*aup_machname;
-	uid_t 	 aup_uid;
-	gid_t  	 aup_gid;
-	u_int	 aup_len;
-	gid_t 	*aup_gids;
+    u_long  aup_time;
+    char *aup_machname;
+    uid_t aup_uid;
+    gid_t aup_gid;
+    u_int aup_len;
+    gid_t *aup_gids;
 };
 
 #define authsys_parms authunix_parms
 
 __BEGIN_DECLS
-extern bool_t xdr_authunix_parms(XDR *, struct authunix_parms *);
+extern bool xdr_authunix_parms(XDR *, struct authunix_parms *);
 __END_DECLS
 
 /*
@@ -77,7 +77,7 @@ __END_DECLS
  * again it is serialized in the obvious fashion.
  */
 struct short_hand_verf {
-	struct opaque_auth new_cred;
+    struct opaque_auth new_cred;
 };
 
 #endif /* !_TIRPC_AUTH_UNIX_H */

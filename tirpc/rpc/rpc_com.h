@@ -1,5 +1,5 @@
-/*	$NetBSD: rpc_com.h,v 1.3 2000/12/10 04:10:08 christos Exp $	*/
-/*	$FreeBSD: src/include/rpc/rpc_com.h,v 1.6 2003/01/16 07:13:51 mbr Exp $ */
+/* $NetBSD: rpc_com.h,v 1.3 2000/12/10 04:10:08 christos Exp $ */
+/* $FreeBSD: src/include/rpc/rpc_com.h,v 1.6 2003/01/16 07:13:51 mbr Exp $ */
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
@@ -39,21 +39,21 @@
  */
 
 #ifndef _RPC_RPCCOM_H
-#define	_RPC_RPCCOM_H
+#define _RPC_RPCCOM_H
 
 #include <sys/cdefs.h>
 
-/* #pragma ident	"@(#)rpc_com.h	1.11	93/07/05 SMI" */
+/* #pragma ident "@(#)rpc_com.h 1.11 93/07/05 SMI" */
 
 /*
  * The max size of the transport, if the size cannot be determined
  * by other means.
  */
-#define	RPC_MAXDATASIZE 9000
-#define	RPC_MAXADDRSIZE 1024
+#define RPC_MAXDATASIZE 9000
+#define RPC_MAXADDRSIZE 1024
 
 #define __RPC_GETXID(now) ((u_int32_t)getpid() ^ (u_int32_t)(now)->tv_sec ^ \
-    (u_int32_t)(now)->tv_usec)
+                           (u_int32_t)(now)->tv_usec)
 
 __BEGIN_DECLS
 extern u_int __rpc_get_a_size(int);
@@ -72,8 +72,8 @@ int __rpc_sockisbound(int);
 struct netbuf *__rpc_set_netbuf(struct netbuf *, const void *, size_t);
 
 struct netbuf *__rpcb_findaddr(rpcprog_t, rpcvers_t, const struct netconfig *,
-			       const char *, CLIENT **);
-bool_t rpc_control(int,void *);
+                               const char *, CLIENT **);
+bool rpc_control(int,void *);
 
 char *_get_next_token(char *, int);
 

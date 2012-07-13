@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.13 2000/06/13 01:02:44 thorpej Exp $	*/
+/* $NetBSD: types.h,v 1.13 2000/06/13 01:02:44 thorpej Exp $ */
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
@@ -27,8 +27,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *	from: @(#)types.h 1.18 87/07/24 SMI
- *	from: @(#)types.h	2.3 88/08/15 4.0 RPCSRC
+ * from: @(#)types.h 1.18 87/07/24 SMI
+ * from: @(#)types.h 2.3 88/08/15 4.0 RPCSRC
  * $FreeBSD: src/include/rpc/types.h,v 1.10.6.1 2003/12/18 00:59:50 peter Exp $
  */
 
@@ -51,15 +51,17 @@ typedef u_int32_t rpcport_t;
 typedef int32_t rpc_inline_t;
 
 #ifndef NULL
-#	define NULL	0
+# define NULL 0
 #endif
-#define __dontcare__	-1
+#define __dontcare__ -1
+
+#define honey_badger __dontcare__
 
 #ifndef FALSE
-#	define FALSE	(0)
+# define FALSE (0)
 #endif
 #ifndef TRUE
-#	define TRUE	(1)
+# define TRUE (1)
 #endif
 
 /*
@@ -130,10 +132,10 @@ typedef struct tirpc_pkg_params {
 
 extern tirpc_pkg_params __pkg_params;
 
-#define __warnx(flags, ...) \
-    do { \
+#define __warnx(flags, ...)                     \
+    do {                                        \
         if (__pkg_params.debug_flags & (flags)) \
-            __pkg_params.warnx(__VA_ARGS__); \
+            __pkg_params.warnx(__VA_ARGS__);    \
     } while (0)
 
 #define mem_alloc(size) __pkg_params.mem_alloc((size))
@@ -155,9 +157,9 @@ extern tirpc_pkg_params __pkg_params;
  * The netbuf structure is used for transport-independent address storage.
  */
 struct netbuf {
-  unsigned int maxlen;
-  unsigned int len;
-  void *buf;
+    unsigned int maxlen;
+    unsigned int len;
+    void *buf;
 };
 
 /*
@@ -166,8 +168,8 @@ struct netbuf {
  */
 
 struct t_bind {
-  struct netbuf   addr;
-  unsigned int    qlen;
+    struct netbuf   addr;
+    unsigned int    qlen;
 };
 
 /*
@@ -175,10 +177,10 @@ struct t_bind {
  * not use.
  */
 struct __rpc_sockinfo {
-	int si_af; 
-	int si_proto;
-	int si_socktype;
-	int si_alen;
+    int si_af;
+    int si_proto;
+    int si_socktype;
+    int si_alen;
 };
 
 #endif /* _TIRPC_TYPES_H */

@@ -44,21 +44,21 @@
 #include <sys/cdefs.h>
 
 struct rmtcallargs {
-	u_long prog, vers, proc, arglen;
-	caddr_t args_ptr;
-	xdrproc_t xdr_args;
+    u_long prog, vers, proc, arglen;
+    caddr_t args_ptr;
+    xdrproc_t xdr_args;
 };
 
 struct rmtcallres {
-	u_long *port_ptr;
-	u_long resultslen;
-	caddr_t results_ptr;
-	xdrproc_t xdr_results;
+    u_long *port_ptr;
+    u_long resultslen;
+    caddr_t results_ptr;
+    xdrproc_t xdr_results;
 };
 
 __BEGIN_DECLS
-extern bool_t xdr_rmtcall_args(XDR *, struct rmtcallargs *);
-extern bool_t xdr_rmtcallres(XDR *, struct rmtcallres *);
+extern bool xdr_rmtcall_args(XDR *, struct rmtcallargs *);
+extern bool xdr_rmtcallres(XDR *, struct rmtcallres *);
 __END_DECLS
 
 #endif /* !_RPC_PMAP_RMT_H */

@@ -84,28 +84,28 @@
  * is the effective GID.)
  */
 struct cmsgcred {
-        pid_t   cmcred_pid;             /* PID of sending process */
-        uid_t   cmcred_uid;             /* real UID of sending process */
-        uid_t   cmcred_euid;            /* effective UID of sending process */
-        gid_t   cmcred_gid;             /* real GID of sending process */
-        short   cmcred_ngroups;         /* number or groups */
-        gid_t   cmcred_groups[CMGROUP_MAX];     /* groups */
+    pid_t   cmcred_pid;             /* PID of sending process */
+    uid_t   cmcred_uid;             /* real UID of sending process */
+    uid_t   cmcred_euid;            /* effective UID of sending process */
+    gid_t   cmcred_gid;             /* real GID of sending process */
+    short   cmcred_ngroups;         /* number or groups */
+    gid_t   cmcred_groups[CMGROUP_MAX];     /* groups */
 };
 
 struct cmessage {
-        struct cmsghdr cmsg;
-        struct cmsgcred cmcred;
+    struct cmsghdr cmsg;
+    struct cmsgcred cmcred;
 };
 
 static enum clnt_stat clnt_vc_call(CLIENT *, rpcproc_t, xdrproc_t, void *,
-    xdrproc_t, void *, struct timeval);
+                                   xdrproc_t, void *, struct timeval);
 static void clnt_vc_geterr(CLIENT *, struct rpc_err *);
-static bool_t clnt_vc_freeres(CLIENT *, xdrproc_t, void *);
+static bool clnt_vc_freeres(CLIENT *, xdrproc_t, void *);
 static void clnt_vc_abort(CLIENT *);
-static bool_t clnt_vc_control(CLIENT *, u_int, void *);
+static bool clnt_vc_control(CLIENT *, u_int, void *);
 static void clnt_vc_destroy(CLIENT *);
 static struct clnt_ops *clnt_vc_ops(void);
-static bool_t time_not_ok(struct timeval *);
+static bool time_not_ok(struct timeval *);
 static int read_vc(void *, void *, int);
 static int write_vc(void *, void *, int);
 
@@ -125,7 +125,7 @@ static int write_vc(void *, void *, int);
  *      should be the first thing fixed.  One step at a time.  (Fixing this.)
  *
  *      The ONC RPC record marking (RM) standard (RFC 5531, s. 11) does not
- *      provide for mixed call and reply fragment reassembly, so writes to the 
+ *      provide for mixed call and reply fragment reassembly, so writes to the
  *      bytestream with MUST be record-wise atomic.  It appears that an
  *      implementation may interleave call and reply messages on distinct
  *      conversations.  This is not incompatible with holding a transport
@@ -148,7 +148,7 @@ static const char __no_mem_str[] = "out of memory";
  *
  * Locked on entry.
  */
-bool_t
+bool
 cond_block_events_client(CLIENT *cl)
 {
     struct cx_data *cx = (struct cx_data *) cl->cl_private;
@@ -189,158 +189,158 @@ cond_unblock_events_client(CLIENT *cl)
  * fd should be an open socket
  */
 CLIENT *
-clnt_vc_create(int fd,			   /* open file descriptor */
+clnt_vc_create(int fd,      /* open file descriptor */
                const struct netbuf *raddr, /* servers address */
-               const rpcprog_t prog,	   /* program number */
-               const rpcvers_t vers,	   /* version number */
-               u_int sendsz,		   /* buffer recv size */
-               u_int recvsz		   /* buffer send size */)
+               const rpcprog_t prog,    /* program number */
+               const rpcvers_t vers,    /* version number */
+               u_int sendsz,     /* buffer recv size */
+               u_int recvsz     /* buffer send size */)
 {
     return (clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz,
-			    CLNT_CREATE_FLAG_CONNECT));
+                            CLNT_CREATE_FLAG_CONNECT));
 }
 
 CLIENT *
-clnt_vc_create2(int fd,			    /* open file descriptor */
+clnt_vc_create2(int fd,       /* open file descriptor */
                 const struct netbuf *raddr, /* servers address */
-                const rpcprog_t prog,	    /* program number */
-                const rpcvers_t vers,	    /* version number */
-                u_int sendsz,		    /* buffer recv size */
-                u_int recvsz,		    /* buffer send size */
+                const rpcprog_t prog,     /* program number */
+                const rpcvers_t vers,     /* version number */
+                u_int sendsz,      /* buffer recv size */
+                u_int recvsz,      /* buffer send size */
                 u_int flags)
 {
-	CLIENT *cl;			/* client handle */
-	struct cx_data *cx = NULL;
-        struct ct_data *ct = NULL;
-	struct timeval now;
-	struct rpc_msg call_msg;
-	static u_int32_t disrupt;
-	sigset_t mask;
-	sigset_t newmask;
-	struct sockaddr_storage ss;
-	socklen_t slen;
-	struct __rpc_sockinfo si;
+    CLIENT *cl;   /* client handle */
+    struct cx_data *cx = NULL;
+    struct ct_data *ct = NULL;
+    struct timeval now;
+    struct rpc_msg call_msg;
+    static u_int32_t disrupt;
+    sigset_t mask;
+    sigset_t newmask;
+    struct sockaddr_storage ss;
+    socklen_t slen;
+    struct __rpc_sockinfo si;
 
-	if (disrupt == 0)
-		disrupt = (u_int32_t)(long)raddr;
+    if (disrupt == 0)
+        disrupt = (u_int32_t)(long)raddr;
 
-	cl = (CLIENT *)mem_alloc(sizeof (*cl));
-        cx = alloc_cx_data(CX_VC_DATA, 0, 0);
-        if ((cl == NULL) || (cx == NULL)) {
-		(void) syslog(LOG_ERR, clnt_vc_errstr,
-		    clnt_vc_str, __no_mem_str);
-		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-		rpc_createerr.cf_error.re_errno = errno;
-		goto err;
-	}
-        ct = CT_DATA(cx);
-	ct->ct_addr.buf = NULL;
-	sigfillset(&newmask);
-	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
+    cl = (CLIENT *)mem_alloc(sizeof (*cl));
+    cx = alloc_cx_data(CX_VC_DATA, 0, 0);
+    if ((cl == NULL) || (cx == NULL)) {
+        (void) syslog(LOG_ERR, clnt_vc_errstr,
+                      clnt_vc_str, __no_mem_str);
+        rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+        rpc_createerr.cf_error.re_errno = errno;
+        goto err;
+    }
+    ct = CT_DATA(cx);
+    ct->ct_addr.buf = NULL;
+    sigfillset(&newmask);
+    thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 
-	/*
-	 * XXX - fvdl connecting while holding a mutex?
-	 */
-	if (flags & CLNT_CREATE_FLAG_CONNECT) {
-	    slen = sizeof ss;
-	    if (getpeername(fd, (struct sockaddr *)&ss, &slen) < 0) {
-		if (errno != ENOTCONN) {
-		    rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-		    rpc_createerr.cf_error.re_errno = errno;
-		    thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
-		    goto err;
-		}
-		if (connect(fd, (struct sockaddr *)raddr->buf, raddr->len) < 0){
-		    rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-		    rpc_createerr.cf_error.re_errno = errno;
-		    thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
-		    goto err;
-		}
-	    }
-	} /* FLAG_CONNECT */
+    /*
+     * XXX - fvdl connecting while holding a mutex?
+     */
+    if (flags & CLNT_CREATE_FLAG_CONNECT) {
+        slen = sizeof ss;
+        if (getpeername(fd, (struct sockaddr *)&ss, &slen) < 0) {
+            if (errno != ENOTCONN) {
+                rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+                rpc_createerr.cf_error.re_errno = errno;
+                thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
+                goto err;
+            }
+            if (connect(fd, (struct sockaddr *)raddr->buf, raddr->len) < 0){
+                rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+                rpc_createerr.cf_error.re_errno = errno;
+                thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
+                goto err;
+            }
+        }
+    } /* FLAG_CONNECT */
 
-	if (!__rpc_fd2sockinfo(fd, &si))
-            goto err;
-	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
+    if (!__rpc_fd2sockinfo(fd, &si))
+        goto err;
+    thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 
-	ct->ct_closeit = FALSE;
+    ct->ct_closeit = FALSE;
 
-	/*
-	 * Set up private data struct
-	 */
-	cx->cx_fd = fd;
-	ct->ct_wait.tv_usec = 0;
-	ct->ct_waitset = FALSE;
-	ct->ct_addr.buf = mem_alloc(raddr->maxlen);
-	if (ct->ct_addr.buf == NULL)
-            goto err;
-	memcpy(ct->ct_addr.buf, raddr->buf, raddr->len);
-	ct->ct_addr.len = raddr->len;
-	ct->ct_addr.maxlen = raddr->maxlen;
+    /*
+     * Set up private data struct
+     */
+    cx->cx_fd = fd;
+    ct->ct_wait.tv_usec = 0;
+    ct->ct_waitset = FALSE;
+    ct->ct_addr.buf = mem_alloc(raddr->maxlen);
+    if (ct->ct_addr.buf == NULL)
+        goto err;
+    memcpy(ct->ct_addr.buf, raddr->buf, raddr->len);
+    ct->ct_addr.len = raddr->len;
+    ct->ct_addr.maxlen = raddr->maxlen;
 
-	/*
-	 * Initialize call message
-	 */
-	(void)gettimeofday(&now, NULL);
-	call_msg.rm_xid = ((u_int32_t)++disrupt) ^ __RPC_GETXID(&now);
-	call_msg.rm_direction = CALL;
-	call_msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
-	call_msg.rm_call.cb_prog = (u_int32_t)prog;
-	call_msg.rm_call.cb_vers = (u_int32_t)vers;
+    /*
+     * Initialize call message
+     */
+    (void)gettimeofday(&now, NULL);
+    call_msg.rm_xid = ((u_int32_t)++disrupt) ^ __RPC_GETXID(&now);
+    call_msg.rm_direction = CALL;
+    call_msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
+    call_msg.rm_call.cb_prog = (u_int32_t)prog;
+    call_msg.rm_call.cb_vers = (u_int32_t)vers;
 
-	/*
-	 * pre-serialize the static part of the call msg and stash it away
-	 */
-	xdrmem_create(&(ct->ct_xdrs), ct->ct_u.ct_mcallc,
-                      MCALL_MSG_SIZE, XDR_ENCODE);
-	if (! xdr_callhdr(&(ct->ct_xdrs), &call_msg)) {
-		if (ct->ct_closeit) {
-                    (void)close(fd);
-		}
-		goto err;
-	}
-	ct->ct_mpos = XDR_GETPOS(&(ct->ct_xdrs));
-	XDR_DESTROY(&(ct->ct_xdrs));
+    /*
+     * pre-serialize the static part of the call msg and stash it away
+     */
+    xdrmem_create(&(ct->ct_xdrs), ct->ct_u.ct_mcallc,
+                  MCALL_MSG_SIZE, XDR_ENCODE);
+    if (! xdr_callhdr(&(ct->ct_xdrs), &call_msg)) {
+        if (ct->ct_closeit) {
+            (void)close(fd);
+        }
+        goto err;
+    }
+    ct->ct_mpos = XDR_GETPOS(&(ct->ct_xdrs));
+    XDR_DESTROY(&(ct->ct_xdrs));
 
-	/*
-	 * Create a client handle which uses xdrrec for serialization
-	 * and authnone for authentication.
-	 */
-	cl->cl_ops = clnt_vc_ops();
-	cl->cl_private = cx;
+    /*
+     * Create a client handle which uses xdrrec for serialization
+     * and authnone for authentication.
+     */
+    cl->cl_ops = clnt_vc_ops();
+    cl->cl_private = cx;
 
-        /*
-         * Register lock channel (sync)
-         */
-        vc_lock_init_cl(cl);
+    /*
+     * Register lock channel (sync)
+     */
+    vc_lock_init_cl(cl);
 
-        /*
-         * Setup auth
-         */
-	cl->cl_auth = authnone_create();
+    /*
+     * Setup auth
+     */
+    cl->cl_auth = authnone_create();
 
-	sendsz = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
-	recvsz = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
+    sendsz = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
+    recvsz = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
 
-        /*
-         * Create XDRS.  TODO:  duplex unification
-         */
-	xdrrec_create(&(ct->ct_xdrs), sendsz, recvsz,
-                      cx, read_vc, write_vc);
-	return (cl);
+    /*
+     * Create XDRS.  TODO:  duplex unification
+     */
+    xdrrec_create(&(ct->ct_xdrs), sendsz, recvsz,
+                  cx, read_vc, write_vc);
+    return (cl);
 
 err:
-	if (cl) {
-		if (cx) {
-                    if (ct->ct_addr.len)
-                        mem_free(ct->ct_addr.buf,
-                                 ct->ct_addr.len);
-                    free_cx_data(cx);
-		}
-		if (cl)
-                    mem_free(cl, sizeof (CLIENT));
-	}
-	return ((CLIENT *)NULL);
+    if (cl) {
+        if (cx) {
+            if (ct->ct_addr.len)
+                mem_free(ct->ct_addr.buf,
+                         ct->ct_addr.len);
+            free_cx_data(cx);
+        }
+        if (cl)
+            mem_free(cl, sizeof (CLIENT));
+    }
+    return ((CLIENT *)NULL);
 }
 
 #define vc_call_return(r) do { result=(r); goto out; } while (0);
@@ -357,7 +357,7 @@ clnt_vc_call(CLIENT *cl,
     struct cx_data *cx = (struct cx_data *) cl->cl_private;
     struct ct_data *ct = CT_DATA(cx);
     enum clnt_stat result = RPC_SUCCESS;
-    bool_t shipnow, ev_blocked, duplex;
+    bool shipnow, ev_blocked, duplex;
     SVCXPRT *duplex_xprt = NULL;
     XDR *xdrs = &(ct->ct_xdrs);
     rpc_ctx_t *ctx = NULL;
@@ -549,8 +549,8 @@ out:
 
 static void
 clnt_vc_geterr(cl, errp)
-	CLIENT *cl;
-	struct rpc_err *errp;
+    CLIENT *cl;
+    struct rpc_err *errp;
 {
     struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
 
@@ -568,33 +568,33 @@ clnt_vc_geterr(cl, errp)
     }
 }
 
-static bool_t
+static bool
 clnt_vc_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
 {
-	struct ct_data *ct;
-	XDR *xdrs;
-	bool_t dummy;
-	sigset_t mask, newmask;
+    struct ct_data *ct;
+    XDR *xdrs;
+    bool dummy;
+    sigset_t mask, newmask;
 
-	assert(cl != NULL);
+    assert(cl != NULL);
 
-	ct = CT_DATA((struct cx_data *)cl->cl_private);
-	xdrs = &(ct->ct_xdrs);
+    ct = CT_DATA((struct cx_data *)cl->cl_private);
+    xdrs = &(ct->ct_xdrs);
 
-        /* Handle our own signal mask here, the signal section is
-         * larger than the wait (not 100% clear why) */
-	sigfillset(&newmask);
-	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
+    /* Handle our own signal mask here, the signal section is
+     * larger than the wait (not 100% clear why) */
+    sigfillset(&newmask);
+    thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 
-        vc_fd_wait_c(cl, rpc_flag_clear);        
+    vc_fd_wait_c(cl, rpc_flag_clear);
 
-	xdrs->x_op = XDR_FREE;
-	dummy = (*xdr_res)(xdrs, res_ptr);
+    xdrs->x_op = XDR_FREE;
+    dummy = (*xdr_res)(xdrs, res_ptr);
 
-	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
-        vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE);
+    thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
+    vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE);
 
-	return dummy;
+    return dummy;
 }
 
 /*ARGSUSED*/
@@ -603,157 +603,157 @@ clnt_vc_abort(CLIENT *cl)
 {
 }
 
-static bool_t
+static bool
 clnt_vc_control(CLIENT *cl, u_int request, void *info)
 {
-	struct cx_data *cx = (struct cx_data *)cl->cl_private;
-	struct ct_data *ct = CT_DATA(cx);
-	void *infop = info;
-	sigset_t mask;
+    struct cx_data *cx = (struct cx_data *)cl->cl_private;
+    struct ct_data *ct = CT_DATA(cx);
+    void *infop = info;
+    sigset_t mask;
 
-	assert(cl);
-        thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
-        vc_fd_lock_c(cl, &mask);
+    assert(cl);
+    thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
+    vc_fd_lock_c(cl, &mask);
 
-	switch (request) {
-	case CLSET_FD_CLOSE:
-            ct->ct_closeit = TRUE;
-            vc_fd_unlock_c(cl, &mask);
-            return (TRUE);
-	case CLSET_FD_NCLOSE:
-            ct->ct_closeit = FALSE;
-            vc_fd_unlock_c(cl, &mask);
-            return (TRUE);
-	default:
-            break;
-	}
-
-	/* for other requests which use info */
-	if (info == NULL) {
-            vc_fd_unlock_c(cl, &mask);
-            return (FALSE);
-	}
-	switch (request) {
-	case CLSET_TIMEOUT:
-            if (time_not_ok((struct timeval *)info)) {
-                vc_fd_unlock_c(cl, &mask);
-                return (FALSE);
-            }
-            ct->ct_wait = *(struct timeval *)infop;
-            ct->ct_waitset = TRUE;
-            break;
-	case CLGET_TIMEOUT:
-            *(struct timeval *)infop = ct->ct_wait;
-            break;
-	case CLGET_SERVER_ADDR:
-            (void) memcpy(info, ct->ct_addr.buf, (size_t)ct->ct_addr.len);
-            break;
-	case CLGET_FD:
-            *(int *)info = cx->cx_fd;
-            break;
-	case CLGET_SVC_ADDR:
-            /* The caller should not free this memory area */
-            *(struct netbuf *)info = ct->ct_addr;
-            break;
-	case CLSET_SVC_ADDR:		/* set to new address */
-            vc_fd_unlock_c(cl, &mask);
-            return (FALSE);
-	case CLGET_XID:
-            /*
-             * use the knowledge that xid is the
-             * first element in the call structure
-             * This will get the xid of the PREVIOUS call
-             */
-            *(u_int32_t *)info =
-                ntohl(*(u_int32_t *)(void *)&ct->ct_u.ct_mcalli);
-            break;
-	case CLSET_XID:
-            /* This will set the xid of the NEXT call */
-            *(u_int32_t *)(void *)&ct->ct_u.ct_mcalli =
-                htonl(*((u_int32_t *)info) + 1);
-            /* increment by 1 as clnt_vc_call() decrements once */
-            break;
-	case CLGET_VERS:
-            /*
-             * This RELIES on the information that, in the call body,
-             * the version number field is the fifth field from the
-             * begining of the RPC header. MUST be changed if the
-             * call_struct is changed
-             */
-            {
-                u_int32_t *tmp =
-                    (u_int32_t *)(ct->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT);
-                *(u_int32_t *)info = ntohl(*tmp);
-            }
-            break;
-
-	case CLSET_VERS:
-            {
-                u_int32_t tmp = htonl(*(u_int32_t *)info);
-                *(ct->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT) = tmp;
-            }
-            break;
-
-	case CLGET_PROG:
-            /*
-             * This RELIES on the information that, in the call body,
-             * the program number field is the fourth field from the
-             * begining of the RPC header. MUST be changed if the
-             * call_struct is changed
-             */
-            {
-                u_int32_t *tmp =
-                    (u_int32_t *)(ct->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT);
-                *(u_int32_t *)info = ntohl(*tmp);
-            }
-            break;
-
-	case CLSET_PROG:
-            {
-                u_int32_t tmp = htonl(*(u_int32_t *)info);
-                *(ct->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT) = tmp;
-            }
-            break;
-
-	default:
-            vc_fd_unlock_c(cl, &mask);
-            return (FALSE);
-	}
-
+    switch (request) {
+    case CLSET_FD_CLOSE:
+        ct->ct_closeit = TRUE;
         vc_fd_unlock_c(cl, &mask);
-	return (TRUE);
+        return (TRUE);
+    case CLSET_FD_NCLOSE:
+        ct->ct_closeit = FALSE;
+        vc_fd_unlock_c(cl, &mask);
+        return (TRUE);
+    default:
+        break;
+    }
+
+    /* for other requests which use info */
+    if (info == NULL) {
+        vc_fd_unlock_c(cl, &mask);
+        return (FALSE);
+    }
+    switch (request) {
+    case CLSET_TIMEOUT:
+        if (time_not_ok((struct timeval *)info)) {
+            vc_fd_unlock_c(cl, &mask);
+            return (FALSE);
+        }
+        ct->ct_wait = *(struct timeval *)infop;
+        ct->ct_waitset = TRUE;
+        break;
+    case CLGET_TIMEOUT:
+        *(struct timeval *)infop = ct->ct_wait;
+        break;
+    case CLGET_SERVER_ADDR:
+        (void) memcpy(info, ct->ct_addr.buf, (size_t)ct->ct_addr.len);
+        break;
+    case CLGET_FD:
+        *(int *)info = cx->cx_fd;
+        break;
+    case CLGET_SVC_ADDR:
+        /* The caller should not free this memory area */
+        *(struct netbuf *)info = ct->ct_addr;
+        break;
+    case CLSET_SVC_ADDR:  /* set to new address */
+        vc_fd_unlock_c(cl, &mask);
+        return (FALSE);
+    case CLGET_XID:
+        /*
+         * use the knowledge that xid is the
+         * first element in the call structure
+         * This will get the xid of the PREVIOUS call
+         */
+        *(u_int32_t *)info =
+            ntohl(*(u_int32_t *)(void *)&ct->ct_u.ct_mcalli);
+        break;
+    case CLSET_XID:
+        /* This will set the xid of the NEXT call */
+        *(u_int32_t *)(void *)&ct->ct_u.ct_mcalli =
+            htonl(*((u_int32_t *)info) + 1);
+        /* increment by 1 as clnt_vc_call() decrements once */
+        break;
+    case CLGET_VERS:
+        /*
+         * This RELIES on the information that, in the call body,
+         * the version number field is the fifth field from the
+         * begining of the RPC header. MUST be changed if the
+         * call_struct is changed
+         */
+    {
+        u_int32_t *tmp =
+            (u_int32_t *)(ct->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT);
+        *(u_int32_t *)info = ntohl(*tmp);
+    }
+    break;
+
+    case CLSET_VERS:
+    {
+        u_int32_t tmp = htonl(*(u_int32_t *)info);
+        *(ct->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT) = tmp;
+    }
+    break;
+
+    case CLGET_PROG:
+        /*
+         * This RELIES on the information that, in the call body,
+         * the program number field is the fourth field from the
+         * begining of the RPC header. MUST be changed if the
+         * call_struct is changed
+         */
+    {
+        u_int32_t *tmp =
+            (u_int32_t *)(ct->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT);
+        *(u_int32_t *)info = ntohl(*tmp);
+    }
+    break;
+
+    case CLSET_PROG:
+    {
+        u_int32_t tmp = htonl(*(u_int32_t *)info);
+        *(ct->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT) = tmp;
+    }
+    break;
+
+    default:
+        vc_fd_unlock_c(cl, &mask);
+        return (FALSE);
+    }
+
+    vc_fd_unlock_c(cl, &mask);
+    return (TRUE);
 }
 
 
 static void
 clnt_vc_destroy(CLIENT *cl)
 {
-	struct cx_data *cx = (struct cx_data *) cl->cl_private;
-	sigset_t mask, newmask;
+    struct cx_data *cx = (struct cx_data *) cl->cl_private;
+    sigset_t mask, newmask;
 
-        /* Handle our own signal mask here, the signal section is
-         * larger than the wait (not 100% clear why) */
-	sigfillset(&newmask);
-	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-        vc_fd_wait_c(cl, rpc_flag_clear);
+    /* Handle our own signal mask here, the signal section is
+     * larger than the wait (not 100% clear why) */
+    sigfillset(&newmask);
+    thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
+    vc_fd_wait_c(cl, rpc_flag_clear);
 
-	if (CT_DATA(cx)->ct_closeit && cx->cx_fd != -1)
-            (void)close(cx->cx_fd);
-	XDR_DESTROY(&(CT_DATA(cx)->ct_xdrs));
-	if (CT_DATA(cx)->ct_addr.buf)
-            __free(CT_DATA(cx)->ct_addr.buf);
+    if (CT_DATA(cx)->ct_closeit && cx->cx_fd != -1)
+        (void)close(cx->cx_fd);
+    XDR_DESTROY(&(CT_DATA(cx)->ct_xdrs));
+    if (CT_DATA(cx)->ct_addr.buf)
+        __free(CT_DATA(cx)->ct_addr.buf);
 
-        vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE); /* XXX moved before free */
-        vc_lock_unref_clnt(cl);
+    vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE); /* XXX moved before free */
+    vc_lock_unref_clnt(cl);
 
-        free_cx_data(cx);
+    free_cx_data(cx);
 
-	if (cl->cl_netid && cl->cl_netid[0])
-            mem_free(cl->cl_netid, strlen(cl->cl_netid) +1);
-	if (cl->cl_tp && cl->cl_tp[0])
-            mem_free(cl->cl_tp, strlen(cl->cl_tp) +1);
-	mem_free(cl, sizeof(CLIENT));
-	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
+    if (cl->cl_netid && cl->cl_netid[0])
+        mem_free(cl->cl_netid, strlen(cl->cl_netid) +1);
+    if (cl->cl_tp && cl->cl_tp[0])
+        mem_free(cl->cl_tp, strlen(cl->cl_tp) +1);
+    mem_free(cl, sizeof(CLIENT));
+    thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 }
 
 /*
@@ -764,121 +764,121 @@ clnt_vc_destroy(CLIENT *cl)
 static int
 read_vc(void *ctp, void *buf, int len)
 {
-	struct cx_data *cx = (struct cx_data *)ctp;
-	struct ct_data *ct = CT_DATA(cx);
-        rpc_ctx_t *ctx = NULL;
-	struct pollfd fd;
-	int milliseconds = (int)((ct->ct_wait.tv_sec * 1000) +
-	    (ct->ct_wait.tv_usec / 1000));
+    struct cx_data *cx = (struct cx_data *)ctp;
+    struct ct_data *ct = CT_DATA(cx);
+    rpc_ctx_t *ctx = NULL;
+    struct pollfd fd;
+    int milliseconds = (int)((ct->ct_wait.tv_sec * 1000) +
+                             (ct->ct_wait.tv_usec / 1000));
 
-	if (len == 0)
-		return (0);
+    if (len == 0)
+        return (0);
 
-        /* Though not previously used by TI-RPC, this is an ONC-compliant
-         * use of x_public */
-        ctx = (rpc_ctx_t *) ct->ct_xdrs.x_public;
+    /* Though not previously used by TI-RPC, this is an ONC-compliant
+     * use of x_public */
+    ctx = (rpc_ctx_t *) ct->ct_xdrs.x_public;
 
-        /* if ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX, in the current
-         * strategy (cf. clnt_vc_call and the duplex-aware getreq
-         * implementation), we assert that the current thread may safely
-         * block in poll (though we are not constrained to blocking
-         * semantics) */
+    /* if ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX, in the current
+     * strategy (cf. clnt_vc_call and the duplex-aware getreq
+     * implementation), we assert that the current thread may safely
+     * block in poll (though we are not constrained to blocking
+     * semantics) */
 
-        fd.fd = cx->cx_fd;
-        fd.events = POLLIN;
-        for (;;) {
-            switch (poll(&fd, 1, milliseconds)) {
-            case 0:
-                ctx->error.re_status = RPC_TIMEDOUT;
-                return (-1);
+    fd.fd = cx->cx_fd;
+    fd.events = POLLIN;
+    for (;;) {
+        switch (poll(&fd, 1, milliseconds)) {
+        case 0:
+            ctx->error.re_status = RPC_TIMEDOUT;
+            return (-1);
 
-            case -1:
-                if (errno == EINTR)
-                    continue;
-                ctx->error.re_status = RPC_CANTRECV;
-                ctx->error.re_errno = errno;
-                return (-1);
-            }
-            break;
-        }
-
-	len = read(cx->cx_fd, buf, (size_t)len);
-
-	switch (len) {
-	case 0:
-            /* premature eof */
-            ctx->error.re_errno = ECONNRESET;
+        case -1:
+            if (errno == EINTR)
+                continue;
             ctx->error.re_status = RPC_CANTRECV;
-            len = -1;  /* it's really an error */
-            break;
-
-	case -1:
             ctx->error.re_errno = errno;
-            ctx->error.re_status = RPC_CANTRECV;
-            break;
-	}
-	return (len);
+            return (-1);
+        }
+        break;
+    }
+
+    len = read(cx->cx_fd, buf, (size_t)len);
+
+    switch (len) {
+    case 0:
+        /* premature eof */
+        ctx->error.re_errno = ECONNRESET;
+        ctx->error.re_status = RPC_CANTRECV;
+        len = -1;  /* it's really an error */
+        break;
+
+    case -1:
+        ctx->error.re_errno = errno;
+        ctx->error.re_status = RPC_CANTRECV;
+        break;
+    }
+    return (len);
 }
 
 static int
 write_vc(void *ctp, void *buf, int len)
 {
-	struct cx_data *cx = (struct cx_data *)ctp;
-	struct ct_data *ct = CT_DATA(cx);
-        rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_public;
+    struct cx_data *cx = (struct cx_data *)ctp;
+    struct ct_data *ct = CT_DATA(cx);
+    rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_public;
 
-	int i = 0, cnt;
+    int i = 0, cnt;
 
-	for (cnt = len; cnt > 0; cnt -= i, buf += i) {
-	    if ((i = write(cx->cx_fd, buf, (size_t)cnt)) == -1) {
-		ctx->error.re_errno = errno;
-		ctx->error.re_status = RPC_CANTSEND;
-		return (-1);
-	    }
-	}
-	return (len);
+    for (cnt = len; cnt > 0; cnt -= i, buf += i) {
+        if ((i = write(cx->cx_fd, buf, (size_t)cnt)) == -1) {
+            ctx->error.re_errno = errno;
+            ctx->error.re_status = RPC_CANTSEND;
+            return (-1);
+        }
+    }
+    return (len);
 }
 
 static void *
 clnt_vc_xdrs(CLIENT *cl)
 {
-	struct ct_data *ct = (struct ct_data *) cl->cl_private;
-	return ((void *) & ct->ct_xdrs);
+    struct ct_data *ct = (struct ct_data *) cl->cl_private;
+    return ((void *) & ct->ct_xdrs);
 }
 
 static struct clnt_ops *
 clnt_vc_ops(void)
 {
-	static struct clnt_ops ops;
-	extern mutex_t  ops_lock;
-	sigset_t mask, newmask;
+    static struct clnt_ops ops;
+    extern mutex_t  ops_lock;
+    sigset_t mask, newmask;
 
-	/* VARIABLES PROTECTED BY ops_lock: ops */
+    /* VARIABLES PROTECTED BY ops_lock: ops */
 
-	sigfillset(&newmask);
-	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-	mutex_lock(&ops_lock);
-	if (ops.cl_call == NULL) {
-		ops.cl_call = clnt_vc_call;
-		ops.cl_xdrs = clnt_vc_xdrs;
-		ops.cl_abort = clnt_vc_abort;
-		ops.cl_geterr = clnt_vc_geterr;
-		ops.cl_freeres = clnt_vc_freeres;
-		ops.cl_destroy = clnt_vc_destroy;
-		ops.cl_control = clnt_vc_control;
-	}
-	mutex_unlock(&ops_lock);
-	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
-	return (&ops);
+    sigfillset(&newmask);
+    thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
+    mutex_lock(&ops_lock);
+    if (ops.cl_call == NULL) {
+        ops.cl_call = clnt_vc_call;
+        ops.cl_xdrs = clnt_vc_xdrs;
+        ops.cl_abort = clnt_vc_abort;
+        ops.cl_geterr = clnt_vc_geterr;
+        ops.cl_freeres = clnt_vc_freeres;
+        ops.cl_destroy = clnt_vc_destroy;
+        ops.cl_control = clnt_vc_control;
+    }
+    mutex_unlock(&ops_lock);
+    thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
+    return (&ops);
 }
 
 /*
  * Make sure that the time is not garbage.   -1 value is disallowed.
  * Note this is different from time_not_ok in clnt_dg.c
  */
-static bool_t
+static bool
 time_not_ok(struct timeval *t)
 {
-	return (t->tv_sec <= -1 || t->tv_sec > 100000000 ||
-		t->tv_usec <= -1 || t->tv_usec > 1000000);
+    return (t->tv_sec <= -1 || t->tv_sec > 100000000 ||
+            t->tv_usec <= -1 || t->tv_usec > 1000000);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: auth.h,v 1.15 2000/06/02 22:57:55 fvdl Exp $	*/
+/* $NetBSD: auth.h,v 1.15 2000/06/02 22:57:55 fvdl Exp $ */
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
@@ -27,9 +27,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *	from: @(#)auth.h 1.17 88/02/08 SMI
- *	from: @(#)auth.h	2.3 88/08/07 4.0 RPCSRC
- *	from: @(#)auth.h	1.43 	98/02/02 SMI
+ * from: @(#)auth.h 1.17 88/02/08 SMI
+ * from: @(#)auth.h 2.3 88/08/07 4.0 RPCSRC
+ * from: @(#)auth.h 1.43  98/02/02 SMI
  * $FreeBSD: src/include/rpc/auth.h,v 1.20 2003/01/01 18:48:42 schweikh Exp $
  */
 
@@ -52,7 +52,7 @@
 /*
  * XDR xdr_opaque_auth
  */
-static inline bool_t 
+static inline bool
 inline_xdr_opaque_auth(XDR *xdrs, struct opaque_auth *oa)
 {
     if (! (inline_xdr_enum(xdrs, &oa->oa_flavor) &&

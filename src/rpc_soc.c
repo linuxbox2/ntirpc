@@ -64,12 +64,12 @@
 
 #include "rpc_com.h"
 
-extern mutex_t	rpcsoc_lock;
+extern mutex_t rpcsoc_lock;
 
 static CLIENT *clnt_com_create(struct sockaddr_in *, rpcprog_t, rpcvers_t,
-    int *, u_int, u_int, char *, int);
+                               int *, u_int, u_int, char *, int);
 static SVCXPRT *svc_com_create(int, u_int, u_int, char *);
-static bool_t rpc_wrap_bcast(char *, struct netbuf *, struct netconfig *);
+static bool rpc_wrap_bcast(char *, struct netbuf *, struct netconfig *);
 
 /* XXX */
 #define IN4_LOCALHOST_STRING    "127.0.0.1"
@@ -93,82 +93,82 @@ clnt_com_create(struct sockaddr_in *raddr,
                 char *tp,
                 int flags)
 {
-	CLIENT *cl;
-	int madefd = FALSE;
-	int fd = *sockp;
-	struct netconfig *nconf;
-	struct netbuf bindaddr;
+    CLIENT *cl;
+    int madefd = FALSE;
+    int fd = *sockp;
+    struct netconfig *nconf;
+    struct netbuf bindaddr;
 
-	mutex_lock(&rpcsoc_lock);
-	if ((nconf = __rpc_getconfip(tp)) == NULL) {
-		rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
-		mutex_unlock(&rpcsoc_lock);
-		return (NULL);
-	}
-	if (fd == RPC_ANYSOCK) {
-		static int have_cloexec;
-		fd = __rpc_nconf2fd_flags(nconf, flags);
-		if (fd == -1) {
-			if ((flags & SOCK_CLOEXEC) && have_cloexec <= 0) {
-				fd = __rpc_nconf2fd(nconf);
-				if (fd == -1)
-					goto syserror;
-				if (flags & SOCK_CLOEXEC) {
-					have_cloexec = -1;
-					fcntl(fd, F_SETFD, FD_CLOEXEC);
-				}
-			} else
-				goto syserror;
-		} else if (flags & SOCK_CLOEXEC)
-			have_cloexec = 1;
-		madefd = TRUE;
-	}
+    mutex_lock(&rpcsoc_lock);
+    if ((nconf = __rpc_getconfip(tp)) == NULL) {
+        rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
+        mutex_unlock(&rpcsoc_lock);
+        return (NULL);
+    }
+    if (fd == RPC_ANYSOCK) {
+        static int have_cloexec;
+        fd = __rpc_nconf2fd_flags(nconf, flags);
+        if (fd == -1) {
+            if ((flags & SOCK_CLOEXEC) && have_cloexec <= 0) {
+                fd = __rpc_nconf2fd(nconf);
+                if (fd == -1)
+                    goto syserror;
+                if (flags & SOCK_CLOEXEC) {
+                    have_cloexec = -1;
+                    fcntl(fd, F_SETFD, FD_CLOEXEC);
+                }
+            } else
+                goto syserror;
+        } else if (flags & SOCK_CLOEXEC)
+            have_cloexec = 1;
+        madefd = TRUE;
+    }
 
-	if (raddr->sin_port == 0) {
-		u_int proto;
-		u_short sport;
+    if (raddr->sin_port == 0) {
+        u_int proto;
+        u_short sport;
 
-		mutex_unlock(&rpcsoc_lock);	/* pmap_getport is recursive */
-		proto = strcmp(tp, "udp") == 0 ? IPPROTO_UDP : IPPROTO_TCP;
-		sport = pmap_getport(raddr, (u_long)prog, (u_long)vers,
-		    proto);
-		if (sport == 0) {
-			goto err;
-		}
-		raddr->sin_port = htons(sport);
-		mutex_lock(&rpcsoc_lock);	/* pmap_getport is recursive */
-	}
+        mutex_unlock(&rpcsoc_lock); /* pmap_getport is recursive */
+        proto = strcmp(tp, "udp") == 0 ? IPPROTO_UDP : IPPROTO_TCP;
+        sport = pmap_getport(raddr, (u_long)prog, (u_long)vers,
+                             proto);
+        if (sport == 0) {
+            goto err;
+        }
+        raddr->sin_port = htons(sport);
+        mutex_lock(&rpcsoc_lock); /* pmap_getport is recursive */
+    }
 
-	/* Transform sockaddr_in to netbuf */
-	bindaddr.maxlen = bindaddr.len =  sizeof (struct sockaddr_in);
-	bindaddr.buf = raddr;
+    /* Transform sockaddr_in to netbuf */
+    bindaddr.maxlen = bindaddr.len =  sizeof (struct sockaddr_in);
+    bindaddr.buf = raddr;
 
-	bindresvport(fd, NULL);
-	cl = clnt_tli_create(fd, nconf, &bindaddr, prog, vers,
-				sendsz, recvsz);
-	if (cl) {
-		if (madefd == TRUE) {
-			/*
-			 * The fd should be closed while destroying the handle.
-			 */
-			(void) CLNT_CONTROL(cl, CLSET_FD_CLOSE, NULL);
-			*sockp = fd;
-		}
-		(void) freenetconfigent(nconf);
-		mutex_unlock(&rpcsoc_lock);
-		return (cl);
-	}
-	goto err;
+    bindresvport(fd, NULL);
+    cl = clnt_tli_create(fd, nconf, &bindaddr, prog, vers,
+                         sendsz, recvsz);
+    if (cl) {
+        if (madefd == TRUE) {
+            /*
+             * The fd should be closed while destroying the handle.
+             */
+            (void) CLNT_CONTROL(cl, CLSET_FD_CLOSE, NULL);
+            *sockp = fd;
+        }
+        (void) freenetconfigent(nconf);
+        mutex_unlock(&rpcsoc_lock);
+        return (cl);
+    }
+    goto err;
 
 syserror:
-	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-	rpc_createerr.cf_error.re_errno = errno;
+    rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+    rpc_createerr.cf_error.re_errno = errno;
 
-err:	if (madefd == TRUE)
-		(void)close(fd);
-	(void) freenetconfigent(nconf);
-	mutex_unlock(&rpcsoc_lock);
-	return (NULL);
+err: if (madefd == TRUE)
+        (void)close(fd);
+    (void) freenetconfigent(nconf);
+    mutex_unlock(&rpcsoc_lock);
+    return (NULL);
 }
 
 /* XXX suspicious */
@@ -182,15 +182,15 @@ __libc_clntudp_bufcreate(struct sockaddr_in *raddr,
                          u_int recvsz,
                          int flags)
 {
-	CLIENT *cl;
+    CLIENT *cl;
 
-	cl = clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
-	    sendsz, recvsz, "udp", flags);
-	if (cl == NULL) {
-		return (NULL);
-	}
-	(void) CLNT_CONTROL(cl, CLSET_RETRY_TIMEOUT, &wait);
-	return (cl);
+    cl = clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
+                         sendsz, recvsz, "udp", flags);
+    if (cl == NULL) {
+        return (NULL);
+    }
+    (void) CLNT_CONTROL(cl, CLSET_RETRY_TIMEOUT, &wait);
+    return (cl);
 }
 
 CLIENT *
@@ -202,23 +202,23 @@ clntudp_bufcreate(struct sockaddr_in *raddr,
                   u_int sendsz,
                   u_int recvsz)
 {
-	CLIENT *cl;
+    CLIENT *cl;
 
-	cl = clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
-	    sendsz, recvsz, "udp", 0);
-	if (cl == NULL) {
-		return (NULL);
-	}
-	(void) CLNT_CONTROL(cl, CLSET_RETRY_TIMEOUT, &wait);
-	return (cl);
+    cl = clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
+                         sendsz, recvsz, "udp", 0);
+    if (cl == NULL) {
+        return (NULL);
+    }
+    (void) CLNT_CONTROL(cl, CLSET_RETRY_TIMEOUT, &wait);
+    return (cl);
 }
 
 CLIENT *
 clntudp_create(struct sockaddr_in *raddr, u_long program, u_long version,
                struct timeval wait, int *sockp)
 {
-	return clntudp_bufcreate(raddr, program, version, wait, sockp,
-                                 UDPMSGSIZE, UDPMSGSIZE);
+    return clntudp_bufcreate(raddr, program, version, wait, sockp,
+                             UDPMSGSIZE, UDPMSGSIZE);
 }
 
 CLIENT *
@@ -229,8 +229,8 @@ clnttcp_create(struct sockaddr_in *raddr,
                u_int sendsz,
                u_int recvsz)
 {
-	return clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
-	    sendsz, recvsz, "tcp", 0);
+    return clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
+                           sendsz, recvsz, "tcp", 0);
 }
 
 /* IPv6 version of clnt*_*create */
@@ -246,15 +246,15 @@ clntudp6_bufcreate(struct sockaddr_in6 *raddr,
                    u_int sendsz,
                    u_int recvsz)
 {
-	CLIENT *cl;
+    CLIENT *cl;
 
-	cl = clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
-	    sendsz, recvsz, "udp6", 0);
-	if (cl == NULL) {
-		return (NULL);
-	}
-	(void) CLNT_CONTROL(cl, CLSET_RETRY_TIMEOUT, &wait);
-	return (cl);
+    cl = clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
+                         sendsz, recvsz, "udp6", 0);
+    if (cl == NULL) {
+        return (NULL);
+    }
+    (void) CLNT_CONTROL(cl, CLSET_RETRY_TIMEOUT, &wait);
+    return (cl);
 }
 
 CLIENT *
@@ -264,8 +264,8 @@ clntudp6_create(struct sockaddr_in6 *raddr,
                 struct timeval wait,
                 int *sockp)
 {
-	return clntudp6_bufcreate(raddr, program, version, wait, sockp,
-                                  UDPMSGSIZE, UDPMSGSIZE);
+    return clntudp6_bufcreate(raddr, program, version, wait, sockp,
+                              UDPMSGSIZE, UDPMSGSIZE);
 }
 
 CLIENT *
@@ -276,8 +276,8 @@ clnttcp6_create(struct sockaddr_in6 *raddr,
                 u_int sendsz,
                 u_int recvsz)
 {
-	return clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
-	    sendsz, recvsz, "tcp6", 0);
+    return clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
+                           sendsz, recvsz, "tcp6", 0);
 }
 
 #endif
@@ -285,7 +285,7 @@ clnttcp6_create(struct sockaddr_in6 *raddr,
 CLIENT *
 clntraw_create(u_long prog, u_long vers)
 {
-	return clnt_raw_create((rpcprog_t)prog, (rpcvers_t)vers);
+    return clnt_raw_create((rpcprog_t)prog, (rpcvers_t)vers);
 }
 
 /*
@@ -294,76 +294,76 @@ clntraw_create(u_long prog, u_long vers)
 static SVCXPRT *
 svc_com_create(int fd, u_int sendsize, u_int recvsize, char *netid)
 {
-	struct netconfig *nconf;
-	SVCXPRT *svc;
-	int madefd = FALSE;
-	int port;
-	struct sockaddr_in sin;
+    struct netconfig *nconf;
+    SVCXPRT *svc;
+    int madefd = FALSE;
+    int port;
+    struct sockaddr_in sin;
 
-	if ((nconf = __rpc_getconfip(netid)) == NULL) {
-		(void) syslog(LOG_ERR, "Could not get %s transport", netid);
-		return (NULL);
-	}
-	if (fd == RPC_ANYSOCK) {
-		fd = __rpc_nconf2fd(nconf);
-		if (fd == -1) {
-			(void) freenetconfigent(nconf);
-			(void) syslog(LOG_ERR,
-			"svc%s_create: could not open connection", netid);
-			return (NULL);
-		}
-		madefd = TRUE;
-	}
+    if ((nconf = __rpc_getconfip(netid)) == NULL) {
+        (void) syslog(LOG_ERR, "Could not get %s transport", netid);
+        return (NULL);
+    }
+    if (fd == RPC_ANYSOCK) {
+        fd = __rpc_nconf2fd(nconf);
+        if (fd == -1) {
+            (void) freenetconfigent(nconf);
+            (void) syslog(LOG_ERR,
+                          "svc%s_create: could not open connection", netid);
+            return (NULL);
+        }
+        madefd = TRUE;
+    }
 
-	memset(&sin, 0, sizeof sin);
-	sin.sin_family = AF_INET;
-	bindresvport(fd, &sin);
-	listen(fd, SOMAXCONN);
-	svc = svc_tli_create(fd, nconf, NULL, sendsize, recvsize);
-	(void) freenetconfigent(nconf);
-	if (svc == NULL) {
-		if (madefd)
-			(void)close(fd);
-		return (NULL);
-	}
-	port = (((struct sockaddr_in *)svc->xp_ltaddr.buf)->sin_port);
-	svc->xp_port = ntohs(port);
-	return (svc);
+    memset(&sin, 0, sizeof sin);
+    sin.sin_family = AF_INET;
+    bindresvport(fd, &sin);
+    listen(fd, SOMAXCONN);
+    svc = svc_tli_create(fd, nconf, NULL, sendsize, recvsize);
+    (void) freenetconfigent(nconf);
+    if (svc == NULL) {
+        if (madefd)
+            (void)close(fd);
+        return (NULL);
+    }
+    port = (((struct sockaddr_in *)svc->xp_ltaddr.buf)->sin_port);
+    svc->xp_port = ntohs(port);
+    return (svc);
 }
 
 SVCXPRT *
 svctcp_create(int fd, u_int sendsize, u_int recvsize)
 {
 
-	return svc_com_create(fd, sendsize, recvsize, "tcp");
+    return svc_com_create(fd, sendsize, recvsize, "tcp");
 }
 
 SVCXPRT *
 svcudp_bufcreate(int fd, u_int sendsz, u_int recvsz)
 {
 
-	return svc_com_create(fd, sendsz, recvsz, "udp");
+    return svc_com_create(fd, sendsz, recvsz, "udp");
 }
 
 SVCXPRT *
 svcfd_create(int fd, u_int sendsize, u_int recvsize)
 {
 
-	return svc_fd_create(fd, sendsize, recvsize);
+    return svc_fd_create(fd, sendsize, recvsize);
 }
 
 SVCXPRT *
 svcudp_create(int fd)
 {
 
-	return svc_com_create(fd, UDPMSGSIZE, UDPMSGSIZE, "udp");
+    return svc_com_create(fd, UDPMSGSIZE, UDPMSGSIZE, "udp");
 }
 
 SVCXPRT *
 svcraw_create()
 {
 
-	return svc_raw_create();
+    return svc_raw_create();
 }
 
 
@@ -371,41 +371,41 @@ svcraw_create()
 #ifdef INET6_NOT_USED
 SVCXPRT *
 svcudp6_bufcreate(fd, sendsz, recvsz)
-	int fd;
-	u_int sendsz, recvsz;
+int fd;
+u_int sendsz, recvsz;
 {
-	return svc_com_create(fd, sendsz, recvsz, "udp6");
+    return svc_com_create(fd, sendsz, recvsz, "udp6");
 }
 
 
 SVCXPRT *
 svctcp6_create(fd, sendsize, recvsize)
-	int fd;
-	u_int sendsize;
-	u_int recvsize;
+int fd;
+u_int sendsize;
+u_int recvsize;
 {
-	return svc_com_create(fd, sendsize, recvsize, "tcp6");
+    return svc_com_create(fd, sendsize, recvsize, "tcp6");
 }
 
 
 SVCXPRT *
 svcudp6_create(fd)
-	int fd;
+int fd;
 {
-	return svc_com_create(fd, UDPMSGSIZE, UDPMSGSIZE, "udp6");
+    return svc_com_create(fd, UDPMSGSIZE, UDPMSGSIZE, "udp6");
 }
 #endif
 
 int
 get_myaddress(addr)
-	struct sockaddr_in *addr;
+    struct sockaddr_in *addr;
 {
 
-	memset((void *) addr, 0, sizeof(*addr));
-	addr->sin_family = AF_INET;
-	addr->sin_port = htons(PMAPPORT);
-	addr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-	return (0);
+    memset((void *) addr, 0, sizeof(*addr));
+    addr->sin_family = AF_INET;
+    addr->sin_port = htons(PMAPPORT);
+    addr->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    return (0);
 }
 
 /*
@@ -416,8 +416,8 @@ callrpc(const char *host, int prognum, int versnum, int procnum,
         xdrproc_t inproc, void *in, xdrproc_t outproc, void *out)
 {
 
-	return (int)rpc_call(host, (rpcprog_t)prognum, (rpcvers_t)versnum,
-	    (rpcproc_t)procnum, inproc, in, outproc, out, "udp");
+    return (int)rpc_call(host, (rpcprog_t)prognum, (rpcvers_t)versnum,
+                         (rpcproc_t)procnum, inproc, in, outproc, out, "udp");
 }
 
 /*
@@ -429,60 +429,60 @@ registerrpc(int prognum, int versnum, int procnum,
             xdrproc_t outproc)
 {
 
-	return rpc_reg((rpcprog_t)prognum, (rpcvers_t)versnum,
-	    (rpcproc_t)procnum, progname, inproc, outproc, "udp");
+    return rpc_reg((rpcprog_t)prognum, (rpcvers_t)versnum,
+                   (rpcproc_t)procnum, progname, inproc, outproc, "udp");
 }
 
 /*
  * All the following clnt_broadcast stuff is convulated; it supports
  * the earlier calling style of the callback function
  */
-extern thread_key_t	clnt_broadcast_key;
+extern thread_key_t clnt_broadcast_key;
 
 /*
  * Need to translate the netbuf address into sockaddr_in address.
  * Dont care about netid here.
  */
 /* ARGSUSED */
-static bool_t
+static bool
 rpc_wrap_bcast(char *resultp, /* results of the call */
                struct netbuf *addr, /* address of the guy who responded */
                struct netconfig *nconf /* Netconf of the transport */)
 {
-	resultproc_t clnt_broadcast_result;
+    resultproc_t clnt_broadcast_result;
 
-	if (strcmp(nconf->nc_netid, "udp"))
-		return (FALSE);
-	clnt_broadcast_result = (resultproc_t)thr_getspecific(clnt_broadcast_key);
-	return (*clnt_broadcast_result)(resultp,
-				(struct sockaddr_in *)addr->buf);
+    if (strcmp(nconf->nc_netid, "udp"))
+        return (FALSE);
+    clnt_broadcast_result = (resultproc_t)thr_getspecific(clnt_broadcast_key);
+    return (*clnt_broadcast_result)(resultp,
+                                    (struct sockaddr_in *)addr->buf);
 }
 
 /*
  * Broadcasts on UDP transport. Obsoleted by rpc_broadcast().
  */
 enum clnt_stat
-clnt_broadcast(u_long		prog,		/* program number */
-               u_long		vers,		/* version number */
-               u_long		proc,		/* procedure number */
-               xdrproc_t	xargs,		/* xdr routine for args */
-               void	       *argsp,		/* pointer to args */
-               xdrproc_t	xresults,	/* xdr routine for results */
-               void	       *resultsp,	/* pointer to results */
-               resultproc_t	eachresult	/* call with each result obtained */)
+clnt_broadcast(u_long  prog,  /* program number */
+               u_long  vers,  /* version number */
+               u_long  proc,  /* procedure number */
+               xdrproc_t xargs,  /* xdr routine for args */
+               void        *argsp,  /* pointer to args */
+               xdrproc_t xresults, /* xdr routine for results */
+               void        *resultsp, /* pointer to results */
+               resultproc_t eachresult /* call with each result obtained */)
 {
-	extern mutex_t tsd_lock;
+    extern mutex_t tsd_lock;
 
-	if (clnt_broadcast_key == -1) {
-		mutex_lock(&tsd_lock);
-		if (clnt_broadcast_key == -1)
-			thr_keycreate(&clnt_broadcast_key, __rpc_free);
-		mutex_unlock(&tsd_lock);
-	}
-	thr_setspecific(clnt_broadcast_key, (void *) eachresult);
-	return rpc_broadcast((rpcprog_t)prog, (rpcvers_t)vers,
-	    (rpcproc_t)proc, xargs, argsp, xresults, resultsp,
-	    (resultproc_t) rpc_wrap_bcast, "udp");
+    if (clnt_broadcast_key == -1) {
+        mutex_lock(&tsd_lock);
+        if (clnt_broadcast_key == -1)
+            thr_keycreate(&clnt_broadcast_key, __rpc_free);
+        mutex_unlock(&tsd_lock);
+    }
+    thr_setspecific(clnt_broadcast_key, (void *) eachresult);
+    return rpc_broadcast((rpcprog_t)prog, (rpcvers_t)vers,
+                         (rpcproc_t)proc, xargs, argsp, xresults, resultsp,
+                         (resultproc_t) rpc_wrap_bcast, "udp");
 }
 
 /*
@@ -495,25 +495,25 @@ authdes_create(char *servername, /* network name of server */
                struct sockaddr *syncaddr, /* optional hostaddr to sync with */
                des_block *ckey /* optional conversation key to use */)
 {
-	AUTH *dummy;
-	AUTH *nauth;
-	char hostname[NI_MAXHOST];
+    AUTH *dummy;
+    AUTH *nauth;
+    char hostname[NI_MAXHOST];
 
-	if (syncaddr) {
-		/*
-		 * Change addr to hostname, because that is the way
-		 * new interface takes it.
-		 */
-		if (getnameinfo(syncaddr, sizeof(syncaddr), hostname,
-		    sizeof hostname, NULL, 0, 0) != 0)
-			goto fallback;
+    if (syncaddr) {
+        /*
+         * Change addr to hostname, because that is the way
+         * new interface takes it.
+         */
+        if (getnameinfo(syncaddr, sizeof(syncaddr), hostname,
+                        sizeof hostname, NULL, 0, 0) != 0)
+            goto fallback;
 
-		nauth = authdes_seccreate(servername, window, hostname, ckey);
-		return (nauth);
-	}
+        nauth = authdes_seccreate(servername, window, hostname, ckey);
+        return (nauth);
+    }
 fallback:
-	dummy = authdes_seccreate(servername, window, NULL, ckey);
-	return (dummy);
+    dummy = authdes_seccreate(servername, window, NULL, ckey);
+    return (dummy);
 }
 
 /*
@@ -527,41 +527,41 @@ clntunix_create(struct sockaddr_un *raddr,
                 u_int sendsz,
                 u_int recvsz)
 {
-	struct netbuf *svcaddr;
-	CLIENT *cl;
-	int len;
+    struct netbuf *svcaddr;
+    CLIENT *cl;
+    int len;
 
-	cl = NULL;
-	svcaddr = NULL;
-	if (((svcaddr = mem_alloc(sizeof(struct netbuf))) == NULL ) ||
-	    ((svcaddr->buf = mem_alloc(sizeof(struct sockaddr_un))) == NULL)) {
-		if (svcaddr != NULL)
-			__free(svcaddr);
-		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-		rpc_createerr.cf_error.re_errno = errno;
-		return(cl);
-	}
-	if (*sockp < 0) {
-		*sockp = socket(AF_LOCAL, SOCK_STREAM, 0);
-		len = SUN_LEN(raddr);
-		if ((*sockp < 0) || (connect(*sockp,
-		    (struct sockaddr *)raddr, len) < 0)) {
-			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-			rpc_createerr.cf_error.re_errno = errno;
-			if (*sockp != -1)
-				(void)close(*sockp);
-			goto done;
-		}
-	}
-	svcaddr->buf = raddr;
-	svcaddr->len = sizeof(raddr);
-	svcaddr->maxlen = sizeof (struct sockaddr_un);
-	cl = clnt_vc_create(*sockp, svcaddr, prog,
-	    vers, sendsz, recvsz);
+    cl = NULL;
+    svcaddr = NULL;
+    if (((svcaddr = mem_alloc(sizeof(struct netbuf))) == NULL ) ||
+        ((svcaddr->buf = mem_alloc(sizeof(struct sockaddr_un))) == NULL)) {
+        if (svcaddr != NULL)
+            __free(svcaddr);
+        rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+        rpc_createerr.cf_error.re_errno = errno;
+        return(cl);
+    }
+    if (*sockp < 0) {
+        *sockp = socket(AF_LOCAL, SOCK_STREAM, 0);
+        len = SUN_LEN(raddr);
+        if ((*sockp < 0) || (connect(*sockp,
+                                     (struct sockaddr *)raddr, len) < 0)) {
+            rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+            rpc_createerr.cf_error.re_errno = errno;
+            if (*sockp != -1)
+                (void)close(*sockp);
+            goto done;
+        }
+    }
+    svcaddr->buf = raddr;
+    svcaddr->len = sizeof(raddr);
+    svcaddr->maxlen = sizeof (struct sockaddr_un);
+    cl = clnt_vc_create(*sockp, svcaddr, prog,
+                        vers, sendsz, recvsz);
 done:
-	__free(svcaddr->buf);
-	__free(svcaddr);
-	return(cl);
+    __free(svcaddr->buf);
+    __free(svcaddr);
+    return(cl);
 }
 
 /*
@@ -574,54 +574,54 @@ svcunix_create(int sock,
                u_int recvsize,
                char *path)
 {
-	struct netconfig *nconf;
-	void *localhandle;
-	struct sockaddr_un sun;
-	struct sockaddr *sa;
-	struct t_bind taddr;
-	SVCXPRT *xprt;
-	int addrlen;
+    struct netconfig *nconf;
+    void *localhandle;
+    struct sockaddr_un sun;
+    struct sockaddr *sa;
+    struct t_bind taddr;
+    SVCXPRT *xprt;
+    int addrlen;
 
-	xprt = (SVCXPRT *)NULL;
-	localhandle = setnetconfig();
-	while ((nconf = getnetconfig(localhandle)) != NULL) {
-		if (nconf->nc_protofmly != NULL &&
-		    strcmp(nconf->nc_protofmly, NC_LOOPBACK) == 0)
-			break;
-	}
-	if (nconf == NULL)
-		return(xprt);
+    xprt = (SVCXPRT *)NULL;
+    localhandle = setnetconfig();
+    while ((nconf = getnetconfig(localhandle)) != NULL) {
+        if (nconf->nc_protofmly != NULL &&
+            strcmp(nconf->nc_protofmly, NC_LOOPBACK) == 0)
+            break;
+    }
+    if (nconf == NULL)
+        return(xprt);
 
-	if ((sock = __rpc_nconf2fd(nconf)) < 0)
-		goto done;
+    if ((sock = __rpc_nconf2fd(nconf)) < 0)
+        goto done;
 
-	memset(&sun, 0, sizeof sun);
-	sun.sun_family = AF_LOCAL;
-	strncpy(sun.sun_path, path, sizeof(sun.sun_path));
-	addrlen = sizeof(struct sockaddr_un);
-	sa = (struct sockaddr *)&sun;
+    memset(&sun, 0, sizeof sun);
+    sun.sun_family = AF_LOCAL;
+    strncpy(sun.sun_path, path, sizeof(sun.sun_path));
+    addrlen = sizeof(struct sockaddr_un);
+    sa = (struct sockaddr *)&sun;
 
-	if (bind(sock, sa, addrlen) < 0)
-		goto done;
+    if (bind(sock, sa, addrlen) < 0)
+        goto done;
 
-	taddr.addr.len = taddr.addr.maxlen = addrlen;
-	taddr.addr.buf = mem_alloc(addrlen);
-	if (taddr.addr.buf == NULL)
-		goto done;
-	memcpy(taddr.addr.buf, sa, addrlen);
+    taddr.addr.len = taddr.addr.maxlen = addrlen;
+    taddr.addr.buf = mem_alloc(addrlen);
+    if (taddr.addr.buf == NULL)
+        goto done;
+    memcpy(taddr.addr.buf, sa, addrlen);
 
-	if (nconf->nc_semantics != NC_TPI_CLTS) {
-		if (listen(sock, SOMAXCONN) < 0) {
-			__free(taddr.addr.buf);
-			goto done;
-		}
-	}
+    if (nconf->nc_semantics != NC_TPI_CLTS) {
+        if (listen(sock, SOMAXCONN) < 0) {
+            __free(taddr.addr.buf);
+            goto done;
+        }
+    }
 
-	xprt = (SVCXPRT *)svc_tli_create(sock, nconf, &taddr, sendsize, recvsize);
+    xprt = (SVCXPRT *)svc_tli_create(sock, nconf, &taddr, sendsize, recvsize);
 
 done:
-	endnetconfig(localhandle);
-	return(xprt);
+    endnetconfig(localhandle);
+    return(xprt);
 }
 
 /*
@@ -631,7 +631,7 @@ done:
 SVCXPRT *
 svcunixfd_create(int fd, u_int sendsize, u_int recvsize)
 {
- 	return (svc_fd_create(fd, sendsize, recvsize));
+    return (svc_fd_create(fd, sendsize, recvsize));
 }
 
 #endif /* PORTMAP */

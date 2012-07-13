@@ -27,12 +27,12 @@
  */
 
 /*
-#if defined(LIBC_SCCS) && !defined(lint)
-static char *sccsid = "@(#)auth_none.c 1.19 87/08/11 Copyr 1984 Sun Micro";
-static char *sccsid = "@(#)auth_none.c	2.1 88/07/29 4.0 RPCSRC";
-#endif
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD: src/lib/libc/rpc/auth_none.c,v 1.12 2002/03/22 23:18:35 obrien Exp $");
+  #if defined(LIBC_SCCS) && !defined(lint)
+  static char *sccsid = "@(#)auth_none.c 1.19 87/08/11 Copyr 1984 Sun Micro";
+  static char *sccsid = "@(#)auth_none.c 2.1 88/07/29 4.0 RPCSRC";
+  #endif
+  #include <sys/cdefs.h>
+  __FBSDID("$FreeBSD: src/lib/libc/rpc/auth_none.c,v 1.12 2002/03/22 23:18:35 obrien Exp $");
 */
 
 
@@ -59,72 +59,72 @@ __FBSDID("$FreeBSD: src/lib/libc/rpc/auth_none.c,v 1.12 2002/03/22 23:18:35 obri
  * Authenticator operations routines
  */
 
-static bool_t authnone_marshal (AUTH *, XDR *);
+static bool authnone_marshal (AUTH *, XDR *);
 static void authnone_verf (AUTH *);
-static bool_t authnone_validate (AUTH *, struct opaque_auth *);
-static bool_t authnone_refresh (AUTH *, void *);
+static bool authnone_validate (AUTH *, struct opaque_auth *);
+static bool authnone_refresh (AUTH *, void *);
 static void authnone_destroy (AUTH *);
 
 static struct auth_ops *authnone_ops(void);
 
 static struct authnone_private {
-	AUTH	no_client;
-	char	marshalled_client[MAX_MARSHAL_SIZE];
-	u_int	mcnt;
+    AUTH no_client;
+    char marshalled_client[MAX_MARSHAL_SIZE];
+    u_int mcnt;
 } *authnone_private;
 
 AUTH *
 authnone_create(void)
 {
-	struct authnone_private *ap = authnone_private;
-	XDR xdr_stream;
-	XDR *xdrs;
-	extern mutex_t authnone_lock;
+    struct authnone_private *ap = authnone_private;
+    XDR xdr_stream;
+    XDR *xdrs;
+    extern mutex_t authnone_lock;
 
-	mutex_lock(&authnone_lock);
-	if (ap == 0) {
-		ap = (struct authnone_private *)calloc(1, sizeof (*ap));
-		if (ap == 0) {
-			mutex_unlock(&authnone_lock);
-			return (0);
-		}
-		authnone_private = ap;
-	}
-	if (!ap->mcnt) {
-		ap->no_client.ah_cred = ap->no_client.ah_verf = _null_auth;
-		ap->no_client.ah_ops = authnone_ops();
-		xdrs = &xdr_stream;
-		xdrmem_create(xdrs, ap->marshalled_client,
-		    (u_int)MAX_MARSHAL_SIZE, XDR_ENCODE);
-		(void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_cred);
-		(void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_verf);
-		ap->mcnt = XDR_GETPOS(xdrs);
-		XDR_DESTROY(xdrs);
-	}
-	mutex_unlock(&authnone_lock);
-	return (&ap->no_client);
+    mutex_lock(&authnone_lock);
+    if (ap == 0) {
+        ap = (struct authnone_private *)calloc(1, sizeof (*ap));
+        if (ap == 0) {
+            mutex_unlock(&authnone_lock);
+            return (0);
+        }
+        authnone_private = ap;
+    }
+    if (!ap->mcnt) {
+        ap->no_client.ah_cred = ap->no_client.ah_verf = _null_auth;
+        ap->no_client.ah_ops = authnone_ops();
+        xdrs = &xdr_stream;
+        xdrmem_create(xdrs, ap->marshalled_client,
+                      (u_int)MAX_MARSHAL_SIZE, XDR_ENCODE);
+        (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_cred);
+        (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_verf);
+        ap->mcnt = XDR_GETPOS(xdrs);
+        XDR_DESTROY(xdrs);
+    }
+    mutex_unlock(&authnone_lock);
+    return (&ap->no_client);
 }
 
 /*ARGSUSED*/
-static bool_t
+static bool
 authnone_marshal(AUTH *client, XDR *xdrs)
 {
-	struct authnone_private *ap;
-	bool_t dummy;
-	extern mutex_t authnone_lock;
+    struct authnone_private *ap;
+    bool dummy;
+    extern mutex_t authnone_lock;
 
-	assert(xdrs != NULL);
+    assert(xdrs != NULL);
 
-	mutex_lock(&authnone_lock);
-	ap = authnone_private;
-	if (ap == NULL) {
-		mutex_unlock(&authnone_lock);
-		return (FALSE);
-	}
-	dummy = (*xdrs->x_ops->x_putbytes)(xdrs,
-	    ap->marshalled_client, ap->mcnt);
-	mutex_unlock(&authnone_lock);
-	return (dummy);
+    mutex_lock(&authnone_lock);
+    ap = authnone_private;
+    if (ap == NULL) {
+        mutex_unlock(&authnone_lock);
+        return (FALSE);
+    }
+    dummy = (*xdrs->x_ops->x_putbytes)(xdrs,
+                                       ap->marshalled_client, ap->mcnt);
+    mutex_unlock(&authnone_lock);
+    return (dummy);
 }
 
 /* All these unused parameters are required to keep ANSI-C from grumbling */
@@ -135,19 +135,19 @@ authnone_verf(AUTH *client)
 }
 
 /*ARGSUSED*/
-static bool_t
+static bool
 authnone_validate(AUTH *client, struct opaque_auth *opaque)
 {
 
-	return (TRUE);
+    return (TRUE);
 }
 
 /*ARGSUSED*/
-static bool_t
+static bool
 authnone_refresh(AUTH *client, void *dummy)
 {
 
-	return (FALSE);
+    return (FALSE);
 }
 
 /*ARGSUSED*/
@@ -156,30 +156,30 @@ authnone_destroy(AUTH *client)
 {
 }
 
-static bool_t
+static bool
 authnone_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xfunc, caddr_t xwhere)
 {
-	return ((*xfunc)(xdrs, xwhere));
+    return ((*xfunc)(xdrs, xwhere));
 }
 
 static struct auth_ops *
 authnone_ops(void)
 {
-	static struct auth_ops ops;
-	extern mutex_t ops_lock;
- 
+    static struct auth_ops ops;
+    extern mutex_t ops_lock;
+
 /* VARIABLES PROTECTED BY ops_lock: ops */
- 
-	mutex_lock(&ops_lock);
-	if (ops.ah_nextverf == NULL) {
-		ops.ah_nextverf = authnone_verf;
-		ops.ah_marshal = authnone_marshal;
-		ops.ah_validate = authnone_validate;
-		ops.ah_refresh = authnone_refresh;
-		ops.ah_destroy = authnone_destroy;
-		ops.ah_wrap = authnone_wrap;
-		ops.ah_unwrap = authnone_wrap;
-	}
-	mutex_unlock(&ops_lock);
-	return (&ops);
+
+    mutex_lock(&ops_lock);
+    if (ops.ah_nextverf == NULL) {
+        ops.ah_nextverf = authnone_verf;
+        ops.ah_marshal = authnone_marshal;
+        ops.ah_validate = authnone_validate;
+        ops.ah_refresh = authnone_refresh;
+        ops.ah_destroy = authnone_destroy;
+        ops.ah_wrap = authnone_wrap;
+        ops.ah_unwrap = authnone_wrap;
+    }
+    mutex_unlock(&ops_lock);
+    return (&ops);
 }

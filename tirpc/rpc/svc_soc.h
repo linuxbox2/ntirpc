@@ -1,5 +1,5 @@
-/*	$NetBSD: svc_soc.h,v 1.1 2000/06/02 22:57:57 fvdl Exp $	*/
-/*	$FreeBSD: src/include/rpc/svc_soc.h,v 1.2 2002/03/23 17:24:55 imp Exp $ */
+/* $NetBSD: svc_soc.h,v 1.1 2000/06/02 22:57:57 fvdl Exp $ */
+/* $FreeBSD: src/include/rpc/svc_soc.h,v 1.2 2002/03/23 17:24:55 imp Exp $ */
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
@@ -52,32 +52,32 @@
  *  Approved way of getting address of caller
  */
 #define svc_getcaller(x) (&(x)->xp_raddr)
-/* Getting address of a caller using netbuf xp_rtaddr */ 
+/* Getting address of a caller using netbuf xp_rtaddr */
 #define svc_getcaller_netbuf(x) (&(x)->xp_rtaddr)
 /*
  * Service registration
  *
  * svc_register(xprt, prog, vers, dispatch, protocol)
- *	SVCXPRT *xprt;
- *	u_long prog;
- *	u_long vers;
- *	void (*dispatch)();
- *	int protocol;    like TCP or UDP, zero means do not register 
+ * SVCXPRT *xprt;
+ * u_long prog;
+ * u_long vers;
+ * void (*dispatch)();
+ * int protocol;    like TCP or UDP, zero means do not register
  */
 __BEGIN_DECLS
-extern bool_t	svc_register(SVCXPRT *, u_long, u_long,
-		    void (*)(struct svc_req *, SVCXPRT *), int);
+extern bool svc_register(SVCXPRT *, u_long, u_long,
+                         void (*)(struct svc_req *, SVCXPRT *), int);
 __END_DECLS
 
 /*
  * Service un-registration
  *
  * svc_unregister(prog, vers)
- *	u_long prog;
- *	u_long vers;
+ * u_long prog;
+ * u_long vers;
  */
 __BEGIN_DECLS
-extern void	svc_unregister(u_long, u_long);
+extern void svc_unregister(u_long, u_long);
 __END_DECLS
 
 

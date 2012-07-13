@@ -1,5 +1,5 @@
-/*	$NetBSD: rpcb_clnt.h,v 1.1 2000/06/02 22:57:56 fvdl Exp $	*/
-/*	$FreeBSD: src/include/rpc/rpcb_clnt.h,v 1.2 2002/03/23 17:24:55 imp Exp $ */
+/* $NetBSD: rpcb_clnt.h,v 1.1 2000/06/02 22:57:56 fvdl Exp $ */
+/* $FreeBSD: src/include/rpc/rpcb_clnt.h,v 1.2 2002/03/23 17:24:55 imp Exp $ */
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
@@ -40,44 +40,45 @@
 
 /*
  * Usage:
- *	success = rpcb_set(program, version, nconf, address);
- *	success = rpcb_unset(program, version, nconf);
- *	success = rpcb_getaddr(program, version, nconf, host);
- *	head = rpcb_getmaps(nconf, host);
- *	clnt_stat = rpcb_rmtcall(nconf, host, program, version, procedure,
- *		xdrargs, argsp, xdrres, resp, tout, addr_ptr)
- *	success = rpcb_gettime(host, timep)
- *	uaddr = rpcb_taddr2uaddr(nconf, taddr);
- *	taddr = rpcb_uaddr2uaddr(nconf, uaddr);
+ * success = rpcb_set(program, version, nconf, address);
+ * success = rpcb_unset(program, version, nconf);
+ * success = rpcb_getaddr(program, version, nconf, host);
+ * head = rpcb_getmaps(nconf, host);
+ * clnt_stat = rpcb_rmtcall(nconf, host, program, version, procedure,
+ *  xdrargs, argsp, xdrres, resp, tout, addr_ptr)
+ * success = rpcb_gettime(host, timep)
+ * uaddr = rpcb_taddr2uaddr(nconf, taddr);
+ * taddr = rpcb_uaddr2uaddr(nconf, uaddr);
  */
 
 #ifndef _RPC_RPCB_CLNT_H
-#define	_RPC_RPCB_CLNT_H
+#define _RPC_RPCB_CLNT_H
 
-/* #pragma ident	"@(#)rpcb_clnt.h	1.13	94/04/25 SMI" */
+/* #pragma ident "@(#)rpcb_clnt.h 1.13 94/04/25 SMI" */
 /* rpcb_clnt.h 1.3 88/12/05 SMI */
 
 #include <rpc/types.h>
 #include <rpc/rpcb_prot.h>
+
 __BEGIN_DECLS
-extern bool_t rpcb_set(const rpcprog_t, const rpcvers_t,
-		       const struct netconfig  *, const struct netbuf *);
-extern bool_t rpcb_unset(const rpcprog_t, const rpcvers_t,
-			 const struct netconfig *);
-extern rpcblist	*rpcb_getmaps(const struct netconfig *, const char *);
+extern bool rpcb_set(const rpcprog_t, const rpcvers_t,
+                       const struct netconfig  *, const struct netbuf *);
+extern bool rpcb_unset(const rpcprog_t, const rpcvers_t,
+                         const struct netconfig *);
+extern rpcblist *rpcb_getmaps(const struct netconfig *, const char *);
 extern enum clnt_stat rpcb_rmtcall(const struct netconfig *,
-				   const char *, const rpcprog_t,
-				   const rpcvers_t, const rpcproc_t,
-				   const xdrproc_t, const caddr_t,
-				   const xdrproc_t, const caddr_t,
-				   const struct timeval,
-				   const struct netbuf *);
-extern bool_t rpcb_getaddr(const rpcprog_t, const rpcvers_t,
-			   const struct netconfig *, struct netbuf *,
-			   const  char *);
-extern bool_t rpcb_gettime(const char *, time_t *);
+                                   const char *, const rpcprog_t,
+                                   const rpcvers_t, const rpcproc_t,
+                                   const xdrproc_t, const caddr_t,
+                                   const xdrproc_t, const caddr_t,
+                                   const struct timeval,
+                                   const struct netbuf *);
+extern bool rpcb_getaddr(const rpcprog_t, const rpcvers_t,
+                           const struct netconfig *, struct netbuf *,
+                           const  char *);
+extern bool rpcb_gettime(const char *, time_t *);
 extern char *rpcb_taddr2uaddr(struct netconfig *, struct netbuf *);
 extern struct netbuf *rpcb_uaddr2taddr(struct netconfig *, char *);
 __END_DECLS
 
-#endif	/* !_RPC_RPCB_CLNT_H */
+#endif /* !_RPC_RPCB_CLNT_H */

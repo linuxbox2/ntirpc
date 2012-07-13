@@ -1,5 +1,3 @@
-#include <config.h>
-#include <sys/cdefs.h>
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
  * All rights reserved.
@@ -35,6 +33,9 @@
  * authdes_prot.c, XDR routines for DES authentication
  */
 
+#include <config.h>
+#include <sys/cdefs.h>
+
 #include <rpc/types.h>
 
 #include <rpc/xdr_inline.h>
@@ -43,41 +44,41 @@
 
 #define ATTEMPT(xdr_op) if (!(xdr_op)) return (FALSE)
 
-bool_t
+bool
 xdr_authdes_cred(XDR *xdrs, struct authdes_cred *cred)
 {
-	/*
-	 * Unrolled xdr
-	 */
-	ATTEMPT(inline_xdr_enum(xdrs, (enum_t *)&cred->adc_namekind));
-	switch (cred->adc_namekind) {
-	case ADN_FULLNAME:
-		ATTEMPT(inline_xdr_string(xdrs, &cred->adc_fullname.name,
-		    MAXNETNAMELEN));
-		ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&cred->adc_fullname.key,
-		    sizeof(des_block)));
-		ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&cred->adc_fullname.window,
-		    sizeof(cred->adc_fullname.window)));
-		return (TRUE);
-	case ADN_NICKNAME:
-		ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&cred->adc_nickname,
-		    sizeof(cred->adc_nickname)));
-		return (TRUE);
-	default:
-		return (FALSE);
-	}
+    /*
+     * Unrolled xdr
+     */
+    ATTEMPT(inline_xdr_enum(xdrs, (enum_t *)&cred->adc_namekind));
+    switch (cred->adc_namekind) {
+    case ADN_FULLNAME:
+        ATTEMPT(inline_xdr_string(xdrs, &cred->adc_fullname.name,
+                                  MAXNETNAMELEN));
+        ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&cred->adc_fullname.key,
+                                  sizeof(des_block)));
+        ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&cred->adc_fullname.window,
+                                  sizeof(cred->adc_fullname.window)));
+        return (TRUE);
+    case ADN_NICKNAME:
+        ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&cred->adc_nickname,
+                                  sizeof(cred->adc_nickname)));
+        return (TRUE);
+    default:
+        return (FALSE);
+    }
 }
 
 
-bool_t
+bool
 xdr_authdes_verf(XDR *xdrs, struct authdes_verf *verf)
 {
-	/*
- 	 * Unrolled xdr
- 	 */
-	ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&verf->adv_xtimestamp,
-	    sizeof(des_block)));
-	ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&verf->adv_int_u,
-	    sizeof(verf->adv_int_u)));
-	return (TRUE);
+    /*
+     * Unrolled xdr
+     */
+    ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&verf->adv_xtimestamp,
+                              sizeof(des_block)));
+    ATTEMPT(inline_xdr_opaque(xdrs, (caddr_t)&verf->adv_int_u,
+                              sizeof(verf->adv_int_u)));
+    return (TRUE);
 }

@@ -12,13 +12,13 @@
   are met:
 
   1. Redistributions of source code must retain the above copyright
-     notice, this list of conditions and the following disclaimer.
+  notice, this list of conditions and the following disclaimer.
   2. Redistributions in binary form must reproduce the above copyright
-     notice, this list of conditions and the following disclaimer in the
-     documentation and/or other materials provided with the distribution.
+  notice, this list of conditions and the following disclaimer in the
+  documentation and/or other materials provided with the distribution.
   3. Neither the name of the University nor the names of its
-     contributors may be used to endorse or promote products derived
-     from this software without specific prior written permission.
+  contributors may be used to endorse or promote products derived
+  from this software without specific prior written permission.
 
   THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED
   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
@@ -33,43 +33,43 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
   $Id: svc_auth_none.c,v 1.1 2004/10/22 17:24:30 bfields Exp $
- */
+*/
 
 #include <config.h>
 #include <rpc/rpc.h>
 
-static bool_t svcauth_none_destroy(SVCAUTH *auth);
-static bool_t svcauth_none_wrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func,
+static bool svcauth_none_destroy(SVCAUTH *auth);
+static bool svcauth_none_wrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func,
                                 caddr_t xdr_ptr);
 
 struct svc_auth_ops svc_auth_none_ops = {
-	svcauth_none_wrap,
-	svcauth_none_wrap,
-	svcauth_none_destroy
+    svcauth_none_wrap,
+    svcauth_none_wrap,
+    svcauth_none_destroy
 };
 
 SVCAUTH svc_auth_none = {
-	&svc_auth_none_ops,
-	NULL,
+    &svc_auth_none_ops,
+    NULL,
 };
 
-static bool_t
+static bool
 svcauth_none_destroy(SVCAUTH *auth)
 {
-	return (TRUE);
+    return (TRUE);
 }
 
-static bool_t
+static bool
 svcauth_none_wrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func,
-		  caddr_t xdr_ptr)
+                  caddr_t xdr_ptr)
 {
-	return ((*xdr_func)(xdrs, xdr_ptr));
+    return ((*xdr_func)(xdrs, xdr_ptr));
 }
 
 enum auth_stat
 _svcauth_none(struct svc_req *rqst, struct rpc_msg *msg)
 {
-	rqst->rq_xprt->xp_auth = &svc_auth_none;
+    rqst->rq_xprt->xp_auth = &svc_auth_none;
 
-	return (AUTH_OK);
+    return (AUTH_OK);
 }

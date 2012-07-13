@@ -65,26 +65,26 @@
  * are O(1) without any ordered or hashed representation.
  */
 
-static bool_t initialized = FALSE;
+static bool initialized = FALSE;
 
 static struct svc_rqst_set svc_rqst_set_ = {
     PTHREAD_RWLOCK_INITIALIZER /* lock */,
     { NULL,
       rqst_thrd_cmpf,
       0, /* size */
-      0  /* gen */ 
+      0  /* gen */
     } /* t */,
     0 /* next_id */
 };
 
 extern struct svc_params __svc_params[1];
 
-#define cond_init_svc_rqst() { \
-do { \
-    if (! initialized) \
-        svc_rqst_init(); \
-    } while (0); \
-}
+#define cond_init_svc_rqst() {                  \
+        do {                                    \
+            if (! initialized)                  \
+                svc_rqst_init();                \
+        } while (0);                            \
+    }
 
 static inline void SetNonBlock(int fd)
 {
@@ -106,7 +106,7 @@ void svc_rqst_init()
     rwlockattr_init(&rwlock_attr);
 #ifdef GLIBC
     pthread_rwlockattr_setkind_np(
-        &rwlock_attr, 
+        &rwlock_attr,
         PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
 #endif
     opr_rbtree_init(&svc_rqst_set_.t, rqst_thrd_cmpf /* may be NULL */);
@@ -158,8 +158,8 @@ svc_rqst_lookup_chan(uint32_t chan_id, uint32_t flags)
     cond_init_svc_rqst();
 
     trec.id_k = chan_id;
- 
-   switch (flags) {
+
+    switch (flags) {
     case SVC_RQST_FLAG_RLOCK:
         rwlock_rdlock(&svc_rqst_set_.lock);
         break;
@@ -171,7 +171,7 @@ svc_rqst_lookup_chan(uint32_t chan_id, uint32_t flags)
     }
 
     ns = opr_rbtree_lookup(&svc_rqst_set_.t, &trec.node_k);
-    if (ns) 
+    if (ns)
         sr_rec = opr_containerof(ns, struct svc_rqst_rec, node_k);
 
     if (flags & SVC_RQST_FLAG_UNLOCK)
@@ -285,7 +285,7 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
         mutex_destroy(&sr_rec->mtx);
         mem_free(sr_rec, sizeof(struct svc_rqst_rec));
         n_id = 0; /* invalid value */
-    }    
+    }
     rwlock_unlock(&svc_rqst_set_.lock);
 
     __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
@@ -338,7 +338,7 @@ static inline void evchan_unreg_impl(struct svc_rqst_rec *sr_rec,
  */
 static inline void ev_sig(int fd, uint32_t sig)
 {
-    int code = 
+    int code =
         write(fd, &sig, sizeof(uint32_t));
     __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
             "%s: fd %d sig %d", __func__, fd, sig);
@@ -501,7 +501,7 @@ int svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     }
 
     evchan_unreg_impl(sr_rec, xprt, SVC_RQST_FLAG_RLOCK);
-    
+
 unlock:
     rwlock_unlock(&svc_rqst_set_.lock);
     return (code);
@@ -521,23 +521,23 @@ int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
     switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
     case SVC_EVENT_EPOLL:
-        {
-            struct epoll_event *ev = &xp_ev->ev_u.epoll.event;
+    {
+        struct epoll_event *ev = &xp_ev->ev_u.epoll.event;
 
-            /* clear epoll vector */
-            code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd, EPOLL_CTL_DEL,
-                             xprt->xp_fd, ev);
-            if (code == -1) {
-                __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-                        "%s: epoll del failed fd %d (%d)",
-                        __func__, xprt->xp_fd, errno);
-                code = errno;
-            } else
-                __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-                        "%s: epoll del fd %d epoll_fd %d",
-                        __func__, xprt->xp_fd, sr_rec->ev_u.epoll.epoll_fd);
-        }
-        break;
+        /* clear epoll vector */
+        code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd, EPOLL_CTL_DEL,
+                         xprt->xp_fd, ev);
+        if (code == -1) {
+            __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+                    "%s: epoll del failed fd %d (%d)",
+                    __func__, xprt->xp_fd, errno);
+            code = errno;
+        } else
+            __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+                    "%s: epoll del fd %d epoll_fd %d",
+                    __func__, xprt->xp_fd, sr_rec->ev_u.epoll.epoll_fd);
+    }
+    break;
 #endif
     default:
         /* XXX formerly select/fd_set case, now placeholder for new
@@ -567,28 +567,28 @@ int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
     switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
     case SVC_EVENT_EPOLL:
-        {
-            struct epoll_event *ev = &xp_ev->ev_u.epoll.event;
+    {
+        struct epoll_event *ev = &xp_ev->ev_u.epoll.event;
 
-            /* set up epoll user data */
-            ev->data.ptr = xprt;
+        /* set up epoll user data */
+        ev->data.ptr = xprt;
 
-            /* wait for read events, level triggered */
-            ev->events = EPOLLIN;
+        /* wait for read events, level triggered */
+        ev->events = EPOLLIN;
 
-            /* add to epoll vector */
-            code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd, EPOLL_CTL_ADD,
-                             xprt->xp_fd, ev);
+        /* add to epoll vector */
+        code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd, EPOLL_CTL_ADD,
+                         xprt->xp_fd, ev);
 
-            __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-                    "%s: add xprt %p fd %d sr_rec %p epoll_fd %d control fd "
-                    "pair (%d:%d) (%d, %d)",
-                    __func__, xprt, xprt->xp_fd, sr_rec,
-                    sr_rec->ev_u.epoll.epoll_fd,
-                    sr_rec->sv[0], sr_rec->sv[1], code, errno);
+        __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+                "%s: add xprt %p fd %d sr_rec %p epoll_fd %d control fd "
+                "pair (%d:%d) (%d, %d)",
+                __func__, xprt, xprt->xp_fd, sr_rec,
+                sr_rec->ev_u.epoll.epoll_fd,
+                sr_rec->sv[0], sr_rec->sv[1], code, errno);
 
-        }
-        break;
+    }
+    break;
 #endif
     default:
         /* XXX formerly select/fd_set case, now placeholder for new
@@ -665,9 +665,9 @@ out:
     return (code);
 }
 
-bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
+bool __svc_clean_idle2(int timeout, bool cleanblock);
 
-static inline int 
+static inline int
 svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
                         uint32_t flags)
 {
@@ -695,8 +695,8 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
                 sr_rec->ev_u.epoll.epoll_fd);
 
         switch (n_events = epoll_wait(sr_rec->ev_u.epoll.epoll_fd,
-                                      sr_rec->ev_u.epoll.events, 
-                                      sr_rec->ev_u.epoll.max_events, 
+                                      sr_rec->ev_u.epoll.events,
+                                      sr_rec->ev_u.epoll.max_events,
                                       timeout_ms)) {
         case -1:
             if (errno == EINTR)
@@ -764,7 +764,7 @@ int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags)
     rwlock_unlock(&svc_rqst_set_.lock); /* !RLOCK */
     sr_rec->states |= SVC_RQST_STATE_ACTIVE;
     mutex_unlock(&sr_rec->mtx);
-    
+
     /* enter event loop */
     switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)

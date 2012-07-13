@@ -169,7 +169,7 @@ typedef rp__list *rpcblist_ptr;		/* results of RPCBPROC_DUMP */
 %#ifdef __cplusplus
 %extern "C" {
 %#endif
-%extern  bool_t xdr_rpcblist(XDR *, rpcblist**);
+%extern  bool xdr_rpcblist(XDR *, rpcblist**);
 %#ifdef	__cplusplus
 %}
 %#endif
@@ -323,10 +323,10 @@ typedef rpcb_stat rpcb_stat_byvers[RPCBVERS_STAT];
 % * and implement it ourselves in rpc/rpcb_prot.c.
 % */
 %#ifdef __cplusplus
-%extern "C" bool_t xdr_netbuf(XDR *, struct netbuf *);
+%extern "C" bool xdr_netbuf(XDR *, struct netbuf *);
 %
 %#else /* __STDC__ */
-%extern  bool_t xdr_netbuf(XDR *, struct netbuf *);
+%extern  bool xdr_netbuf(XDR *, struct netbuf *);
 %
 %#endif
 #endif /* def RPC_HDR */

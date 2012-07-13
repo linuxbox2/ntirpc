@@ -1,5 +1,5 @@
-/*	@(#)auth_des.h	2.2 88/07/29 4.0 RPCSRC; from 1.3 88/02/08 SMI */
-/*	$FreeBSD: src/include/rpc/auth_des.h,v 1.3 2002/03/23 17:24:55 imp Exp $ */
+/* @(#)auth_des.h 2.2 88/07/29 4.0 RPCSRC; from 1.3 88/02/08 SMI */
+/* $FreeBSD: src/include/rpc/auth_des.h,v 1.3 2002/03/23 17:24:55 imp Exp $ */
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
  * All rights reserved.
@@ -26,9 +26,9 @@
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- * 
- *	from: @(#)auth_des.h 2.2 88/07/29 4.0 RPCSRC
- *	from: @(#)auth_des.h 1.14    94/04/25 SMI
+ *
+ * from: @(#)auth_des.h 2.2 88/07/29 4.0 RPCSRC
+ * from: @(#)auth_des.h 1.14    94/04/25 SMI
  */
 
 /*
@@ -48,44 +48,44 @@
  * There are two kinds of "names": fullnames and nicknames
  */
 enum authdes_namekind {
-	ADN_FULLNAME, 
-	ADN_NICKNAME
+    ADN_FULLNAME,
+    ADN_NICKNAME
 };
 
 /*
- * A fullname contains the network name of the client, 
+ * A fullname contains the network name of the client,
  * a conversation key and the window
  */
 struct authdes_fullname {
-  char *name;		/* network name of client, up to MAXNETNAMELEN */
-  union des_block key;		/* conversation key */
-  /* u_long window;	*/ 
-  u_int32_t window;	/* associated window */
+    char *name;  /* network name of client, up to MAXNETNAMELEN */
+    union des_block key;  /* conversation key */
+    /* u_long window; */
+    u_int32_t window; /* associated window */
 };
 
 
 /*
- * A credential 
+ * A credential
  */
 struct authdes_cred {
-	enum authdes_namekind adc_namekind;
-  	struct authdes_fullname adc_fullname;
-  /*u_long adc_nickname;*/
- u_int32_t adc_nickname;
-}; 
+    enum authdes_namekind adc_namekind;
+    struct authdes_fullname adc_fullname;
+    /*u_long adc_nickname;*/
+    u_int32_t adc_nickname;
+};
 
 
 
 /*
- * A des authentication verifier 
+ * A des authentication verifier
  */
 struct authdes_verf {
-	union {
-		struct timeval adv_ctime;	/* clear time */
-	  	des_block adv_xtime;		/* crypt time */
-	} adv_time_u;
-  /*u_long adv_int_u;*/
-  u_int32_t adv_int_u;
+    union {
+        struct timeval adv_ctime; /* clear time */
+        des_block adv_xtime;  /* crypt time */
+    } adv_time_u;
+    /*u_long adv_int_u;*/
+    u_int32_t adv_int_u;
 };
 
 /*
@@ -95,9 +95,9 @@ struct authdes_verf {
  * adv_winverf is the credential window + 1.
  * Both are encrypted using the conversation key.
  */
-#define adv_timestamp	adv_time_u.adv_ctime
-#define adv_xtimestamp	adv_time_u.adv_xtime
-#define adv_winverf	adv_int_u
+#define adv_timestamp adv_time_u.adv_ctime
+#define adv_xtimestamp adv_time_u.adv_xtime
+#define adv_winverf adv_int_u
 
 /*
  * des authentication verifier: server variety
@@ -106,24 +106,25 @@ struct authdes_verf {
  * adv_nickname is the server's nickname for the client.
  * adv_timeverf is encrypted using the conversation key.
  */
-#define adv_timeverf	adv_time_u.adv_ctime
-#define adv_xtimeverf	adv_time_u.adv_xtime
-#define adv_nickname	adv_int_u
+#define adv_timeverf adv_time_u.adv_ctime
+#define adv_xtimeverf adv_time_u.adv_xtime
+#define adv_nickname adv_int_u
 
 /*
  * Map a des credential into a unix cred.
  *
  */
 __BEGIN_DECLS
-extern int authdes_getucred( struct authdes_cred *, uid_t *, gid_t *, int *, gid_t * );
+extern int authdes_getucred( struct authdes_cred *, uid_t *, gid_t *, int *,
+                             gid_t * );
 __END_DECLS
 
 __BEGIN_DECLS
-extern bool_t	xdr_authdes_cred(XDR *, struct authdes_cred *);
-extern bool_t	xdr_authdes_verf(XDR *, struct authdes_verf *);
-extern int	rtime(dev_t, struct netbuf *, int, struct timeval *,
-		    struct timeval *);
-extern void	kgetnetname(char *);
+extern bool xdr_authdes_cred(XDR *, struct authdes_cred *);
+extern bool xdr_authdes_verf(XDR *, struct authdes_verf *);
+extern int rtime(dev_t, struct netbuf *, int, struct timeval *,
+                 struct timeval *);
+extern void kgetnetname(char *);
 extern enum auth_stat _svcauth_des(struct svc_req *, struct rpc_msg *);
 __END_DECLS
 

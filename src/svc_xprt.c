@@ -57,7 +57,7 @@
 
 #define SVC_XPRT_PARTITIONS 7
 
-static bool_t initialized = FALSE;
+static bool initialized = FALSE;
 
 static struct svc_xprt_set svc_xprt_set_ = {
     PTHREAD_MUTEX_INITIALIZER /* svc_xprt_lock */,
@@ -110,12 +110,12 @@ unlock:
     mutex_unlock(&svc_xprt_set_.lock);
 }
 
-#define cond_init_svc_xprt() { \
-do { \
-    if (! initialized) \
-        svc_xprt_init(); \
-    } while (0); \
-}
+#define cond_init_svc_xprt() {                  \
+        do {                                    \
+            if (! initialized)                  \
+                svc_xprt_init();                \
+        } while (0);                            \
+    }
 
 static inline struct svc_xprt_rec *svc_xprt_lookup(int fd)
 {
@@ -136,7 +136,7 @@ static inline struct svc_xprt_rec *svc_xprt_lookup(int fd)
     if (nv)
         srec = opr_containerof(nv, struct svc_xprt_rec, node_k);
 
-    return (srec);    
+    return (srec);
 }
 
 static inline SVCXPRT *svc_xprt_insert(SVCXPRT *xprt, uint32_t flags)
@@ -210,7 +210,7 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
                 opr_rbtree_remove(&t->t, &srec->node_k);
                 mutex_unlock(&srec->mtx);
                 mutex_destroy(&srec->mtx);
-                mem_free(srec, sizeof(struct svc_xprt_rec));  
+                mem_free(srec, sizeof(struct svc_xprt_rec));
                 goto unlock;
             }
             else
@@ -250,7 +250,7 @@ SVCXPRT* svc_xprt_get(int fd)
         mutex_unlock(&srec->mtx);
     }
 
-    return (xprt);    
+    return (xprt);
 }
 
 int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
@@ -284,7 +284,7 @@ int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
             srec = opr_containerof(n, struct svc_xprt_rec, node_k);
             if (srec->xprt) {
                 sk.fd_k = srec->fd_k;
-            
+
                 /* call each_func with t !LOCKED, srec LOCKED */
                 mutex_lock(&srec->mtx);
                 rwlock_unlock(&t->lock);
@@ -359,7 +359,7 @@ void svc_xprt_shutdown()
         n = opr_rbtree_first(&t->t);
         while (n != NULL) {
             srec = opr_containerof(n, struct svc_xprt_rec, node_k);
-            if (srec->xprt) {            
+            if (srec->xprt) {
                 /* call each_func with t !LOCKED, srec LOCKED */
                 mutex_lock(&srec->mtx);
                 SVC_DESTROY(srec->xprt);
@@ -370,7 +370,7 @@ void svc_xprt_shutdown()
             /* now remove srec */
             opr_rbtree_remove(&t->t, &srec->node_k);
             /* and free it */
-            mem_free(srec, sizeof(struct svc_xprt_rec));    
+            mem_free(srec, sizeof(struct svc_xprt_rec));
             n = opr_rbtree_first(&t->t);
         } /* curr partition */
         rwlock_unlock(&t->lock); /* t !LOCKED */

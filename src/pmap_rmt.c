@@ -68,41 +68,42 @@ static const struct timeval timeout = { 3, 0 };
  * which will look up a service program in the port maps, and then
  * remotely call that routine with the given parameters.  This allows
  * programs to do a lookup and call in one step.
-*/
+ */
 enum clnt_stat
 pmap_rmtcall(struct sockaddr_in *addr, u_long prog, u_long vers, u_long proc,
              xdrproc_t xdrargs, caddr_t argsp, xdrproc_t xdrres, caddr_t resp,
              struct timeval tout, u_long *port_ptr)
 {
-	int sock = -1;
-	CLIENT *client;
-	struct rmtcallargs a;
-	struct rmtcallres r;
-	enum clnt_stat stat;
+    int sock = -1;
+    CLIENT *client;
+    struct rmtcallargs a;
+    struct rmtcallres r;
+    enum clnt_stat stat;
 
-	assert(addr != NULL);
-	assert(port_ptr != NULL);
+    assert(addr != NULL);
+    assert(port_ptr != NULL);
 
-	addr->sin_port = htons(PMAPPORT);
-	client = clntudp_create(addr, PMAPPROG, PMAPVERS, timeout, &sock);
-	if (client != NULL) {
-		a.prog = prog;
-		a.vers = vers;
-		a.proc = proc;
-		a.args_ptr = argsp;
-		a.xdr_args = xdrargs;
-		r.port_ptr = port_ptr;
-		r.results_ptr = resp;
-		r.xdr_results = xdrres;
-		stat = CLNT_CALL(client, (rpcproc_t)PMAPPROC_CALLIT,
-		    (xdrproc_t)xdr_rmtcall_args, &a, (xdrproc_t)xdr_rmtcallres,
-		    &r, tout);
-		CLNT_DESTROY(client);
-	} else {
-		stat = RPC_FAILED;
-	}
-	addr->sin_port = 0;
-	return (stat);
+    addr->sin_port = htons(PMAPPORT);
+    client = clntudp_create(addr, PMAPPROG, PMAPVERS, timeout, &sock);
+    if (client != NULL) {
+        a.prog = prog;
+        a.vers = vers;
+        a.proc = proc;
+        a.args_ptr = argsp;
+        a.xdr_args = xdrargs;
+        r.port_ptr = port_ptr;
+        r.results_ptr = resp;
+        r.xdr_results = xdrres;
+        stat = CLNT_CALL(client, (rpcproc_t)PMAPPROC_CALLIT,
+                         (xdrproc_t)xdr_rmtcall_args, &a,
+                         (xdrproc_t)xdr_rmtcallres,
+                         &r, tout);
+        CLNT_DESTROY(client);
+    } else {
+        stat = RPC_FAILED;
+    }
+    addr->sin_port = 0;
+    return (stat);
 }
 
 
@@ -110,51 +111,52 @@ pmap_rmtcall(struct sockaddr_in *addr, u_long prog, u_long vers, u_long proc,
  * XDR remote call arguments
  * written for XDR_ENCODE direction only
  */
-bool_t
+bool
 xdr_rmtcall_args(XDR *xdrs, struct rmtcallargs *cap)
 {
-	u_int lenposition, argposition, position;
+    u_int lenposition, argposition, position;
 
-	assert(xdrs != NULL);
-	assert(cap != NULL);
+    assert(xdrs != NULL);
+    assert(cap != NULL);
 
-	if (xdr_u_long(xdrs, &(cap->prog)) &&
-	    xdr_u_long(xdrs, &(cap->vers)) &&
-	    xdr_u_long(xdrs, &(cap->proc))) {
-		lenposition = XDR_GETPOS(xdrs);
-		if (! xdr_u_long(xdrs, &(cap->arglen)))
-		    return (FALSE);
-		argposition = XDR_GETPOS(xdrs);
-		if (! (*(cap->xdr_args))(xdrs, cap->args_ptr))
-		    return (FALSE);
-		position = XDR_GETPOS(xdrs);
-		cap->arglen = (u_long)position - (u_long)argposition;
-		XDR_SETPOS(xdrs, lenposition);
-		if (! xdr_u_long(xdrs, &(cap->arglen)))
-		    return (FALSE);
-		XDR_SETPOS(xdrs, position);
-		return (TRUE);
-	}
-	return (FALSE);
+    if (xdr_u_long(xdrs, &(cap->prog)) &&
+        xdr_u_long(xdrs, &(cap->vers)) &&
+        xdr_u_long(xdrs, &(cap->proc))) {
+        lenposition = XDR_GETPOS(xdrs);
+        if (! xdr_u_long(xdrs, &(cap->arglen)))
+            return (FALSE);
+        argposition = XDR_GETPOS(xdrs);
+        if (! (*(cap->xdr_args))(xdrs, cap->args_ptr))
+            return (FALSE);
+        position = XDR_GETPOS(xdrs);
+        cap->arglen = (u_long)position - (u_long)argposition;
+        XDR_SETPOS(xdrs, lenposition);
+        if (! xdr_u_long(xdrs, &(cap->arglen)))
+            return (FALSE);
+        XDR_SETPOS(xdrs, position);
+        return (TRUE);
+    }
+    return (FALSE);
 }
 
 /*
  * XDR remote call results
  * written for XDR_DECODE direction only
  */
-bool_t
+bool
 xdr_rmtcallres(XDR *xdrs, struct rmtcallres *crp)
 {
-	caddr_t port_ptr;
+    caddr_t port_ptr;
 
-	assert(xdrs != NULL);
-	assert(crp != NULL);
+    assert(xdrs != NULL);
+    assert(crp != NULL);
 
-	port_ptr = (caddr_t)(void *)crp->port_ptr;
-	if (xdr_reference(xdrs, &port_ptr, sizeof (u_long),
-	    (xdrproc_t)xdr_u_long) && xdr_u_long(xdrs, &crp->resultslen)) {
-		crp->port_ptr = (u_long *)(void *)port_ptr;
-		return ((*(crp->xdr_results))(xdrs, crp->results_ptr));
-	}
-	return (FALSE);
+    port_ptr = (caddr_t)(void *)crp->port_ptr;
+    if (xdr_reference(
+            xdrs, &port_ptr, sizeof (u_long), (xdrproc_t)xdr_u_long) &&
+        xdr_u_long(xdrs, &crp->resultslen)) {
+        crp->port_ptr = (u_long *)(void *)port_ptr;
+        return ((*(crp->xdr_results))(xdrs, crp->results_ptr));
+    }
+    return (FALSE);
 }

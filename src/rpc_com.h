@@ -38,21 +38,21 @@
  */
 
 #ifndef _TIRPC_RPCCOM_H
-#define	_TIRPC_RPCCOM_H
+#define _TIRPC_RPCCOM_H
 
 #include <sys/cdefs.h>
 
-/* #pragma ident	"@(#)rpc_com.h	1.11	93/07/05 SMI" */
+/* #pragma ident "@(#)rpc_com.h 1.11 93/07/05 SMI" */
 
 /*
  * The max size of the transport, if the size cannot be determined
  * by other means.
  */
-#define	RPC_MAXDATASIZE 9000
-#define	RPC_MAXADDRSIZE 1024
+#define RPC_MAXDATASIZE 9000
+#define RPC_MAXADDRSIZE 1024
 
 #define __RPC_GETXID(now) ((u_int32_t)getpid() ^ (u_int32_t)(now)->tv_sec ^ \
-    (u_int32_t)(now)->tv_usec)
+                           (u_int32_t)(now)->tv_usec)
 
 __BEGIN_DECLS
 extern u_int __rpc_get_a_size(int);
@@ -71,18 +71,19 @@ void *rpc_nullproc(CLIENT *);
 int __rpc_sockisbound(int);
 
 struct netbuf *__rpcb_findaddr(rpcprog_t, rpcvers_t, const struct netconfig *,
-    const char *, CLIENT **);
+                               const char *, CLIENT **);
 struct netbuf *__rpcb_findaddr_timed(rpcprog_t, rpcvers_t,
-    const struct netconfig *, const char *host, CLIENT **clpp,
-    struct timeval *tp);
+                                     const struct netconfig *,
+                                     const char *host, CLIENT **clpp,
+                                     struct timeval *tp);
 
-bool_t __rpc_control(int,void *);
+bool __rpc_control(int,void *);
 
 char *_get_next_token(char *, int);
 
-bool_t __svc_clean_idle(fd_set *, int, bool_t);
-bool_t __xdrrec_setnonblock(XDR *, int);
-bool_t __xdrrec_getrec(XDR *, enum xprt_stat *, bool_t);
+bool __svc_clean_idle(fd_set *, int, bool);
+bool __xdrrec_setnonblock(XDR *, int);
+bool __xdrrec_getrec(XDR *, enum xprt_stat *, bool);
 void __xprt_unregister_unlocked(SVCXPRT *);
 void __xprt_set_raddr(SVCXPRT *, const struct sockaddr_storage *);
 
