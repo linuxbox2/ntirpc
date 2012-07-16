@@ -92,8 +92,45 @@ enum xdr_op {
  * This is the number of bytes per unit of external data.
  */
 #define BYTES_PER_XDR_UNIT (4)
+/* Taken verbatim from a system xdr.h, which carries a BSD-style
+ * license (Matt) */
+/*
+ * This only works if the above is a power of 2.  But it's defined to be
+ * 4 by the appropriate RFCs.  So it will work.  And it's normally quicker
+ * than the old routine.
+ */
+#if 1
+#define RNDUP(x)  (((x) + BYTES_PER_XDR_UNIT - 1) & ~(BYTES_PER_XDR_UNIT - 1))
+#else /* this is the old routine */
 #define RNDUP(x)  ((((x) + BYTES_PER_XDR_UNIT - 1) / BYTES_PER_XDR_UNIT) \
                    * BYTES_PER_XDR_UNIT)
+#endif
+
+#define XBS_FLAG_NONE   0x0000
+#define XBS_FLAG_GIFT   0x0001
+
+/* XDR buffer descriptors. */
+typedef struct __rpc_buffer {
+    void *xb_base;
+    int   xb_len;
+    u_int xb_flags;
+    void *xb_p1; /* XDR private data */
+    void *xb_u1; /* User data */
+} xdr_buffer;
+
+typedef struct __rpc_buffers {
+    xdr_buffer *xbs_buf; /* array of buffers */
+    int         xbs_cnt; /* count of buffers */
+    size_t      xbs_offset; /* not used (yet) */
+    size_t      xbs_resid; /* residual bytes */
+    u_int       xbs_flags;
+    void       *xbs_p1;
+    void       *xbs_u1;
+} xdr_uio;
+
+/* Op flags */
+#define XDR_PUTBUFS_FLAG_NONE   0x0000
+#define XDR_PUTBUFS_FLAG_BRELE  0x0001
 
 /*
  * The XDR handle.
@@ -118,9 +155,12 @@ typedef struct __rpc_xdr {
         bool (*x_setpostn)(struct __rpc_xdr *, u_int);
         /* buf quick ptr to buffered data */
         int32_t *(*x_inline)(struct __rpc_xdr *, u_int);
-        /* free privates of this xdr_stream */
+        /* free private resources of this xdr_stream */
         void (*x_destroy)(struct __rpc_xdr *);
         bool (*x_control)(struct __rpc_xdr *, int, void *);
+        /* new vector and refcounted interfaces */
+        bool (*x_getbufs)(struct __rpc_xdr *, xdr_uio *, u_int, u_int);
+        bool (*x_putbufs)(struct __rpc_xdr *, xdr_uio *, u_int);
     } *x_ops;
     void *x_public; /* users' data */
     void *x_private; /* pointer to private data */
@@ -196,6 +236,16 @@ xdr_putint32(XDR *xdrs, int32_t *ip)
     (*(xdrs)->x_ops->x_putbytes)(xdrs, addr, len)
 #define xdr_putbytes(xdrs, addr, len)   \
     (*(xdrs)->x_ops->x_putbytes)(xdrs, addr, len)
+
+#define XDR_GETBUFS(xdrs, uio, len, flags) \
+    (*(xdrs)->x_ops->x_getbufs)(xdrs, uio, len, flags)
+#define xdr_getbufs(xdrs, uio, len, flags) \
+    (*(xdrs)->x_ops->x_getbufs)(xdrs, uio, len, flags)
+
+#define XDR_PUTBUFS(xdrs, uio, len, flags) \
+    (*(xdrs)->x_ops->x_putbufs)(xdrs, uio, len, flags)
+#define xdr_putbufs(xdrs, uio, len, flags) \
+    (*(xdrs)->x_ops->x_putbufs)(xdrs, uio, len, flags)
 
 #define XDR_GETPOS(xdrs)                        \
     (*(xdrs)->x_ops->x_getpostn)(xdrs)
@@ -347,15 +397,15 @@ extern bool   xdr_netobj(XDR *, struct netobj *);
  */
 __BEGIN_DECLS
 /* XDR using memory buffers */
-extern void   xdrmem_create(XDR *, char *, u_int, enum xdr_op);
+extern void xdrmem_create(XDR *, char *, u_int, enum xdr_op);
 
 /* XDR using stdio library */
-extern void   xdrstdio_create(XDR *, FILE *, enum xdr_op);
+extern void xdrstdio_create(XDR *, FILE *, enum xdr_op);
 
 /* XDR pseudo records for tcp */
-extern void   xdrrec_create(XDR *, u_int, u_int, void *,
-                            int (*)(void *, void *, int),
-                            int (*)(void *, void *, int));
+extern void xdrrec_create(XDR *, u_int, u_int, void *,
+                          int (*)(void *, void *, int),
+                          int (*)(void *, void *, int));
 
 /* make end of xdr record */
 extern bool xdrrec_endofrecord(XDR *, bool);
@@ -365,7 +415,7 @@ extern bool xdrrec_skiprecord(XDR *);
 
 /* true if no more input */
 extern bool xdrrec_eof(XDR *);
-extern u_int xdrrec_readbytes(XDR *, caddr_t, u_int);
+
 __END_DECLS
 
 #endif /* !_TIRPC_XDR_H */

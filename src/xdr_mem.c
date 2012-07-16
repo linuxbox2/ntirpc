@@ -63,6 +63,10 @@ static u_int xdrmem_getpos(XDR *);
 static bool xdrmem_setpos(XDR *, u_int);
 static int32_t *xdrmem_inline_aligned(XDR *, u_int);
 static int32_t *xdrmem_inline_unaligned(XDR *, u_int);
+static bool xdrmem_noop(void);
+
+typedef bool (* dummyfunc3)(XDR *, int, void *);
+typedef bool (* dummyfunc4)(XDR *, const char *, u_int, u_int);
 
 static const struct xdr_ops xdrmem_ops_aligned = {
     xdrmem_getlong_aligned,
@@ -72,7 +76,10 @@ static const struct xdr_ops xdrmem_ops_aligned = {
     xdrmem_getpos,
     xdrmem_setpos,
     xdrmem_inline_aligned,
-    xdrmem_destroy
+    xdrmem_destroy,
+    (dummyfunc3) xdrmem_noop, /* x_control */
+    (dummyfunc4) xdrmem_noop, /* x_getbufs */
+    (dummyfunc4) xdrmem_noop  /* x_putbufs */
 };
 
 static const struct xdr_ops xdrmem_ops_unaligned = {
@@ -83,7 +90,9 @@ static const struct xdr_ops xdrmem_ops_unaligned = {
     xdrmem_getpos,
     xdrmem_setpos,
     xdrmem_inline_unaligned,
-    xdrmem_destroy
+    xdrmem_destroy,
+    NULL, /* getbufs */
+    NULL  /* putbufs   */
 };
 
 /*
@@ -224,4 +233,10 @@ static int32_t *
 xdrmem_inline_unaligned(XDR *xdrs, u_int len)
 {
     return (0);
+}
+
+static bool
+xdrmem_noop(void)
+{
+    return (FALSE);
 }

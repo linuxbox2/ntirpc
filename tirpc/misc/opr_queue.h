@@ -48,11 +48,30 @@ struct opr_queue {
     cursor != (head); \
     cursor = store, store = store->next
 
+#define opr_queue_ScanFrom(head, cursor) \
+    /* nothing */; cursor != (head); cursor = cursor->next
+
+#define opr_queue_ScanSafeFrom(head, cursor, store) \
+    /* nothing */, store = cursor->next; \
+    cursor != (head); \
+    cursor = store, store = store->next
+
 #define opr_queue_ScanBackwards(head, cursor) \
     cursor = (head)->prev; cursor != (head); cursor = cursor->prev
 
+#define opr_queue_ScanBackwards(head, cursor) \
+    cursor = (head)->prev; cursor != (head); cursor = cursor->prev
+
+#define opr_queue_ScanBackwardsFrom(head, cursor) \
+    /* nothing */; cursor != (head); cursor = cursor->prev
+
 #define opr_queue_ScanBackwardsSafe(head, cursor, store) \
    cursor = (head)->prev, store = cursor->prev; \
+   cursor != (head); \
+   cursor = store, store = store->prev
+
+#define opr_queue_ScanBackwardsSafeFrom(head, cursor, store) \
+    /* nothing */, store = cursor->prev; \
    cursor != (head); \
    cursor = store, store = store->prev
 

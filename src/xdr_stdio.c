@@ -55,6 +55,10 @@ static bool xdrstdio_putbytes(XDR *, const char *, u_int);
 static u_int xdrstdio_getpos(XDR *);
 static bool xdrstdio_setpos(XDR *, u_int);
 static int32_t *xdrstdio_inline(XDR *, u_int);
+static bool xdrstdio_noop(void);
+
+typedef bool (* dummyfunc3)(XDR *, int, void *);
+typedef bool (* dummyfunc4)(XDR *, const char *, u_int, u_int);
 
 /*
  * Ops vector for stdio type XDR
@@ -67,7 +71,10 @@ static const struct xdr_ops xdrstdio_ops = {
     xdrstdio_getpos, /* get offset in the stream */
     xdrstdio_setpos, /* set offset in the stream */
     xdrstdio_inline, /* prime stream for inline macros */
-    xdrstdio_destroy /* destroy stream */
+    xdrstdio_destroy, /* destroy stream */
+    (dummyfunc3) xdrstdio_noop, /* x_control */
+    (dummyfunc4) xdrstdio_noop, /* x_getbufs */
+    (dummyfunc4) xdrstdio_noop  /* x_putbufs */
 };
 
 /*
@@ -170,4 +177,10 @@ xdrstdio_inline(XDR *xdrs, u_int len)
      * management on this buffer, so we don't do this.
      */
     return (NULL);
+}
+
+static bool
+xdrstdio_noop(void)
+{
+    return (FALSE);
 }
