@@ -44,17 +44,17 @@ struct vc_fd_rec_set
 
 static inline int32_t vc_lock_ref(struct vc_fd_rec *crec, u_int flags)
 {
-    int32_t refcount;
+    int32_t refcnt;
 
     if (! (flags & VC_LOCK_FLAG_MTX_LOCKED))
         mutex_lock(&crec->mtx);
 
-    refcount = ++(crec->refcount);
+    refcnt = ++(crec->refcnt);
 
     if (! (flags & VC_LOCK_FLAG_MTX_LOCKED))
         mutex_unlock(&crec->mtx);
 
-    return(refcount);
+    return(refcnt);
 }
 
 int32_t vc_lock_unref(struct vc_fd_rec *crec, u_int flags);
@@ -181,21 +181,21 @@ static inline void vc_fd_unlock_x(SVCXPRT *xprt, sigset_t *mask)
 
 static inline void vc_lock_unref_clnt(CLIENT *cl)
 {
-    int32_t refcount __attribute__((unused)) = 0;
+    int32_t refcnt __attribute__((unused)) = 0;
     struct cx_data *cx = (struct cx_data *) cl->cl_private;
 
     if (cx->cx_crec) {
-        refcount = vc_lock_unref(cx->cx_crec, VC_LOCK_FLAG_NONE);
+        refcnt = vc_lock_unref(cx->cx_crec, VC_LOCK_FLAG_NONE);
         cx->cx_crec = NULL;
     }
 }
 
 static inline void vc_lock_unref_xprt(SVCXPRT *xprt)
 {
-    int32_t refcount __attribute__((unused)) = 0;
+    int32_t refcnt __attribute__((unused)) = 0;
 
     if (xprt->xp_p5) {
-        refcount = vc_lock_unref((struct vc_fd_rec *) xprt->xp_p5,
+        refcnt = vc_lock_unref((struct vc_fd_rec *) xprt->xp_p5,
                                  VC_LOCK_FLAG_NONE);
         xprt->xp_p5 = NULL;
     }

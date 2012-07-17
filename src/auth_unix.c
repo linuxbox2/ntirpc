@@ -220,7 +220,7 @@ retry:
     len = getgroups(len, gids);
     if (len == -1) {
         rpc_createerr.cf_error.re_errno = errno;
-        __free(gids);
+        mem_free(gids, 0); /* XXX */
         if (rpc_createerr.cf_error.re_errno == EINVAL) {
             rpc_createerr.cf_error.re_errno = 0;
             goto retry;
@@ -237,7 +237,7 @@ retry:
 
     /* XXX: interface problem; those should all have been unsigned */
     result = authunix_create(machname, uid, gid, len, gids);
-    __free(gids);
+    mem_free(gids, 0); /* XXX */
     return result;
 
 out_err:

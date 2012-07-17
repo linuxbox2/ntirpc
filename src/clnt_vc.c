@@ -277,6 +277,8 @@ clnt_vc_create2(int fd,       /* open file descriptor */
     memcpy(ct->ct_addr.buf, raddr->buf, raddr->len);
     ct->ct_addr.len = raddr->len;
     ct->ct_addr.maxlen = raddr->maxlen;
+    cl->cl_netid = NULL;
+    cl->cl_tp = NULL;
 
     /*
      * Initialize call message
@@ -741,7 +743,7 @@ clnt_vc_destroy(CLIENT *cl)
         (void)close(cx->cx_fd);
     XDR_DESTROY(&(CT_DATA(cx)->ct_xdrs));
     if (CT_DATA(cx)->ct_addr.buf)
-        __free(CT_DATA(cx)->ct_addr.buf);
+        mem_free(CT_DATA(cx)->ct_addr.buf, 0); /* XXX */
 
     vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE); /* XXX moved before free */
     vc_lock_unref_clnt(cl);

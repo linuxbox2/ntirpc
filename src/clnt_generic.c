@@ -302,8 +302,8 @@ clnt_tp_create_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
                                  prog, vers, 0, 0);
         }
     }
-    __free(svcaddr->buf);
-    __free(svcaddr);
+    mem_free(svcaddr->buf, 0); /* XXX */
+    mem_free(svcaddr, 0);
     return (cl);
 }
 

@@ -74,7 +74,7 @@ pmap_set(u_long program, u_long version, int protocol, int port)
         return (FALSE);
     }
     rslt = rpcb_set((rpcprog_t)program, (rpcvers_t)version, nconf, na);
-    __free(na);
+    mem_free(na, 0);
     freenetconfigent(nconf);
     return (rslt);
 }

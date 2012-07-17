@@ -301,7 +301,7 @@ svc_reg(SVCXPRT *xprt,
     if ((s = svc_find(prog, vers, &prev, netid)) != NULL)
     {
         if (netid)
-            __free(netid);
+            mem_free(netid, 0);
         if (s->rec.sc_dispatch == dispatch)
             goto rpcb_it;  /* he is registering another xptr */
         rwlock_unlock(&svc_lock);
@@ -311,7 +311,7 @@ svc_reg(SVCXPRT *xprt,
     if (s == NULL)
     {
         if (netid)
-            __free(netid);
+            mem_free(netid, 0);
         rwlock_unlock(&svc_lock);
         return (FALSE);
     }

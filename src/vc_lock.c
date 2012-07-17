@@ -116,6 +116,8 @@ alloc_fd_rec(void)
 {
     struct vc_fd_rec *crec = mem_alloc(sizeof(struct vc_fd_rec));
     if (crec) {
+        crec->refcnt = 0;
+        crec->lock_flag_value = 0;
         mutex_init(&crec->mtx, NULL);
         cond_init(&crec->cv, 0, NULL);
     }
@@ -236,14 +238,14 @@ int32_t vc_lock_unref(struct vc_fd_rec *crec, u_int flags)
 {
     struct rbtree_x_part *t;
     struct opr_rbtree_node *nv;
-    int32_t refcount;
+    int32_t refcnt;
 
     if (! (flags & VC_LOCK_FLAG_MTX_LOCKED))
         mutex_lock(&crec->mtx);
 
-    refcount = --(crec->refcount);
+    refcnt = --(crec->refcnt);
 
-    if (crec->refcount == 0) {
+    if (crec->refcnt == 0) {
         t = rbtx_partition_of_scalar(&vc_fd_rec_set.xt, crec->fd_k);
         mutex_unlock(&crec->mtx);
         rwlock_wrlock(&t->lock);
@@ -251,13 +253,13 @@ int32_t vc_lock_unref(struct vc_fd_rec *crec, u_int flags)
         if (nv) {
             crec = opr_containerof(nv, struct vc_fd_rec, node_k);
             mutex_lock(&crec->mtx);
-            if (crec->refcount == 0) {
+            if (crec->refcnt == 0) {
                 (void) opr_rbtree_remove(&t->t, &crec->node_k);
                 mutex_unlock(&crec->mtx);
                 free_fd_rec(crec);
                 crec = NULL;
             } else
-                refcount = crec->refcount;
+                refcnt = crec->refcnt;
         }
         rwlock_unlock(&t->lock);
     }
@@ -265,7 +267,7 @@ int32_t vc_lock_unref(struct vc_fd_rec *crec, u_int flags)
     if (crec && (! (flags & VC_LOCK_FLAG_MTX_LOCKED)))
         mutex_unlock(&crec->mtx);
 
-    return (refcount);
+    return (refcnt);
 }
 
 void vc_lock_shutdown()

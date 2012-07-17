@@ -29,7 +29,7 @@
 /*
  * Copyright (c) 1989 by Sun Microsystems, Inc.
  */
- 
+
 #include <config.h>
 #include <pthread.h>
 #include <reentrant.h>
@@ -57,31 +57,31 @@
  * netconfig errors
  */
 
-#define NC_NONETCONFIG	ENOENT
-#define NC_NOMEM	ENOMEM
-#define NC_NOTINIT	EINVAL	    /* setnetconfig was not called first */
-#define NC_BADFILE	EBADF	    /* format for netconfig file is bad */
-#define NC_NOTFOUND	ENOPROTOOPT /* specified netid was not found */
+#define NC_NONETCONFIG    ENOENT
+#define NC_NOMEM          ENOMEM
+#define NC_NOTINIT        EINVAL      /* setnetconfig was not called first */
+#define NC_BADFILE        EBADF       /* format for netconfig file is bad */
+#define NC_NOTFOUND       ENOPROTOOPT /* specified netid was not found */
 
 /*
  * semantics as strings (should be in netconfig.h)
  */
-#define NC_TPI_CLTS_S	    "tpi_clts"
-#define	NC_TPI_COTS_S	    "tpi_cots"
-#define	NC_TPI_COTS_ORD_S   "tpi_cots_ord"
-#define	NC_TPI_RAW_S        "tpi_raw"
+#define NC_TPI_CLTS_S     "tpi_clts"
+#define NC_TPI_COTS_S     "tpi_cots"
+#define NC_TPI_COTS_ORD_S "tpi_cots_ord"
+#define NC_TPI_RAW_S      "tpi_raw"
 
 /*
  * flags as characters (also should be in netconfig.h)
  */
-#define	NC_NOFLAG_C	'-'
-#define	NC_VISIBLE_C	'v'
-#define	NC_BROADCAST_C	'b'
+#define NC_NOFLAG_C       '-'
+#define NC_VISIBLE_C      'v'
+#define NC_BROADCAST_C    'b'
 
 /*
  * Character used to indicate there is no name-to-address lookup library
  */
-#define NC_NOLOOKUP	"-"
+#define NC_NOLOOKUP "-"
 
 /* serialize globals */
 static mutex_t nc_mtx = PTHREAD_MUTEX_INITIALIZER;
@@ -95,27 +95,27 @@ static const char * const _nc_errors[] = {
 };
 
 struct netconfig_info {
-    int		eof;	/* all entries has been read */
-    int		ref;	/* # of times setnetconfig() has been called */
-    struct netconfig_list	*head;	/* head of the list */
-    struct netconfig_list	*tail;	/* last of the list */
+    int  eof; /* all entries has been read */
+    int  ref; /* # of times setnetconfig() has been called */
+    struct netconfig_list *head; /* head of the list */
+    struct netconfig_list *tail; /* last of the list */
 };
 
 struct netconfig_list {
-    char			*linep;	/* hold line read from netconfig */
-    struct netconfig		*ncp;
-    struct netconfig_list	*next;
+    char   *linep; /* hold line read from netconfig */
+    struct netconfig  *ncp;
+    struct netconfig_list *next;
 };
 
 struct netconfig_vars {
-    int   valid;	/* token that indicates a valid netconfig_vars */
-    int   flag;		/* first time flag */
+    int   valid; /* token that indicates a valid netconfig_vars */
+    int   flag;  /* first time flag */
     struct netconfig_list *nc_configs;  /* pointer to the current netconfig entry */
 };
 
-#define NC_VALID	0xfeed
-#define NC_STORAGE	0xf00d
-#define NC_INVALID	0
+#define NC_VALID 0xfeed
+#define NC_STORAGE 0xf00d
+#define NC_INVALID 0
 
 
 static int *__nc_error(void);
@@ -123,43 +123,43 @@ static int parse_ncp(char *, struct netconfig *);
 static struct netconfig *dup_ncp(struct netconfig *);
 
 
-static FILE *nc_file;		/* for netconfig db */
-static struct netconfig_info	ni = { 0, 0, NULL, NULL};
+static FILE *nc_file;  /* for netconfig db */
+static struct netconfig_info ni = { 0, 0, NULL, NULL};
 
 #define MAXNETCONFIGLINE    1000
 
 static int *
 __nc_error(void)
 {
-	static pthread_mutex_t nc_lock = PTHREAD_MUTEX_INITIALIZER;
-	extern thread_key_t nc_key;
-	static int nc_error = 0;
-	int error, *nc_addr;
+    static pthread_mutex_t nc_lock = PTHREAD_MUTEX_INITIALIZER;
+    extern thread_key_t nc_key;
+    static int nc_error = 0;
+    int error, *nc_addr;
 
-	/*
-	 * Use the static `nc_error' if we are the main thread
-	 * (including non-threaded programs), or if an allocation
-	 * fails.
-	 */
-	if (nc_key == -1) {
-		error = 0;
-		mutex_lock(&nc_lock);
-		if (nc_key == -1)
-			error = thr_keycreate(&nc_key, __rpc_free);
-		mutex_unlock(&nc_lock);
-		if (error)
-			return (&nc_error);
-	}
-	if ((nc_addr = (int *)thr_getspecific(nc_key)) == NULL) {
-		nc_addr = (int *) mem_alloc(sizeof (int));
-		if (thr_setspecific(nc_key, (void *) nc_addr) != 0) {
-			if (nc_addr)
-				__free(nc_addr);
-			return (&nc_error);
-		}
-		*nc_addr = 0;
-	}
-	return (nc_addr);
+    /*
+     * Use the static `nc_error' if we are the main thread
+     * (including non-threaded programs), or if an allocation
+     * fails.
+     */
+    if (nc_key == -1) {
+        error = 0;
+        mutex_lock(&nc_lock);
+        if (nc_key == -1)
+            error = thr_keycreate(&nc_key, free); /* XXX */
+        mutex_unlock(&nc_lock);
+        if (error)
+            return (&nc_error);
+    }
+    if ((nc_addr = (int *)thr_getspecific(nc_key)) == NULL) {
+        nc_addr = (int *) mem_zalloc(sizeof (int));
+        if (thr_setspecific(nc_key, (void *) nc_addr) != 0) {
+            if (nc_addr)
+                mem_free(nc_addr, 0); /* XXX */
+            return (&nc_error);
+        }
+        *nc_addr = 0;
+    }
+    return (nc_addr);
 }
 
 #define nc_error        (*(__nc_error()))
@@ -187,9 +187,9 @@ setnetconfig(void)
 {
     struct netconfig_vars *nc_vars;
 
-    if ((nc_vars = (struct netconfig_vars *) mem_alloc(sizeof
-		(struct netconfig_vars))) == NULL) {
-	return(NULL);
+    if ((nc_vars = (struct netconfig_vars *)
+         mem_zalloc(sizeof(struct netconfig_vars))) == NULL) {
+        return(NULL);
     }
 
     /*
@@ -199,16 +199,16 @@ setnetconfig(void)
     mutex_lock(&nc_mtx);
     ni.ref++;
     if ((nc_file != NULL) || (nc_file = fopen(NETCONFIG, "r")) != NULL) {
-	nc_vars->valid = NC_VALID;
-	nc_vars->flag = 0;
-	nc_vars->nc_configs = ni.head;
+        nc_vars->valid = NC_VALID;
+        nc_vars->flag = 0;
+        nc_vars->nc_configs = ni.head;
         mutex_unlock(&nc_mtx);
-	return ((void *)nc_vars);
+        return ((void *)nc_vars);
     }
     ni.ref--;
     mutex_unlock(&nc_mtx);
     nc_error = NC_NONETCONFIG;
-    __free(nc_vars);
+    mem_free(nc_vars, 0); /* XXX */
     return (NULL);
 }
 
@@ -225,69 +225,69 @@ struct netconfig *
 getnetconfig(void *handlep)
 {
     struct netconfig_vars *ncp = (struct netconfig_vars *)handlep;
-    char *stringp;		/* tmp string pointer */
-    struct netconfig_list	*list;
+    char *stringp;  /* tmp string pointer */
+    struct netconfig_list *list;
     struct netconfig *np;
 
     /*
      * Verify that handle is valid
      */
     if (ncp == NULL || nc_file == NULL) {
-	nc_error = NC_NOTINIT;
-	return (NULL);
+        nc_error = NC_NOTINIT;
+        return (NULL);
     }
 
     mutex_lock(&nc_mtx);
 
     switch (ncp->valid) {
     case NC_VALID:
-	/*
-	 * If entry has already been read into the list,
-	 * we return the entry in the linked list.
-	 * If this is the first time call, check if there are any entries in
-	 * linked list.  If no entries, we need to read the netconfig db.
-	 * If we have been here and the next entry is there, we just return
-	 * it.
-	 */
-	if (ncp->flag == 0) {	/* first time */
-	    ncp->flag = 1;
-	    ncp->nc_configs = ni.head;
-            if (ncp->nc_configs != NULL)	/* entry already exist */ {
+        /*
+         * If entry has already been read into the list,
+         * we return the entry in the linked list.
+         * If this is the first time call, check if there are any entries in
+         * linked list.  If no entries, we need to read the netconfig db.
+         * If we have been here and the next entry is there, we just return
+         * it.
+         */
+        if (ncp->flag == 0) { /* first time */
+            ncp->flag = 1;
+            ncp->nc_configs = ni.head;
+            if (ncp->nc_configs != NULL) /* entry already exist */ {
                 mutex_unlock(&nc_mtx);
-		return(ncp->nc_configs->ncp);
+                return(ncp->nc_configs->ncp);
             }
-	}
-	else if (ncp->nc_configs != NULL && ncp->nc_configs->next != NULL) {
-	    ncp->nc_configs = ncp->nc_configs->next;
+        }
+        else if (ncp->nc_configs != NULL && ncp->nc_configs->next != NULL) {
+            ncp->nc_configs = ncp->nc_configs->next;
             mutex_unlock(&nc_mtx);
-	    return(ncp->nc_configs->ncp);
-	}
+            return(ncp->nc_configs->ncp);
+        }
 
-	/*
-	 * If we cannot find the entry in the list and is end of file,
-	 * we give up.
-	 */
+        /*
+         * If we cannot find the entry in the list and is end of file,
+         * we give up.
+         */
         if (ni.eof == 1) {
             mutex_unlock(&nc_mtx);
             return(NULL);
         }
-	break;
+        break;
     default:
         nc_error = NC_NOTINIT;
         mutex_unlock(&nc_mtx);
-	return (NULL);
+        return (NULL);
     }
 
-    stringp = (char *) mem_alloc(MAXNETCONFIGLINE);
+    stringp = (char *) mem_zalloc(MAXNETCONFIGLINE);
     if (stringp == NULL) {
         mutex_unlock(&nc_mtx);
-    	return (NULL);
+        return (NULL);
     }
 
 #ifdef MEM_CHK
     if (malloc_verify() == 0) {
-	fprintf(stderr, "memory heap corrupted in getnetconfig\n");
-	exit(1);
+        fprintf(stderr, "memory heap corrupted in getnetconfig\n");
+        exit(1);
     }
 #endif
 
@@ -295,55 +295,55 @@ getnetconfig(void *handlep)
      * Read a line from netconfig file.
      */
     do {
-	if (fgets(stringp, MAXNETCONFIGLINE, nc_file) == NULL) {
-	    __free(stringp);
-	    ni.eof = 1;
+        if (fgets(stringp, MAXNETCONFIGLINE, nc_file) == NULL) {
+            mem_free(stringp, 0);
+            ni.eof = 1;
             mutex_unlock(&nc_mtx);
-	    return (NULL);
+            return (NULL);
         }
     } while (*stringp == '#');
 
-    list = (struct netconfig_list *) mem_alloc(sizeof (struct netconfig_list));
+    list = (struct netconfig_list *) mem_zalloc(sizeof (struct netconfig_list));
     if (list == NULL) {
-    	__free(stringp);
+        mem_free(stringp, 0);
         mutex_unlock(&nc_mtx);
-    	return(NULL);
+        return(NULL);
     }
-    np = (struct netconfig *) mem_alloc(sizeof (struct netconfig));
+    np = (struct netconfig *) mem_zalloc(sizeof (struct netconfig));
     if (np == NULL) {
-    	__free(stringp);
-	__free(list);
+        mem_free(stringp, 0);
+        mem_free(list, 0);
         mutex_unlock(&nc_mtx);
-    	return(NULL);
+        return(NULL);
     }
     list->ncp = np;
     list->next = NULL;
     list->ncp->nc_lookups = NULL;
     list->linep = stringp;
     if (parse_ncp(stringp, list->ncp) == -1) {
-	__free(stringp);
-	__free(np);
-	__free(list);
+        mem_free(stringp, 0);
+        mem_free(np, 0);
+        mem_free(list, 0);
         mutex_unlock(&nc_mtx);
-	return (NULL);
+        return (NULL);
     }
     else {
-	/*
-	 * If this is the first entry that's been read, it is the head of
-	 * the list.  If not, put the entry at the end of the list.
-	 * Reposition the current pointer of the handle to the last entry
-	 * in the list.
-	 */
-        if (ni.head == NULL) {	/* first entry */
-	    ni.head = ni.tail = list;
-	}
-    	else {
-    	    ni.tail->next = list;
-    	    ni.tail = ni.tail->next;
-    	}
-	ncp->nc_configs = ni.tail;
+        /*
+         * If this is the first entry that's been read, it is the head of
+         * the list.  If not, put the entry at the end of the list.
+         * Reposition the current pointer of the handle to the last entry
+         * in the list.
+         */
+        if (ni.head == NULL) { /* first entry */
+            ni.head = ni.tail = list;
+        }
+        else {
+            ni.tail->next = list;
+            ni.tail = ni.tail->next;
+        }
+        ncp->nc_configs = ni.tail;
         mutex_unlock(&nc_mtx);
-	return(ni.tail->ncp);
+        return(ni.tail->ncp);
     }
     mutex_unlock(&nc_mtx);
 }
@@ -366,9 +366,9 @@ endnetconfig(void *handlep)
      * Verify that handle is valid
      */
     if (nc_handlep == NULL || (nc_handlep->valid != NC_VALID &&
-	    nc_handlep->valid != NC_STORAGE)) {
-	nc_error = NC_NOTINIT;
-	return (-1);
+                               nc_handlep->valid != NC_STORAGE)) {
+        nc_error = NC_NOTINIT;
+        return (-1);
     }
 
     /*
@@ -380,8 +380,8 @@ endnetconfig(void *handlep)
     mutex_lock(&nc_mtx);
     if (--ni.ref > 0) {
         mutex_unlock(&nc_mtx);
-    	__free(nc_handlep);
-	return(0);
+        mem_free(nc_handlep, 0);
+        return(0);
     }
 
     /*
@@ -393,17 +393,17 @@ endnetconfig(void *handlep)
     ni.head = NULL;
     ni.tail = NULL;
     while (q) {
-	p = q->next;
-	if (q->ncp->nc_lookups != NULL) __free(q->ncp->nc_lookups);
-	__free(q->ncp);
-	__free(q->linep);
-	__free(q);
-	q = p;
+        p = q->next;
+        if (q->ncp->nc_lookups != NULL) mem_free(q->ncp->nc_lookups, 0);
+        mem_free(q->ncp, 0);
+        mem_free(q->linep, 0);
+        mem_free(q, 0);
+        q = p;
     }
     fclose(nc_file);
     nc_file = NULL;
     mutex_unlock(&nc_mtx);
-    __free(nc_handlep);
+    mem_free(nc_handlep, 0);
     return (0);
 }
 
@@ -418,26 +418,26 @@ endnetconfig(void *handlep)
 struct netconfig *
 getnetconfigent(const char *netid)
 {
-    FILE *file;		/* NETCONFIG db's file pointer */
-    char *linep;	/* holds current netconfig line */
-    char *stringp;	/* temporary string pointer */
+    FILE *file;  /* NETCONFIG db's file pointer */
+    char *linep; /* holds current netconfig line */
+    char *stringp; /* temporary string pointer */
     struct netconfig *ncp = NULL;   /* returned value */
-    struct netconfig_list *list;	/* pointer to cache list */
+    struct netconfig_list *list; /* pointer to cache list */
 
-    nc_error = NC_NOTFOUND;	/* default error. */
+    nc_error = NC_NOTFOUND; /* default error. */
     if (netid == NULL || strlen(netid) == 0) {
-	return (NULL);
+        return (NULL);
     }
 
     if (strcmp(netid, "unix") == 0) {
-	fprintf(stderr, "The local transport is called \"unix\" ");
-	fprintf(stderr, "in /etc/netconfig.\n");
-	fprintf(stderr, "Please change this to \"local\" manually ");
-	fprintf(stderr, "or run mergemaster(8).\n");
-	fprintf(stderr, "See UPDATING entry 20021216 for details.\n");
-	fprintf(stderr, "Continuing in 10 seconds\n\n");
-	fprintf(stderr, "This warning will be removed 20030301\n");
-	sleep(10);
+        fprintf(stderr, "The local transport is called \"unix\" ");
+        fprintf(stderr, "in /etc/netconfig.\n");
+        fprintf(stderr, "Please change this to \"local\" manually ");
+        fprintf(stderr, "or run mergemaster(8).\n");
+        fprintf(stderr, "See UPDATING entry 20021216 for details.\n");
+        fprintf(stderr, "Continuing in 10 seconds\n\n");
+        fprintf(stderr, "This warning will be removed 20030301\n");
+        sleep(10);
 
     }
 
@@ -453,13 +453,13 @@ getnetconfigent(const char *netid)
     mutex_lock(&nc_mtx);
 
     if (ni.head != NULL) {
-	for (list = ni.head; list; list = list->next) {
-	    if (strcmp(list->ncp->nc_netid, netid) == 0) {
+        for (list = ni.head; list; list = list->next) {
+            if (strcmp(list->ncp->nc_netid, netid) == 0) {
                 mutex_unlock(&nc_mtx);
-	        return(dup_ncp(list->ncp));
-	    }
-	}
-        if (ni.eof == 1)	/* that's all the entries */ {
+                return(dup_ncp(list->ncp));
+            }
+        }
+        if (ni.eof == 1) /* that's all the entries */ {
             mutex_unlock(&nc_mtx);
             return(NULL);
         }
@@ -467,49 +467,49 @@ getnetconfigent(const char *netid)
 
 
     if ((file = fopen(NETCONFIG, "r")) == NULL) {
-	nc_error = NC_NONETCONFIG;
+        nc_error = NC_NONETCONFIG;
         mutex_unlock(&nc_mtx);
-	return (NULL);
+        return (NULL);
     }
 
-    if ((linep = mem_alloc(MAXNETCONFIGLINE)) == NULL) {
-	fclose(file);
-	nc_error = NC_NOMEM;
+    if ((linep = mem_zalloc(MAXNETCONFIGLINE)) == NULL) {
+        fclose(file);
+        nc_error = NC_NOMEM;
         mutex_unlock(&nc_mtx);
-	return (NULL);
+        return (NULL);
     }
     do {
-	ptrdiff_t len;
-	char *tmpp;	/* tmp string pointer */
+        ptrdiff_t len;
+        char *tmpp; /* tmp string pointer */
 
-	do {
-	    if ((stringp = fgets(linep, MAXNETCONFIGLINE, file)) == NULL) {
-		break;
-	    }
-	} while (*stringp == '#');
-	if (stringp == NULL) {	    /* eof */
-	    break;
-	}
-	if ((tmpp = strpbrk(stringp, "\t ")) == NULL) {	/* can't parse file */
-	    nc_error = NC_BADFILE;
-	    break;
-	}
-	if (strlen(netid) == (size_t) (len = tmpp - stringp) &&	/* a match */
-		strncmp(stringp, netid, (size_t)len) == 0) {
-	    if ((ncp = (struct netconfig *)
-		    mem_alloc(sizeof (struct netconfig))) == NULL) {
-		break;
-	    }
-	    ncp->nc_lookups = NULL;
-	    if (parse_ncp(linep, ncp) == -1) {
-		__free(ncp);
-		ncp = NULL;
-	    }
-	    break;
-	}
+        do {
+            if ((stringp = fgets(linep, MAXNETCONFIGLINE, file)) == NULL) {
+                break;
+            }
+        } while (*stringp == '#');
+        if (stringp == NULL) {     /* eof */
+            break;
+        }
+        if ((tmpp = strpbrk(stringp, "\t ")) == NULL) { /* can't parse file */
+            nc_error = NC_BADFILE;
+            break;
+        }
+        if (strlen(netid) == (size_t) (len = tmpp - stringp) && /* a match */
+            strncmp(stringp, netid, (size_t)len) == 0) {
+            if ((ncp = (struct netconfig *)
+                 mem_zalloc(sizeof (struct netconfig))) == NULL) {
+                break;
+            }
+            ncp->nc_lookups = NULL;
+            if (parse_ncp(linep, ncp) == -1) {
+                mem_free(ncp, 0);
+                ncp = NULL;
+            }
+            break;
+        }
     } while (stringp != NULL);
     if (ncp == NULL) {
-	__free(linep);
+        mem_free(linep, 0);
     }
     fclose(file);
     mutex_unlock(&nc_mtx);
@@ -525,10 +525,10 @@ void
 freenetconfigent(struct netconfig *netconfigp)
 {
     if (netconfigp != NULL) {
-	__free(netconfigp->nc_netid);	/* holds all netconfigp's strings */
-	if (netconfigp->nc_lookups != NULL)
-	    __free(netconfigp->nc_lookups);
-	__free(netconfigp);
+        mem_free(netconfigp->nc_netid, 0); /* holds all netconfigp's strings */
+        if (netconfigp->nc_lookups != NULL)
+            mem_free(netconfigp->nc_lookups, 0);
+        mem_free(netconfigp, 0);
     }
     return;
 }
@@ -536,7 +536,7 @@ freenetconfigent(struct netconfig *netconfigp)
 /*
  * Parse line and stuff it in a struct netconfig
  * Typical line might look like:
- *	udp tpi_cots vb inet udp /dev/udp /usr/lib/ip.so,/usr/local/ip.so
+ * udp tpi_cots vb inet udp /dev/udp /usr/lib/ip.so,/usr/local/ip.so
  *
  * We return -1 if any of the tokens don't parse, or malloc fails.
  *
@@ -546,85 +546,88 @@ freenetconfigent(struct netconfig *netconfigp)
  */
 
 static int
-parse_ncp(char *stringp,	/* string to parse */
+parse_ncp(char *stringp, /* string to parse */
           struct netconfig *ncp /* where to put results */)
 {
-    char    *tokenp;	/* for processing tokens */
+    char    *tokenp; /* for processing tokens */
     char    *lasts;
 
-    nc_error = NC_BADFILE;	/* nearly anything that breaks is for this reason */
-    stringp[strlen(stringp)-1] = '\0';	/* get rid of newline */
+    nc_error = NC_BADFILE; /* nearly anything that breaks is for this reason */
+    stringp[strlen(stringp)-1] = '\0'; /* get rid of newline */
     /* netid */
     if ((ncp->nc_netid = strtok_r(stringp, "\t ", &lasts)) == NULL) {
-	return (-1);
+        return (-1);
     }
 
     /* semantics */
     if ((tokenp = strtok_r(NULL, "\t ", &lasts)) == NULL) {
-	return (-1);
+        return (-1);
     }
     if (strcmp(tokenp, NC_TPI_COTS_ORD_S) == 0)
-	ncp->nc_semantics = NC_TPI_COTS_ORD;
+        ncp->nc_semantics = NC_TPI_COTS_ORD;
     else if (strcmp(tokenp, NC_TPI_COTS_S) == 0)
-	ncp->nc_semantics = NC_TPI_COTS;
+        ncp->nc_semantics = NC_TPI_COTS;
     else if (strcmp(tokenp, NC_TPI_CLTS_S) == 0)
-	ncp->nc_semantics = NC_TPI_CLTS;
+        ncp->nc_semantics = NC_TPI_CLTS;
     else if (strcmp(tokenp, NC_TPI_RAW_S) == 0)
-	ncp->nc_semantics = NC_TPI_RAW;
+        ncp->nc_semantics = NC_TPI_RAW;
     else
-	return (-1);
+        return (-1);
 
     /* flags */
     if ((tokenp = strtok_r(NULL, "\t ", &lasts)) == NULL) {
-	return (-1);
+        return (-1);
     }
     for (ncp->nc_flag = NC_NOFLAG; *tokenp != '\0';
-	    tokenp++) {
-	switch (*tokenp) {
-	case NC_NOFLAG_C:
-	    break;
-	case NC_VISIBLE_C:
-	    ncp->nc_flag |= NC_VISIBLE;
-	    break;
-	case NC_BROADCAST_C:
-	    ncp->nc_flag |= NC_BROADCAST;
-	    break;
-	default:
-	    return (-1);
-	}
+         tokenp++) {
+        switch (*tokenp) {
+        case NC_NOFLAG_C:
+            break;
+        case NC_VISIBLE_C:
+            ncp->nc_flag |= NC_VISIBLE;
+            break;
+        case NC_BROADCAST_C:
+            ncp->nc_flag |= NC_BROADCAST;
+            break;
+        default:
+            return (-1);
+        }
     }
     /* protocol family */
     if ((ncp->nc_protofmly = strtok_r(NULL, "\t ", &lasts)) == NULL) {
-	return (-1);
+        return (-1);
     }
     /* protocol name */
     if ((ncp->nc_proto = strtok_r(NULL, "\t ", &lasts)) == NULL) {
-	return (-1);
+        return (-1);
     }
     /* network device */
     if ((ncp->nc_device = strtok_r(NULL, "\t ", &lasts)) == NULL) {
-	return (-1);
+        return (-1);
     }
     if ((tokenp = strtok_r(NULL, "\t ", &lasts)) == NULL) {
-	return (-1);
+        return (-1);
     }
     if (strcmp(tokenp, NC_NOLOOKUP) == 0) {
-	ncp->nc_nlookups = 0;
-	ncp->nc_lookups = NULL;
+        ncp->nc_nlookups = 0;
+        ncp->nc_lookups = NULL;
     } else {
-	char *cp;	    /* tmp string */
+        char *cp;     /* tmp string */
 
-	if (ncp->nc_lookups != NULL)	/* from last visit */
-	    __free(ncp->nc_lookups);
-	/* preallocate one string pointer */
-	ncp->nc_lookups = (char **) mem_alloc(sizeof (char *));
-	ncp->nc_nlookups = 0;
-	while ((cp = tokenp) != NULL) {
-	    tokenp = _get_next_token(cp, ',');
-	    ncp->nc_lookups[(size_t)ncp->nc_nlookups++] = cp;
-	    ncp->nc_lookups = (char **)realloc(ncp->nc_lookups,
-		(size_t)(ncp->nc_nlookups+1) *sizeof(char *));	/* for next loop */
-	}
+        if (ncp->nc_lookups != NULL) /* from last visit */
+            mem_free(ncp->nc_lookups, 0); /* XXX */
+        /* preallocate one string pointer */
+        ncp->nc_lookups = (char **) mem_zalloc(sizeof (char *));
+        ncp->nc_nlookups = 0;
+        while ((cp = tokenp) != NULL) {
+            tokenp = _get_next_token(cp, ',');
+            ncp->nc_lookups[(size_t)ncp->nc_nlookups++] = cp;
+            /* XXXX ok, this works, but should be fixed */
+            ncp->nc_lookups =
+                (char **)realloc(
+                    ncp->nc_lookups,
+                    (size_t)(ncp->nc_nlookups+1) *sizeof(char *)); /* for next loop */
+        }
     }
     return (0);
 }
@@ -640,22 +643,22 @@ nc_sperror(void)
 
     switch(nc_error) {
     case NC_NONETCONFIG:
-	message = _nc_errors[0];
-	break;
+        message = _nc_errors[0];
+        break;
     case NC_NOMEM:
-	message = _nc_errors[1];
-	break;
+        message = _nc_errors[1];
+        break;
     case NC_NOTINIT:
-	message = _nc_errors[2];
-	break;
+        message = _nc_errors[2];
+        break;
     case NC_BADFILE:
-	message = _nc_errors[3];
-	break;
+        message = _nc_errors[3];
+        break;
     case NC_NOTFOUND:
-	message = _nc_errors[4];
-	break;
+        message = _nc_errors[4];
+        break;
     default:
-	message = "Unknown network selection error";
+        message = "Unknown network selection error";
     }
     /* LINTED const castaway */
     return ((char *)message);
@@ -676,15 +679,15 @@ nc_perror(const char *s)
 static struct netconfig *
 dup_ncp(struct netconfig *ncp)
 {
-    struct netconfig	*p;
-    char	*tmp;
-    u_int	i;
+    struct netconfig *p;
+    char *tmp;
+    u_int i;
 
-    if ((tmp=mem_alloc(MAXNETCONFIGLINE)) == NULL)
-	return(NULL);
-    if ((p=(struct netconfig *) mem_alloc(sizeof(struct netconfig))) == NULL) {
-	__free(tmp);
-	return(NULL);
+    if ((tmp=mem_zalloc(MAXNETCONFIGLINE)) == NULL)
+        return(NULL);
+    if ((p=(struct netconfig *) mem_zalloc(sizeof(struct netconfig))) == NULL) {
+        mem_free(tmp, 0);
+        return(NULL);
     }
     /*
      * First we dup all the data from matched netconfig buffer.  Then we
@@ -703,14 +706,15 @@ dup_ncp(struct netconfig *ncp)
     p->nc_proto = (char *)strcpy(tmp,ncp->nc_proto);
     tmp = strchr(tmp, 0) + 1;
     p->nc_device = (char *)strcpy(tmp,ncp->nc_device);
-    p->nc_lookups = (char **) mem_alloc((size_t)(p->nc_nlookups+1) * sizeof(char *));
+    p->nc_lookups =
+        (char **) mem_zalloc((size_t)(p->nc_nlookups+1) * sizeof(char *));
     if (p->nc_lookups == NULL) {
-	__free(p->nc_netid);
-	return(NULL);
+        mem_free(p->nc_netid, 0);
+        return(NULL);
     }
     for (i=0; i < p->nc_nlookups; i++) {
-    	tmp = strchr(tmp, 0) + 1;
-    	p->nc_lookups[i] = (char *)strcpy(tmp,ncp->nc_lookups[i]);
+        tmp = strchr(tmp, 0) + 1;
+        p->nc_lookups[i] = (char *)strcpy(tmp,ncp->nc_lookups[i]);
     }
     return(p);
 }

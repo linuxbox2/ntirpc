@@ -48,7 +48,7 @@ struct ct_wait_entry {
 struct vc_fd_rec
 {
     int fd_k;
-    int32_t refcount;
+    int32_t refcnt;
     int32_t lock_flag_value; /* state of lock at fd */
     struct opr_rbtree_node node_k;
     mutex_t mtx;
@@ -207,7 +207,7 @@ struct cx_data
 static inline struct cx_data *
 alloc_cx_data(enum CX_TYPE type, uint32_t sendsz, uint32_t recvsz)
 {
-    struct cx_data *cx = mem_alloc(sizeof(struct cx_data));
+    struct cx_data *cx = mem_zalloc(sizeof(struct cx_data));
     cx->type = type;
     switch (type) {
     case CX_DG_DATA:

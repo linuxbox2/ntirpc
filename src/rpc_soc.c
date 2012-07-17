@@ -476,7 +476,7 @@ clnt_broadcast(u_long  prog,  /* program number */
     if (clnt_broadcast_key == -1) {
         mutex_lock(&tsd_lock);
         if (clnt_broadcast_key == -1)
-            thr_keycreate(&clnt_broadcast_key, __rpc_free);
+            thr_keycreate(&clnt_broadcast_key, free); /* XXX */
         mutex_unlock(&tsd_lock);
     }
     thr_setspecific(clnt_broadcast_key, (void *) eachresult);
@@ -536,7 +536,7 @@ clntunix_create(struct sockaddr_un *raddr,
     if (((svcaddr = mem_alloc(sizeof(struct netbuf))) == NULL ) ||
         ((svcaddr->buf = mem_alloc(sizeof(struct sockaddr_un))) == NULL)) {
         if (svcaddr != NULL)
-            __free(svcaddr);
+            mem_free(svcaddr, 0);
         rpc_createerr.cf_stat = RPC_SYSTEMERROR;
         rpc_createerr.cf_error.re_errno = errno;
         return(cl);
@@ -559,8 +559,8 @@ clntunix_create(struct sockaddr_un *raddr,
     cl = clnt_vc_create(*sockp, svcaddr, prog,
                         vers, sendsz, recvsz);
 done:
-    __free(svcaddr->buf);
-    __free(svcaddr);
+    mem_free(svcaddr->buf, 0);
+    mem_free(svcaddr, 0);
     return(cl);
 }
 
@@ -612,7 +612,7 @@ svcunix_create(int sock,
 
     if (nconf->nc_semantics != NC_TPI_CLTS) {
         if (listen(sock, SOMAXCONN) < 0) {
-            __free(taddr.addr.buf);
+            mem_free(taddr.addr.buf, 0);
             goto done;
         }
     }
