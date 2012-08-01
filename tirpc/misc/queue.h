@@ -543,6 +543,16 @@ struct {								\
 	QMD_TRACE_HEAD(head);						\
 } while (0)
 
+/* XXX optional IS_ENQUEUED support--entries must be initialized if
+ * IS_ENQUEUED will be used */
+#define TAILQ_INIT_ENTRY(elm, field) do { \
+        (elm)->field.tqe_prev = NULL;     \
+        (elm)->field.tqe_next = NULL;     \
+    } while (0);
+
+#define TAILQ_IS_ENQUEUED(elm, field) ( ((elm)->field.tqe_prev != NULL) || \
+                                        ((elm)->field.tqe_next != NULL))
+
 #define	TAILQ_INSERT_AFTER(head, listelm, elm, field) do {		\
 	QMD_TAILQ_CHECK_NEXT(listelm, field);				\
 	if ((TAILQ_NEXT((elm), field) = TAILQ_NEXT((listelm), field)) != NULL)\
