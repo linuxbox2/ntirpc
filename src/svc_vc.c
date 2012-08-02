@@ -449,6 +449,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz)
      * a call channel */
     svc_vc_ops(xprt);
 
+#if XDR_VREC
     /* parallel send/recv */
     xdr_vrec_create(&(cd->xdrs_in),
                     XDR_VREC_IN, xprt, readv_vc, NULL, recvsz,
@@ -457,6 +458,13 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz)
     xdr_vrec_create(&(cd->xdrs_out),
                     XDR_VREC_OUT, xprt, NULL, writev_vc, sendsz,
                     VREC_FLAG_NONE);
+#else
+    /* XXX */
+    xdrrec_create(&(cd->xdrs_in), sendsz, recvsz, xprt,
+                  read_vc, write_vc);
+    xdrrec_create(&(cd->xdrs_out), sendsz, recvsz, xprt,
+                  read_vc, write_vc);
+#endif
 
     xprt->xp_p1 = cd;
     xprt->xp_verf.oa_base = cd->verf_body;
@@ -962,17 +970,16 @@ writev_vc(void *xprtp, struct iovec *iov, int iovcnt, u_int flags)
 static enum xprt_stat
 svc_vc_stat(SVCXPRT *xprt)
 {
-    struct cf_conn *cd;
-
-    assert(xprt != NULL);
-
-    cd = (struct cf_conn *)(xprt->xp_p1);
+    struct cf_conn *cd = (struct cf_conn *)(xprt->xp_p1);
 
     if (cd->strm_stat == XPRT_DIED)
         return (XPRT_DIED);
-
+#if XDR_VREC
     /* SVC_STAT() only cares about the recv queue */
     if (! xdr_vrec_eof(&(cd->xdrs_in)))
+#else
+    if (! xdrrec_eof(&(cd->xdrs_in)))
+#endif
         return (XPRT_MOREREQS);
 
     return (XPRT_IDLE);
@@ -983,9 +990,6 @@ svc_vc_recv(SVCXPRT *xprt, struct rpc_msg *msg)
 {
     struct cf_conn *cd;
     XDR *xdrs;
-
-    assert(xprt != NULL);
-    assert(msg != NULL);
 
     cd = (struct cf_conn *)(xprt->xp_p1);
 
@@ -1003,7 +1007,11 @@ svc_vc_recv(SVCXPRT *xprt, struct rpc_msg *msg)
      * No need skip records with nonblocking connections
      */
     if (cd->nonblock == FALSE)
+#if XDR_VREC
         (void) xdr_vrec_skiprecord(xdrs);
+#else
+        (void) xdrrec_skiprecord(xdrs);
+#endif
 
     if (xdr_dplx_msg(xdrs, msg)) {
         /* XXX actually using cd->x_id !MT-SAFE */
@@ -1163,7 +1171,11 @@ svc_vc_reply(SVCXPRT *xprt, struct rpc_msg *msg)
                                     xdr_location)))) {
         rstat = TRUE;
     }
+#if XDR_VREC
     (void)xdr_vrec_endofrecord(xdrs, TRUE);
+#else
+    (void)xdrrec_endofrecord(xdrs, TRUE);
+#endif
     return (rstat);
 }
 
@@ -1576,6 +1588,7 @@ SVCXPRT *svc_vc_create_xprt(u_long sendsz, u_long recvsz)
 
     cd->strm_stat = XPRT_IDLE;
 
+#if XDR_VREC
     /* parallel send/recv */
     xdr_vrec_create(&(cd->xdrs_in),
                     XDR_VREC_IN, xprt, readv_vc, NULL, recvsz,
@@ -1584,6 +1597,13 @@ SVCXPRT *svc_vc_create_xprt(u_long sendsz, u_long recvsz)
     xdr_vrec_create(&(cd->xdrs_out),
                     XDR_VREC_OUT, xprt, NULL, writev_vc, sendsz,
                     VREC_FLAG_NONE);
+#else
+    /* XXX */
+    xdrrec_create(&(cd->xdrs_in), sendsz, recvsz, xprt,
+                  read_vc, write_vc);
+    xdrrec_create(&(cd->xdrs_out), sendsz, recvsz, xprt,
+                  read_vc, write_vc);
+#endif
 
     xprt->xp_p1 = cd;
     xprt->xp_verf.oa_base = cd->verf_body;
