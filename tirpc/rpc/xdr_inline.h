@@ -715,6 +715,7 @@ inline_xdr_int64_t(XDR *xdrs, int64_t *llp)
 	return (FALSE);
 }
 
+#define inline_xdr_quad_t inline_xdr_int64_t
 
 /*
  * XDR unsigned 64-bit integers
@@ -746,6 +747,7 @@ inline_xdr_u_int64_t(XDR *xdrs, u_int64_t *ullp)
 	return (FALSE);
 }
 
+#define inline_xdr_uquad_t inline_xdr_u_int64_t
 
 /*
  * XDR hypers

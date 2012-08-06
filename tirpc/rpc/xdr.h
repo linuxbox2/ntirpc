@@ -326,6 +326,10 @@ extern bool_t	xdr_hyper(XDR *, quad_t *);
 extern bool_t	xdr_u_hyper(XDR *, u_quad_t *);
 extern bool_t	xdr_longlong_t(XDR *, quad_t *);
 extern bool_t	xdr_u_longlong_t(XDR *, u_quad_t *);
+
+#define xdr_quad_t  xdr_int64_t
+#define xdr_uquad_t xdr_uint64_t
+
 __END_DECLS
 
 /*
