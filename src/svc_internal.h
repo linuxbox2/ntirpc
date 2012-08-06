@@ -26,6 +26,78 @@
 #ifndef TIRPC_SVC_INTERNAL_H
 #define TIRPC_SVC_INTERNAL_H
 
+#include <stdbool.h>
+
+/* threading fdsets around is annoying */
+struct svc_params
+{
+    bool initialized;
+    mutex_t mtx;
+    u_long flags;
+
+    /* package global event handling--may be overridden using the
+     * svc_rqst interface */
+    enum svc_event_type ev_type;
+    union {
+        struct {
+            uint32_t id;
+            uint32_t max_events;
+        } evchan;
+        struct {
+            fd_set set; /* select/fd_set (currently unhooked) */
+        } fd;
+    } ev_u;
+
+    u_int max_connections;
+    union {
+        struct {
+            pthread_spinlock_t sp;
+            u_int nconns;
+        } vc;
+    } xprt_u;
+
+    struct __svc_ops {
+        bool (*svc_clean_idle)(fd_set *fds, int timeout, bool cleanblock);
+        void (*svc_run)(void);
+        void (*svc_getreq)(int rdfds); /* XXX */
+        void (*svc_getreqset)(fd_set *readfds); /* XXX */
+        void (*svc_exit)(void);
+    } *svc_ops;
+};
+
+extern struct svc_params __svc_params[1];
+
+#define svc_cond_init() \
+    do { \
+        if (! __svc_params->initialized) { \
+            svc_init(&(svc_init_params) \
+                     { .flags = SVC_INIT_EPOLL, \
+                       .max_connections = 8192, \
+                       .max_events = 512}); \
+        } \
+    } while (0);
+
+/* XXX */
+static inline bool svc_vc_new_conn_ok(void)
+{
+    bool ok = FALSE;
+    svc_cond_init();
+    spin_lock((&__svc_params->xprt_u.vc.sp));
+    if (__svc_params->xprt_u.vc.nconns < __svc_params->max_connections) {
+        ++(__svc_params->xprt_u.vc.nconns);
+        ok = TRUE;
+    }
+    spin_unlock(&(__svc_params->xprt_u.vc.sp));
+    return (ok);
+}
+
+#define svc_vc_dec_nconns() \
+    do { \
+        spin_lock((&__svc_params->xprt_u.vc.sp)); \
+        --(__svc_params->xprt_u.vc.nconns); \
+        spin_unlock(&(__svc_params->xprt_u.vc.sp)); \
+    } while (0);
+
 #define	su_data(xprt)	((struct svc_dg_data *)(xprt->xp_p2))
 
 /*  The CACHING COMPONENT */
