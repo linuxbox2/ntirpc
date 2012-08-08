@@ -28,12 +28,12 @@
  *
  */
 
-/* 
- * This file was derived from a copy in FreeBSD CVS on August 26, 2010. 
+/*
+ * This file was derived from a copy in FreeBSD CVS on August 26, 2010.
  * FreeBSD/NetBSD have slightly different definitions for some/most of
  * these functions and types, so they should just use the ones found
  * in their system copy of reentrant.h.
- * These definitions are only guaranteed to be valid on Linux. 
+ * These definitions are only guaranteed to be valid on Linux.
  */
 
 #if defined(__linux__)
@@ -69,6 +69,12 @@
 #define rwlock_unlock(l)	pthread_rwlock_unlock(l)
 #define rwlockattr_init(a)      pthread_rwlockattr_init(a)
 #define rwlock_destroy(l)	pthread_rwlock_destroy(l)
+
+#define spin_init(l, a)         pthread_spin_init(l, a)
+#define spin_lock(l)            pthread_spin_lock(l)
+#define spin_trylock(l)         pthread_spin_trylock(l)
+#define spin_unlock(l)          pthread_spin_unlock(l)
+#define spin_destory(l)         pthread_spin_destroy(l)
 
 #define thr_keycreate(k, d)	pthread_key_create(k, d)
 #define thr_setspecific(k, p)	pthread_setspecific(k, p)

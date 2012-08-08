@@ -66,12 +66,15 @@
 
 #include "rpc_com.h"
 #include "clnt_internal.h"
+#include "svc_internal.h"
 #include "svc_xprt.h"
 #include "vc_lock.h"
 #include <rpc/svc_rqst.h>
 #include <rpc/xdr_vrec.h>
 
 #include <getpeereid.h>
+
+#define XDR_VREC 0
 
 extern struct svc_params __svc_params[1];
 
@@ -98,6 +101,8 @@ static bool svc_vc_control(SVCXPRT *xprt, const u_int rq, void *in);
 static bool svc_vc_rendezvous_control (SVCXPRT *xprt, const u_int rq,
                                          void *in);
 bool __svc_clean_idle2(int timeout, bool cleanblock);
+
+extern pthread_mutex_t svc_ctr_lock;
 
 /*
  * If event processing on xprt is not currently blocked, set to
@@ -406,6 +411,7 @@ freedata:
     return (NULL);
 }
 
+
 SVCXPRT *
 makefd_xprt(int fd, u_int sendsz, u_int recvsz)
 {
@@ -416,14 +422,12 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz)
 
     assert(fd != -1);
 
-    if (! __svc_params->max_connections)
-        __svc_params->max_connections = FD_SETSIZE;
-
-    if (fd >= __svc_params->max_connections) {
-        __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                "svc_vc: makefd_xprt: fd too high\n");
-        xprt = NULL;
-        goto done;
+    if (! svc_vc_new_conn_ok()) {
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "%s: makefd_xprt: max_connections exceeded\n",
+                    __func__);
+                xprt = NULL;
+                goto done;
     }
 
     xprt = mem_zalloc(sizeof(SVCXPRT));
@@ -636,6 +640,7 @@ __svc_vc_dodestroy(SVCXPRT *xprt)
     if (xprt->xp_netid)
         mem_free(xprt->xp_netid, 0);
 
+    svc_vc_dec_nconns();
     svc_rqst_finalize_xprt(xprt);
     vc_lock_unref_xprt(xprt);
 

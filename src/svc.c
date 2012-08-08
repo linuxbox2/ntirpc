@@ -78,7 +78,9 @@
 extern tirpc_pkg_params __pkg_params;
 
 struct svc_params __svc_params[1] = {
-    { FALSE /* !initialized */ }
+    {
+        FALSE /* !initialized */,
+        PTHREAD_MUTEX_INITIALIZER }
 };
 
 /*
@@ -111,23 +113,28 @@ static void __xprt_do_unregister(SVCXPRT * xprt, bool dolock);
 void
 svc_init(svc_init_params * params)
 {
+    mutex_lock(&__svc_params->mtx);
     if (__svc_params->initialized) {
         __warnx(TIRPC_DEBUG_FLAG_SVC,
                 "svc_init: multiple initialization attempt (nothing happens)");
+        mutex_unlock(&__svc_params->mtx);
         return;
     }
-
-    __svc_params->max_connections = FD_SETSIZE;
+    __svc_params->max_connections =
+        (params->max_connections) ? params->max_connections : FD_SETSIZE;
 
     if (params->flags & SVC_INIT_WARNX)
         __pkg_params.warnx = params->warnx;
     else
         __pkg_params.warnx = warnx;
 
+    /* svc_vc */
+    __svc_params->xprt_u.vc.nconns = 0;
+    spin_init(&__svc_params->xprt_u.vc.sp, PTHREAD_PROCESS_PRIVATE);
+
 #if defined(TIRPC_EPOLL)
     if (params->flags & SVC_INIT_EPOLL) {
         __svc_params->ev_type = SVC_EVENT_EPOLL;
-        __svc_params->max_connections = params->max_connections;
         __svc_params->ev_u.evchan.max_events = params->max_events;
     }
 #else
@@ -138,6 +145,10 @@ svc_init(svc_init_params * params)
     /* allow consumers to manage all xprt registration */
     if (params->flags & SVC_INIT_NOREG_XPRTS)
         __svc_params->flags |= SVC_FLAG_NOREG_XPRTS;
+
+    __svc_params->initialized = TRUE;
+
+    mutex_unlock(&__svc_params->mtx);
 
     return;
 }

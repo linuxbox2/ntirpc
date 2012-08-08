@@ -124,7 +124,6 @@ enum svc_event_type {
 
 typedef struct svc_init_params
 {
-    u_int version;
     u_long flags;
     u_int max_connections; /* xprts */
     u_int max_events;      /* evchan events */
@@ -134,37 +133,6 @@ typedef struct svc_init_params
 /* Svc param flags */
 #define SVC_FLAG_NONE             0x0000
 #define SVC_FLAG_NOREG_XPRTS      0x0001
-
-/* threading fdsets around is annoying */
-struct svc_params
-{
-    bool initialized;
-
-    u_long flags;
-
-    /* package global event handling--may be overridden using the
-     * svc_rqst interface */
-    enum svc_event_type ev_type;
-    union {
-        struct {
-            uint32_t id;
-            uint32_t max_events;
-        } evchan;
-        struct {
-            fd_set set; /* select/fd_set (currently unhooked) */
-        } fd;
-    } ev_u;
-
-    u_int max_connections;
-
-    struct __svc_ops {
-        bool (*svc_clean_idle)(fd_set *fds, int timeout, bool cleanblock);
-        void (*svc_run)(void);
-        void (*svc_getreq)(int rdfds); /* XXX */
-        void (*svc_getreqset)(fd_set *readfds); /* XXX */
-        void (*svc_exit)(void);
-    } *svc_ops;
-};
 
 /*
  * SVCXPRT xp_flags
