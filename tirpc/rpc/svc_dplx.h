@@ -27,7 +27,11 @@
 #define TIRPC_SVC_DPLX_H
 
 /* channel locks using xprt handle */
-void svc_dplx_lock_x(SVCXPRT *xprt, sigset_t *mask);
+#define svc_dplx_lock_x(xprt, mask) \
+    svc_dplx_lock_x_impl(xprt, mask, __FILE__, __LINE__)
+
+void svc_dplx_lock_x_impl(SVCXPRT *xprt, sigset_t *mask, const char *file,
+                          int line);
 void svc_dplx_unlock_x(SVCXPRT *xprt, sigset_t *mask);
 
 #endif /* TIRPC_SVC_DPLX_H */

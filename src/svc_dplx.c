@@ -47,9 +47,10 @@
 
 /* placeholder, will be based on modified svc_vc.c */
 
-void svc_dplx_lock_x(SVCXPRT *xprt, sigset_t *mask)
+void svc_dplx_lock_x_impl(SVCXPRT *xprt, sigset_t *mask, const char *file,
+                          int line)
 { 
-    vc_fd_lock_x(xprt, mask);
+    vc_fd_lock_x(xprt, mask, file, line);
 }
 
 void svc_dplx_unlock_x(SVCXPRT *xprt, sigset_t *mask)

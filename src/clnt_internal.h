@@ -58,6 +58,10 @@ struct vc_fd_rec
         uint32_t depends_xid;
         struct opr_rbtree t;
     } calls;
+    struct {
+        char file[32];
+        int line;
+    } locktrace;
 };
 
 #define MCALL_MSG_SIZE 24
