@@ -239,10 +239,11 @@ typedef struct __rpc_svcxprt {
     /* XXXX duplex fix */
     struct opaque_auth xp_verf;  /* raw response verifier */
     SVCAUTH  *xp_auth;  /* auth handle of current req */
-    /* XXXX */
+
+    /* serialize private data */
+    mutex_t         xp_lock;
 
     void            *xp_ev;          /* event handle */
-
     void  *xp_p1;   /* private: for use by svc ops */
     void  *xp_p2;   /* private: for use by svc ops */
     void  *xp_p3;   /* private: for use by svc lib */
@@ -253,8 +254,6 @@ typedef struct __rpc_svcxprt {
     int             xp_type;         /* xprt type */
     u_int  xp_flags;  /* flags */
     uint64_t        xp_gen;          /* svc_xprt generation number */
-
-    rwlock_t lock;
 
 } SVCXPRT;
 

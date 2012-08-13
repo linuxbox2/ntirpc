@@ -437,7 +437,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz)
         goto done;
     }
     memset(xprt, 0, sizeof *xprt);
-    rwlock_init(&xprt->lock, NULL);
+    mutex_init(&xprt->xp_lock, NULL);
     cd = mem_alloc(sizeof(struct cf_conn));
     if (cd == NULL) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
@@ -1309,7 +1309,7 @@ static void svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
 
     if (TRUE) { /* flag in __svc_params->ev_u.epoll? */
 
-        rwlock_rdlock(&xprt->lock); /* XXX mutex? */
+        mutex_lock(&xprt->xp_lock);
 
         if (xprt == NULL || xprt->xp_ops == NULL ||
             xprt->xp_ops->xp_recv != svc_vc_recv)
@@ -1329,7 +1329,7 @@ static void svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
         }
         if (acc->tv.tv_sec - cd->last_recv_time.tv_sec > acc->timeout) {
             /* XXX locking */
-            rwlock_unlock(&xprt->lock); /* XXX mutex? */
+            mutex_unlock(&xprt->xp_lock);
             (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
             SVC_DESTROY(xprt);
             acc->ncleaned++;
@@ -1337,7 +1337,7 @@ static void svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
         }
 
     unlock:
-        rwlock_unlock(&xprt->lock); /* XXX mutex? */
+        mutex_unlock(&xprt->xp_lock);
     } /* TRUE */
 out:
     return;
@@ -1391,8 +1391,7 @@ clnt_vc_create_from_svc(SVCXPRT *xprt,
     struct cf_conn *cd;
     CLIENT *cl;
 
-    /* XXX inconsistent lock pattern, revisit */
-    rwlock_wrlock (&xprt->lock);
+    mutex_lock(&xprt->xp_lock);
 
     /* XXX return allocated client structure, or allocate one if none
      * is currently allocated (it can be destroyed) */
@@ -1424,7 +1423,7 @@ clnt_vc_create_from_svc(SVCXPRT *xprt,
     xprt->xp_flags |= SVC_XPRT_FLAG_DONTCLOSE;
 
 unlock:
-    rwlock_unlock (&xprt->lock);
+    mutex_unlock(&xprt->xp_lock);
 
     /* for a dedicated channel, unregister and free xprt */
     if ((flags & SVC_VC_CREATE_FLAG_SPLX) &&
