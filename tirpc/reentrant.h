@@ -43,6 +43,7 @@
 #define mutex_t			pthread_mutex_t
 #define cond_t			pthread_cond_t
 #define rwlock_t		pthread_rwlock_t
+#define spinlock_t              pthread_spinlock_t
 #define once_t			pthread_once_t
 
 #define thread_key_t		pthread_key_t

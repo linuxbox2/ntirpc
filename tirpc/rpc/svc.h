@@ -250,7 +250,7 @@ typedef struct __rpc_svcxprt {
 	u_int		xp_flags;	 /* flags */
 	uint64_t        xp_gen;          /* svc_xprt generation number */
 
-	rwlock_t lock;
+	spinlock_t sp;
 
 } SVCXPRT;
 
