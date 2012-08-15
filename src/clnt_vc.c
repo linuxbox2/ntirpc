@@ -69,7 +69,7 @@
 #include "rpc_com.h"
 
 #include "clnt_internal.h"
-#include "vc_lock.h"
+#include "rpc_dplx_internal.h"
 #include "rpc_ctx.h"
 #include <rpc/svc_rqst.h>
 
@@ -314,7 +314,7 @@ clnt_vc_create2(int fd,       /* open file descriptor */
     /*
      * Register lock channel (sync)
      */
-    vc_lock_init_cl(cl);
+    rpc_dplx_init_client(cl);
 
     /*
      * Setup auth
@@ -345,7 +345,19 @@ err:
     return ((CLIENT *)NULL);
 }
 
-#define vc_call_return(r) do { result=(r); goto out; } while (0);
+#define vc_call_return_slocked(r) \
+    do { \
+        result=(r); \
+        rpc_dplx_suc(cl, &mask); \
+        goto out; \
+    } while (0);
+
+#define vc_call_return_rlocked(r) \
+    do { \
+        result=(r); \
+        rpc_dplx_ruc(cl, &mask); \
+        goto out; \
+    } while (0);
 
 static enum clnt_stat
 clnt_vc_call(CLIENT *cl,
@@ -361,14 +373,13 @@ clnt_vc_call(CLIENT *cl,
     enum clnt_stat result = RPC_SUCCESS;
     bool shipnow, ev_blocked, duplex;
     SVCXPRT *duplex_xprt = NULL;
-    XDR *xdrs = &(ct->ct_xdrs);
+    XDR *xdrs = &(ct->ct_xdrs); /* XXX consolidation */
     rpc_ctx_t *ctx = NULL;
     int refreshes = 2;
     sigset_t mask;
 
     assert(cl != NULL);
     thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
-    vc_fd_lock_c(cl, &mask);
 
     /* XXX presently, we take any svcxprt out of EPOLL during calls,
      * this is harmless, but it may be less efficient than using the
@@ -422,6 +433,8 @@ clnt_vc_call(CLIENT *cl,
          && timeout.tv_usec == 0) ? FALSE : TRUE;
 
 call_again:
+    rpc_dplx_slc(cl, &mask);
+
     xdrs->x_op = XDR_ENCODE;
     xdrs->x_lib = (void *) ctx; /* transiently thread call ctx */
 
@@ -435,20 +448,20 @@ call_again:
         if (ctx->error.re_status == RPC_SUCCESS)
             ctx->error.re_status = RPC_CANTENCODEARGS;
         (void)xdrrec_endofrecord(xdrs, TRUE);
-        vc_call_return(ctx->error.re_status);
+        vc_call_return_slocked(ctx->error.re_status);
     }
 
     if (! xdrrec_endofrecord(xdrs, shipnow))
-        vc_call_return(ctx->error.re_status = RPC_CANTSEND);
+        vc_call_return_slocked(ctx->error.re_status = RPC_CANTSEND);
 
     if (! shipnow)
-        vc_call_return(RPC_SUCCESS);
+        vc_call_return_slocked(RPC_SUCCESS);
 
     /*
      * Hack to provide rpc-based message passing
      */
     if (timeout.tv_sec == 0 && timeout.tv_usec == 0)
-        vc_call_return(ctx->error.re_status = RPC_TIMEDOUT);
+        vc_call_return_slocked(ctx->error.re_status = RPC_TIMEDOUT);
 
     /*
      * Keep receiving until we get a valid transaction id.
@@ -456,6 +469,9 @@ call_again:
      * XXX This behavior is incompatible with duplex operation.  We'll
      * remove it shortly.
      */
+    rpc_dplx_suc(cl, &mask);
+    rpc_dplx_rlc(cl, &mask);
+
     xdrs->x_op = XDR_DECODE;
     while (TRUE) {
         ctx->msg->acpted_rply.ar_verf = _null_auth;
@@ -464,18 +480,18 @@ call_again:
         if (! xdrrec_skiprecord(xdrs)) {
             __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
                     "%s: error at skiprecord", __func__);
-            vc_call_return(ctx->error.re_status);
+            vc_call_return_rlocked(ctx->error.re_status);
         }
         /* now decode and validate the response header */
         if (! xdr_dplx_msg_decode_start(xdrs, ctx->msg)) {
             __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
                     "%s: error at xdr_dplx_msg_start", __func__);
-            vc_call_return(ctx->error.re_status);
+            vc_call_return_rlocked(ctx->error.re_status);
         }
         if (! xdr_dplx_msg_decode_continue(xdrs, ctx->msg)) {
             __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
                     "%s: error at xdr_dplx_msg_continue", __func__);
-            vc_call_return(ctx->error.re_status);
+            vc_call_return_rlocked(ctx->error.re_status);
         }
 
         __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
@@ -531,20 +547,19 @@ replied:
     else {
         /* maybe our credentials need to be refreshed ... */
         if (refreshes-- && AUTH_REFRESH(cl->cl_auth, &(ctx->msg))) {
-            rpc_ctx_next_xid(ctx, RPC_CTX_FLAG_LOCKED);
+            rpc_ctx_next_xid(ctx, RPC_CTX_FLAG_NONE);
+            rpc_dplx_ruc(cl, &mask);
             goto call_again;
         }
     }  /* end of unsuccessful completion */
-    vc_call_return(ctx->error.re_status);
+    vc_call_return_rlocked(ctx->error.re_status);
 
 out:
     if (ev_blocked)
         cond_unblock_events_client(cl);
 
     if (ctx)
-        free_rpc_call_ctx(ctx, RPC_CTX_FLAG_LOCKED);
-
-    vc_fd_unlock_c(cl, &mask);
+        free_rpc_call_ctx(ctx, RPC_CTX_FLAG_NONE);
 
     return (result);
 }
@@ -588,13 +603,16 @@ clnt_vc_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
     sigfillset(&newmask);
     thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 
-    vc_fd_wait_c(cl, rpc_flag_clear);
+    /* barrier recv channel */
+    rpc_dplx_rwc(cl, rpc_flag_clear);
 
     xdrs->x_op = XDR_FREE;
     dummy = (*xdr_res)(xdrs, res_ptr);
 
     thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
-    vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE);
+
+    /* signal recv channel */
+    rpc_dplx_rsc(cl, RPC_DPLX_FLAG_NONE);
 
     return dummy;
 }
@@ -611,20 +629,24 @@ clnt_vc_control(CLIENT *cl, u_int request, void *info)
     struct cx_data *cx = (struct cx_data *)cl->cl_private;
     struct ct_data *ct = CT_DATA(cx);
     void *infop = info;
+    bool rslt = TRUE;
     sigset_t mask;
 
     assert(cl);
+
+    /* lock both channels */
     thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
-    vc_fd_lock_c(cl, &mask);
+    rpc_dplx_slc(cl, &mask);
+    rpc_dplx_rlc(cl, &mask);
 
     switch (request) {
     case CLSET_FD_CLOSE:
         ct->ct_closeit = TRUE;
-        vc_fd_unlock_c(cl, &mask);
+        goto unlock;
         return (TRUE);
     case CLSET_FD_NCLOSE:
         ct->ct_closeit = FALSE;
-        vc_fd_unlock_c(cl, &mask);
+        goto unlock;
         return (TRUE);
     default:
         break;
@@ -632,14 +654,14 @@ clnt_vc_control(CLIENT *cl, u_int request, void *info)
 
     /* for other requests which use info */
     if (info == NULL) {
-        vc_fd_unlock_c(cl, &mask);
-        return (FALSE);
+        rslt = FALSE;
+        goto unlock;
     }
     switch (request) {
     case CLSET_TIMEOUT:
         if (time_not_ok((struct timeval *)info)) {
-            vc_fd_unlock_c(cl, &mask);
-            return (FALSE);
+            rslt = FALSE;
+            goto unlock;
         }
         ct->ct_wait = *(struct timeval *)infop;
         ct->ct_waitset = TRUE;
@@ -658,8 +680,8 @@ clnt_vc_control(CLIENT *cl, u_int request, void *info)
         *(struct netbuf *)info = ct->ct_addr;
         break;
     case CLSET_SVC_ADDR:  /* set to new address */
-        vc_fd_unlock_c(cl, &mask);
-        return (FALSE);
+        rslt = FALSE;
+        goto unlock;
     case CLGET_XID:
         /*
          * use the knowledge that xid is the
@@ -718,11 +740,15 @@ clnt_vc_control(CLIENT *cl, u_int request, void *info)
     break;
 
     default:
-        vc_fd_unlock_c(cl, &mask);
-        return (FALSE);
+        rslt = FALSE;
+        goto unlock;
+        break;
     }
 
-    vc_fd_unlock_c(cl, &mask);
+unlock:
+    rpc_dplx_ruc(cl, &mask);
+    rpc_dplx_suc(cl, &mask);
+
     return (TRUE);
 }
 
@@ -737,7 +763,10 @@ clnt_vc_destroy(CLIENT *cl)
      * larger than the wait (not 100% clear why) */
     sigfillset(&newmask);
     thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-    vc_fd_wait_c(cl, rpc_flag_clear);
+
+    /* barrier both channels */
+    rpc_dplx_swc(cl, rpc_flag_clear);
+    rpc_dplx_rwc(cl, rpc_flag_clear);
 
     if (CT_DATA(cx)->ct_closeit && cx->cx_fd != -1)
         (void)close(cx->cx_fd);
@@ -745,9 +774,11 @@ clnt_vc_destroy(CLIENT *cl)
     if (CT_DATA(cx)->ct_addr.buf)
         mem_free(CT_DATA(cx)->ct_addr.buf, 0); /* XXX */
 
-    vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE); /* XXX moved before free */
-    vc_lock_unref_clnt(cl);
+    /* signal both channels */
+    rpc_dplx_ssc(cl, RPC_DPLX_FLAG_NONE);
+    rpc_dplx_rsc(cl, RPC_DPLX_FLAG_NONE);
 
+    rpc_dplx_unref_clnt(cl);
     free_cx_data(cx);
 
     if (cl->cl_netid && cl->cl_netid[0])

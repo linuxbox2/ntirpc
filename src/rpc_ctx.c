@@ -42,27 +42,29 @@
 #include <rpc/svc.h>
 
 #include "rpc_com.h"
-#include "clnt_internal.h"
-
 #include <misc/rbtree_x.h>
-#include "vc_lock.h"
+#include "clnt_internal.h"
+#include "rpc_dplx_internal.h"
 #include "rpc_ctx.h"
 
 rpc_ctx_t *
 alloc_rpc_call_ctx(CLIENT *cl, rpcproc_t proc, xdrproc_t xdr_args,
-                       void *args_ptr, xdrproc_t xdr_results, void *results_ptr,
-                       struct timeval timeout)
+                   void *args_ptr, xdrproc_t xdr_results, void *results_ptr,
+                   struct timeval timeout)
 {
     struct cx_data *cx = (struct cx_data *) cl->cl_private;
-    struct vc_fd_rec *crec = cx->cx_crec;
+    struct rpc_dplx_rec *rec = cx->cx_rec;
     rpc_ctx_t *ctx = mem_alloc(sizeof(rpc_ctx_t));
     if (! ctx)
         goto out;
 
-    assert(crec);
+    assert(rec);
+
+    /* rec->calls and rbtree protected by spinlock */
+    spin_lock(&rec->sp);
 
     /* XXX we hold the client-fd lock */
-    ctx->xid = ++(crec->calls.xid);
+    ctx->xid = ++(rec->calls.xid);
 
     /* some of this looks like overkill;  it's here to support future,
      * fully async calls */
@@ -78,14 +80,18 @@ alloc_rpc_call_ctx(CLIENT *cl, rpcproc_t proc, xdrproc_t xdr_args,
     ctx->flags = 0;
 
     /* stash it */
-    if (opr_rbtree_insert(&crec->calls.t, &ctx->node_k)) {
+    if (opr_rbtree_insert(&rec->calls.t, &ctx->node_k)) {
         __warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
                 "%s: call ctx insert failed (xid %d client %p)",
                 __func__,
                 ctx->xid, cl);
+        spin_unlock(&rec->sp);
         mem_free(ctx, sizeof(rpc_ctx_t));
         ctx = NULL;
+        goto out;
     }
+
+    spin_unlock(&rec->sp);
 
 out:
     return (ctx);
@@ -94,19 +100,25 @@ out:
 void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
 {
     struct cx_data *cx = (struct cx_data *) ctx->ctx_u.clnt.cl->cl_private;
-    struct vc_fd_rec *crec = cx->cx_crec;
+    struct rpc_dplx_rec *rec = cx->cx_rec;
 
     assert (flags & RPC_CTX_FLAG_LOCKED);
 
-    opr_rbtree_remove(&crec->calls.t, &ctx->node_k);
-    ctx->xid = ++(crec->calls.xid);
-    if (opr_rbtree_insert(&crec->calls.t, &ctx->node_k)) {
+    spin_lock(&rec->sp);
+    opr_rbtree_remove(&rec->calls.t, &ctx->node_k);
+    ctx->xid = ++(rec->calls.xid);
+    if (opr_rbtree_insert(&rec->calls.t, &ctx->node_k)) {
+        spin_unlock(&rec->sp);
         __warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
                 "%s: call ctx insert failed (xid %d client %p)",
                 __func__,
                 ctx->xid,
                 ctx->ctx_u.clnt.cl);
+        goto out;
     }
+    spin_unlock(&rec->sp);
+out:
+    return;
 }
 
 #if 0
@@ -115,10 +127,12 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 {
     struct cx_data *cx = (struct cx_data *) ctx->ctx_u.clnt.cl->cl_private;
     struct ct_data *ct = CT_DATA(cx);
-    struct vc_fd_rec *crec __attribute__((unused)) = cx->cx_crec;
+    struct rpc_dplx_rec *rec __attribute__((unused)) = cx->cx_rec;
     XDR *xdrs __attribute__((unused)) = &(ct->ct_xdrs);
     enum clnt_stat stat = RPC_SUCCESS;
 
+    /* XXX if we keep this convenience flag, it needs to indicate SEND or
+     * RECV lock */
     assert (flags & RPC_CTX_FLAG_LOCKED);
 
     ctx->state = RPC_CTX_REPLY_WAIT;
@@ -156,13 +170,12 @@ void
 free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
 {
     struct cx_data *cx = (struct cx_data *) ctx->ctx_u.clnt.cl->cl_private;
-    struct vc_fd_rec *crec = cx->cx_crec;
+    struct rpc_dplx_rec *rec = cx->cx_rec;
 
-    assert (flags & RPC_CTX_FLAG_LOCKED);
-
-    opr_rbtree_remove(&crec->calls.t, &ctx->node_k);
+    spin_lock(&rec->sp);
+    opr_rbtree_remove(&rec->calls.t, &ctx->node_k);
+    spin_unlock(&rec->sp);
     if (ctx->msg)
         free_rpc_msg(ctx->msg);
     mem_free(ctx, sizeof(rpc_ctx_t));
-    
 }

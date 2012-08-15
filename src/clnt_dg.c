@@ -62,7 +62,7 @@
 #endif
 
 #include "clnt_internal.h"
-#include "vc_lock.h"
+#include "rpc_dplx_internal.h"
 
 #define MAX_DEFAULT_FDS                 20000
 
@@ -186,6 +186,7 @@ clnt_dg_create(int fd,           /* open file descriptor */
     cl->cl_ops = clnt_dg_ops();
     cl->cl_private = (caddr_t)(void *) cx;
     cl->cl_auth = authnone_create();
+    rpc_dplx_init_client(cl);
     cl->cl_tp = NULL;
     cl->cl_netid = NULL;
 
@@ -227,10 +228,13 @@ clnt_dg_call(CLIENT *cl,             /* client handle */
     socklen_t  __attribute__((unused)) inlen, salen;
     ssize_t recvlen = 0;
     u_int32_t xid, inval, outval;
+    bool slocked = FALSE;
+    bool rlocked = FALSE;
 
     outlen = 0;
     thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
-    vc_fd_lock_c(cl, &mask);
+    rpc_dplx_slc(cl, &mask);
+    slocked = TRUE;
     if (cu->cu_total.tv_usec == -1) {
         timeout = utimeout; /* use supplied timeout */
     } else {
@@ -258,6 +262,10 @@ clnt_dg_call(CLIENT *cl,             /* client handle */
 
     /* Clean up in case the last call ended in a longjmp(3) call. */
 call_again:
+    if (! slocked) {
+        rpc_dplx_slc(cl, &mask);
+        slocked = TRUE;
+    }
     xdrs = &(cu->cu_outxdrs);
     if (cu->cu_async == TRUE && xargs == NULL)
         goto get_reply;
@@ -301,12 +309,17 @@ send_again:
     }
 
 get_reply:
-
     /*
      * sub-optimal code appears here because we have
      * some clock time to spare while the packets are in flight.
      * (We assume that this is actually only executed once.)
      */
+    rpc_dplx_suc(cl, &mask);
+    slocked = FALSE;
+
+    rpc_dplx_rlc(cl, &mask);
+    rlocked = TRUE;
+
     reply_msg.acpted_rply.ar_verf = _null_auth;
     reply_msg.acpted_rply.ar_results.where = NULL;
     reply_msg.acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
@@ -319,6 +332,8 @@ get_reply:
         switch (poll(&fd, 1, tv)) {
         case 0:
             total_time -= tv;
+            rpc_dplx_ruc(cl, &mask);
+            rlocked = FALSE;
             goto send_again;
         case -1:
             if (errno == EINTR)
@@ -368,8 +383,7 @@ get_reply:
                 {
                     e = (struct sock_extended_err *) CMSG_DATA(cmsg);
                     cu->cu_error.re_errno = e->ee_errno;
-                    vc_fd_unlock_c(cl, &mask);
-                    return (cu->cu_error.re_status = RPC_CANTRECV);
+                    cu->cu_error.re_status = RPC_CANTRECV;
                 }
     }
 #endif
@@ -387,6 +401,8 @@ get_reply:
 
     if (recvlen < sizeof(u_int32_t)) {
         total_time -= tv;
+        rpc_dplx_ruc(cl, &mask);
+        rlocked = FALSE;
         goto send_again;
     }
 
@@ -397,6 +413,8 @@ get_reply:
         memcpy(&outval, cu->cu_outbuf, sizeof(u_int32_t));
         if (inval != outval) {
             total_time -= tv;
+            rpc_dplx_ruc(cl, &mask);
+            rlocked = FALSE;
             goto send_again;
         }
         inlen = (socklen_t)recvlen;
@@ -441,6 +459,8 @@ get_reply:
             if (nrefreshes > 0 &&
                 AUTH_REFRESH(cl->cl_auth, &reply_msg)) {
                 nrefreshes--;
+                rpc_dplx_ruc(cl, &mask);
+                rlocked = FALSE;
                 goto call_again;
             }
         /* end of unsuccessful completion */
@@ -450,7 +470,11 @@ get_reply:
 
     }
 out:
-    vc_fd_unlock_c(cl, &mask);
+    if (slocked)
+        rpc_dplx_suc(cl, &mask);
+    if (rlocked)
+        rpc_dplx_ruc(cl, &mask);
+
     return (cu->cu_error.re_status);
 }
 
@@ -473,14 +497,15 @@ clnt_dg_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
     if (! xdr_res)
         goto out;
 
-    xdrs = &(cu->cu_outxdrs);
+    xdrs = &(cu->cu_outxdrs); /* XXX outxdrs? */
 
     /* Handle our own signal mask here, the signal section is
      * larger than the wait (not 100% clear why) */
     sigfillset(&newmask);
     thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 
-    vc_fd_wait_c(cl, rpc_flag_clear);
+    /* barrier recv channel */
+    rpc_dplx_rwc(cl, rpc_flag_clear);
 
     xdrs->x_op = XDR_FREE;
     dummy = 0;
@@ -488,7 +513,9 @@ clnt_dg_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
         dummy = (*xdr_res)(xdrs, res_ptr);
 
     thr_sigsetmask(SIG_SETMASK, &mask, NULL);
-    vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE);
+
+    /* signal recv channel */
+    rpc_dplx_rsc(cl, RPC_DPLX_FLAG_NONE);
 
 out:
     return (dummy);
@@ -506,31 +533,32 @@ clnt_dg_control(CLIENT *cl, u_int request, void *info)
     struct cu_data *cu = CU_DATA((struct cx_data *) cl->cl_private);
     struct netbuf *addr;
     sigset_t mask;
-    bool result = TRUE;
+    bool rslt = TRUE;
 
     thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
-    vc_fd_lock_c(cl, &mask);
+    rpc_dplx_slc(cl, &mask);
+    rpc_dplx_rlc(cl, &mask);
 
     switch (request) {
     case CLSET_FD_CLOSE:
         cu->cu_closeit = TRUE;
-        result = TRUE;
+        rslt = TRUE;
         goto unlock;
     case CLSET_FD_NCLOSE:
         cu->cu_closeit = FALSE;
-        result = TRUE;
+        rslt = TRUE;
         goto unlock;
     }
 
     /* for other requests which use info */
     if (info == NULL) {
-        result = FALSE;
+        rslt = FALSE;
         goto unlock;
     }
     switch (request) {
     case CLSET_TIMEOUT:
         if (time_not_ok((struct timeval *)info)) {
-            result = FALSE;
+            rslt = FALSE;
             goto unlock;
         }
         cu->cu_total = *(struct timeval *)info;
@@ -544,7 +572,7 @@ clnt_dg_control(CLIENT *cl, u_int request, void *info)
         break;
     case CLSET_RETRY_TIMEOUT:
         if (time_not_ok((struct timeval *)info)) {
-            result = FALSE;
+            rslt = FALSE;
             goto unlock;
         }
         cu->cu_wait = *(struct timeval *)info;
@@ -564,7 +592,7 @@ clnt_dg_control(CLIENT *cl, u_int request, void *info)
     case CLSET_SVC_ADDR:  /* set to new address */
         addr = (struct netbuf *)info;
         if (addr->len < sizeof cu->cu_raddr) {
-            result = FALSE;
+            rslt = FALSE;
             goto unlock;
 
         }
@@ -632,8 +660,10 @@ clnt_dg_control(CLIENT *cl, u_int request, void *info)
     }
 
 unlock:
-    vc_fd_unlock_c(cl, &mask);
-    return (result);
+    rpc_dplx_ruc(cl, &mask);
+    rpc_dplx_suc(cl, &mask);
+
+    return (rslt);
 }
 
 static void
@@ -647,15 +677,20 @@ clnt_dg_destroy(CLIENT *cl)
      * larger than the wait (not 100% clear why) */
     sigfillset(&newmask);
     thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-    vc_fd_wait_c(cl, rpc_flag_clear);
+
+    /* barrier both channels */
+    rpc_dplx_swc(cl, rpc_flag_clear);
+    rpc_dplx_rwc(cl, rpc_flag_clear);
 
     if (CU_DATA(cx)->cu_closeit)
         (void)close(cu_fd);
     XDR_DESTROY(&(CU_DATA(cx)->cu_outxdrs));
 
-    thr_sigsetmask(SIG_SETMASK, &mask, NULL);
-    vc_fd_signal(cu_fd, VC_LOCK_FLAG_NONE);
+    /* signal both channels */
+    rpc_dplx_ssc(cl, RPC_DPLX_FLAG_NONE);
+    rpc_dplx_rsc(cl, RPC_DPLX_FLAG_NONE);
 
+    rpc_dplx_unref_clnt(cl);
     free_cx_data(cx);
 
     if (cl->cl_netid && cl->cl_netid[0])
@@ -663,6 +698,7 @@ clnt_dg_destroy(CLIENT *cl)
     if (cl->cl_tp && cl->cl_tp[0])
         mem_free(cl->cl_tp, strlen(cl->cl_tp) +1);
     mem_free(cl, sizeof (CLIENT));
+    thr_sigsetmask(SIG_SETMASK, &mask, NULL);
 }
 
 static struct clnt_ops *

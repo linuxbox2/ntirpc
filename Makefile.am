@@ -22,7 +22,6 @@ nobase_include_HEADERS = m4/.dummy \
 			 tirpc/rpc/svc.h \
 			 tirpc/rpc/svc_dg.h \
 			 tirpc/rpc/svc_auth.h \
-			 tirpc/rpc/svc_dplx.h \
 			 tirpc/rpc/svc_rqst.h \
 			 tirpc/rpc/rpc_msg.h \
 			 tirpc/rpc/rpc.h \

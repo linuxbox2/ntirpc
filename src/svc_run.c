@@ -51,7 +51,7 @@
 #include "clnt_internal.h"
 #include "svc_internal.h"
 #include "svc_xprt.h"
-#include "vc_lock.h"
+#include "rpc_dplx_internal.h"
 #include <rpc/svc_rqst.h>
 
 extern struct svc_params __svc_params[1];

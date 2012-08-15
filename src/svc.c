@@ -65,7 +65,7 @@
 #include "clnt_internal.h"
 #include "svc_internal.h"
 #include "svc_xprt.h"
-#include "vc_lock.h"
+#include "rpc_dplx_internal.h"
 #include <rpc/svc_rqst.h>
 
 #define RQCRED_SIZE 400 /* this size is excessive */
@@ -1172,7 +1172,7 @@ svc_shutdown(u_long flags)
     svc_xprt_shutdown();
 
     /* release fd lock records */
-    vc_lock_shutdown();
+    rpc_dplx_shutdown();
 
     return (code);
 }

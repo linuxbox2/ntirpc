@@ -38,21 +38,16 @@
 #include <errno.h>
 #include <unistd.h>
 #include <signal.h>
-
 #include <rpc/types.h>
 #include <rpc/rpc.h>
 #ifdef PORTMAP
 #include <rpc/pmap_clnt.h>
 #endif /* PORTMAP */
-
 #include "rpc_com.h"
-
 #include <rpc/svc.h>
-
 #include <misc/rbtree_x.h>
-
 #include "clnt_internal.h"
-#include "vc_lock.h"
+#include "rpc_dplx_internal.h"
 #include "svc_xprt.h"
 
 #define SVC_XPRT_PARTITIONS 7

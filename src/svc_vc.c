@@ -68,7 +68,7 @@
 #include "clnt_internal.h"
 #include "svc_internal.h"
 #include "svc_xprt.h"
-#include "vc_lock.h"
+#include "rpc_dplx_internal.h"
 #include <rpc/svc_rqst.h>
 #include <rpc/xdr_vrec.h>
 
@@ -642,7 +642,7 @@ __svc_vc_dodestroy(SVCXPRT *xprt)
 
     svc_vc_dec_nconns();
     svc_rqst_finalize_xprt(xprt);
-    vc_lock_unref_xprt(xprt);
+    rpc_dplx_unref_xprt(xprt);
 
     /* assert: caller has unregistered xprt */
     /* duplex */
@@ -1400,9 +1400,10 @@ clnt_vc_create_from_svc(SVCXPRT *xprt,
         goto unlock;
     }
 
+    cd = (struct cf_conn *) xprt->xp_p1;
+
     /* Create a client transport handle.  The endpoint is already
      * connected. */
-    cd = (struct cf_conn *) xprt->xp_p1;
     cl = clnt_vc_create2(xprt->xp_fd,
                          &xprt->xp_rtaddr,
                          prog,
@@ -1411,7 +1412,7 @@ clnt_vc_create_from_svc(SVCXPRT *xprt,
                          cd->sendsize,
                          CLNT_CREATE_FLAG_SVCXPRT);
     if (! cl)
-        goto unlock; /* XXX should probably warn here */
+        goto fail; /* XXX should probably warn here */
 
     if (flags & SVC_VC_CREATE_FLAG_DPLX) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
@@ -1425,6 +1426,7 @@ clnt_vc_create_from_svc(SVCXPRT *xprt,
 unlock:
     mutex_unlock(&xprt->xp_lock);
 
+fail:
     /* for a dedicated channel, unregister and free xprt */
     if ((flags & SVC_VC_CREATE_FLAG_SPLX) &&
         (flags & SVC_VC_CREATE_FLAG_DISPOSE)) {
@@ -1463,8 +1465,8 @@ svc_vc_create_from_clnt(CLIENT *cl,
 
     fd = cx->cx_fd;
     thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask);
-
-    vc_fd_lock_c(cl, &mask);
+    rpc_dplx_slc(cl, &mask);
+    rpc_dplx_rlc(cl, &mask);
 
     /*
      * make a new transport
@@ -1539,7 +1541,8 @@ svc_vc_create_from_clnt(CLIENT *cl,
     }
 
 unlock:
-    vc_fd_unlock(fd, &mask);
+    rpc_dplx_ruc(cl, &mask);
+    rpc_dplx_suc(cl, &mask);
 
     return (xprt);
 }

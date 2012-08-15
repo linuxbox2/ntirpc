@@ -37,31 +37,43 @@
 #ifndef _CLNT_INTERNAL_H
 #define _CLNT_INTERNAL_H
 
-struct ct_wait_entry {
+struct ct_wait_entry
+{
     mutex_t mtx;
     cond_t  cv;
 };
 
 #include <misc/rbtree_x.h>
 
+typedef struct rpc_dplx_lock
+{
+    struct ct_wait_entry we;
+    int32_t lock_flag_value; /* XXX killme */
+    struct {
+        char file[32];
+        int line;
+    } locktrace;
+} rpc_dplx_lock_t;
+
 /* new unified client state */
-struct vc_fd_rec
+struct rpc_dplx_rec
 {
     int fd_k;
-    int32_t refcnt;
-    int32_t lock_flag_value; /* state of lock at fd */
     struct opr_rbtree_node node_k;
-    mutex_t mtx;
-    cond_t  cv;
+    int32_t refcnt;
+    uint32_t flags;
+    spinlock_t sp;
+    struct {
+        rpc_dplx_lock_t lock;
+    } send;
+    struct {
+        rpc_dplx_lock_t lock;
+    } recv;
     struct {
         uint32_t xid; /* current xid */
         uint32_t depends_xid;
         struct opr_rbtree t;
     } calls;
-    struct {
-        char file[32];
-        int line;
-    } locktrace;
 };
 
 #define MCALL_MSG_SIZE 24
@@ -196,10 +208,10 @@ struct cx_data
         struct cu_data cu;
         struct ct_data ct;
     } c_u;
-    int cx_fd;                  /* connection's fd */
-    struct vc_fd_rec *cx_crec;  /* unified sync */
+    int cx_fd;                   /* connection's fd */
+    struct rpc_dplx_rec *cx_rec; /* unified sync */
     struct {
-        void *xprt;             /* duplex integration */
+        void *xprt;              /* duplex integration */
         uint32_t flags;
     } cx_duplex;
 };
