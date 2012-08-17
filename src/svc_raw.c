@@ -95,7 +95,10 @@ svc_raw_create(void)
     srp->server.xp_port = 0;
     srp->server.xp_p3 = NULL;
     svc_raw_ops(&srp->server);
+#warning XXX fixme /* XXX check and or fixme */
+#if 0
     srp->server.xp_verf.oa_base = srp->verf_body;
+#endif
     xdrmem_create(&srp->xdr_stream, srp->raw_buf, UDPMSGSIZE, XDR_DECODE);
     xprt_register(&srp->server);
     mutex_unlock(&svcraw_lock);

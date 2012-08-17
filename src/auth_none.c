@@ -48,10 +48,13 @@
 #include <reentrant.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <rpc/types.h>
+#include <rpc/rpc.h>
 #include <rpc/xdr_inline.h>
 #include <rpc/auth_inline.h>
 #include <rpc/auth.h>
+#include <misc/opr.h>
 
 #define MAX_MARSHAL_SIZE 20
 
@@ -67,41 +70,34 @@ static void authnone_destroy (AUTH *);
 
 static struct auth_ops *authnone_ops(void);
 
-static struct authnone_private {
+struct authnone_private {
     AUTH no_client;
     char marshalled_client[MAX_MARSHAL_SIZE];
     u_int mcnt;
-} *authnone_private;
+};
 
 AUTH *
 authnone_create(void)
 {
-    struct authnone_private *ap = authnone_private;
+    struct authnone_private *ap;
     XDR xdr_stream;
     XDR *xdrs;
-    extern mutex_t authnone_lock;
 
-    mutex_lock(&authnone_lock);
-    if (ap == 0) {
-        ap = (struct authnone_private *)calloc(1, sizeof (*ap));
-        if (ap == 0) {
-            mutex_unlock(&authnone_lock);
-            return (0);
-        }
-        authnone_private = ap;
+    if ((ap = mem_alloc(sizeof(struct authnone_private))) == NULL) {
+        rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+        rpc_createerr.cf_error.re_errno = ENOMEM;
+        return (NULL);
     }
-    if (!ap->mcnt) {
-        ap->no_client.ah_cred = ap->no_client.ah_verf = _null_auth;
-        ap->no_client.ah_ops = authnone_ops();
-        xdrs = &xdr_stream;
-        xdrmem_create(xdrs, ap->marshalled_client,
-                      (u_int)MAX_MARSHAL_SIZE, XDR_ENCODE);
-        (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_cred);
-        (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_verf);
-        ap->mcnt = XDR_GETPOS(xdrs);
-        XDR_DESTROY(xdrs);
-    }
-    mutex_unlock(&authnone_lock);
+    ap->no_client.ah_cred = ap->no_client.ah_verf = _null_auth;
+    ap->no_client.ah_ops = authnone_ops();
+    xdrs = &xdr_stream;
+    xdrmem_create(xdrs, ap->marshalled_client,
+                  (u_int)MAX_MARSHAL_SIZE, XDR_ENCODE);
+    (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_cred);
+    (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_verf);
+    ap->mcnt = XDR_GETPOS(xdrs);
+    XDR_DESTROY(xdrs);
+
     return (&ap->no_client);
 }
 
@@ -109,22 +105,13 @@ authnone_create(void)
 static bool
 authnone_marshal(AUTH *client, XDR *xdrs)
 {
-    struct authnone_private *ap;
-    bool dummy;
-    extern mutex_t authnone_lock;
+    struct authnone_private *ap =
+        opr_containerof(client, struct authnone_private, no_client);
 
     assert(xdrs != NULL);
 
-    mutex_lock(&authnone_lock);
-    ap = authnone_private;
-    if (ap == NULL) {
-        mutex_unlock(&authnone_lock);
-        return (FALSE);
-    }
-    dummy = (*xdrs->x_ops->x_putbytes)(xdrs,
-                                       ap->marshalled_client, ap->mcnt);
-    mutex_unlock(&authnone_lock);
-    return (dummy);
+    return( (*xdrs->x_ops->x_putbytes)
+            (xdrs, ap->marshalled_client, ap->mcnt) );
 }
 
 /* All these unused parameters are required to keep ANSI-C from grumbling */
@@ -154,6 +141,9 @@ authnone_refresh(AUTH *client, void *dummy)
 static void
 authnone_destroy(AUTH *client)
 {
+    struct authnone_private *ap =
+        opr_containerof(client, struct authnone_private, no_client);
+    mem_free(ap, 0);
 }
 
 static bool

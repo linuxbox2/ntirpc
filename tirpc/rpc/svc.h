@@ -127,6 +127,9 @@ typedef struct svc_init_params
     u_long flags;
     u_int max_connections; /* xprts */
     u_int max_events;      /* evchan events */
+    u_int gss_ctx_hash_partitions;
+    u_int gss_max_idle_gen;
+    u_int gss_max_gc;
     warnx_t warnx;
 } svc_init_params;
 
@@ -204,7 +207,8 @@ typedef struct __rpc_svcxprt {
         bool (*xp_getargs)(struct __rpc_svcxprt *, xdrproc_t,
                              void *);
         /* send reply */
-        bool (*xp_reply)(struct __rpc_svcxprt *, struct rpc_msg *);
+        bool (*xp_reply)(struct __rpc_svcxprt *, struct svc_req *req,
+                         struct rpc_msg *);
         /* free mem allocated for args */
         bool (*xp_freeargs)(struct __rpc_svcxprt *, xdrproc_t,
                               void *);
@@ -236,9 +240,9 @@ typedef struct __rpc_svcxprt {
     struct netbuf xp_ltaddr;  /* local transport address */
     struct netbuf xp_rtaddr;  /* remote transport address */
 
-    /* XXXX duplex fix */
-    struct opaque_auth xp_verf;  /* raw response verifier */
-    SVCAUTH  *xp_auth;  /* auth handle of current req */
+    /* auth */
+    mutex_t  xp_auth_lock; /* lock owned by installed authenticator */
+    SVCAUTH  *xp_auth; /* auth handle */
 
     /* serialize private data */
     mutex_t         xp_lock;
@@ -310,6 +314,10 @@ struct svc_req {
     u_int32_t       rq_xid;         /* xid */
     void            *rq_u1;         /* user data */
     void            *rq_u2;         /* user data */
+
+    /* Moved in N TI-RPC */
+    struct opaque_auth rq_verf; /* raw response verifier */
+    SVCAUTH  *rq_auth; /* auth handle */
 };
 
 /*
@@ -367,10 +375,10 @@ extern SVCXPRT *svc_shim_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig);
 #define svc_getargs2(xprt, xargs, argsp, u_data)                        \
     (*(xprt)->xp_ops->xp_getargs2)((xprt), (xargs), (argsp), (u_data))
 
-#define SVC_REPLY(xprt, msg)                    \
-    (*(xprt)->xp_ops->xp_reply) ((xprt), (msg))
-#define svc_reply(xprt, msg)                    \
-    (*(xprt)->xp_ops->xp_reply) ((xprt), (msg))
+#define SVC_REPLY(xprt, req, msg) \
+    (*(xprt)->xp_ops->xp_reply) ((xprt), (req), (msg))
+#define svc_reply(xprt, req, msg) \
+    (*(xprt)->xp_ops->xp_reply) ((xprt), (req), (msg))
 
 #define SVC_FREEARGS(xprt, xargs, argsp)                        \
     (*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
@@ -501,25 +509,15 @@ __END_DECLS
  */
 
 __BEGIN_DECLS
-extern bool svc_sendreply(SVCXPRT *, xdrproc_t, void *);
-extern bool   svc_sendreply2 (SVCXPRT *, struct svc_req *, xdrproc_t,
-                                void *);
-extern void svcerr_decode(SVCXPRT *);
-extern void svcerr_weakauth(SVCXPRT *);
-extern void svcerr_noproc(SVCXPRT *);
-extern void svcerr_progvers(SVCXPRT *, rpcvers_t, rpcvers_t);
-extern void svcerr_auth(SVCXPRT *, enum auth_stat);
-extern void svcerr_noprog(SVCXPRT *);
-extern void svcerr_systemerr(SVCXPRT *);
 
-extern void svcerr_decode2(SVCXPRT *, struct svc_req *);
-extern void svcerr_weakauth2(SVCXPRT *, struct svc_req *);
-extern void svcerr_noproc2(SVCXPRT *, struct svc_req *);
-extern void svcerr_progvers2(SVCXPRT *, struct svc_req *, rpcvers_t,
-                             rpcvers_t);
-extern void svcerr_auth2(SVCXPRT *, struct svc_req *, enum auth_stat);
-extern void svcerr_noprog2(SVCXPRT *, struct svc_req *);
-extern void svcerr_systemerr2(SVCXPRT *, struct svc_req *);
+extern bool svc_sendreply(SVCXPRT *, struct svc_req *, xdrproc_t, void *);
+extern void svcerr_decode(SVCXPRT *, struct svc_req *);
+extern void svcerr_weakauth(SVCXPRT *, struct svc_req *);
+extern void svcerr_noproc(SVCXPRT *, struct svc_req *);
+extern void svcerr_progvers(SVCXPRT *, struct svc_req *, rpcvers_t, rpcvers_t);
+extern void svcerr_auth(SVCXPRT *, struct svc_req *, enum auth_stat);
+extern void svcerr_noprog(SVCXPRT *, struct svc_req *);
+extern void svcerr_systemerr(SVCXPRT *, struct svc_req *);
 
 extern int rpc_reg(rpcprog_t, rpcvers_t, rpcproc_t,
                    char *(*)(char *), xdrproc_t, xdrproc_t,

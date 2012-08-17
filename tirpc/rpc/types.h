@@ -112,6 +112,7 @@ typedef int32_t rpc_inline_t;
 #define TIRPC_DEBUG_FLAG_XDRREC         0x0400000
 #define TIRPC_DEBUG_FLAG_RBTREE         0x0800000
 #define TIRPC_DEBUG_FLAG_RPC_CTX        0x1000000
+#define TIRPC_DEBUG_FLAG_RPCSEC_GSS     0x2000000
 
 typedef void *(*mem_alloc_t)(size_t);
 typedef void (*mem_free_t)(void *, size_t);
@@ -134,6 +135,8 @@ extern tirpc_pkg_params __pkg_params;
         if (__pkg_params.debug_flags & (flags)) \
             __pkg_params.warnx(__VA_ARGS__);    \
     } while (0)
+
+#define __debug_flag(flags) (__pkg_params.debug_flags & (flags)))
 
 #define mem_alloc(size) malloc((size))
 #define mem_zalloc(size) calloc(1, (size))

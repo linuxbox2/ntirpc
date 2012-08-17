@@ -93,7 +93,7 @@ static bool svc_vc_recv(SVCXPRT *, struct rpc_msg *);
 static bool svc_vc_getargs(SVCXPRT *, xdrproc_t, void *);
 static bool svc_vc_getargs2(SVCXPRT *, xdrproc_t, void *, void *);
 static bool svc_vc_freeargs(SVCXPRT *, xdrproc_t, void *);
-static bool svc_vc_reply(SVCXPRT *, struct rpc_msg *);
+static bool svc_vc_reply(SVCXPRT *, struct svc_req *req, struct rpc_msg *);
 static void svc_vc_rendezvous_ops(SVCXPRT *);
 static void svc_vc_ops(SVCXPRT *);
 static void svc_vc_override_ops(SVCXPRT *xprt, SVCXPRT *newxprt);
@@ -204,7 +204,10 @@ svc_vc_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
     }
     xprt->xp_flags = SVC_XPRT_FLAG_NONE;
     xprt->xp_p1 = r;
+#warning XXX fixme /* XXX check and or fixme */
+#if 0
     xprt->xp_verf = _null_auth;
+#endif
     svc_vc_rendezvous_ops(xprt);
     xprt->xp_fd = fd;
     svc_rqst_init_xprt(xprt);
@@ -438,6 +441,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz)
     }
     memset(xprt, 0, sizeof *xprt);
     mutex_init(&xprt->xp_lock, NULL);
+    mutex_init(&xprt->xp_auth_lock, NULL);
     cd = mem_alloc(sizeof(struct cf_conn));
     if (cd == NULL) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
@@ -471,7 +475,10 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz)
 #endif
 
     xprt->xp_p1 = cd;
+#warning XXX fixme /* XXX check and or fixme */
+#if 0
     xprt->xp_verf.oa_base = cd->verf_body;
+#endif
     xprt->xp_fd = fd;
     if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
         xprt->xp_netid = rpc_strdup(netid);
@@ -1124,13 +1131,14 @@ svc_vc_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 }
 
 static bool
-svc_vc_reply(SVCXPRT *xprt, struct rpc_msg *msg)
+svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 {
     XDR *xdrs;
     struct cf_conn *cd;
     xdrproc_t xdr_results;
     caddr_t xdr_location;
     bool rstat, has_args;
+    SVCAUTH *auth;
 #if 0
     CLIENT *cl; /* XXX duplex */
     struct ct_data *ct;
@@ -1170,9 +1178,10 @@ svc_vc_reply(SVCXPRT *xprt, struct rpc_msg *msg)
         msg->rm_xid = cd->x_id;
 
     rstat = FALSE;
+    auth = (req->rq_auth) ? req->rq_auth : xprt->xp_auth;
     if (xdr_replymsg(xdrs, msg) &&
-        (!has_args || (xprt->xp_auth &&
-                       SVCAUTH_WRAP(xprt->xp_auth, xdrs, xdr_results,
+        (!has_args || (auth &&
+                       SVCAUTH_WRAP(auth, xdrs, xdr_results,
                                     xdr_location)))) {
         rstat = TRUE;
     }
@@ -1613,7 +1622,10 @@ SVCXPRT *svc_vc_create_xprt(u_long sendsz, u_long recvsz)
 #endif
 
     xprt->xp_p1 = cd;
+#warning XXX fixme /* XXX check and or fixme */
+#if 0
     xprt->xp_verf.oa_base = cd->verf_body;
+#endif
 
 done:
     return (xprt);

@@ -236,7 +236,7 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
  */
 
 static void
-universal(struct svc_req *rqstp, SVCXPRT *transp)
+universal(struct svc_req *req, SVCXPRT *transp)
 {
     rpcprog_t prog;
     rpcvers_t vers;
@@ -249,17 +249,17 @@ universal(struct svc_req *rqstp, SVCXPRT *transp)
     /*
      * enforce "procnum 0 is echo" convention
      */
-    if (rqstp->rq_proc == NULLPROC) {
-        if (svc_sendreply(transp, (xdrproc_t) xdr_void, NULL) ==
+    if (req->rq_proc == NULLPROC) {
+        if (svc_sendreply(transp, req, (xdrproc_t) xdr_void, NULL) ==
             FALSE) {
             __warnx(TIRPC_DEBUG_FLAG_SVC,
                     "svc_sendreply failed");
         }
         return;
     }
-    prog = rqstp->rq_prog;
-    vers = rqstp->rq_vers;
-    proc = rqstp->rq_proc;
+    prog = req->rq_prog;
+    vers = req->rq_vers;
+    proc = req->rq_proc;
     mutex_lock(&proglst_lock);
     for (pl = proglst; pl; pl = pl->p_nxt)
         if (pl->p_prognum == prog && pl->p_procnum == proc &&
@@ -275,7 +275,7 @@ universal(struct svc_req *rqstp, SVCXPRT *transp)
              * may bomb. BEWARE!
              */
             if (!svc_getargs(transp, pl->p_inproc, xdrbuf)) {
-                svcerr_decode(transp);
+                svcerr_decode(transp, req);
                 mutex_unlock(&proglst_lock);
                 return;
             }
@@ -286,7 +286,7 @@ universal(struct svc_req *rqstp, SVCXPRT *transp)
                 mutex_unlock(&proglst_lock);
                 return;
             }
-            if (!svc_sendreply(transp, pl->p_outproc, outdata)) {
+            if (!svc_sendreply(transp, req, pl->p_outproc, outdata)) {
                 __warnx(TIRPC_DEBUG_FLAG_SVC,
                         "rpc: rpc_reg trouble replying to prog %u vers %u",
                         (unsigned)prog, (unsigned)vers);

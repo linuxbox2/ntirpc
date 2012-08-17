@@ -53,6 +53,7 @@
 #include <misc/opr_queue.h>
 #include "clnt_internal.h"
 #include "svc_internal.h"
+#include <rpc/gss_internal.h>
 #include <rpc/svc_rqst.h>
 #include "svc_xprt.h"
 
@@ -706,11 +707,8 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
             break;
         case 0:
             /* timed out (idle) */
-            __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-                    "%s: before __svc_clean_idle2", __func__);
-            __svc_clean_idle2(30, FALSE);
-            __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-                    "%s: after __svc_clean_idle2", __func__);
+            __svc_clean_idle2(30, FALSE); /* reclaim idle xprts */
+            authgss_ctx_gc_idle(); /* reclaim idle gss contexts */
             continue;
         default:
             /* new events */

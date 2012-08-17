@@ -77,7 +77,7 @@ extern struct svc_params __svc_params[1];
 static void svc_dg_ops(SVCXPRT *);
 static enum xprt_stat svc_dg_stat(SVCXPRT *);
 static bool svc_dg_recv(SVCXPRT *, struct rpc_msg *);
-static bool svc_dg_reply(SVCXPRT *, struct rpc_msg *);
+static bool svc_dg_reply(SVCXPRT *, struct svc_req *req, struct rpc_msg *);
 static bool svc_dg_getargs(SVCXPRT *, xdrproc_t, void *);
 static bool svc_dg_getargs2(SVCXPRT *, xdrproc_t, void *, void *);
 static bool svc_dg_freeargs(SVCXPRT *, xdrproc_t, void *);
@@ -133,6 +133,10 @@ svc_dg_create(int fd, u_int sendsize, u_int recvsize)
         goto freedata;
     memset(xprt, 0, sizeof (SVCXPRT));
 
+    /* Init SVCXPRT locks, etc */
+    mutex_init(&xprt->xp_lock, NULL);
+    mutex_init(&xprt->xp_auth_lock, NULL);
+
     su = mem_alloc(sizeof (*su));
     if (su == NULL)
         goto freedata;
@@ -147,7 +151,10 @@ svc_dg_create(int fd, u_int sendsize, u_int recvsize)
     xprt->xp_fd = fd;
     xprt->xp_p2 = su;
     xprt->xp_auth = NULL;
+#warning XXX fixme /* XXX check and or fixme */
+#if 0
     xprt->xp_verf.oa_base = su->su_verfbody;
+#endif
     svc_dg_ops(xprt);
     xprt->xp_rtaddr.maxlen = sizeof (struct sockaddr_storage);
 
@@ -262,7 +269,7 @@ again:
 }
 
 static bool
-svc_dg_reply(SVCXPRT *xprt, struct rpc_msg *msg)
+svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 {
     struct svc_dg_data *su = su_data(xprt);
     XDR *xdrs = &(su->su_xdrs);
@@ -272,6 +279,7 @@ svc_dg_reply(SVCXPRT *xprt, struct rpc_msg *msg)
     xdrproc_t xdr_results;
     caddr_t xdr_location;
     bool has_args;
+    SVCAUTH *auth;
 
     if (msg->rm_reply.rp_stat == MSG_ACCEPTED &&
         msg->rm_reply.rp_acpt.ar_stat == SUCCESS) {
@@ -293,9 +301,10 @@ svc_dg_reply(SVCXPRT *xprt, struct rpc_msg *msg)
     if (! (msg->rm_flags & RPC_MSG_FLAG_MT_XID))
         msg->rm_xid = su->su_xid;
 
+    auth = (req->rq_auth) ? req->rq_auth : xprt->xp_auth;
     if (xdr_replymsg(xdrs, msg) &&
-        (!has_args || (xprt->xp_auth &&
-                       SVCAUTH_WRAP(xprt->xp_auth, xdrs, xdr_results, xdr_location)))) {
+        (!has_args || (auth &&
+                       SVCAUTH_WRAP(auth, xdrs, xdr_results, xdr_location)))) {
         struct msghdr *msg = &su->su_msghdr;
         struct iovec iov;
 

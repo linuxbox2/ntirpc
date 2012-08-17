@@ -32,9 +32,6 @@ pthread_mutex_t authkerb_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t svcauthkerbstats_lock = PTHREAD_MUTEX_INITIALIZER;
 #endif /* KERBEROS */
 
-/* auth_none.c serialization */
-pthread_mutex_t authnone_lock = PTHREAD_MUTEX_INITIALIZER;
-
 /* protects the Auths list (svc_auth.c) */
 pthread_mutex_t authsvc_lock = PTHREAD_MUTEX_INITIALIZER;
 
