@@ -64,12 +64,12 @@ int __rpc_raise_fd(int);
  * pointer, which indicates that the default timeout should be used.
  */
 CLIENT *
-clnt_create_vers(const char *hostname, rpcprog_t prog, rpcvers_t *vers_out,
-                 rpcvers_t vers_low, rpcvers_t vers_high, const char *nettype)
+clnt_ncreate_vers(const char *hostname, rpcprog_t prog, rpcvers_t *vers_out,
+                  rpcvers_t vers_low, rpcvers_t vers_high, const char *nettype)
 {
 
-    return (clnt_create_vers_timed(hostname, prog, vers_out, vers_low,
-                                   vers_high, nettype, NULL));
+    return (clnt_ncreate_vers_timed(hostname, prog, vers_out, vers_low,
+                                    vers_high, nettype, NULL));
 }
 
 /*
@@ -79,8 +79,8 @@ clnt_create_vers(const char *hostname, rpcprog_t prog, rpcvers_t *vers_out,
  * that the default timeout value should be used.
  */
 CLIENT *
-clnt_create_vers_timed(const char *hostname, rpcprog_t prog,
-                       rpcvers_t *vers_out, rpcvers_t vers_low, rpcvers_t vers_high,
+clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
+                        rpcvers_t *vers_out, rpcvers_t vers_low, rpcvers_t vers_high,
                        const char *nettype, const struct timeval *tp)
 {
     CLIENT *clnt;
@@ -88,7 +88,7 @@ clnt_create_vers_timed(const char *hostname, rpcprog_t prog,
     enum clnt_stat rpc_stat;
     struct rpc_err rpcerr;
 
-    clnt = clnt_create_timed(hostname, prog, vers_high, nettype, tp);
+    clnt = clnt_ncreate_timed(hostname, prog, vers_high, nettype, tp);
     if (clnt == NULL) {
         return (NULL);
     }
@@ -147,8 +147,8 @@ error:
  * It calls clnt_create_timed() with the default timeout.
  */
 CLIENT *
-clnt_create(const char *hostname, rpcprog_t prog, rpcvers_t vers,
-            const char *nettype)
+clnt_ncreate(const char *hostname, rpcprog_t prog, rpcvers_t vers,
+             const char *nettype)
 {
 
     return (clnt_create_timed(hostname, prog, vers, nettype, NULL));
@@ -163,8 +163,8 @@ clnt_create(const char *hostname, rpcprog_t prog, rpcvers_t vers,
  * This function calls clnt_tp_create_timed().
  */
 CLIENT *
-clnt_create_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
-                  const char *netclass, const struct timeval *tp)
+clnt_ncreate_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
+                   const char *netclass, const struct timeval *tp)
 {
     struct netconfig *nconf;
     CLIENT *clnt = NULL;
@@ -200,7 +200,7 @@ clnt_create_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
         __warnx(TIRPC_DEBUG_FLAG_CLNT_GEN,
                 "%s: trying netid %s", __func__, nconf->nc_netid);
 #endif
-        clnt = clnt_tp_create_timed(hostname, prog, vers, nconf, tp);
+        clnt = clnt_tp_ncreate_timed(hostname, prog, vers, nconf, tp);
         if (clnt)
             break;
         else {
@@ -251,21 +251,21 @@ clnt_create_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
  * It calls clnt_tp_create_timed() with the default timeout.
  */
 CLIENT *
-clnt_tp_create(const char *hostname, rpcprog_t prog, rpcvers_t vers,
-               const struct netconfig *nconf)
+clnt_tp_ncreate(const char *hostname, rpcprog_t prog, rpcvers_t vers,
+                const struct netconfig *nconf)
 {
-    return (clnt_tp_create_timed(hostname, prog, vers, nconf, NULL));
+    return (clnt_tp_ncreate_timed(hostname, prog, vers, nconf, NULL));
 }
 
 /*
- * This has the same definition as clnt_tp_create(), except it
+ * This has the same definition as clnt_tp_ncreate(), except it
  * takes an additional parameter - a pointer to a timeval structure.
  * A NULL value for the timeout pointer indicates that the default
  * value for the timeout should be used.
  */
 CLIENT *
-clnt_tp_create_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
-                     const struct netconfig *nconf, const struct timeval *tp)
+clnt_tp_ncreate_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
+                      const struct netconfig *nconf, const struct timeval *tp)
 {
     struct netbuf *svcaddr;   /* servers address */
     CLIENT *cl = NULL;   /* client handle */
@@ -278,15 +278,16 @@ clnt_tp_create_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
     /*
      * Get the address of the server
      */
-    if ((svcaddr = __rpcb_findaddr_timed(prog, vers,
-                                         (struct netconfig *)nconf, (char *)hostname,
-                                         &cl, (struct timeval *)tp)) == NULL) {
+    if ((svcaddr = __rpcb_findaddr_timed(
+             prog, vers,
+             (struct netconfig *)nconf, (char *)hostname,
+             &cl, (struct timeval *)tp)) == NULL) {
         /* appropriate error number is set by rpcbind libraries */
         return (NULL);
     }
     if (cl == NULL) {
-        cl = clnt_tli_create(RPC_ANYFD, nconf, svcaddr,
-                             prog, vers, 0, 0);
+        cl = clnt_tli_ncreate(RPC_ANYFD, nconf, svcaddr,
+                              prog, vers, 0, 0);
     } else {
         /* Reuse the CLIENT handle and change the appropriate fields */
         if (CLNT_CONTROL(cl, CLSET_SVC_ADDR, (void *)svcaddr) == TRUE) {
@@ -298,8 +299,8 @@ clnt_tp_create_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
             (void) CLNT_CONTROL(cl, CLSET_VERS, (void *)&vers);
         } else {
             CLNT_DESTROY(cl);
-            cl = clnt_tli_create(RPC_ANYFD, nconf, svcaddr,
-                                 prog, vers, 0, 0);
+            cl = clnt_tli_ncreate(RPC_ANYFD, nconf, svcaddr,
+                                  prog, vers, 0, 0);
         }
     }
     mem_free(svcaddr->buf, 0); /* XXX */
@@ -316,9 +317,9 @@ clnt_tp_create_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
  * If sizes are 0; appropriate defaults will be chosen.
  */
 CLIENT *
-clnt_tli_create(int fd, const struct netconfig *nconf,
-                struct netbuf *svcaddr, rpcprog_t prog, rpcvers_t vers,
-                u_int sendsz, u_int recvsz)
+clnt_tli_ncreate(int fd, const struct netconfig *nconf,
+                 struct netbuf *svcaddr, rpcprog_t prog, rpcvers_t vers,
+                 u_int sendsz, u_int recvsz)
 {
     CLIENT *cl;   /* client handle */
     bool madefd = FALSE;  /* whether fd opened here */
@@ -361,7 +362,7 @@ clnt_tli_create(int fd, const struct netconfig *nconf,
 
     switch (servtype) {
     case NC_TPI_COTS:
-        cl = clnt_vc_create(fd, svcaddr, prog, vers, sendsz, recvsz);
+        cl = clnt_vc_ncreate(fd, svcaddr, prog, vers, sendsz, recvsz);
         break;
     case NC_TPI_COTS_ORD:
         if (nconf &&
@@ -370,17 +371,17 @@ clnt_tli_create(int fd, const struct netconfig *nconf,
             setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one,
                        sizeof (one));
         }
-        cl = clnt_vc_create(fd, svcaddr, prog, vers, sendsz, recvsz);
+        cl = clnt_vc_ncreate(fd, svcaddr, prog, vers, sendsz, recvsz);
         break;
     case NC_TPI_CLTS:
-        cl = clnt_dg_create(fd, svcaddr, prog, vers, sendsz, recvsz);
+        cl = clnt_dg_ncreate(fd, svcaddr, prog, vers, sendsz, recvsz);
         break;
     default:
         goto err;
     }
 
     if (cl == NULL)
-        goto err1; /* borrow errors from clnt_dg/vc creates */
+        goto err1; /* borrow errors from clnt_dg/vc ncreates */
     if (nconf) {
         cl->cl_netid = rpc_strdup(nconf->nc_netid);
         cl->cl_tp = rpc_strdup(nconf->nc_device);

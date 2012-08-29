@@ -138,7 +138,7 @@ rpc_call(const char *host,   /* host name */
         /*
          * Using the first successful transport for that type
          */
-        rcp->client = clnt_create(host, prognum, versnum, nettype);
+        rcp->client = clnt_ncreate(host, prognum, versnum, nettype);
         rcp->pid = getpid();
         if (rcp->client == NULL) {
             return (rpc_createerr.cf_stat);

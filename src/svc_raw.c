@@ -73,7 +73,7 @@ static bool svc_raw_control(SVCXPRT *, const u_int, void *);
 char *__rpc_rawcombuf = NULL;
 
 SVCXPRT *
-svc_raw_create(void)
+svc_raw_ncreate(void)
 {
     struct svc_raw_private *srp;
 /* VARIABLES PROTECTED BY svcraw_lock: svc_raw_private, srp */

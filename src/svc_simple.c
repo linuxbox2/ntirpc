@@ -139,7 +139,7 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
         if (svcxprt == NULL) {
             struct __rpc_sockinfo si;
 
-            svcxprt = svc_tli_create(RPC_ANYFD, nconf, NULL, 0, 0);
+            svcxprt = svc_tli_ncreate(RPC_ANYFD, nconf, NULL, 0, 0);
             if (svcxprt == NULL)
                 continue;
             if (!__rpc_fd2sockinfo(svcxprt->xp_fd, &si)) {

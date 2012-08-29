@@ -91,20 +91,20 @@ static int svc_dg_valid_pktinfo(struct msghdr *);
 
 /*
  * Usage:
- * xprt = svc_dg_create(sock, sendsize, recvsize);
+ * xprt = svc_dg_ncreate(sock, sendsize, recvsize);
  * Does other connectionless specific initializations.
  * Once *xprt is initialized, it is registered.
  * see (svc.h, xprt_register). If recvsize or sendsize are 0 suitable
  * system defaults are chosen.
  * The routines returns NULL if a problem occurred.
  */
-static const char svc_dg_str[] = "svc_dg_create: %s";
+static const char svc_dg_str[] = "svc_dg_ncreate: %s";
 static const char svc_dg_err1[] = "could not get transport information";
 static const char svc_dg_err2[] = " transport does not support data transfer";
 static const char __no_mem_str[] = "out of memory";
 
 SVCXPRT *
-svc_dg_create(int fd, u_int sendsize, u_int recvsize)
+svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 {
     SVCXPRT *xprt;
     struct svc_dg_data *su = NULL;

@@ -93,12 +93,12 @@ static const char mem_err_clnt_dg[] = "clnt_dg_create: out of memory";
  * If svcaddr is NULL, returns NULL.
  */
 CLIENT *
-clnt_dg_create(int fd,           /* open file descriptor */
-               const struct netbuf *svcaddr, /* servers address */
-               rpcprog_t program,  /* program number */
-               rpcvers_t version,  /* version number */
-               u_int sendsz,   /* buffer recv size */
-               u_int recvsz   /* buffer send size */)
+clnt_dg_ncreate(int fd,           /* open file descriptor */
+                const struct netbuf *svcaddr, /* servers address */
+                rpcprog_t program,  /* program number */
+                rpcvers_t version,  /* version number */
+                u_int sendsz,   /* buffer recv size */
+                u_int recvsz   /* buffer send size */)
 {
     CLIENT *cl = NULL;  /* client handle */
     struct cx_data *cx = NULL; /* private data */

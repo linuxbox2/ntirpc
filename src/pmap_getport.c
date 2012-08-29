@@ -66,8 +66,9 @@ pmap_getport(struct sockaddr_in *address, u_long program, u_long version,
 	assert(address != NULL);
 
 	address->sin_port = htons(PMAPPORT);
-	client = clntudp_bufcreate(address, PMAPPROG,
-	    PMAPVERS, timeout, &sock, RPCSMALLMSGSIZE, RPCSMALLMSGSIZE);
+	client = clntudp_nbufcreate(address,
+                                    PMAPPROG, PMAPVERS, timeout,
+                                    &sock, RPCSMALLMSGSIZE, RPCSMALLMSGSIZE);
 	if (client != NULL) {
 		parms.pm_prog = program;
 		parms.pm_vers = version;

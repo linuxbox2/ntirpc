@@ -66,9 +66,9 @@
 
 extern mutex_t rpcsoc_lock;
 
-static CLIENT *clnt_com_create(struct sockaddr_in *, rpcprog_t, rpcvers_t,
-                               int *, u_int, u_int, char *, int);
-static SVCXPRT *svc_com_create(int, u_int, u_int, char *);
+static CLIENT *clnt_com_ncreate(struct sockaddr_in *, rpcprog_t, rpcvers_t,
+                                int *, u_int, u_int, char *, int);
+static SVCXPRT *svc_com_ncreate(int, u_int, u_int, char *);
 static bool rpc_wrap_bcast(char *, struct netbuf *, struct netconfig *);
 
 /* XXX */
@@ -84,14 +84,14 @@ static bool rpc_wrap_bcast(char *, struct netbuf *, struct netconfig *);
  * A common clnt create routine
  */
 static CLIENT *
-clnt_com_create(struct sockaddr_in *raddr,
-                rpcprog_t prog,
-                rpcvers_t vers,
-                int *sockp,
-                u_int sendsz,
-                u_int recvsz,
-                char *tp,
-                int flags)
+clnt_com_ncreate(struct sockaddr_in *raddr,
+                 rpcprog_t prog,
+                 rpcvers_t vers,
+                 int *sockp,
+                 u_int sendsz,
+                 u_int recvsz,
+                 char *tp,
+                 int flags)
 {
     CLIENT *cl;
     int madefd = FALSE;
@@ -144,8 +144,8 @@ clnt_com_create(struct sockaddr_in *raddr,
     bindaddr.buf = raddr;
 
     bindresvport(fd, NULL);
-    cl = clnt_tli_create(fd, nconf, &bindaddr, prog, vers,
-                         sendsz, recvsz);
+    cl = clnt_tli_ncreate(fd, nconf, &bindaddr, prog, vers,
+                          sendsz, recvsz);
     if (cl) {
         if (madefd == TRUE) {
             /*
@@ -173,19 +173,19 @@ err: if (madefd == TRUE)
 
 /* XXX suspicious */
 CLIENT *
-__libc_clntudp_bufcreate(struct sockaddr_in *raddr,
-                         u_long prog,
-                         u_long vers,
-                         struct timeval wait,
-                         int *sockp,
-                         u_int sendsz,
-                         u_int recvsz,
-                         int flags)
+__libc_clntudp_nbufcreate(struct sockaddr_in *raddr,
+                          u_long prog,
+                          u_long vers,
+                          struct timeval wait,
+                          int *sockp,
+                          u_int sendsz,
+                          u_int recvsz,
+                          int flags)
 {
     CLIENT *cl;
 
-    cl = clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
-                         sendsz, recvsz, "udp", flags);
+    cl = clnt_com_ncreate(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
+                          sendsz, recvsz, "udp", flags);
     if (cl == NULL) {
         return (NULL);
     }
@@ -194,18 +194,18 @@ __libc_clntudp_bufcreate(struct sockaddr_in *raddr,
 }
 
 CLIENT *
-clntudp_bufcreate(struct sockaddr_in *raddr,
-                  u_long prog,
-                  u_long vers,
-                  struct timeval wait,
-                  int *sockp,
-                  u_int sendsz,
-                  u_int recvsz)
+clntudp_nbufcreate(struct sockaddr_in *raddr,
+                   u_long prog,
+                   u_long vers,
+                   struct timeval wait,
+                   int *sockp,
+                   u_int sendsz,
+                   u_int recvsz)
 {
     CLIENT *cl;
 
-    cl = clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
-                         sendsz, recvsz, "udp", 0);
+    cl = clnt_com_ncreate(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
+                          sendsz, recvsz, "udp", 0);
     if (cl == NULL) {
         return (NULL);
     }
@@ -217,8 +217,8 @@ CLIENT *
 clntudp_create(struct sockaddr_in *raddr, u_long program, u_long version,
                struct timeval wait, int *sockp)
 {
-    return clntudp_bufcreate(raddr, program, version, wait, sockp,
-                             UDPMSGSIZE, UDPMSGSIZE);
+    return clntudp_nbufcreate(raddr, program, version, wait, sockp,
+                              UDPMSGSIZE, UDPMSGSIZE);
 }
 
 CLIENT *
@@ -229,8 +229,8 @@ clnttcp_create(struct sockaddr_in *raddr,
                u_int sendsz,
                u_int recvsz)
 {
-    return clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
-                           sendsz, recvsz, "tcp", 0);
+    return clnt_com_ncreate(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
+                            sendsz, recvsz, "tcp", 0);
 }
 
 /* IPv6 version of clnt*_*create */
@@ -238,18 +238,18 @@ clnttcp_create(struct sockaddr_in *raddr,
 #ifdef INET6_NOT_USED
 
 CLIENT *
-clntudp6_bufcreate(struct sockaddr_in6 *raddr,
-                   u_long prog,
-                   u_long vers,
-                   struct timeval wait,
-                   int *sockp,
-                   u_int sendsz,
-                   u_int recvsz)
+clntudp6_nbufcreate(struct sockaddr_in6 *raddr,
+                    u_long prog,
+                    u_long vers,
+                    struct timeval wait,
+                    int *sockp,
+                    u_int sendsz,
+                    u_int recvsz)
 {
     CLIENT *cl;
 
-    cl = clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
-                         sendsz, recvsz, "udp6", 0);
+    cl = clnt_com_ncreate(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
+                          sendsz, recvsz, "udp6", 0);
     if (cl == NULL) {
         return (NULL);
     }
@@ -258,26 +258,26 @@ clntudp6_bufcreate(struct sockaddr_in6 *raddr,
 }
 
 CLIENT *
-clntudp6_create(struct sockaddr_in6 *raddr,
-                u_long program,
-                u_long version,
-                struct timeval wait,
-                int *sockp)
+clntudp6_ncreate(struct sockaddr_in6 *raddr,
+                 u_long program,
+                 u_long version,
+                 struct timeval wait,
+                 int *sockp)
 {
-    return clntudp6_bufcreate(raddr, program, version, wait, sockp,
-                              UDPMSGSIZE, UDPMSGSIZE);
+    return clntudp6_nbufcreate(raddr, program, version, wait, sockp,
+                               UDPMSGSIZE, UDPMSGSIZE);
 }
 
 CLIENT *
-clnttcp6_create(struct sockaddr_in6 *raddr,
-                u_long prog,
-                u_long vers,
-                int *sockp,
-                u_int sendsz,
-                u_int recvsz)
+clnttcp6_ncreate(struct sockaddr_in6 *raddr,
+                 u_long prog,
+                 u_long vers,
+                 int *sockp,
+                 u_int sendsz,
+                 u_int recvsz)
 {
-    return clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
-                           sendsz, recvsz, "tcp6", 0);
+    return clnt_com_ncreate(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
+                            sendsz, recvsz, "tcp6", 0);
 }
 
 #endif
@@ -292,7 +292,7 @@ clntraw_create(u_long prog, u_long vers)
  * A common server create routine
  */
 static SVCXPRT *
-svc_com_create(int fd, u_int sendsize, u_int recvsize, char *netid)
+svc_com_ncreate(int fd, u_int sendsize, u_int recvsize, char *netid)
 {
     struct netconfig *nconf;
     SVCXPRT *svc;
@@ -319,7 +319,7 @@ svc_com_create(int fd, u_int sendsize, u_int recvsize, char *netid)
     sin.sin_family = AF_INET;
     bindresvport(fd, &sin);
     listen(fd, SOMAXCONN);
-    svc = svc_tli_create(fd, nconf, NULL, sendsize, recvsize);
+    svc = svc_tli_ncreate(fd, nconf, NULL, sendsize, recvsize);
     (void) freenetconfigent(nconf);
     if (svc == NULL) {
         if (madefd)
@@ -335,64 +335,64 @@ SVCXPRT *
 svctcp_create(int fd, u_int sendsize, u_int recvsize)
 {
 
-    return svc_com_create(fd, sendsize, recvsize, "tcp");
+    return svc_com_ncreate(fd, sendsize, recvsize, "tcp");
 }
 
 SVCXPRT *
 svcudp_bufcreate(int fd, u_int sendsz, u_int recvsz)
 {
 
-    return svc_com_create(fd, sendsz, recvsz, "udp");
+    return svc_com_ncreate(fd, sendsz, recvsz, "udp");
 }
 
 SVCXPRT *
 svcfd_create(int fd, u_int sendsize, u_int recvsize)
 {
 
-    return svc_fd_create(fd, sendsize, recvsize);
+    return svc_fd_ncreate(fd, sendsize, recvsize);
 }
 
 SVCXPRT *
 svcudp_create(int fd)
 {
 
-    return svc_com_create(fd, UDPMSGSIZE, UDPMSGSIZE, "udp");
+    return svc_com_ncreate(fd, UDPMSGSIZE, UDPMSGSIZE, "udp");
 }
 
 SVCXPRT *
 svcraw_create()
 {
 
-    return svc_raw_create();
+    return svc_raw_ncreate();
 }
 
 
 /* IPV6 version */
 #ifdef INET6_NOT_USED
 SVCXPRT *
-svcudp6_bufcreate(fd, sendsz, recvsz)
+svcudp6_nbufcreate(fd, sendsz, recvsz)
 int fd;
 u_int sendsz, recvsz;
 {
-    return svc_com_create(fd, sendsz, recvsz, "udp6");
+    return svc_com_ncreate(fd, sendsz, recvsz, "udp6");
 }
 
 
 SVCXPRT *
-svctcp6_create(fd, sendsize, recvsize)
+svctcp6_ncreate(fd, sendsize, recvsize)
 int fd;
 u_int sendsize;
 u_int recvsize;
 {
-    return svc_com_create(fd, sendsize, recvsize, "tcp6");
+    return svc_com_ncreate(fd, sendsize, recvsize, "tcp6");
 }
 
 
 SVCXPRT *
-svcudp6_create(fd)
+svcudp6_ncreate(fd)
 int fd;
 {
-    return svc_com_create(fd, UDPMSGSIZE, UDPMSGSIZE, "udp6");
+    return svc_com_ncreate(fd, UDPMSGSIZE, UDPMSGSIZE, "udp6");
 }
 #endif
 
@@ -520,12 +520,12 @@ fallback:
  * Create a client handle for a unix connection. Obsoleted by clnt_vc_create()
  */
 CLIENT *
-clntunix_create(struct sockaddr_un *raddr,
-                u_long prog,
-                u_long vers,
-                int *sockp,
-                u_int sendsz,
-                u_int recvsz)
+clntunix_ncreate(struct sockaddr_un *raddr,
+                 u_long prog,
+                 u_long vers,
+                 int *sockp,
+                 u_int sendsz,
+                 u_int recvsz)
 {
     struct netbuf *svcaddr;
     CLIENT *cl;
@@ -556,8 +556,8 @@ clntunix_create(struct sockaddr_un *raddr,
     svcaddr->buf = raddr;
     svcaddr->len = sizeof(raddr);
     svcaddr->maxlen = sizeof (struct sockaddr_un);
-    cl = clnt_vc_create(*sockp, svcaddr, prog,
-                        vers, sendsz, recvsz);
+    cl = clnt_vc_ncreate(*sockp, svcaddr, prog,
+                         vers, sendsz, recvsz);
 done:
     mem_free(svcaddr->buf, 0);
     mem_free(svcaddr, 0);
@@ -569,10 +569,10 @@ done:
  * Obsoleted by svc_vc_create().
  */
 SVCXPRT *
-svcunix_create(int sock,
-               u_int sendsize,
-               u_int recvsize,
-               char *path)
+svcunix_ncreate(int sock,
+                u_int sendsize,
+                u_int recvsize,
+                char *path)
 {
     struct netconfig *nconf;
     void *localhandle;
@@ -617,7 +617,7 @@ svcunix_create(int sock,
         }
     }
 
-    xprt = (SVCXPRT *)svc_tli_create(sock, nconf, &taddr, sendsize, recvsize);
+    xprt = (SVCXPRT *)svc_tli_ncreate(sock, nconf, &taddr, sendsize, recvsize);
 
 done:
     endnetconfig(localhandle);
@@ -629,7 +629,7 @@ done:
  * descriptor as its first input. Obsoleted by svc_fd_create();
  */
 SVCXPRT *
-svcunixfd_create(int fd, u_int sendsize, u_int recvsize)
+svcunixfd_ncreate(int fd, u_int sendsize, u_int recvsize)
 {
     return (svc_fd_create(fd, sendsize, recvsize));
 }

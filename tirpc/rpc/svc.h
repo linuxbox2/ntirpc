@@ -105,7 +105,7 @@
 #define RPC_SVC_FDSET_SET       5
 
 /*
- * Flags for svc_fd_create2
+ * Flags for svc_fd_ncreate2
  */
 
 #define SVC_VCCR_NONE             0x0000
@@ -544,7 +544,7 @@ extern void svc_exit(void);
 __END_DECLS
 
 /*
- * Socket to use on svcxxx_create call to get default socket
+ * Socket to use on svcxxx_ncreate call to get default socket
  */
 #define RPC_ANYSOCK -1
 #define RPC_ANYFD RPC_ANYSOCK
@@ -557,8 +557,8 @@ __BEGIN_DECLS
 /*
  * Transport independent svc_create routine.
  */
-extern int svc_create(void (*)(struct svc_req *, SVCXPRT *),
-                      const rpcprog_t, const rpcvers_t, const char *);
+extern int svc_ncreate(void (*)(struct svc_req *, SVCXPRT *),
+                       const rpcprog_t, const rpcvers_t, const char *);
 /*
  *      void (*dispatch)();             -- dispatch routine
  *      const rpcprog_t prognum;        -- program number
@@ -572,9 +572,9 @@ extern int svc_create(void (*)(struct svc_req *, SVCXPRT *),
  * instead of a nettype.
  */
 
-extern SVCXPRT *svc_tp_create(void (*)(struct svc_req *, SVCXPRT *),
-                              const rpcprog_t, const rpcvers_t,
-                              const struct netconfig *);
+extern SVCXPRT *svc_tp_ncreate(void (*)(struct svc_req *, SVCXPRT *),
+                               const rpcprog_t, const rpcvers_t,
+                               const struct netconfig *);
 /*
  * void (*dispatch)();            -- dispatch routine
  * const rpcprog_t prognum;       -- program number
@@ -586,9 +586,9 @@ extern SVCXPRT *svc_tp_create(void (*)(struct svc_req *, SVCXPRT *),
 /*
  * Generic TLI create routine
  */
-extern SVCXPRT *svc_tli_create(const int, const struct netconfig *,
-                               const struct t_bind *, const u_int,
-                               const u_int);
+extern SVCXPRT *svc_tli_ncreate(const int, const struct netconfig *,
+                                const struct t_bind *, const u_int,
+                                const u_int);
 /*
  *      const int fd;                   -- connection end point
  *      const struct netconfig *nconf;  -- netconfig structure for network
@@ -601,15 +601,15 @@ extern SVCXPRT *svc_tli_create(const int, const struct netconfig *,
  * Connectionless and connectionful create routines
  */
 
-extern SVCXPRT *svc_vc_create(const int, const u_int, const u_int);
+extern SVCXPRT *svc_vc_ncreate(const int, const u_int, const u_int);
 /*
  *      const int fd;                           -- open connection end point
  *      const u_int sendsize;                   -- max send size
  *      const u_int recvsize;                   -- max recv size
  */
 
-extern SVCXPRT *svc_vc_create2(const int, const u_int, const u_int,
-                               const u_int);
+extern SVCXPRT *svc_vc_ncreate2(const int, const u_int, const u_int,
+                                const u_int);
 /*
  *      const int fd;                           -- open connection end point
  *      const u_int sendsize;                   -- max send size
@@ -631,8 +631,8 @@ __BEGIN_DECLS
 /*
  * Create a client handle from an active service transport handle.
  */
-extern CLIENT *clnt_vc_create_from_svc(SVCXPRT *, const rpcprog_t,
-                                       const rpcvers_t, const uint32_t);
+extern CLIENT *clnt_vc_ncreate_svc(SVCXPRT *, const rpcprog_t,
+                                   const rpcvers_t, const uint32_t);
 /*
  *      SVCXPRT *xprt;                          -- active service xprt
  *      const rpcprog_t prog;                   -- RPC program number
@@ -647,8 +647,8 @@ __BEGIN_DECLS
  * Create an RPC SVCXPRT handle from an active client transport
  * handle, i.e., to service RPC requests
  */
-extern SVCXPRT *svc_vc_create_from_clnt(CLIENT *, u_int, u_int,
-                                        const uint32_t);
+extern SVCXPRT *svc_vc_ncreate_clnt(CLIENT *, u_int, u_int,
+                                    const uint32_t);
 /*
  *
  * CLIENT *cl;                                  -- connected client
@@ -677,9 +677,9 @@ extern void svc_vc_destroy_xprt(SVCXPRT * xprt);
 /*
  * Added for compatibility to old rpc 4.0. Obsoleted by svc_vc_create().
  */
-extern SVCXPRT *svcunix_create(int, u_int, u_int, char *);
+extern SVCXPRT *svcunix_ncreate(int, u_int, u_int, char *);
 
-extern SVCXPRT *svc_dg_create(const int, const u_int, const u_int);
+extern SVCXPRT *svc_dg_ncreate(const int, const u_int, const u_int);
 /*
  * const int fd;                                -- open connection
  * const u_int sendsize;                        -- max send size
@@ -691,7 +691,7 @@ extern SVCXPRT *svc_dg_create(const int, const u_int, const u_int);
  * the routine takes any *open* connection
  * descriptor as its first input and is used for open connections.
  */
-extern SVCXPRT *svc_fd_create(const int, const u_int, const u_int);
+extern SVCXPRT *svc_fd_ncreate(const int, const u_int, const u_int);
 /*
  *      const int fd;                           -- open connection end point
  *      const u_int sendsize;                   -- max send size
@@ -701,12 +701,12 @@ extern SVCXPRT *svc_fd_create(const int, const u_int, const u_int);
 /*
  * Added for compatibility to old rpc 4.0. Obsoleted by svc_fd_create().
  */
-extern SVCXPRT *svcunixfd_create(int, u_int, u_int);
+extern SVCXPRT *svcunixfd_ncreate(int, u_int, u_int);
 
 /*
  * Memory based rpc (for speed check and testing)
  */
-extern SVCXPRT *svc_raw_create(void);
+extern SVCXPRT *svc_raw_ncreate(void);
 
 /*
  * Getreq plug-out prototype
@@ -737,5 +737,6 @@ __END_DECLS
 
 /* for backward compatibility */
 #include <rpc/svc_soc.h>
+#include <rpc/tirpc_compat.h>
 
 #endif /* !_TIRPC_SVC_H */

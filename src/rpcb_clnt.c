@@ -126,11 +126,11 @@ __rpc_control(int request, void *info)
  * It might seem that a reader/writer lock would be more reasonable here.
  * However because getclnthandle(), the only user of the cache functions,
  * may do a delete_cache() operation if a check_cache() fails to return an
- * address useful to clnt_tli_create(), we may as well use a mutex.
+ * address useful to clnt_tli_ncreate(), we may as well use a mutex.
  */
 /*
  * As it turns out, if the cache lock is *not* a reader/writer lock, we will
- * block all clnt_create's if we are trying to connect to a host that's down,
+ * block all clnt_ncreate's if we are trying to connect to a host that's down,
  * since the lock will be held all during that time.
  */
 extern rwlock_t rpcbaddr_cache_lock;
@@ -294,8 +294,9 @@ getclnthandle(const char *host, const struct netconfig *nconf,
         ad_cache = check_cache(host, nconf->nc_netid);
     if (ad_cache != NULL) {
         addr = ad_cache->ac_taddr;
-        client = clnt_tli_create(RPC_ANYFD, nconf, addr,
-                                 (rpcprog_t)RPCBPROG, (rpcvers_t)RPCBVERS4, 0, 0);
+        client = clnt_tli_ncreate(RPC_ANYFD, nconf, addr,
+                                  (rpcprog_t)RPCBPROG,
+                                  (rpcvers_t)RPCBVERS4, 0, 0);
         if (client != NULL) {
             if (targaddr)
                 *targaddr = rpc_strdup(ad_cache->ac_uaddr);
@@ -388,9 +389,9 @@ getclnthandle(const char *host, const struct netconfig *nconf,
             fprintf(stderr, "\n");
         }
 #endif
-        client = clnt_tli_create(RPC_ANYFD, nconf, &taddr,
-                                 (rpcprog_t)RPCBPROG,
-                                 (rpcvers_t)RPCBVERS4, 0, 0);
+        client = clnt_tli_ncreate(RPC_ANYFD, nconf, &taddr,
+                                  (rpcprog_t)RPCBPROG,
+                                  (rpcvers_t)RPCBVERS4, 0, 0);
 #ifdef ND_DEBUG
         if (! client) {
             clnt_pcreateerror("rpcbind clnt interface");
@@ -1164,10 +1165,10 @@ local_rpcb(void)
     nbuf.buf = &sun;
 
     tsize = __rpc_get_t_size(AF_LOCAL, 0, 0);
-    client = clnt_vc_create(sock, &nbuf,
-                            (rpcprog_t)RPCBPROG,
-                            (rpcvers_t)RPCBVERS,
-                            tsize, tsize);
+    client = clnt_vc_ncreate(sock, &nbuf,
+                             (rpcprog_t)RPCBPROG,
+                             (rpcvers_t)RPCBVERS,
+                             tsize, tsize);
 
     if (client != NULL) {
         /* Mark the socket to be closed in destructor */

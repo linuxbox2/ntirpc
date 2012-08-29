@@ -84,7 +84,7 @@ pmap_rmtcall(struct sockaddr_in *addr, u_long prog, u_long vers, u_long proc,
     assert(port_ptr != NULL);
 
     addr->sin_port = htons(PMAPPORT);
-    client = clntudp_create(addr, PMAPPROG, PMAPVERS, timeout, &sock);
+    client = clntudp_ncreate(addr, PMAPPROG, PMAPVERS, timeout, &sock);
     if (client != NULL) {
         a.prog = prog;
         a.vers = vers;

@@ -62,7 +62,7 @@
  *	u_int recvsz;
  */
 __BEGIN_DECLS
-extern CLIENT *clnttcp_create(struct sockaddr_in *, u_long, u_long, int *,
+extern CLIENT *clnttcp_ncreate(struct sockaddr_in *, u_long, u_long, int *,
 			      u_int, u_int);
 __END_DECLS
 
@@ -70,7 +70,7 @@ __END_DECLS
  * Raw (memory) rpc.
  */
 __BEGIN_DECLS
-extern CLIENT *clntraw_create(u_long, u_long);
+extern CLIENT *clntraw_ncreate(u_long, u_long);
 __END_DECLS
 
 
@@ -79,8 +79,8 @@ IPv6 socket version
 */
 #ifdef INET6
 __BEGIN_DECLS
-extern CLIENT *clnttcp6_create(struct sockaddr_in6 *, u_long, u_long, int *,
-			      u_int, u_int);
+extern CLIENT *clnttcp6_ncreate(struct sockaddr_in6 *, u_long, u_long, int *,
+                                u_int, u_int);
 __END_DECLS
 #endif
 
@@ -106,15 +106,15 @@ __END_DECLS
  *	u_int recvsz;
  */
 __BEGIN_DECLS
-extern CLIENT *clntudp_create(struct sockaddr_in *, u_long, u_long, 
-			      struct timeval, int *);
-extern CLIENT *clntudp_bufcreate(struct sockaddr_in *, u_long, u_long,
-				 struct timeval, int *, u_int, u_int);
+extern CLIENT *clntudp_ncreate(struct sockaddr_in *, u_long, u_long, 
+                               struct timeval, int *);
+extern CLIENT *clntudp_nbufcreate(struct sockaddr_in *, u_long, u_long,
+                                  struct timeval, int *, u_int, u_int);
 #ifdef INET6
-extern CLIENT *clntudp6_create(struct sockaddr_in6 *, u_long, u_long, 
-			      struct timeval, int *);
-extern CLIENT *clntudp6_bufcreate(struct sockaddr_in6 *, u_long, u_long,
-				 struct timeval, int *, u_int, u_int);
+extern CLIENT *clntudp6_ncreate(struct sockaddr_in6 *, u_long, u_long, 
+                                struct timeval, int *);
+extern CLIENT *clntudp6_nbufcreate(struct sockaddr_in6 *, u_long, u_long,
+                                   struct timeval, int *, u_int, u_int);
 #endif
 __END_DECLS
 

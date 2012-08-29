@@ -61,14 +61,14 @@ extern int __svc_vc_setflag(SVCXPRT *, int);
  * and returns the number of handles it can create and/or find.
  *
  * It creates a link list of all the handles it could create.
- * If svc_create() is called multiple times, it uses the handle
+ * If svc_ncreate() is called multiple times, it uses the handle
  * created earlier instead of creating a new handle every time.
  */
 int
-svc_create(void (*dispatch)(struct svc_req *, SVCXPRT *),
-           rpcprog_t prognum,  /* Program number */
-           rpcvers_t versnum,  /* Version number */
-           const char *nettype  /* Networktype token */)
+svc_ncreate(void (*dispatch)(struct svc_req *, SVCXPRT *),
+            rpcprog_t prognum,  /* Program number */
+            rpcvers_t versnum,  /* Version number */
+            const char *nettype  /* Networktype token */)
 {
     struct xlist {
         SVCXPRT *xprt;  /* Server handle */
@@ -85,7 +85,7 @@ svc_create(void (*dispatch)(struct svc_req *, SVCXPRT *),
 
     if ((handle = __rpc_setconf(nettype)) == NULL) {
         __warnx(TIRPC_DEBUG_FLAG_SVC,
-                "svc_create: unknown protocol");
+                "svc_ncreate: unknown protocol");
         return (0);
     }
     while ((nconf = __rpc_getconf(handle)) != NULL) {
@@ -97,7 +97,7 @@ svc_create(void (*dispatch)(struct svc_req *, SVCXPRT *),
                 if (svc_reg(l->xprt, prognum, versnum,
                             dispatch, nconf) == FALSE)
                     __warnx(TIRPC_DEBUG_FLAG_SVC,
-                            "svc_create: could not register "
+                            "svc_ncreate: could not register "
                             "prog %u vers %u on %s",
                             (unsigned)prognum, (unsigned)versnum,
                             nconf->nc_netid);
@@ -108,12 +108,12 @@ svc_create(void (*dispatch)(struct svc_req *, SVCXPRT *),
         }
         if (l == NULL) {
             /* It was not found. Now create a new one */
-            xprt = svc_tp_create(dispatch, prognum, versnum, nconf);
+            xprt = svc_tp_ncreate(dispatch, prognum, versnum, nconf);
             if (xprt) {
                 l = (struct xlist *) mem_alloc(sizeof (*l));
                 if (l == NULL) {
                     __warnx(TIRPC_DEBUG_FLAG_SVC,
-                            "svc_create: no memory");
+                            "svc_ncreate: no memory");
                     mutex_unlock(&xprtlist_lock);
                     return (0);
                 }
@@ -134,25 +134,26 @@ svc_create(void (*dispatch)(struct svc_req *, SVCXPRT *),
 }
 
 /*
- * The high level interface to svc_tli_create().
+ * The high level interface to svc_tli_ncreate().
  * It tries to create a server for "nconf" and registers the service
- * with the rpcbind. It calls svc_tli_create();
+ * with the rpcbind. It calls svc_tli_ncreate();
  */
 SVCXPRT *
-svc_tp_create(void (*dispatch)(struct svc_req *, SVCXPRT *),
-              rpcprog_t prognum,  /* Program number */
-              rpcvers_t versnum,  /* Version number */
-              const struct netconfig *nconf /* Netconfig structure for the network */)
+svc_tp_ncreate(void (*dispatch)(struct svc_req *, SVCXPRT *),
+               rpcprog_t prognum,  /* Program number */
+               rpcvers_t versnum,  /* Version number */
+               const struct netconfig *nconf /* Netconfig structure for the network */)
 {
     SVCXPRT *xprt;
 
     if (nconf == NULL) {
         __warnx(TIRPC_DEBUG_FLAG_SVC,
-                "svc_tp_create: invalid netconfig structure for prog %u vers %u",
+                "svc_tp_ncreate: invalid netconfig structure for prog %u "
+                "vers %u",
                 (unsigned)prognum, (unsigned)versnum);
         return (NULL);
     }
-    xprt = svc_tli_create(RPC_ANYFD, nconf, NULL, 0, 0);
+    xprt = svc_tli_ncreate(RPC_ANYFD, nconf, NULL, 0, 0);
     if (xprt == NULL) {
         return (NULL);
     }
@@ -160,7 +161,7 @@ svc_tp_create(void (*dispatch)(struct svc_req *, SVCXPRT *),
     (void) rpcb_unset(prognum, versnum, (struct netconfig *) nconf);
     if (svc_reg(xprt, prognum, versnum, dispatch, nconf) == FALSE) {
         __warnx(TIRPC_DEBUG_FLAG_SVC,
-                "svc_tp_create: Could not register prog %u vers %u on %s",
+                "svc_tp_ncreate: Could not register prog %u vers %u on %s",
                 (unsigned)prognum, (unsigned)versnum,
                 nconf->nc_netid);
         SVC_DESTROY(xprt);
@@ -179,11 +180,11 @@ svc_tp_create(void (*dispatch)(struct svc_req *, SVCXPRT *),
  * If sendsz or recvsz are zero, their default values are chosen.
  */
 SVCXPRT *
-svc_tli_create(int fd,    /* Connection end point */
-               const struct netconfig *nconf, /* Netconfig struct for nettoken */
-               const struct t_bind *bindaddr, /* Local bind address */
-               u_int sendsz,   /* Max sendsize */
-               u_int recvsz   /* Max recvsize */)
+svc_tli_ncreate(int fd,    /* Connection end point */
+                const struct netconfig *nconf, /* Netconfig struct for nettoken */
+                const struct t_bind *bindaddr, /* Local bind address */
+                u_int sendsz,   /* Max sendsize */
+                u_int recvsz   /* Max recvsize */)
 {
     SVCXPRT *xprt = NULL;  /* service handle */
     bool madefd = FALSE;  /* whether fd opened here  */
@@ -194,13 +195,13 @@ svc_tli_create(int fd,    /* Connection end point */
     if (fd == RPC_ANYFD) {
         if (nconf == NULL) {
             __warnx(TIRPC_DEBUG_FLAG_SVC,
-                    "svc_tli_create: invalid netconfig");
+                    "svc_tli_ncreate: invalid netconfig");
             return (NULL);
         }
         fd = __rpc_nconf2fd(nconf);
         if (fd == -1) {
             __warnx(TIRPC_DEBUG_FLAG_SVC,
-                    "svc_tli_create: could not open connection for %s",
+                    "svc_tli_ncreate: could not open connection for %s",
                     nconf->nc_netid);
             return (NULL);
         }
@@ -228,7 +229,7 @@ svc_tli_create(int fd,    /* Connection end point */
                 if (bind(fd, (struct sockaddr *)(void *)&ss,
                          (socklen_t)si.si_alen) < 0) {
                     __warnx(TIRPC_DEBUG_FLAG_SVC,
-                            "svc_tli_create: could not bind to "
+                            "svc_tli_ncreate: could not bind to "
                             "anonymous port");
                     goto freedata;
                 }
@@ -239,7 +240,7 @@ svc_tli_create(int fd,    /* Connection end point */
                      (struct sockaddr *)bindaddr->addr.buf,
                      (socklen_t)si.si_alen) < 0) {
                 __warnx(TIRPC_DEBUG_FLAG_SVC,
-                        "svc_tli_create: could not bind to requested "
+                        "svc_tli_ncreate: could not bind to requested "
                         "address");
                 goto freedata;
             }
@@ -256,9 +257,9 @@ svc_tli_create(int fd,    /* Connection end point */
         if (getpeername(fd, (struct sockaddr *)(void *)&ss,
                         &slen) == 0) {
             /* accepted socket */
-            xprt = svc_fd_create(fd, sendsz, recvsz);
+            xprt = svc_fd_ncreate(fd, sendsz, recvsz);
         } else
-            xprt = svc_vc_create(fd, sendsz, recvsz);
+            xprt = svc_vc_ncreate(fd, sendsz, recvsz);
         if (!nconf || !xprt)
             break;
 #if 0
@@ -269,18 +270,18 @@ svc_tli_create(int fd,    /* Connection end point */
 #endif
         break;
     case SOCK_DGRAM:
-        xprt = svc_dg_create(fd, sendsz, recvsz);
+        xprt = svc_dg_ncreate(fd, sendsz, recvsz);
         break;
     default:
         __warnx(TIRPC_DEBUG_FLAG_SVC,
-                "svc_tli_create: bad service type");
+                "svc_tli_ncreate: bad service type");
         goto freedata;
     }
 
     if (xprt == NULL)
         /*
          * The error messages here are produced by the lower layers:
-         * svc_vc_create(), svc_fd_create() and svc_dg_create().
+         * svc_vc_ncreate(), svc_fd_ncreate() and svc_dg_ncreate().
          */
         goto freedata;
 

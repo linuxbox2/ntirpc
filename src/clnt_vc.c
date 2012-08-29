@@ -136,7 +136,7 @@ static int write_vc(void *, void *, int);
  */
 
 static const char clnt_vc_errstr[] = "%s : %s";
-static const char clnt_vc_str[] = "clnt_vc_create";
+static const char clnt_vc_str[] = "clnt_vc_ncreate";
 static const char clnt_read_vc_str[] = "read_vc";
 static const char __no_mem_str[] = "out of memory";
 
@@ -189,25 +189,25 @@ cond_unblock_events_client(CLIENT *cl)
  * fd should be an open socket
  */
 CLIENT *
-clnt_vc_create(int fd,      /* open file descriptor */
-               const struct netbuf *raddr, /* servers address */
-               const rpcprog_t prog,    /* program number */
-               const rpcvers_t vers,    /* version number */
-               u_int sendsz,     /* buffer recv size */
-               u_int recvsz     /* buffer send size */)
+clnt_vc_ncreate(int fd,      /* open file descriptor */
+                const struct netbuf *raddr, /* servers address */
+                const rpcprog_t prog,    /* program number */
+                const rpcvers_t vers,    /* version number */
+                u_int sendsz,     /* buffer recv size */
+                u_int recvsz     /* buffer send size */)
 {
-    return (clnt_vc_create2(fd, raddr, prog, vers, sendsz, recvsz,
-                            CLNT_CREATE_FLAG_CONNECT));
+    return (clnt_vc_ncreate2(fd, raddr, prog, vers, sendsz, recvsz,
+                             CLNT_CREATE_FLAG_CONNECT));
 }
 
 CLIENT *
-clnt_vc_create2(int fd,       /* open file descriptor */
-                const struct netbuf *raddr, /* servers address */
-                const rpcprog_t prog,     /* program number */
-                const rpcvers_t vers,     /* version number */
-                u_int sendsz,      /* buffer recv size */
-                u_int recvsz,      /* buffer send size */
-                u_int flags)
+clnt_vc_bcreate2(int fd,       /* open file descriptor */
+                 const struct netbuf *raddr, /* servers address */
+                 const rpcprog_t prog,     /* program number */
+                 const rpcvers_t vers,     /* version number */
+                 u_int sendsz,      /* buffer recv size */
+                 u_int recvsz,      /* buffer send size */
+                 u_int flags)
 {
     CLIENT *cl;   /* client handle */
     struct cx_data *cx = NULL;

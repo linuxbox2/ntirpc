@@ -78,7 +78,7 @@ static struct clnt_ops *clnt_raw_ops(void);
  * Create a client handle for memory based rpc.
  */
 CLIENT *
-clnt_raw_create(rpcprog_t prog, rpcvers_t vers)
+clnt_raw_ncreate(rpcprog_t prog, rpcvers_t vers)
 {
     struct clntraw_private *clp;
     struct rpc_msg call_msg;

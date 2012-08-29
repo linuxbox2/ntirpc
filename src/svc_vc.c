@@ -155,7 +155,7 @@ static void map_ipv4_to_ipv6(sin, sin6)
 
 /*
  * Usage:
- * xprt = svc_vc_create(sock, send_buf_size, recv_buf_size);
+ * xprt = svc_vc_ncreate(sock, send_buf_size, recv_buf_size);
  *
  * Creates, registers, and returns a (rpc) tcp based transporter.
  * Once *xprt is initialized, it is registered as a transporter
@@ -169,12 +169,12 @@ static void map_ipv4_to_ipv6(sin, sin6)
  * how big the send and receive buffers are via the second and third parms;
  * 0 => use the system default.
  *
- * Added svc_vc_create2 with flags argument, has the behavior of the original
- * function if flags are SVC_VC_FLAG_NONE (0).
+ * Added svc_vc_ncreate2 with flags argument, has the behavior of the
+ * original function if flags are SVC_VC_FLAG_NONE (0).
  *
  */
 SVCXPRT *
-svc_vc_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
+svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 {
     SVCXPRT *xprt;
     struct cf_rendezvous *r = NULL;
@@ -188,8 +188,8 @@ svc_vc_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
     r = mem_alloc(sizeof(*r));
     if (r == NULL) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                "svc_vc_create: out of memory");
-        goto cleanup_svc_vc_create;
+                "svc_vc_ncreate: out of memory");
+        goto cleanup_svc_vc_ncreate;
     }
     if (!__rpc_fd2sockinfo(fd, &si))
         return NULL;
@@ -199,8 +199,8 @@ svc_vc_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
     xprt = mem_zalloc(sizeof(SVCXPRT));
     if (xprt == NULL) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                "svc_vc_create: out of memory");
-        goto cleanup_svc_vc_create;
+                "svc_vc_ncreate: out of memory");
+        goto cleanup_svc_vc_ncreate;
     }
     xprt->xp_flags = SVC_XPRT_FLAG_NONE;
     xprt->xp_p1 = r;
@@ -220,7 +220,7 @@ svc_vc_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
     if (getsockname(fd, (struct sockaddr *)(void *)&sslocal, &slen) < 0) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
                 "svc_vc_create: could not retrieve local addr");
-        goto cleanup_svc_vc_create;
+        goto cleanup_svc_vc_ncreate;
     }
 #if 0
     xprt->xp_port = (u_short)-1; /* It is the rendezvouser */
@@ -240,8 +240,8 @@ svc_vc_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 #endif
     if (!__rpc_set_netbuf(&xprt->xp_ltaddr, &sslocal, sizeof(sslocal))) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                "svc_vc_create: no mem for local addr");
-        goto cleanup_svc_vc_create;
+                "svc_vc_ncreate: no mem for local addr");
+        goto cleanup_svc_vc_ncreate;
     }
 
     /* conditional xprt_register */
@@ -251,7 +251,7 @@ svc_vc_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 
     return (xprt);
 
-cleanup_svc_vc_create:
+cleanup_svc_vc_ncreate:
     if (r != NULL)
         mem_free(r, sizeof(*r));
 
@@ -259,17 +259,17 @@ cleanup_svc_vc_create:
 }
 
 SVCXPRT *
-svc_vc_create(int fd, u_int sendsize, u_int recvsize)
+svc_vc_ncreate(int fd, u_int sendsize, u_int recvsize)
 {
-    return (svc_vc_create2(fd, sendsize, recvsize, SVC_VC_CREATE_FLAG_NONE));
+    return (svc_vc_ncreate2(fd, sendsize, recvsize, SVC_VC_CREATE_FLAG_NONE));
 }
 
 /*
- * Like svtcp_create(), except the routine takes any *open* UNIX file
+ * Like svtcp_ncreate(), except the routine takes any *open* UNIX file
  * descriptor as its first input.
  */
 SVCXPRT *
-svc_fd_create(int fd, u_int sendsize, u_int recvsize)
+svc_fd_ncreate(int fd, u_int sendsize, u_int recvsize)
 {
     struct sockaddr_storage ss;
     socklen_t slen;
@@ -322,12 +322,12 @@ freedata:
 }
 
 /*
- * Like sv_fd_create(), except export flags for additional control.  Add
+ * Like sv_fd_ncreate(), except export flags for additional control.  Add
  * special handling for AF_INET and AFS_INET6.  Possibly not needed,
  * because no longer called in Ganesha.
  */
 SVCXPRT *
-svc_fd_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
+svc_fd_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 {
     struct sockaddr_storage ss;
     struct sockaddr_in6 sin6;
@@ -345,19 +345,19 @@ svc_fd_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
     slen = sizeof (struct sockaddr_storage);
     if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                "svc_fd_create: could not retrieve local addr");
+                "svc_fd_ncreate: could not retrieve local addr");
         goto freedata;
     }
     if (!__rpc_set_netbuf(&xprt->xp_ltaddr, &ss, sizeof(ss))) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                "svc_fd_create: no mem for local addr");
+                "svc_fd_ncreate: no mem for local addr");
         goto freedata;
     }
 
     slen = sizeof (struct sockaddr_storage);
     if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                "svc_fd_create: could not retrieve remote addr");
+                "svc_fd_ncreate: could not retrieve remote addr");
         goto freedata;
     }
     af = ss.ss_family;
@@ -374,7 +374,7 @@ svc_fd_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
         addr = __rpc_set_netbuf(&xprt->xp_rtaddr, &ss, sizeof(ss));
     if (!addr) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                "svc_fd_create: no mem for local addr");
+                "svc_fd_ncreate: no mem for local addr");
         goto freedata;
     }
 
@@ -445,7 +445,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz)
     cd = mem_alloc(sizeof(struct cf_conn));
     if (cd == NULL) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                "svc_tcp: makefd_xprt: out of memory");
+                "svc_vc: makefd_xprt: out of memory");
         mem_free(xprt, sizeof(SVCXPRT));
         xprt = NULL;
         goto done;
@@ -1391,10 +1391,10 @@ out:
  * unregistered and disposed inline.
  */
 CLIENT *
-clnt_vc_create_from_svc(SVCXPRT *xprt,
-                        const rpcprog_t prog,
-                        const rpcvers_t vers,
-                        const uint32_t flags)
+clnt_vc_ncreate_svc(SVCXPRT *xprt,
+                    const rpcprog_t prog,
+                    const rpcvers_t vers,
+                    const uint32_t flags)
 {
 
     struct cf_conn *cd;
@@ -1413,13 +1413,13 @@ clnt_vc_create_from_svc(SVCXPRT *xprt,
 
     /* Create a client transport handle.  The endpoint is already
      * connected. */
-    cl = clnt_vc_create2(xprt->xp_fd,
-                         &xprt->xp_rtaddr,
-                         prog,
-                         vers,
-                         cd->recvsize,
-                         cd->sendsize,
-                         CLNT_CREATE_FLAG_SVCXPRT);
+    cl = clnt_vc_ncreate2(xprt->xp_fd,
+                          &xprt->xp_rtaddr,
+                          prog,
+                          vers,
+                          cd->recvsize,
+                          cd->sendsize,
+                          CLNT_CREATE_FLAG_SVCXPRT);
     if (! cl)
         goto fail; /* XXX should probably warn here */
 
@@ -1456,10 +1456,10 @@ fail:
  * deallocated without closing cl->cl_private->ct_fd.
  */
 SVCXPRT *
-svc_vc_create_from_clnt(CLIENT *cl,
-                        const u_int sendsz,
-                        const u_int recvsz,
-                        const uint32_t flags)
+svc_vc_ncreate_clnt(CLIENT *cl,
+                    const u_int sendsz,
+                    const u_int recvsz,
+                    const uint32_t flags)
 {
 
     int fd;
