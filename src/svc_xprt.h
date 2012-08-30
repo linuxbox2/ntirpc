@@ -46,8 +46,12 @@ SVCXPRT* svc_xprt_get(int fd);
 SVCXPRT *svc_xprt_clear(SVCXPRT *xprt);
 
 /* iterator callback prototype */
-typedef void (*svc_xprt_each_func_t) (SVCXPRT *xprt, void *arg);
+#define SVC_XPRT_FOREACH_NONE    0x0000
+#define SVC_XPRT_FOREACH_CLEAR   0x0001 /* caller must clear xprt */
+
+typedef uint32_t (*svc_xprt_each_func_t) (SVCXPRT *xprt, void *arg);
 int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg);
+
 void svc_xprt_dump_xprts(const char *tag);
 void svc_xprt_shutdown();
 

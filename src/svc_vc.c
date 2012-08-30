@@ -1145,11 +1145,13 @@ struct svc_clean_idle_arg
     int cleanblock, ncleaned, timeout;
 };
 
-static void svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
+static uint32_t
+svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
 {
     struct cf_conn *cd;
     struct timeval tdiff;
     struct svc_clean_idle_arg *acc = (struct svc_clean_idle_arg *) arg;
+    uint32_t rflag = SVC_XPRT_FOREACH_NONE;
 
     if (TRUE) { /* flag in __svc_params->ev_u.epoll? */
 
@@ -1173,6 +1175,7 @@ static void svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
         }
         if (acc->tv.tv_sec - cd->last_recv_time.tv_sec > acc->timeout) {
             /* XXX locking */
+            rflag = SVC_XPRT_FOREACH_CLEAR;
             rwlock_unlock(&xprt->lock); /* XXX mutex? */
             (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
             SVC_DESTROY(xprt);
@@ -1184,7 +1187,7 @@ static void svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
         rwlock_unlock(&xprt->lock); /* XXX mutex? */
     } /* TRUE */
 out:
-    return;
+    return (rflag);
 }
 
 bool_t

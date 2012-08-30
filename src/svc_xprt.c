@@ -205,9 +205,9 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
         } else {
             xprt2 = srec->xprt;
             if (flags & SVC_XPRT_FLAG_CLEAR) {
-                srec->xprt = NULL;
                 /* XXX avoid bloat, remove cleared entries */
                 opr_rbtree_remove(&t->t, &srec->node_k);
+                srec->xprt = NULL;
                 mutex_unlock(&srec->mtx);
                 mutex_destroy(&srec->mtx);
                 mem_free(srec, sizeof(struct svc_xprt_rec));  
@@ -225,7 +225,6 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
 unlock:
     rwlock_unlock(&t->lock);
 
-out:
     return (xprt2);
 };
 
@@ -258,8 +257,10 @@ int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
     struct rbtree_x_part *t = NULL;
     struct opr_rbtree_node *n;
     struct svc_xprt_rec sk, *srec;
-    uint64_t gen;
+    SVCXPRT * xprt;
     int p_ix, x_ix, restarts, code = 0;
+    uint64_t sgen, tgen;
+    uint32_t rflag;
 
     cond_init_svc_xprt();
 
@@ -272,11 +273,12 @@ int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
          * exclusive locked for a full scan of the legacy svc_xprts
          * array.  We avoid this via tree partitioning and by
          * operating mostly unlocked. */
-        rwlock_rdlock(&t->lock); /* t RLOCKED */
     restart:
         if (++restarts > 5)
             break;
-        gen = t->t.gen;
+        /* start with rlock */
+        rwlock_rdlock(&t->lock); /* t RLOCKED */
+        tgen = t->t.gen;
         x_ix = 0;
         n = opr_rbtree_first(&t->t);
         while (n != NULL) {
@@ -288,17 +290,42 @@ int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
                 /* call each_func with t !LOCKED, srec LOCKED */
                 mutex_lock(&srec->mtx);
                 rwlock_unlock(&t->lock);
-                each_f(srec->xprt, arg);
+
+                /* each_f may dispose xprt */
+                xprt = srec->xprt;
+                rflag = each_f(xprt, arg);
+                if (rflag = SVC_XPRT_FOREACH_CLEAR) {
+                    sgen = srec->gen;
+                    rwlock_wrlock(&t->lock); /* t WLOCKED */
+                    n = opr_rbtree_lookup(&t->t, &sk.node_k);
+                    if (n) {
+                        srec = opr_containerof(n, struct svc_xprt_rec, node_k);
+                        if ((srec) &&
+                            (srec->gen == sgen) &&
+                            (srec->xprt == xprt) /* XXX must match sgen */) {
+                            opr_rbtree_remove(&t->t, &srec->node_k);
+                            srec->xprt = NULL;
+                            mutex_unlock(&srec->mtx);
+                            mutex_destroy(&srec->mtx);
+                            mem_free(srec, sizeof(struct svc_xprt_rec));
+                            srec = NULL;
+                        }
+                    }
+                    rwlock_unlock(&t->lock); /* t !LOCKED */   
+                    goto restart;
+                }
                 mutex_unlock(&srec->mtx);
 
                 /* can invalidate */
                 rwlock_rdlock(&t->lock);
 
-                if (gen != t->t.gen) {
+                if (tgen != t->t.gen) {
                     /* invalidated, try harder */
                     n = opr_rbtree_lookup(&t->t, &sk.node_k);
-                    if (!n)
+                    if (! n) {
+                        rwlock_unlock(&t->lock); /* t !LOCKED */
                         goto restart;
+                    }
                 }
             }
             n = opr_rbtree_next(n);
