@@ -1194,7 +1194,15 @@ bool_t
 __svc_clean_idle2(int timeout, bool_t cleanblock)
 {
         struct svc_clean_idle_arg acc;
+        static mutex_t active_mtx = PTHREAD_MUTEX_INITIALIZER;
+        static uint32_t active = 0;
+        bool_t rslt = FALSE;
 
+        mutex_lock(&active_mtx);
+        if (active > 0)
+            goto unlock;
+
+        ++active;
         memset(&acc, 0, sizeof(struct svc_clean_idle_arg));
 	gettimeofday(&acc.tv, NULL);
         acc.timeout = timeout;
@@ -1209,8 +1217,11 @@ __svc_clean_idle2(int timeout, bool_t cleanblock)
             __svc_vc_dodestroy(acc.least_active);
             acc.ncleaned++;
 	}
+	rslt = (acc.ncleaned > 0) ? TRUE : FALSE;
 
-	return (acc.ncleaned > 0) ? TRUE : FALSE;
+unlock:
+        mutex_unlock(&active_mtx);
+        return (rslt);
 
 } /* __svc_clean_idle2 */
 
