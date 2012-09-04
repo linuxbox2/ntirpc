@@ -421,7 +421,7 @@ clnt_vc_call(CLIENT *cl,
 
 call_again:
     xdrs->x_op = XDR_ENCODE;
-    xdrs->x_public = (void *) ctx; /* transiently thread call ctx */
+    xdrs->x_lib = (void *) ctx; /* transiently thread call ctx */
 
     ctx->error.re_status = RPC_SUCCESS;
     ct->ct_u.ct_mcalli = ntohl(ctx->xid);
@@ -557,8 +557,8 @@ clnt_vc_geterr(cl, errp)
     assert(cl != NULL);
     assert(errp != NULL);
 
-    if (ct->ct_xdrs.x_public) {
-        rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_public;
+    if (ct->ct_xdrs.x_lib) {
+        rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_lib;
         *errp = ctx->error;
     } else {
         /* XXX we don't want (overhead of) an unsafe last-error value */
@@ -775,8 +775,9 @@ read_vc(void *ctp, void *buf, int len)
 		return (0);
 
         /* Though not previously used by TI-RPC, this is an ONC-compliant
-         * use of x_public */
-        ctx = (rpc_ctx_t *) ct->ct_xdrs.x_public;
+         * use of x_public.  However, we'd like to reserve x_public for
+         * application layer code. */
+        ctx = (rpc_ctx_t *) ct->ct_xdrs.x_lib;
 
         /* if ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX, in the current
          * strategy (cf. clnt_vc_call and the duplex-aware getreq
@@ -825,7 +826,7 @@ write_vc(void *ctp, void *buf, int len)
 {
 	struct cx_data *cx = (struct cx_data *)ctp;
 	struct ct_data *ct = CT_DATA(cx);
-        rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_public;
+        rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_lib;
 
 	int i = 0, cnt;
 

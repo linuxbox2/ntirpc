@@ -274,7 +274,7 @@ universal(struct svc_req *rqstp, SVCXPRT *transp)
 			 * for the arguments; if not then the program
 			 * may bomb. BEWARE!
 			 */
-			if (!svc_getargs(transp, pl->p_inproc, xdrbuf)) {
+			if (!svc_getargs(transp, pl->p_inproc, xdrbuf, NULL)) {
 				svcerr_decode(transp);
 				mutex_unlock(&proglst_lock);
 				return;

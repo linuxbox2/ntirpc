@@ -228,7 +228,7 @@ typedef struct __rpc_svcxprt {
 	    enum xprt_stat (*xp_stat)(struct __rpc_svcxprt *);
 	    /* get arguments */
 	    bool_t	(*xp_getargs)(struct __rpc_svcxprt *, xdrproc_t,
-				void *);
+                                void *, void *);
 	    /* send reply */
 	    bool_t	(*xp_reply)(struct __rpc_svcxprt *, struct rpc_msg *);
 	    /* free mem allocated for args */
@@ -385,10 +385,10 @@ extern SVCXPRT *svc_shim_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig);
 #define svc_stat(xprt)					\
 	(*(xprt)->xp_ops->xp_stat)(xprt)
 
-#define SVC_GETARGS(xprt, xargs, argsp)			\
-	(*(xprt)->xp_ops->xp_getargs)((xprt), (xargs), (argsp))
-#define svc_getargs(xprt, xargs, argsp)			\
-	(*(xprt)->xp_ops->xp_getargs)((xprt), (xargs), (argsp))
+#define SVC_GETARGS(xprt, xargs, argsp, u_data)		\
+	(*(xprt)->xp_ops->xp_getargs)((xprt), (xargs), (argsp), (u_data))
+#define svc_getargs(xprt, xargs, argsp, u_data)		\
+	(*(xprt)->xp_ops->xp_getargs)((xprt), (xargs), (argsp), (u_data))
 
 #define SVC_REPLY(xprt, msg)				\
 	(*(xprt)->xp_ops->xp_reply) ((xprt), (msg))

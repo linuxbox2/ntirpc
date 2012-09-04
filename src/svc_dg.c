@@ -78,7 +78,7 @@ static void svc_dg_ops(SVCXPRT *);
 static enum xprt_stat svc_dg_stat(SVCXPRT *);
 static bool_t svc_dg_recv(SVCXPRT *, struct rpc_msg *);
 static bool_t svc_dg_reply(SVCXPRT *, struct rpc_msg *);
-static bool_t svc_dg_getargs(SVCXPRT *, xdrproc_t, void *);
+static bool_t svc_dg_getargs(SVCXPRT *, xdrproc_t, void *, void *);
 static bool_t svc_dg_freeargs(SVCXPRT *, xdrproc_t, void *);
 static void svc_dg_destroy(SVCXPRT *);
 static bool_t svc_dg_control(SVCXPRT *, const u_int, void *);
@@ -316,14 +316,16 @@ svc_dg_reply(SVCXPRT *xprt, struct rpc_msg *msg)
 }
 
 static bool_t
-svc_dg_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
+svc_dg_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr,
+    void *u_data)
 {
-	if (! SVCAUTH_UNWRAP(xprt->xp_auth, &(su_data(xprt)->su_xdrs),
-			     xdr_args, args_ptr)) {
-		(void)svc_freeargs(xprt, xdr_args, args_ptr);
-		return FALSE;
-	}
-	return TRUE;
+    XDR *xdrs = &(su_data(xprt)->su_xdrs);
+    xdrs->x_public = u_data;
+    if (! SVCAUTH_UNWRAP(xprt->xp_auth, xdrs, xdr_args, args_ptr)) {
+        (void) svc_freeargs(xprt, xdr_args, args_ptr);
+        return FALSE;
+    }
+    return TRUE;
 }
 
 static bool_t

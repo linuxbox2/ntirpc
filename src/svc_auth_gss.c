@@ -196,7 +196,7 @@ svcauth_gss_accept_sec_context(struct svc_req *rqst,
 	memset(&recv_tok, 0, sizeof(recv_tok));
 
 	if (!svc_getargs(rqst->rq_xprt, (xdrproc_t)xdr_rpc_gss_init_args,
-			 (caddr_t)&recv_tok))
+			 (caddr_t)&recv_tok, NULL))
 		return (FALSE);
 
 	gr->gr_major = gss_accept_sec_context(&gr->gr_minor,

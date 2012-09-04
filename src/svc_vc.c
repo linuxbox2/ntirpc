@@ -82,7 +82,7 @@ static int read_vc(void *, void *, int);
 static int write_vc(void *, void *, int);
 static enum xprt_stat svc_vc_stat(SVCXPRT *);
 static bool_t svc_vc_recv(SVCXPRT *, struct rpc_msg *);
-static bool_t svc_vc_getargs(SVCXPRT *, xdrproc_t, void *);
+static bool_t svc_vc_getargs(SVCXPRT *, xdrproc_t, void *, void *);
 static bool_t svc_vc_freeargs(SVCXPRT *, xdrproc_t, void *);
 static bool_t svc_vc_reply(SVCXPRT *, struct rpc_msg *);
 static void svc_vc_rendezvous_ops(SVCXPRT *);
@@ -923,18 +923,16 @@ svc_vc_recv(SVCXPRT *xprt, struct rpc_msg *msg)
 }
 
 static bool_t
-svc_vc_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
+svc_vc_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr,
+    void *u_data)
 {
     bool_t rslt = TRUE;
-
-    assert(xprt != NULL);
-    /* args_ptr may be NULL */
+    XDR *xdrs = &(((struct cf_conn *)(xprt->xp_p1))->xdrs);
+    xdrs->x_public = u_data;
 
     /* XXXX TODO: duplex unification (xdrs)  */
 
-    if (! SVCAUTH_UNWRAP(xprt->xp_auth,
-                         &(((struct cf_conn *)(xprt->xp_p1))->xdrs),
-                         xdr_args, args_ptr)) {
+    if (! SVCAUTH_UNWRAP(xprt->xp_auth, xdrs, xdr_args, args_ptr)) {
         CLIENT *cl;
         cl = (CLIENT *) xprt->xp_p4;
         if (cl) {

@@ -123,6 +123,7 @@ typedef struct __rpc_xdr {
 	} *x_ops;
 	char *	 	x_public;	/* users' data */
 	void *		x_private;	/* pointer to private data */
+	char *	 	x_lib;	        /* RPC library private */
 	char * 		x_base;		/* private used for position info */
 	u_int		x_handy;	/* extra private word */
 } XDR;
