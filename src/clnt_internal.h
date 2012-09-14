@@ -44,6 +44,10 @@ struct ct_wait_entry {
 
 #include <misc/rbtree_x.h>
 
+#ifndef HAVE_STRLCPY
+extern size_t strlcpy(char *dst, const char *src, size_t siz);
+#endif
+
 /* new unified client state */
 struct vc_fd_rec
 {
@@ -53,6 +57,10 @@ struct vc_fd_rec
     struct opr_rbtree_node node_k;
     mutex_t mtx;
     cond_t  cv;
+    struct {
+        char file[32];
+        uint32_t line;
+    } locktrace;
     struct {
         uint32_t xid; /* current xid */
         uint32_t depends_xid;

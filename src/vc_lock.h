@@ -82,12 +82,15 @@ static inline void vc_lock_init_xprt(SVCXPRT *xprt)
 
 #define AMTX 1
 
-static inline void vc_fd_lock_impl(struct vc_fd_rec *crec, sigset_t *mask)
+static inline void vc_fd_lock_impl(struct vc_fd_rec *crec, sigset_t *mask,
+                                   const char *file, uint32_t line)
 {
     sigset_t __attribute__((unused)) newmask;
 
 #if AMTX
     mutex_lock(&crec->mtx);
+    strlcpy(crec->locktrace.file, file, 32);
+    crec->locktrace.line = line;
 #else
     sigfillset(&newmask);
     sigdelset(&newmask, SIGINT); /* XXXX debugger */
@@ -131,12 +134,13 @@ static inline void vc_fd_signal_impl(struct vc_fd_rec *crec, uint32_t flags)
         mutex_unlock(&crec->mtx);
 }
 
-static inline void vc_fd_lock_c(CLIENT *cl, sigset_t *mask)
+static inline void vc_fd_lock_c(CLIENT *cl, sigset_t *mask, const char *file,
+                                uint32_t line)
 {
     struct cx_data *cx = (struct cx_data *) cl->cl_private;
 
     vc_lock_init_cl(cl);
-    vc_fd_lock_impl(cx->cx_crec, mask);
+    vc_fd_lock_impl(cx->cx_crec, mask, file, line);
 }
 
 static inline void vc_fd_unlock_c(CLIENT *cl, sigset_t *mask)
@@ -167,10 +171,11 @@ static inline void vc_fd_signal_c(CLIENT *cl, uint32_t flags)
     vc_fd_signal_impl(cx->cx_crec, flags);
 }
 
-static inline void vc_fd_lock_x(SVCXPRT *xprt, sigset_t *mask)
+static inline void vc_fd_lock_x(SVCXPRT *xprt, sigset_t *mask,
+                                const char *file, uint32_t line)
 { 
     vc_lock_init_xprt(xprt);
-    vc_fd_lock_impl((struct vc_fd_rec *) xprt->xp_p5, mask);
+    vc_fd_lock_impl((struct vc_fd_rec *) xprt->xp_p5, mask, file, line);
 }
 
 static inline void vc_fd_unlock_x(SVCXPRT *xprt, sigset_t *mask)

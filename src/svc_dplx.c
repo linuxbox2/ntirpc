@@ -44,12 +44,14 @@
 #include <misc/rbtree_x.h>
 #include "clnt_internal.h"
 #include "vc_lock.h"
+#include <rpc/svc_dplx.h>
 
 /* placeholder, will be based on modified svc_vc.c */
 
-void svc_dplx_lock_x(SVCXPRT *xprt, sigset_t *mask)
+void svc_dplx_lock_x(SVCXPRT *xprt, sigset_t *mask, const char *file,
+                     uint32_t line)
 { 
-    vc_fd_lock_x(xprt, mask);
+    vc_fd_lock_x(xprt, mask, file, line);
 }
 
 void svc_dplx_unlock_x(SVCXPRT *xprt, sigset_t *mask)

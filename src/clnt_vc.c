@@ -366,7 +366,7 @@ clnt_vc_call(CLIENT *cl,
 
     assert(cl != NULL);
     thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
-    vc_fd_lock_c(cl, &mask);
+    vc_fd_lock_c(cl, &mask, __FILE__, __LINE__);
 
     /* XXX presently, we take any svcxprt out of EPOLL during calls,
      * this is harmless, but it may be less efficient than using the
@@ -613,7 +613,7 @@ clnt_vc_control(CLIENT *cl, u_int request, void *info)
 
 	assert(cl);
         thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
-        vc_fd_lock_c(cl, &mask);
+        vc_fd_lock_c(cl, &mask, __FILE__, __LINE__);
 
 	switch (request) {
 	case CLSET_FD_CLOSE:

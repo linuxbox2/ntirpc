@@ -1323,7 +1323,7 @@ svc_vc_create_from_clnt(CLIENT *cl,
     fd = cx->cx_fd;
     thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask);
 
-    vc_fd_lock_c(cl, &mask);
+    vc_fd_lock_c(cl, &mask, __FILE__, __LINE__);
 
     /*
      * make a new transport

@@ -230,7 +230,7 @@ clnt_dg_call(CLIENT *cl,             /* client handle */
 
 	outlen = 0;
         thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
-        vc_fd_lock_c(cl, &mask);
+        vc_fd_lock_c(cl, &mask, __FILE__, __LINE__);
 	if (cu->cu_total.tv_usec == -1) {
 		timeout = utimeout;	/* use supplied timeout */
 	} else {
@@ -508,7 +508,7 @@ clnt_dg_control(CLIENT *cl, u_int request, void *info)
         bool_t result = TRUE;
 
         thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
-        vc_fd_lock_c(cl, &mask);
+        vc_fd_lock_c(cl, &mask, __FILE__, __LINE__);
 
 	switch (request) {
 	case CLSET_FD_CLOSE:
