@@ -506,11 +506,14 @@ unlock:
 
 int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
 {
-    struct svc_xprt_ev *xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
-    struct svc_rqst_rec *sr_rec = xp_ev->sr_rec;
+    struct svc_xprt_ev *xp_ev;
+    struct svc_rqst_rec *sr_rec;
     int code = 0;
 
     cond_init_svc_rqst();
+
+    xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
+    sr_rec = xp_ev->sr_rec;
 
     if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
         mutex_lock(&sr_rec->mtx);
