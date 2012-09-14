@@ -765,6 +765,12 @@ svc_vc_rendezvous_control(SVCXPRT *xprt, const u_int rq, void *in)
 	return (TRUE);
 }
 
+static inline void
+cfconn_set_dead(struct cf_conn *cd)
+{
+    cd->strm_stat = XPRT_DIED;
+}
+
 /*
  * reads data from the tcp or udp connection.
  * any error is fatal and the connection is closed.
@@ -779,16 +785,16 @@ read_vc(void *xprtp, void *buf, int len)
 	int sock;
 	int milliseconds = 35 * 1000; /* XXX shouldn't this be configurable? */
 	struct pollfd pollfd;
-	struct cf_conn *cfp;
+	struct cf_conn *cd;
 
 	xprt = (SVCXPRT *)xprtp;
 	assert(xprt != NULL);
 
 	sock = xprt->xp_fd;
 
-	cfp = (struct cf_conn *)xprt->xp_p1;
+	cd = (struct cf_conn *)xprt->xp_p1;
 
-	if (cfp->nonblock) {
+	if (cd->nonblock) {
 		len = read(sock, buf, (size_t)len);
 		if (len < 0) {
 			if (errno == EAGAIN)
@@ -797,7 +803,7 @@ read_vc(void *xprtp, void *buf, int len)
 				goto fatal_err;
 		}
 		if (len != 0)
-			gettimeofday(&cfp->last_recv_time, NULL);
+			gettimeofday(&cd->last_recv_time, NULL);
 		return len;
 	}
 
@@ -822,12 +828,12 @@ read_vc(void *xprtp, void *buf, int len)
 	} while ((pollfd.revents & POLLIN) == 0);
 
 	if ((len = read(sock, buf, (size_t)len)) > 0) {
-		gettimeofday(&cfp->last_recv_time, NULL);
+		gettimeofday(&cd->last_recv_time, NULL);
 		return (len);
 	}
 
 fatal_err:
-	((struct cf_conn *)(xprt->xp_p1))->strm_stat = XPRT_DIED;
+        cfconn_set_dead(cd);
 	return (-1);
 }
 
@@ -855,7 +861,7 @@ write_vc(void *xprtp, void *buf, int len)
 		i = write(xprt->xp_fd, buf, (size_t)cnt);
 		if (i  < 0) {
 			if (errno != EAGAIN || !cd->nonblock) {
-				cd->strm_stat = XPRT_DIED;
+				cfconn_set_dead(cd);
 				return (-1);
 			}
 			if (cd->nonblock && i != cnt) {
@@ -868,7 +874,7 @@ write_vc(void *xprtp, void *buf, int len)
 				 */
 				gettimeofday(&tv1, NULL);
 				if (tv1.tv_sec - tv0.tv_sec >= 2) {
-					cd->strm_stat = XPRT_DIED;
+					cfconn_set_dead(cd);
 					return (-1);
 				}
 			}
@@ -922,7 +928,7 @@ svc_vc_recv(SVCXPRT *xprt, struct rpc_msg *msg)
             cd->x_id = msg->rm_xid;
             return (TRUE);
 	}
-	cd->strm_stat = XPRT_DIED;
+        cfconn_set_dead(cd);
 	return (FALSE);
 }
 
