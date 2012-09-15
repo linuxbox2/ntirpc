@@ -4,6 +4,7 @@
 #define _OPR_RBTREE_H 1
 
 #include <stdint.h>
+#include <misc/opr.h>
 
 /* from opr.h */
 #define opr_containerof(ptr, structure, member) \
