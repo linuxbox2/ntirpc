@@ -136,9 +136,11 @@ extern tirpc_pkg_params __pkg_params;
             __pkg_params.warnx(__VA_ARGS__); \
     } while (0)
 
-#define mem_alloc(size) __pkg_params.mem_alloc((size))
-#define mem_free(ptr, size) __pkg_params.mem_free((ptr),(size))
-#define __free(ptr) __pkg_params.free((ptr))
+#define mem_alloc(size) malloc((size))
+#define mem_zalloc(size) calloc(1, (size))
+#define mem_alloc_aligned(size, align) aligned_alloc((align), (size))
+#define mem_free(ptr, size) free(ptr)
+#define _free(ptr) free(ptr)
 
 #include <sys/time.h>
 #include <sys/param.h>

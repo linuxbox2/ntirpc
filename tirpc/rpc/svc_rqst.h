@@ -26,7 +26,7 @@
 #ifndef TIRPC_SVC_RQST_H
 #define TIRPC_SVC_RQST_H
 
-#include <misc/rbtree.h>
+#include <misc/rbtree_x.h>
 #include <sys/epoll.h> /* before rpc.h */
 
 struct svc_rqst_rec; /* forward decl */
@@ -89,9 +89,10 @@ struct svc_rqst_rec
 
 struct svc_rqst_set
 {
-    rwlock_t lock;
-    struct opr_rbtree t;
+    mutex_t mtx;
+    struct rbtree_x xt;
     uint32_t next_id;
+    spinlock_t sp;
 };
 
 static inline int rqst_thrd_cmpf(const struct opr_rbtree_node *lhs,
@@ -179,7 +180,6 @@ int svc_rqst_foreach_xprt(uint32_t chan_id, svc_rqst_xprt_each_func_t each_f,
 
 
 #define SVC_RQST_FLAG_NONE            0x00000
-#define SVC_RQST_FLAG_RLOCK           0x00001
 #define SVC_RQST_FLAG_WLOCK           0x00002
 #define SVC_RQST_FLAG_UNLOCK          0x00004
 #define SVC_RQST_FLAG_EPOLL           0x00008
