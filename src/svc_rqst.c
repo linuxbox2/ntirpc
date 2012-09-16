@@ -139,6 +139,7 @@ void svc_rqst_init_xprt(SVCXPRT *xprt)
 #else
     xp_ev->ev_type = SVC_EVENT_FDSET;
 #endif
+    xp_ev->flags = XP_EV_FLAG_NONE;
     xprt->xp_ev = xp_ev;
 
     /* reachable */
@@ -162,7 +163,8 @@ out:
 }
 
 static inline struct svc_rqst_rec *
-svc_rqst_lookup_chan(uint32_t chan_id, uint32_t flags)
+svc_rqst_lookup_chan(uint32_t chan_id, struct rbtree_x_part **ref_t,
+                     uint32_t flags)
 {
     struct svc_rqst_rec trec, *sr_rec = NULL;
     struct rbtree_x_part *t;
@@ -172,8 +174,9 @@ svc_rqst_lookup_chan(uint32_t chan_id, uint32_t flags)
 
     trec.id_k = chan_id;
     t = rbtx_partition_of_scalar(&svc_rqst_set.xt, trec.id_k);
+    *ref_t = t;
 
-    if (flags & SVC_RQST_FLAG_WLOCK)
+    if (flags & SVC_RQST_FLAG_LOCK)
         mutex_lock(&t->mtx);
 
     ns = rbtree_x_cached_lookup(&svc_rqst_set.xt, t, &trec.node_k, trec.id_k);
@@ -188,8 +191,9 @@ svc_rqst_lookup_chan(uint32_t chan_id, uint32_t flags)
 
 #define SVC_RQST_FLAG_MASK (SVC_RQST_FLAG_CHAN_AFFINITY)
 
-int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
-                        uint32_t flags)
+int
+svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
+                    uint32_t flags)
 {
     uint32_t n_id;
     struct svc_rqst_rec *sr_rec;
@@ -250,9 +254,8 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
 
         /* permit wakeup of threads blocked in epoll_wait, with a
          * couple of possible semantics */
-        sr_rec->ev_u.epoll.ctrl_ev.events = EPOLLIN;
+        sr_rec->ev_u.epoll.ctrl_ev.events = EPOLLIN|EPOLLONESHOT;
         sr_rec->ev_u.epoll.ctrl_ev.data.fd = sr_rec->sv[1];
-
         code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
                          EPOLL_CTL_ADD,
                          sr_rec->sv[1],
@@ -272,6 +275,7 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
     spin_lock(&svc_rqst_set.sp);
     n_id = ++(svc_rqst_set.next_id);
     spin_unlock(&svc_rqst_set.sp);
+
     sr_rec->id_k = n_id;
     sr_rec->states = SVC_RQST_STATE_NONE;
     sr_rec->u_data = u_data;
@@ -295,7 +299,8 @@ out:
     return (code);
 }
 
-static inline void evchan_unreg_impl(struct svc_rqst_rec *sr_rec,
+static inline void
+evchan_unreg_impl(struct svc_rqst_rec *sr_rec,
                                      SVCXPRT *xprt, uint32_t flags)
 {
     struct svc_xprt_ev *xp_ev;
@@ -333,7 +338,8 @@ static inline void evchan_unreg_impl(struct svc_rqst_rec *sr_rec,
  * value as presently implemented can be interpreted only by one consumer,
  * so is not relied on.
  */
-static inline void ev_sig(int fd, uint32_t sig)
+static inline void
+ev_sig(int fd, uint32_t sig)
 {
     int code = 
         write(fd, &sig, sizeof(uint32_t));
@@ -349,14 +355,16 @@ static inline void ev_sig(int fd, uint32_t sig)
  * Read a single 4-byte value from the shared event-notification channel,
  * the socket is in non-blocking mode.  The value read is returned.
  */
-static inline uint32_t consume_ev_sig_nb(int fd)
+static inline uint32_t
+consume_ev_sig_nb(int fd)
 {
     uint32_t sig = 0;
     (void) read(fd, &sig, sizeof(uint32_t));
     return (sig);
 }
 
-int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
+int
+svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
 {
     struct svc_rqst_rec *sr_rec;
     struct opr_rbtree_node *n;
@@ -364,10 +372,11 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
     SVCXPRT *xprt = NULL;
     int code = 0;
 
-    sr_rec = svc_rqst_lookup_chan(chan_id, SVC_RQST_FLAG_WLOCK);
+    sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_RQST_FLAG_LOCK);
     if (! sr_rec) {
+        mutex_unlock(&t->mtx);
         code = ENOENT;
-        goto unlock;
+        goto out;
     }
 
     /* traverse sr_req->xprt_q inorder */
@@ -379,7 +388,7 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
         xprt = opr_containerof(n, struct svc_xprt_ev, node_k)->xprt;
         /* stop processing events */
         evchan_unreg_impl(sr_rec, xprt,
-                          (SVC_RQST_FLAG_WLOCK | SVC_RQST_FLAG_SREC_LOCK));
+                          (SVC_RQST_FLAG_LOCK | SVC_RQST_FLAG_SREC_LOCK));
 
         /* wake up*/
         ev_sig(sr_rec->sv[0], 0);
@@ -404,8 +413,6 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
     }
 
     /* now remove sr_rec */
-    t = rbtx_partition_of_scalar(&svc_rqst_set.xt, sr_rec->id_k);
-    mutex_lock(&t->mtx);
     rbtree_x_cached_remove(&svc_rqst_set.xt, t, &sr_rec->node_k, sr_rec->id_k);
     mutex_unlock(&t->mtx);
 
@@ -427,15 +434,16 @@ int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
     mutex_destroy(&sr_rec->mtx);
     mem_free(sr_rec, sizeof(struct svc_rqst_rec));
 
-unlock:
-    mutex_unlock(&svc_rqst_set.mtx);
+out:
     return (code);
 }
 
-int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
+int
+svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 {
     struct svc_rqst_rec *sr_rec;
     struct svc_xprt_ev *xp_ev;
+    struct rbtree_x_part *t;
     int code = 0;
 
     if (chan_id == 0) {
@@ -444,10 +452,11 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
         goto out;
     }
 
-    sr_rec = svc_rqst_lookup_chan(chan_id, SVC_RQST_FLAG_WLOCK);
+    sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_RQST_FLAG_LOCK);
     if (! sr_rec) {
+        mutex_unlock(&t->mtx);
         code = ENOENT;
-        goto unlock;
+        goto out;
     }
 
     mutex_lock(&sr_rec->mtx);
@@ -480,32 +489,34 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     /* register on event mux */
     (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
 
-unlock:
-    mutex_unlock(&svc_rqst_set.mtx);
+    mutex_unlock(&t->mtx);
 
 out:
     return (code);
 }
 
-int svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
+int
+svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 {
     struct svc_rqst_rec *sr_rec;
+    struct rbtree_x_part *t;
     int code = EINVAL;
 
-    sr_rec = svc_rqst_lookup_chan(chan_id, SVC_RQST_FLAG_WLOCK);
+    sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_RQST_FLAG_LOCK);
     if (! sr_rec) {
         code = ENOENT;
         goto unlock;
     }
 
-    evchan_unreg_impl(sr_rec, xprt, SVC_RQST_FLAG_WLOCK);
+    evchan_unreg_impl(sr_rec, xprt, SVC_RQST_FLAG_LOCK);
     
 unlock:
-    mutex_unlock(&svc_rqst_set.mtx);
+    mutex_unlock(&t->mtx);
     return (code);
 }
 
-int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
+int
+svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
 {
     struct svc_xprt_ev *xp_ev;
     struct svc_rqst_rec *sr_rec;
@@ -518,6 +529,8 @@ int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
 
     if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
         mutex_lock(&sr_rec->mtx);
+
+    xp_ev->flags |= XP_EV_FLAG_BLOCKED;
 
     switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
@@ -533,10 +546,12 @@ int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
                         "%s: epoll del failed fd %d (%d)",
                         __func__, xprt->xp_fd, errno);
                 code = errno;
-            } else
+            } else {
+                xp_ev->flags &= ~XP_EV_FLAG_ADDED;
                 __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
                         "%s: epoll del fd %d epoll_fd %d",
                         __func__, xprt->xp_fd, sr_rec->ev_u.epoll.epoll_fd);
+            }
         }
         break;
 #endif
@@ -552,17 +567,75 @@ int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
     return (0);
 }
 
-int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
+int
+svc_rqst_rearm_events(SVCXPRT *xprt, uint32_t  __attribute__((unused)) flags)
 {
-    struct svc_xprt_ev *xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
-    struct svc_rqst_rec *sr_rec = xp_ev->sr_rec;
+    struct svc_rqst_rec *sr_rec;
+    struct svc_xprt_ev *xp_ev;
     int code = 0;
 
     cond_init_svc_rqst();
 
+    xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
+    sr_rec = xp_ev->sr_rec;
+
     assert(sr_rec);
 
     mutex_lock(&sr_rec->mtx);
+    if (xp_ev->flags & XP_EV_FLAG_ADDED) {
+
+        switch (sr_rec->ev_type) {
+#if defined(TIRPC_EPOLL)
+        case SVC_EVENT_EPOLL:
+        {
+            struct epoll_event *ev = &xp_ev->ev_u.epoll.event;
+
+            /* set up epoll user data */
+            /* ev->data.ptr = xprt; */ /* XXX already set */
+            ev->events = EPOLLIN|EPOLLONESHOT;
+
+            /* rearm in epoll vector */
+            code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd, EPOLL_CTL_MOD,
+                             xprt->xp_fd, ev);
+
+            __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+                    "%s: rearm xprt %p fd %d sr_rec %p epoll_fd %d control fd "
+                    "pair (%d:%d) (%d, %d)",
+                    __func__, xprt, xprt->xp_fd, sr_rec,
+                    sr_rec->ev_u.epoll.epoll_fd,
+                    sr_rec->sv[0], sr_rec->sv[1], code, errno);
+        }
+        break;
+#endif
+        default:
+        /* XXX formerly select/fd_set case, now placeholder for new
+         * event systems, reworked select, etc. */
+            break;
+        } /* switch */
+    }
+
+    mutex_unlock(&sr_rec->mtx);
+
+    return (0);
+}
+
+int svc_rqst_unblock_events(SVCXPRT *xprt,
+                            uint32_t __attribute__((unused))flags)
+{
+    struct svc_rqst_rec *sr_rec;
+    struct svc_xprt_ev *xp_ev;
+    int code = 0;
+
+    cond_init_svc_rqst();
+
+    xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
+    sr_rec = xp_ev->sr_rec;
+
+    assert(sr_rec);
+
+    mutex_lock(&sr_rec->mtx);
+
+    xp_ev->flags &= ~XP_EV_FLAG_BLOCKED;
 
     switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
@@ -579,6 +652,9 @@ int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
             /* add to epoll vector */
             code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd, EPOLL_CTL_ADD,
                              xprt->xp_fd, ev);
+            if (! code) {
+                xp_ev->flags |= XP_EV_FLAG_ADDED;
+            }
 
             __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
                     "%s: add xprt %p fd %d sr_rec %p epoll_fd %d control fd "
@@ -586,7 +662,6 @@ int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
                     __func__, xprt, xprt->xp_fd, sr_rec,
                     sr_rec->ev_u.epoll.epoll_fd,
                     sr_rec->sv[0], sr_rec->sv[1], code, errno);
-
         }
         break;
 #endif
@@ -643,7 +718,8 @@ out:
     return (code);
 }
 
-int svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t flags)
+int
+svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t __attribute__((unused)) flags)
 {
     struct svc_xprt_ev *xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
     struct svc_rqst_rec *sr_rec = xp_ev->sr_rec;
@@ -668,8 +744,9 @@ bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
 
 static inline int 
 svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
-                        uint32_t flags)
+                        uint32_t __attribute__((unused)) flags)
 {
+    struct svc_xprt_ev *xp_ev;
     struct epoll_event *ev;
     SVCXPRT *xprt;
 
@@ -721,8 +798,12 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
                         ix, ev->data.fd, ev->data.ptr);
 
                 if (ev->data.fd != sr_rec->sv[1]) {
+                    /* TODO: need to lookup xprt */
                     xprt = (SVCXPRT *) ev->data.ptr;
-                    code = xprt->xp_ops2->xp_getreq(xprt);
+                    xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
+                    if (! (xp_ev->flags & XP_EV_FLAG_BLOCKED)) {
+                        code = xprt->xp_ops2->xp_getreq(xprt);
+                    }
                 } else {
                     /* signalled -- there was a wakeup on ctrl_ev (see
                      * top-of-loop) */
@@ -742,14 +823,16 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
     return (code);
 }
 
-int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags)
+int
+svc_rqst_thrd_run(uint32_t chan_id, __attribute__((unused)) uint32_t flags)
 {
     struct svc_rqst_rec *sr_rec = NULL;
+    struct rbtree_x_part *t;
     int code = 0;
 
-    sr_rec = svc_rqst_lookup_chan(chan_id, SVC_RQST_FLAG_WLOCK);
+    sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_RQST_FLAG_LOCK);
     if (! sr_rec) {
-        mutex_unlock(&svc_rqst_set.mtx);
+        mutex_unlock(&t->mtx);
         __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
                 "svc_rqst_thrd_run: unknown chan_id %d", chan_id);
         code = ENOENT;
@@ -760,7 +843,7 @@ int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags)
      * with a secondary state machine to detect inconsistencies (e.g., trying
      * to unregister a channel when it is active) */
     mutex_lock(&sr_rec->mtx);
-    mutex_unlock(&svc_rqst_set.mtx); /* !RLOCK */
+    mutex_unlock(&t->mtx); /* !LOCK */
     sr_rec->states |= SVC_RQST_STATE_ACTIVE;
     mutex_unlock(&sr_rec->mtx);
     
@@ -783,15 +866,18 @@ out:
     return (code);
 }
 
-int svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags)
+int
+svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags)
 {
     struct svc_rqst_rec *sr_rec;
+    struct rbtree_x_part *t;
     int code = 0;
 
-    sr_rec = svc_rqst_lookup_chan(chan_id, SVC_RQST_FLAG_WLOCK);
+    sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_RQST_FLAG_LOCK);
     if (! sr_rec) {
+        mutex_unlock(&t->mtx);
         code = ENOENT;
-        goto unlock;
+        goto out;
     }
 
     mutex_lock(&sr_rec->mtx);
@@ -799,7 +885,6 @@ int svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags)
     ev_sig(sr_rec->sv[0], flags); /* send wakeup */
     mutex_unlock(&sr_rec->mtx);
 
-unlock:
-    mutex_unlock(&svc_rqst_set.mtx);
+out:
     return (code);
 }

@@ -136,11 +136,12 @@ extern tirpc_pkg_params __pkg_params;
             __pkg_params.warnx(__VA_ARGS__); \
     } while (0)
 
-#define mem_alloc(size) malloc((size))
+/* XXX reliance on zeroed memory is fixed on duplex-8 */
+#define mem_alloc(size) calloc(1, (size))
 #define mem_zalloc(size) calloc(1, (size))
 #define mem_alloc_aligned(size, align) aligned_alloc((align), (size))
 #define mem_free(ptr, size) free(ptr)
-#define _free(ptr) free(ptr)
+#define __free(ptr) free(ptr)
 
 #include <sys/time.h>
 #include <sys/param.h>
