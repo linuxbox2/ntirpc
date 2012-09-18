@@ -29,7 +29,7 @@
 #include <config.h>
 
 /*
- * svc_vc.c, Server side for Connection Oriented based RPC.
+ * svc_vc.c, Server side for Connection Oriented RPC.
  *
  * Actually implements two flavors of transporter -
  * a tcp rendezvouser (a listner and connection establisher)
@@ -210,6 +210,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 #endif
     svc_vc_rendezvous_ops(xprt);
     xprt->xp_fd = fd;
+    spin_init(&xprt->xp_lock, PTHREAD_PROCESS_PRIVATE);
     svc_rqst_init_xprt(xprt);
 
     /* caller should know what it's doing */
@@ -440,7 +441,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz)
         goto done;
     }
     memset(xprt, 0, sizeof *xprt);
-    mutex_init(&xprt->xp_lock, NULL);
+    spin_init(&xprt->xp_lock, PTHREAD_PROCESS_PRIVATE);
     mutex_init(&xprt->xp_auth_lock, NULL);
     cd = mem_alloc(sizeof(struct cf_conn));
     if (cd == NULL) {
@@ -1318,7 +1319,7 @@ static void svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
 
     if (TRUE) { /* flag in __svc_params->ev_u.epoll? */
 
-        mutex_lock(&xprt->xp_lock);
+        spin_lock(&xprt->xp_lock);
 
         if (xprt == NULL || xprt->xp_ops == NULL ||
             xprt->xp_ops->xp_recv != svc_vc_recv)
@@ -1338,7 +1339,7 @@ static void svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
         }
         if (acc->tv.tv_sec - cd->last_recv_time.tv_sec > acc->timeout) {
             /* XXX locking */
-            mutex_unlock(&xprt->xp_lock);
+            spin_unlock(&xprt->xp_lock);
             (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
             SVC_DESTROY(xprt);
             acc->ncleaned++;
@@ -1346,7 +1347,7 @@ static void svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
         }
 
     unlock:
-        mutex_unlock(&xprt->xp_lock);
+        spin_unlock(&xprt->xp_lock);
     } /* TRUE */
 out:
     return;
@@ -1400,7 +1401,7 @@ clnt_vc_ncreate_svc(SVCXPRT *xprt,
     struct cf_conn *cd;
     CLIENT *cl;
 
-    mutex_lock(&xprt->xp_lock);
+    spin_lock(&xprt->xp_lock);
 
     /* XXX return allocated client structure, or allocate one if none
      * is currently allocated (it can be destroyed) */
@@ -1411,8 +1412,9 @@ clnt_vc_ncreate_svc(SVCXPRT *xprt,
 
     cd = (struct cf_conn *) xprt->xp_p1;
 
-    /* Create a client transport handle.  The endpoint is already
-     * connected. */
+    /* XXX this is the slow case, and xprt is spin locked.  but racing
+     * here was inviting a delay, so  we don't care if a thread
+     * schedules */
     cl = clnt_vc_ncreate2(xprt->xp_fd,
                           &xprt->xp_rtaddr,
                           prog,
@@ -1433,7 +1435,7 @@ clnt_vc_ncreate_svc(SVCXPRT *xprt,
     xprt->xp_flags |= SVC_XPRT_FLAG_DONTCLOSE;
 
 unlock:
-    mutex_unlock(&xprt->xp_lock);
+    spin_unlock(&xprt->xp_lock);
 
 fail:
     /* for a dedicated channel, unregister and free xprt */
