@@ -847,6 +847,9 @@ read_vc(void *xprtp, void *buf, int len)
                 continue;
             /*FALLTHROUGH*/
         case 0:
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "%s: poll returns 0 (will set dead)",
+                    __func__);
             goto fatal_err;
 
         default:
@@ -888,6 +891,9 @@ write_vc(void *xprtp, void *buf, int len)
         i = write(xprt->xp_fd, buf, (size_t)cnt);
         if (i  < 0) {
             if (errno != EAGAIN || !cd->nonblock) {
+                __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                        "%s: short write !EAGAIN (will set dead)",
+                        __func__);
                 cfconn_set_dead(cd);
                 return (-1);
             }
@@ -901,6 +907,9 @@ write_vc(void *xprtp, void *buf, int len)
                  */
                 gettimeofday(&tv1, NULL);
                 if (tv1.tv_sec - tv0.tv_sec >= 2) {
+                    __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                            "%s: short write !EAGAIN (will set dead)",
+                            __func__);
                     cfconn_set_dead(cd);
                     return (-1);
                 }
@@ -944,6 +953,9 @@ readv_vc(void *xprtp, struct iovec *iov, int iovcnt, u_int flags)
                 continue;
             /*FALLTHROUGH*/
         case 0:
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "%s: poll returns 0 (will set dead)",
+                    __func__);
             goto fatal_err;
         default:
             break;
@@ -979,6 +991,9 @@ writev_vc(void *xprtp, struct iovec *iov, int iovcnt, u_int flags)
 
     nbytes = writev(xprt->xp_fd, iov, iovcnt);
     if (nbytes  < 0) {
+        __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                "%s: short writev (will set dead)",
+                __func__);
         cfconn_set_dead(cd);
         return (-1);
     }
@@ -1037,7 +1052,8 @@ svc_vc_recv(SVCXPRT *xprt, struct rpc_msg *msg)
         cd->x_id = msg->rm_xid;
         return (TRUE);
     }
-
+    __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+            "%s: xdr_dplx_msg failed (will set dead)");
     cfconn_set_dead(cd);
     return (FALSE);
 }
