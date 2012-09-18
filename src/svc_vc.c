@@ -1424,6 +1424,7 @@ __svc_clean_idle2(int timeout, bool cleanblock)
         acc.ncleaned++;
     }
     rslt = (acc.ncleaned > 0) ? TRUE : FALSE;
+    --active;
 
 unlock:
     mutex_unlock(&active_mtx);
