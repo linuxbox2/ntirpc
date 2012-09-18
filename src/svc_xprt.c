@@ -287,39 +287,21 @@ svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
         while (n != NULL) {
             ++x_ix; /* diagnostic, index into logical srec sequence */
             srec = opr_containerof(n, struct svc_xprt_rec, node_k);
+            mutex_lock(&srec->mtx);
             if (srec->xprt) {
                 sk.fd_k = srec->fd_k;
+                xprt = srec->xprt;
 
-                /* call each_func with t !LOCKED, srec LOCKED */
-                mutex_lock(&srec->mtx);
+                /* call each_func with t !LOCKED, srec !LOCKED */
+                mutex_unlock(&srec->mtx);
                 rwlock_unlock(&t->lock);
 
-                /* each_f may dispose xprt */
-                xprt = srec->xprt;
+                /* restart if each_f disposed xprt */
                 rflag = each_f(xprt, arg);
-                if (rflag = SVC_XPRT_FOREACH_CLEAR) {
-                    sgen = srec->gen;
-                    rwlock_wrlock(&t->lock); /* t WLOCKED */
-                    n = opr_rbtree_lookup(&t->t, &sk.node_k);
-                    if (n) {
-                        srec = opr_containerof(n, struct svc_xprt_rec, node_k);
-                        if ((srec) &&
-                            (srec->gen == sgen) &&
-                            (srec->xprt == xprt) /* XXX must match sgen */) {
-                            opr_rbtree_remove(&t->t, &srec->node_k);
-                            srec->xprt = NULL;
-                            mutex_unlock(&srec->mtx);
-                            mutex_destroy(&srec->mtx);
-                            mem_free(srec, sizeof(struct svc_xprt_rec));
-                            srec = NULL;
-                        }
-                    }
-                    rwlock_unlock(&t->lock); /* t !LOCKED */   
+                if (rflag = SVC_XPRT_FOREACH_CLEAR)
                     goto restart;
-                }
-                mutex_unlock(&srec->mtx);
 
-                /* can invalidate */
+                /* invalidate */
                 rwlock_rdlock(&t->lock);
 
                 if (tgen != t->t.gen) {

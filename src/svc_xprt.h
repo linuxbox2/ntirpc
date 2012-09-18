@@ -47,7 +47,7 @@ SVCXPRT *svc_xprt_clear(SVCXPRT *xprt);
 
 /* iterator callback prototype */
 #define SVC_XPRT_FOREACH_NONE    0x0000
-#define SVC_XPRT_FOREACH_CLEAR   0x0001 /* caller must clear xprt */
+#define SVC_XPRT_FOREACH_CLEAR   0x0001 /* each_f destroyed xprt */
 
 typedef uint32_t (*svc_xprt_each_func_t) (SVCXPRT *xprt, void *arg);
 int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg);
