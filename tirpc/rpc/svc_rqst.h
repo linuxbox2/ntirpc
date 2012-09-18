@@ -26,7 +26,7 @@
 #ifndef TIRPC_SVC_RQST_H
 #define TIRPC_SVC_RQST_H
 
-#include <misc/rbtree.h>
+#include <misc/rbtree_x.h>
 #include <sys/epoll.h> /* before rpc.h */
 
 struct svc_rqst_rec; /* forward decl */
@@ -44,6 +44,9 @@ struct svc_xprt_ev
         } epoll;
 #endif
     } ev_u;
+
+    /* state */
+    uint32_t flags;
 
     /*
      * thread on svc_xprt_rec
@@ -89,9 +92,10 @@ struct svc_rqst_rec
 
 struct svc_rqst_set
 {
-    rwlock_t lock;
-    struct opr_rbtree t;
+    mutex_t mtx;
+    struct rbtree_x xt;
     uint32_t next_id;
+    spinlock_t sp;
 };
 
 static inline int rqst_thrd_cmpf(const struct opr_rbtree_node *lhs,
@@ -162,6 +166,7 @@ int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags);
+int svc_rqst_rearm_events(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt);
 int svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags);
@@ -178,13 +183,17 @@ int svc_rqst_foreach_xprt(uint32_t chan_id, svc_rqst_xprt_each_func_t each_f,
                           void *arg);
 
 
+#define XP_EV_FLAG_NONE               0x00000
+#define XP_EV_FLAG_ADDED              0x00001
+#define XP_EV_FLAG_BLOCKED            0x00002
+
 #define SVC_RQST_FLAG_NONE            0x00000
-#define SVC_RQST_FLAG_RLOCK           0x00001
-#define SVC_RQST_FLAG_WLOCK           0x00002
+#define SVC_RQST_FLAG_LOCK            0x00002
 #define SVC_RQST_FLAG_UNLOCK          0x00004
 #define SVC_RQST_FLAG_EPOLL           0x00008
 #define SVC_RQST_FLAG_FDSET           0x00010
-#define SVC_RQST_FLAG_SREC_LOCKED     0x00020
+#define SVC_RQST_FLAG_SREC_LOCK       0x00020
+#define SVC_RQST_FLAG_SREC_LOCKED     0x00040
 
 #define SVC_RQST_FLAG_CHAN_AFFINITY   0x01000 /* bind new conn to parent chan */
 #define SVC_RQST_FLAG_CHAN_ACCEPT_CB  0x02000 /* make rendezvous callout? */
