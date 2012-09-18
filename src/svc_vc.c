@@ -805,12 +805,17 @@ cfconn_set_dead(struct cf_conn *cd)
  * All read operations timeout after 35 seconds.  A timeout is
  * fatal for the connection.
  */
+#define EARLY_DEATH_DEBUG 1
+
 static int
 read_vc(void *xprtp, void *buf, int len)
 {
     SVCXPRT *xprt;
     int sock;
     int milliseconds = 35 * 1000; /* XXX shouldn't this be configurable? */
+#if EARLY_DEATH_DEBUG
+    struct timeval tv_dbg1, tv_dbg2;
+#endif
     struct pollfd pollfd;
     struct cf_conn *cd;
 
@@ -818,7 +823,6 @@ read_vc(void *xprtp, void *buf, int len)
     assert(xprt != NULL);
 
     sock = xprt->xp_fd;
-
     cd = (struct cf_conn *) xprt->xp_p1;
 
     if (cd->nonblock) {
@@ -841,15 +845,26 @@ read_vc(void *xprtp, void *buf, int len)
         pollfd.fd = sock;
         pollfd.events = POLLIN;
         pollfd.revents = 0;
+#if EARLY_DEATH_DEBUG
+        gettimeofday(&tv_dbg1, NULL);
+#endif
         switch (poll(&pollfd, 1, milliseconds)) {
         case -1:
             if (errno == EINTR)
                 continue;
             /*FALLTHROUGH*/
         case 0:
+#if EARLY_DEATH_DEBUG
+            gettimeofday(&tv_dbg2, NULL);
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "%s: poll returns 0 (tv_sec 1 %u tv_sec 2 %u)",
+                    __func__,
+                    tv_dbg1.tv_sec, tv_dbg2.tv_sec);
+#else
             __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
                     "%s: poll returns 0 (will set dead)",
                     __func__);
+#endif
             goto fatal_err;
 
         default:
