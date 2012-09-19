@@ -68,7 +68,7 @@ _svcauth_unix(struct svc_req *req, struct rpc_msg *msg)
     assert(req != NULL);
     assert(msg != NULL);
 
-    req->rq_xprt->xp_auth = &svc_auth_none;
+    req->rq_auth = &svc_auth_none;
 
     area = (struct area *) req->rq_clntcred;
     aup = &area->area_aup;
@@ -144,6 +144,6 @@ done:
 enum auth_stat
 _svcauth_short(struct svc_req *req, struct rpc_msg *msg)
 {
-    req->rq_xprt->xp_auth = &svc_auth_none;
+    req->rq_auth = &svc_auth_none;
     return (AUTH_REJECTEDCRED);
 }

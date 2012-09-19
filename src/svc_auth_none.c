@@ -67,9 +67,9 @@ svcauth_none_wrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func,
 }
 
 enum auth_stat
-_svcauth_none(struct svc_req *rqst, struct rpc_msg *msg)
+_svcauth_none(struct svc_req *req, struct rpc_msg *msg)
 {
-    rqst->rq_xprt->xp_auth = &svc_auth_none;
+    req->rq_auth = &svc_auth_none;
 
     return (AUTH_OK);
 }
