@@ -201,7 +201,7 @@ clnt_vc_ncreate(int fd,      /* open file descriptor */
 }
 
 CLIENT *
-clnt_vc_bcreate2(int fd,       /* open file descriptor */
+clnt_vc_ncreate2(int fd,       /* open file descriptor */
                  const struct netbuf *raddr, /* servers address */
                  const rpcprog_t prog,     /* program number */
                  const rpcvers_t vers,     /* version number */

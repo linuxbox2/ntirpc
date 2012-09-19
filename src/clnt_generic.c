@@ -144,14 +144,14 @@ error:
  * XXX The error message in the case of failure will be the one
  * pertaining to the last create error.
  *
- * It calls clnt_create_timed() with the default timeout.
+ * It calls clnt_ncreate_timed() with the default timeout.
  */
 CLIENT *
 clnt_ncreate(const char *hostname, rpcprog_t prog, rpcvers_t vers,
              const char *nettype)
 {
 
-    return (clnt_create_timed(hostname, prog, vers, nettype, NULL));
+    return (clnt_ncreate_timed(hostname, prog, vers, nettype, NULL));
 }
 
 /*
