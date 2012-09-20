@@ -1075,6 +1075,7 @@ svc_vc_recv(SVCXPRT *xprt, struct rpc_msg *msg)
     return (FALSE);
 }
 
+/* XXX may not work.  Going away. */
 static bool
 svc_vc_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {

@@ -63,7 +63,7 @@ extern mutex_t svcraw_lock;
 
 static enum xprt_stat svc_raw_stat(SVCXPRT *);
 static bool svc_raw_recv(SVCXPRT *, struct rpc_msg *);
-static bool svc_raw_reply(SVCXPRT *, struct rpc_msg *);
+static bool svc_raw_reply(SVCXPRT *, struct svc_req *req, struct rpc_msg *);
 static bool svc_raw_getargs(SVCXPRT *, xdrproc_t, void *);
 static bool svc_raw_freeargs(SVCXPRT *, xdrproc_t, void *);
 static void svc_raw_destroy(SVCXPRT *);
@@ -95,7 +95,7 @@ svc_raw_ncreate(void)
     srp->server.xp_port = 0;
     srp->server.xp_p3 = NULL;
     svc_raw_ops(&srp->server);
-#warning XXX fixme /* XXX check and or fixme */
+/* XXX check and or fixme */
 #if 0
     srp->server.xp_verf.oa_base = srp->verf_body;
 #endif
@@ -138,7 +138,7 @@ svc_raw_recv(SVCXPRT *xprt, struct rpc_msg *msg)
 
 /*ARGSUSED*/
 static bool
-svc_raw_reply(SVCXPRT *xprt, struct rpc_msg *msg)
+svc_raw_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 {
     struct svc_raw_private *srp;
     XDR *xdrs;

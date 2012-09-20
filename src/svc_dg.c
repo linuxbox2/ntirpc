@@ -136,7 +136,7 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
     memset(xprt, 0, sizeof (SVCXPRT));
 
     /* Init SVCXPRT locks, etc */
-    mutex_init(&xprt->xp_lock, NULL);
+    spin_init(&xprt->xp_lock, PTHREAD_PROCESS_PRIVATE);
     mutex_init(&xprt->xp_auth_lock, NULL);
 
     su = mem_alloc(sizeof (*su));
@@ -282,7 +282,6 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
     xdrproc_t xdr_results;
     caddr_t xdr_location;
     bool has_args;
-    SVCAUTH *auth;
 
     if (msg->rm_reply.rp_stat == MSG_ACCEPTED &&
         msg->rm_reply.rp_acpt.ar_stat == SUCCESS) {
@@ -304,10 +303,9 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
     if (! (msg->rm_flags & RPC_MSG_FLAG_MT_XID))
         msg->rm_xid = su->su_xid;
 
-    auth = (req->rq_auth) ? req->rq_auth : xprt->xp_auth;
     if (xdr_replymsg(xdrs, msg) &&
-        (!has_args || (auth &&
-                       SVCAUTH_WRAP(auth, xdrs, xdr_results, xdr_location)))) {
+        (!has_args || (SVCAUTH_WRAP(req->rq_auth, xdrs, xdr_results,
+                                    xdr_location)))) {
         struct msghdr *msg = &su->su_msghdr;
         struct iovec iov;
 
@@ -328,6 +326,7 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
     return (stat);
 }
 
+/* XXX may not work.  Going away. */
 static bool
 svc_dg_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
