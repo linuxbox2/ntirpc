@@ -69,9 +69,10 @@ rpc_dplx_slxi(SVCXPRT *xprt, sigset_t *mask, const char *file, int line)
 void
 rpc_dplx_sux(SVCXPRT *xprt, sigset_t *mask)
 {
-    struct rpc_dplx_rec *rec
-        = (struct rpc_dplx_rec *) xprt->xp_p5;
-    /* assert: initialized */
+    struct rpc_dplx_rec *rec;
+
+    rpc_dplx_init_xprt(xprt);
+    rec = (struct rpc_dplx_rec *) xprt->xp_p5;
     mutex_unlock(&rec->send.lock.we.mtx);
 }
 
@@ -95,9 +96,10 @@ rpc_dplx_rlxi(SVCXPRT *xprt, sigset_t *mask, const char *file, int line)
 void
 rpc_dplx_rux(SVCXPRT *xprt, sigset_t *mask)
 {
-    struct rpc_dplx_rec *rec
-        = (struct rpc_dplx_rec *) xprt->xp_p5;
-    /* assert: initialized */
+    struct rpc_dplx_rec *rec;
+
+    rpc_dplx_init_xprt(xprt);
+    rec = (struct rpc_dplx_rec *) xprt->xp_p5;
     mutex_unlock(&rec->recv.lock.we.mtx);
 }
 
@@ -109,7 +111,6 @@ rpc_dplx_slci(CLIENT *clnt, sigset_t *mask, const char *file, int line)
     rpc_dplx_lock_t *lk;
 
     rpc_dplx_init_client(clnt);
-
     cx = (struct cx_data *) clnt->cl_private;
     rec = cx->cx_rec;
     lk = &rec->send.lock;
@@ -124,8 +125,10 @@ rpc_dplx_slci(CLIENT *clnt, sigset_t *mask, const char *file, int line)
 void
 rpc_dplx_suc(CLIENT *clnt, sigset_t *mask)
 {
-    struct cx_data *cx = (struct cx_data *) clnt->cl_private;
-    /* assert: initialized */
+    struct cx_data *cx;
+
+    rpc_dplx_init_client(clnt);
+    cx = (struct cx_data *) clnt->cl_private;
     mutex_unlock(&cx->cx_rec->send.lock.we.mtx);
 }
 
@@ -152,8 +155,10 @@ rpc_dplx_rlci(CLIENT *clnt, sigset_t *mask, const char *file, int line)
 void
 rpc_dplx_ruc(CLIENT *clnt, sigset_t *mask)
 {
-    struct cx_data *cx = (struct cx_data *) clnt->cl_private;
-    /* assert: initialized */
+    struct cx_data *cx;
+
+    rpc_dplx_init_client(clnt);
+    cx = (struct cx_data *) clnt->cl_private;
     mutex_unlock(&cx->cx_rec->recv.lock.we.mtx);
 }
 
