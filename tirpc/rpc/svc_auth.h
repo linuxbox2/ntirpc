@@ -41,6 +41,8 @@
 #ifndef _RPC_SVC_AUTH_H
 #define _RPC_SVC_AUTH_H
 
+#include <rpc/svc.h>
+
 /*
  * Interface to server-side authentication flavors.
  */
@@ -69,7 +71,6 @@ __BEGIN_DECLS
 extern enum auth_stat svc_auth_authenticate(struct svc_req *, struct rpc_msg *);
 extern int svc_auth_reg(int, enum auth_stat (*)(struct svc_req *,
                                                 struct rpc_msg *));
-
 __END_DECLS
 
 #endif /* !_RPC_SVC_AUTH_H */

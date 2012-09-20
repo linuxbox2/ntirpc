@@ -39,6 +39,7 @@
 #include <reentrant.h>
 #include <sys/types.h>
 #include <rpc/rpc.h>
+#include <rpc/svc_auth.h>
 #include <stdlib.h>
 
 /*

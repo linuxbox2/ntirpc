@@ -61,6 +61,7 @@
 #include "rpc_com.h"
 
 #include <rpc/svc.h>
+#include <rpc/svc_auth.h>
 
 #include "clnt_internal.h"
 #include "svc_internal.h"

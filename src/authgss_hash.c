@@ -34,6 +34,8 @@
 #include "rpc_com.h"
 #include <intrinsic.h>
 #include <misc/abstract_atomic.h>
+#include <rpc/svc.h>
+#include <rpc/svc_auth.h>
 #include <rpc/gss_internal.h>
 #include "svc_internal.h"
 

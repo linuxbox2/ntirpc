@@ -50,6 +50,7 @@
 #endif
 #include <rpc/rpc.h>
 #include <rpc/svc_dg.h>
+#include <rpc/svc_auth.h>
 #include <errno.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -79,7 +80,8 @@ static enum xprt_stat svc_dg_stat(SVCXPRT *);
 static bool svc_dg_recv(SVCXPRT *, struct rpc_msg *);
 static bool svc_dg_reply(SVCXPRT *, struct svc_req *req, struct rpc_msg *);
 static bool svc_dg_getargs(SVCXPRT *, xdrproc_t, void *);
-static bool svc_dg_getargs2(SVCXPRT *, xdrproc_t, void *, void *);
+static bool svc_dg_getargs2(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
+                            void *);
 static bool svc_dg_freeargs(SVCXPRT *, xdrproc_t, void *);
 static void svc_dg_destroy(SVCXPRT *);
 static bool svc_dg_control(SVCXPRT *, const u_int, void *);
@@ -337,9 +339,10 @@ svc_dg_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
     return TRUE;
 }
 
+/* XXXX fix for svc_req arg */
 static bool
-svc_dg_getargs2(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr,
-                void *u_data)
+svc_dg_getargs2(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
+                void *args_ptr, void *u_data)
 {
     struct svc_dg_data *su = su_data(xprt);
     XDR *xdrs = &(su->su_xdrs);

@@ -63,7 +63,6 @@
 #endif
 
 /* Server side only remote procedure callee */
-#include <rpc/svc_auth.h> /* service side authenticator */
 #include <rpc/svc.h>  /* service manager and multiplexer */
 
 /* Portmapper client, server, and protocol headers */

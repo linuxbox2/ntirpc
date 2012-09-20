@@ -192,6 +192,8 @@ struct cf_conn
     struct timeval last_recv_time;
 };
 
+struct SVCAUTH; /* forward decl. */
+
 /*
  * Server side transport handle
  */
@@ -215,8 +217,8 @@ typedef struct __rpc_svcxprt {
         /* destroy this struct */
         void (*xp_destroy)(struct __rpc_svcxprt *);
         /* get arguments, thread u_data in arg4*/
-        bool(*xp_getargs2)(struct __rpc_svcxprt *, xdrproc_t,
-                             void *, void *);
+        bool(*xp_getargs2)(struct __rpc_svcxprt *, struct svc_req *req,
+                           xdrproc_t, void *, void *);
     } *xp_ops;
     int  xp_addrlen;  /* length of remote address */
     struct sockaddr_in6 xp_raddr;  /* remote addr (backward ABI compat) */
@@ -242,7 +244,7 @@ typedef struct __rpc_svcxprt {
 
     /* auth */
     mutex_t  xp_auth_lock; /* lock owned by installed authenticator */
-    SVCAUTH  *xp_auth; /* auth handle */
+    struct SVCAUTH  *xp_auth; /* auth handle */
 
     /* serialize private data */
     spinlock_t         xp_lock;
@@ -311,13 +313,14 @@ struct svc_req {
     caddr_t  rq_svcname; /* read only cooked service cred */
 
     /* New with N TI-RPC */
-    u_int32_t       rq_xid;         /* xid */
-    void            *rq_u1;         /* user data */
-    void            *rq_u2;         /* user data */
+    u_int32_t        rq_xid;         /* xid */
+    struct rpc_msg  *rq_msg;         /* decoded rpc_msg */
+    void            *rq_u1;          /* user data */
+    void            *rq_u2;          /* user data */
 
     /* Moved in N TI-RPC */
     struct opaque_auth rq_verf; /* raw response verifier */
-    SVCAUTH  *rq_auth; /* auth handle */
+    struct SVCAUTH  *rq_auth; /* auth handle */
 };
 
 /*
@@ -370,10 +373,10 @@ extern SVCXPRT *svc_shim_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig);
 #define svc_getargs(xprt, xargs, argsp)                         \
     (*(xprt)->xp_ops->xp_getargs)((xprt), (xargs), (argsp))
 
-#define SVC_GETARGS2(xprt, xargs, argsp)                        \
-    (*(xprt)->xp_ops->xp_getargs2)((xprt), (xargs), (argsp))
-#define svc_getargs2(xprt, xargs, argsp, u_data)                        \
-    (*(xprt)->xp_ops->xp_getargs2)((xprt), (xargs), (argsp), (u_data))
+#define SVC_GETARGS2(xprt, req, xargs, argsp, u_data) \
+    (*(xprt)->xp_ops->xp_getargs2)((xprt), (req), (xargs), (argsp))
+#define svc_getargs2(xprt, req, xargs, argsp, u_data) \
+    (*(xprt)->xp_ops->xp_getargs2)((xprt), (req), (xargs), (argsp), (u_data))
 
 #define SVC_REPLY(xprt, req, msg) \
     (*(xprt)->xp_ops->xp_reply) ((xprt), (req), (msg))

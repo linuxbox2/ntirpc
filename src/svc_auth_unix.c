@@ -43,6 +43,8 @@
 #include <string.h>
 
 #include <rpc/rpc.h>
+#include <rpc/svc.h>
+#include <rpc/svc_auth.h>
 
 extern SVCAUTH svc_auth_none;
 
