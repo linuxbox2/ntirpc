@@ -150,7 +150,6 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 
     su->su_cache = NULL;
     xprt->xp_flags = SVC_XPRT_FLAG_NONE;
-    spin_init(&xprt->xp_lock, PTHREAD_PROCESS_PRIVATE);
     xprt->xp_fd = fd;
     xprt->xp_p2 = su;
     xprt->xp_auth = NULL;
@@ -338,7 +337,6 @@ svc_dg_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
     return TRUE;
 }
 
-/* XXXX fix for svc_req arg */
 static bool
 svc_dg_getargs2(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
                 void *args_ptr, void *u_data)
@@ -349,7 +347,7 @@ svc_dg_getargs2(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
     /* threads u_data for advanced decoders */
     xdrs->x_public = u_data;
 
-    if (! SVCAUTH_UNWRAP(xprt->xp_auth, &(su_data(xprt)->su_xdrs),
+    if (! SVCAUTH_UNWRAP(req->rq_auth, &(su_data(xprt)->su_xdrs),
                          xdr_args, args_ptr)) {
         (void)svc_freeargs(xprt, xdr_args, args_ptr);
         return FALSE;
@@ -360,10 +358,12 @@ svc_dg_getargs2(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
 static bool
 svc_dg_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
-    XDR *xdrs = &(su_data(xprt)->su_xdrs);
-
-    xdrs->x_op = XDR_FREE;
-    return (*xdr_args)(xdrs, args_ptr);
+    XDR xdrs = {
+        .x_public = NULL,
+        .x_lib = NULL
+    };
+    xdrmem_create(&xdrs, args_ptr, ~0, XDR_FREE);
+    return (*xdr_args)(&xdrs, args_ptr);
 }
 
 static void
