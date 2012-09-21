@@ -1162,15 +1162,16 @@ svc_vc_getargs2(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
 static bool
 svc_vc_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
-    XDR *xdrs;
+    XDR xdrs = {
+        .x_public = NULL,
+        .x_lib = NULL
+    };
+    xdrmem_create(&xdrs, args_ptr, ~0, XDR_FREE);
 
     assert(xprt != NULL);
     /* args_ptr may be NULL */
 
-    xdrs = &(((struct cf_conn *)(xprt->xp_p1))->xdrs_in);
-
-    xdrs->x_op = XDR_FREE;
-    return ((*xdr_args)(xdrs, args_ptr));
+    return ((*xdr_args)(&xdrs, args_ptr));
 }
 
 static bool

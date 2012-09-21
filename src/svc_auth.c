@@ -82,7 +82,8 @@ static struct authsvc *Auths = NULL;
  * There is an assumption that any flavour less than AUTH_NULL is invalid.
  */
 enum auth_stat
-svc_auth_authenticate(struct svc_req *req, struct rpc_msg *msg)
+svc_auth_authenticate(struct svc_req *req, struct rpc_msg *msg,
+                      bool *no_dispatch)
 {
     int cred_flavor;
     struct authsvc *asp;
@@ -98,8 +99,7 @@ svc_auth_authenticate(struct svc_req *req, struct rpc_msg *msg)
     switch (cred_flavor) {
     case RPCSEC_GSS:
         {
-            bool no_dispatch;
-            rslt = _svcauth_gss(req, msg, &no_dispatch);
+            rslt = _svcauth_gss(req, msg, no_dispatch);
         }
     return (rslt);
     case AUTH_NONE:
