@@ -60,6 +60,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
+#include <misc/timespec.h>
 
 #include <rpc/rpc.h>
 #include <rpc/svc.h>
@@ -586,8 +587,7 @@ again:
 #else
     cd->nonblock = FALSE;
 #endif
-
-    gettimeofday(&cd->last_recv_time, NULL);
+    (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &cd->last_recv_time);
 
     /* if parent has xp_rdvs, use it */
     if (xprt->xp_ops2->xp_rdvs)
@@ -817,9 +817,6 @@ read_vc(void *xprtp, void *buf, int len)
     SVCXPRT *xprt;
     int sock;
     int milliseconds = 35 * 1000; /* XXX shouldn't this be configurable? */
-#if EARLY_DEATH_DEBUG
-    struct timeval tv_dbg1, tv_dbg2;
-#endif
     struct pollfd pollfd;
     struct cf_conn *cd;
 
@@ -838,7 +835,7 @@ read_vc(void *xprtp, void *buf, int len)
                 goto fatal_err;
         }
         if (len != 0)
-            gettimeofday(&cd->last_recv_time, NULL);
+            (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &cd->last_recv_time);
         return len;
     }
 
@@ -849,26 +846,15 @@ read_vc(void *xprtp, void *buf, int len)
         pollfd.fd = sock;
         pollfd.events = POLLIN;
         pollfd.revents = 0;
-#if EARLY_DEATH_DEBUG
-        gettimeofday(&tv_dbg1, NULL);
-#endif
         switch (poll(&pollfd, 1, milliseconds)) {
         case -1:
             if (errno == EINTR)
                 continue;
             /*FALLTHROUGH*/
         case 0:
-#if EARLY_DEATH_DEBUG
-            gettimeofday(&tv_dbg2, NULL);
-            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                    "%s: poll returns 0 (tv_sec 1 %u tv_sec 2 %u)",
-                    __func__,
-                    tv_dbg1.tv_sec, tv_dbg2.tv_sec);
-#else
             __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
                     "%s: poll returns 0 (will set dead)",
                     __func__);
-#endif
             goto fatal_err;
 
         default:
@@ -877,7 +863,7 @@ read_vc(void *xprtp, void *buf, int len)
     } while ((pollfd.revents & POLLIN) == 0);
 
     if ((len = read(sock, buf, (size_t)len)) > 0) {
-        gettimeofday(&cd->last_recv_time, NULL);
+        (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &cd->last_recv_time);
         return (len);
     }
 
@@ -896,7 +882,7 @@ write_vc(void *xprtp, void *buf, int len)
     SVCXPRT *xprt;
     int i, cnt;
     struct cf_conn *cd;
-    struct timeval tv0, tv1;
+    struct timespec ts0, ts1;
 
     xprt = (SVCXPRT *)xprtp;
     assert(xprt != NULL);
@@ -904,7 +890,7 @@ write_vc(void *xprtp, void *buf, int len)
     cd = (struct cf_conn *)xprt->xp_p1;
 
     if (cd->nonblock)
-        gettimeofday(&tv0, NULL);
+        (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &ts0);
 
     for (cnt = len; cnt > 0; cnt -= i, buf += i) {
         i = write(xprt->xp_fd, buf, (size_t)cnt);
@@ -924,8 +910,8 @@ write_vc(void *xprtp, void *buf, int len)
                  *
                  * XXX 2 is an arbitrary amount.
                  */
-                gettimeofday(&tv1, NULL);
-                if (tv1.tv_sec - tv0.tv_sec >= 2) {
+                (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &ts1);
+                if (ts1.tv_sec - ts0.tv_sec >= 2) {
                     __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
                             "%s: short write !EAGAIN (will set dead)",
                             __func__);
@@ -982,7 +968,7 @@ readv_vc(void *xprtp, struct iovec *iov, int iovcnt, u_int flags)
     } while ((pollfd.revents & POLLIN) == 0);
 
     if ((nbytes = readv(xprt->xp_fd, iov, iovcnt)) > 0) {
-        gettimeofday(&cd->last_recv_time, NULL);
+        (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &cd->last_recv_time);
         goto out;
     }
 
@@ -1348,7 +1334,7 @@ __svc_clean_idle(fd_set *fds, int timeout, bool cleanblock)
 struct svc_clean_idle_arg
 {
     SVCXPRT *least_active;
-    struct timeval tv, tmax;
+    struct timespec ts, tmax;
     int cleanblock, ncleaned, timeout;
 };
 
@@ -1356,7 +1342,7 @@ static uint32_t
 svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
 {
     struct cf_conn *cd;
-    struct timeval tdiff;
+    struct timespec tdiff;
     struct svc_clean_idle_arg *acc = (struct svc_clean_idle_arg *) arg;
     uint32_t rflag = SVC_XPRT_FOREACH_NONE;
 
@@ -1373,14 +1359,14 @@ svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
             goto unlock;
 
         if (acc->timeout == 0) {
-            timersub(&acc->tv, &cd->last_recv_time, &tdiff);
-            if (timercmp(&tdiff, &acc->tmax, >)) {
+            tdiff = acc->ts; timespecsub(&tdiff, &cd->last_recv_time);
+            if (timespeccmp(&tdiff, &acc->tmax, >)) {
                 acc->tmax = tdiff;
                 acc->least_active = xprt;
             }
             goto unlock;
         }
-        if (acc->tv.tv_sec - cd->last_recv_time.tv_sec > acc->timeout) {
+        if (acc->ts.tv_sec - cd->last_recv_time.tv_sec > acc->timeout) {
             /* XXX locking */
             rflag = SVC_XPRT_FOREACH_CLEAR;
             spin_unlock(&xprt->xp_lock);
@@ -1414,7 +1400,7 @@ __svc_clean_idle2(int timeout, bool cleanblock)
     ++active;
 
     memset(&acc, 0, sizeof(struct svc_clean_idle_arg));
-    gettimeofday(&acc.tv, NULL);
+    (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &acc.ts);
     acc.timeout = timeout;
 
     /* XXX refcounting, state? */
@@ -1584,8 +1570,7 @@ svc_vc_ncreate_clnt(CLIENT *cl,
 #else
     cd->nonblock = FALSE;
 #endif
-
-    gettimeofday(&cd->last_recv_time, NULL);
+    (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &cd->last_recv_time);
 
     /* conditional xprt_register */
     if ((! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS)) &&

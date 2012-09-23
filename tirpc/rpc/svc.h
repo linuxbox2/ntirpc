@@ -189,7 +189,7 @@ struct cf_conn
     u_int recvsize;
     int maxrec;
     bool nonblock;
-    struct timeval last_recv_time;
+    struct timespec last_recv_time;
 };
 
 struct SVCAUTH; /* forward decl. */

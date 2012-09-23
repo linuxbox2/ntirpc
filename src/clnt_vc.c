@@ -212,7 +212,6 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
     CLIENT *cl;   /* client handle */
     struct cx_data *cx = NULL;
     struct ct_data *ct = NULL;
-    struct timeval now;
     struct rpc_msg call_msg;
     static u_int32_t disrupt;
     sigset_t mask;
@@ -283,8 +282,7 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
     /*
      * Initialize call message
      */
-    (void)gettimeofday(&now, NULL);
-    call_msg.rm_xid = ((u_int32_t)++disrupt) ^ __RPC_GETXID(&now);
+    call_msg.rm_xid = 1;
     call_msg.rm_direction = CALL;
     call_msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
     call_msg.rm_call.cb_prog = (u_int32_t)prog;

@@ -90,7 +90,7 @@ authunix_create(char *machname, uid_t uid, gid_t gid, int len,
 {
     struct authunix_parms aup;
     char mymem[MAX_AUTH_BYTES];
-    struct timeval now;
+    struct timespec now;
     XDR xdrs;
     AUTH *auth;
     struct audata *au;
@@ -126,7 +126,7 @@ authunix_create(char *machname, uid_t uid, gid_t gid, int len,
     /*
      * fill in param struct from the given params
      */
-    (void)gettimeofday(&now, NULL);
+    (void)clock_gettime(CLOCK_MONOTONIC_COARSE, &now);
     aup.aup_time = now.tv_sec;
     aup.aup_machname = machname;
     aup.aup_uid = uid;
@@ -327,7 +327,7 @@ authunix_refresh(AUTH *auth, void *dummy)
         goto done;
 
     /* update the time and serialize in place */
-    (void)gettimeofday(&now, NULL);
+    (void)clock_gettime(CLOCK_MONOTONIC_COARSE, &now);
     aup.aup_time = now.tv_sec;
     xdrs.x_op = XDR_ENCODE;
     XDR_SETPOS(&xdrs, 0);

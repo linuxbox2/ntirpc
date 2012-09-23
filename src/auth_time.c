@@ -230,7 +230,8 @@ __rpc_get_time_offset(struct timeval *td, /* Time difference */
     enum clnt_stat  status;  /* result of clnt_call */
     u_long   thetime, delta;
     int   needfree = 0;
-    struct timeval  tv;
+    struct timeval tv;
+    struct timespec ts;
     int   time_valid;
     int   udp_ep = -1, tcp_ep = -1;
     int   a1, a2, a3, a4;
@@ -242,6 +243,7 @@ __rpc_get_time_offset(struct timeval *td, /* Time difference */
     int   s = RPC_ANYSOCK;
     socklen_t len;
     int   type = 0;
+    div_t q;
 
     td->tv_sec = 0;
     td->tv_usec = 0;
@@ -441,7 +443,10 @@ __rpc_get_time_offset(struct timeval *td, /* Time difference */
             thetime = 0;
     }
 
-    gettimeofday(&tv, 0);
+    (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+    tv.tv_sec = ts.tv_sec;
+    q = div(ts.tv_nsec, 1000);
+    tv.tv_usec = q.quot;
 
 error:
     /*

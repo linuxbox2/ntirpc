@@ -103,7 +103,7 @@ clnt_dg_ncreate(int fd,           /* open file descriptor */
     CLIENT *cl = NULL;  /* client handle */
     struct cx_data *cx = NULL; /* private data */
     struct cu_data *cu = NULL;
-    struct timeval now;
+    struct timespec now;
     struct rpc_msg call_msg;
     struct __rpc_sockinfo si;
     int one = 1;
@@ -152,8 +152,8 @@ clnt_dg_ncreate(int fd,           /* open file descriptor */
     cu->cu_async = FALSE;
     cu->cu_connect = FALSE;
     cu->cu_connected = FALSE;
-    (void) gettimeofday(&now, NULL);
-    call_msg.rm_xid = __RPC_GETXID(&now);
+    (void)clock_gettime(CLOCK_MONOTONIC_COARSE, &now);
+    call_msg.rm_xid = __RPC_GETXID(&now); /* XXX? */
     call_msg.rm_call.cb_prog = program;
     call_msg.rm_call.cb_vers = version;
     xdrmem_create(&(cu->cu_outxdrs), cu->cu_outbuf,

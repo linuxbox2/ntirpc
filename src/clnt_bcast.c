@@ -244,7 +244,7 @@ rpc_broadcast_exp(rpcprog_t prog,  /* program number */
     XDR   xdr_stream; /* XDR stream */
     XDR   *xdrs = &xdr_stream;
     struct rpc_msg msg; /* RPC message */
-    struct timeval t;
+    struct timespec ts;
     char   *outbuf = NULL; /* Broadcast msg buffer */
     char  *inbuf = NULL; /* Reply buf */
     int  inlen;
@@ -368,8 +368,8 @@ rpc_broadcast_exp(rpcprog_t prog,  /* program number */
     }
 
     /* Serialize all the arguments which have to be sent */
-    (void) gettimeofday(&t, NULL);
-    msg.rm_xid = __RPC_GETXID(&t);
+    (void)clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+    msg.rm_xid = __RPC_GETXID(&ts);
     msg.rm_direction = CALL;
     msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
     msg.rm_call.cb_prog = RPCBPROG;

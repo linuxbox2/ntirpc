@@ -52,7 +52,7 @@
 #define RPC_MAXADDRSIZE 1024
 
 #define __RPC_GETXID(now) ((u_int32_t)getpid() ^ (u_int32_t)(now)->tv_sec ^ \
-                           (u_int32_t)(now)->tv_usec)
+                           (u_int32_t)((now)->tv_nsec))
 
 __BEGIN_DECLS
 extern u_int __rpc_get_a_size(int);
