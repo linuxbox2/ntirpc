@@ -186,6 +186,7 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
     svc_dg_enable_pktinfo(fd, &si);
 
     /* Make reachable */
+    rpc_dplx_init_xprt(xprt);
     svc_rqst_init_xprt(xprt);
 
     /* Conditional xprt_register */

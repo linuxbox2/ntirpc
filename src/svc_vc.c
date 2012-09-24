@@ -210,6 +210,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
     svc_vc_rendezvous_ops(xprt);
     xprt->xp_fd = fd;
     spin_init(&xprt->xp_lock, PTHREAD_PROCESS_PRIVATE);
+    rpc_dplx_init_xprt(xprt);
     svc_rqst_init_xprt(xprt);
 
     /* caller should know what it's doing */
@@ -479,8 +480,10 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz)
     if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
         xprt->xp_netid = rpc_strdup(netid);
 
-    /* Make reachable.  Registration deferred.  */
+    /* Make reachable.  Registration deferred. */
+    rpc_dplx_init_xprt(xprt);
     svc_rqst_init_xprt(xprt);
+
 done:
     return (xprt);
 }
@@ -1632,6 +1635,7 @@ SVCXPRT *svc_vc_create_xprt(u_long sendsz, u_long recvsz)
         goto done;
     }
 
+    rpc_dplx_init_xprt(xprt);
     svc_rqst_init_xprt(xprt);
 
     cd->strm_stat = XPRT_IDLE;
