@@ -993,15 +993,12 @@ svc_vc_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr,
 static bool_t
 svc_vc_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
-	XDR *xdrs;
-
-	assert(xprt != NULL);
-	/* args_ptr may be NULL */
-
-	xdrs = &(((struct cf_conn *)(xprt->xp_p1))->xdrs);
-
-	xdrs->x_op = XDR_FREE;
-	return ((*xdr_args)(xdrs, args_ptr));
+    XDR xdrs = {
+        .x_public = NULL,
+        .x_lib = NULL
+    };
+    xdrmem_create(&xdrs, args_ptr, ~0, XDR_FREE);
+    return ((*xdr_args)(&xdrs, args_ptr));
 }
 
 static bool_t

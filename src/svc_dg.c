@@ -332,10 +332,12 @@ svc_dg_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr,
 static bool_t
 svc_dg_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
-	XDR *xdrs = &(su_data(xprt)->su_xdrs);
-
-	xdrs->x_op = XDR_FREE;
-	return (*xdr_args)(xdrs, args_ptr);
+   XDR xdrs = {
+        .x_public = NULL,
+        .x_lib = NULL
+    };
+    xdrmem_create(&xdrs, args_ptr, ~0, XDR_FREE);
+    return (*xdr_args)(&xdrs, args_ptr);
 }
 
 static void
