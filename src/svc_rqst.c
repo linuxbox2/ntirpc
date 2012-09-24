@@ -646,8 +646,8 @@ int svc_rqst_unblock_events(SVCXPRT *xprt,
             /* set up epoll user data */
             ev->data.ptr = xprt;
 
-            /* wait for read events, level triggered */
-            ev->events = EPOLLIN;
+            /* wait for read events, level triggered, oneshot */
+            ev->events = EPOLLIN|EPOLLONESHOT;
 
             /* add to epoll vector */
             code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd, EPOLL_CTL_ADD,
