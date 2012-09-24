@@ -104,7 +104,7 @@ static struct {
  * Service side authenticator for AUTH_DES
  */
 enum auth_stat
-_svcauth_des(struct svc_req *rqst, struct rpc_msg *msg)
+_svcauth_des(struct svc_req *req, struct rpc_msg *msg)
 {
 
 	long *ixdr;
@@ -124,11 +124,14 @@ _svcauth_des(struct svc_req *rqst, struct rpc_msg *msg)
 		char area_netname[MAXNETNAMELEN+1];
 	} *area;
 
+        /* Initialize reply. */
+        req->rq_verf = _null_auth;
+
 	if (authdes_cache == NULL) {
 		cache_init();
 	}
 
-	area = (struct area *)rqst->rq_clntcred;
+	area = (struct area *)req->rq_clntcred;
 	cred = (struct authdes_cred *)&area->area_cred;
 
 	/*
@@ -296,16 +299,16 @@ _svcauth_des(struct svc_req *rqst, struct rpc_msg *msg)
 	verf.adv_xtimestamp = cryptbuf[0];
 
 	/*
-	 * Serialize the reply verifier, and update rqst
+	 * Serialize the reply verifier, and update req
 	 */
 	ixdr = (long *)msg->rm_call.cb_verf.oa_base;
 	*ixdr++ = (long)verf.adv_xtimestamp.key.high;
 	*ixdr++ = (long)verf.adv_xtimestamp.key.low;
 	*ixdr++ = (long)verf.adv_int_u;
 
-	rqst->rq_xprt->xp_verf.oa_flavor = AUTH_DES;
-	rqst->rq_xprt->xp_verf.oa_base = msg->rm_call.cb_verf.oa_base;
-	rqst->rq_xprt->xp_verf.oa_length = 
+	req->rq_verf.oa_flavor = AUTH_DES;
+	req->rq_verf.oa_base = msg->rm_call.cb_verf.oa_base;
+	req->rq_verf.oa_length = 
 		(char *)ixdr - msg->rm_call.cb_verf.oa_base;
 
 	/*

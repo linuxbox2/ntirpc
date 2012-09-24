@@ -184,7 +184,6 @@ struct cf_conn
     XDR xdrs_in;  /* send queue */
     XDR xdrs_out; /* recv queue */
 
-    char verf_body[MAX_AUTH_BYTES];
     u_int sendsize;
     u_int recvsize;
     int maxrec;
