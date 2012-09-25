@@ -63,6 +63,7 @@
 #include "svc_internal.h"
 #include "clnt_internal.h"
 #include "svc_xprt.h"
+#include "rpc_dplx_internal.h"
 #include <rpc/svc_rqst.h>
 
 extern tirpc_pkg_params __pkg_params;
