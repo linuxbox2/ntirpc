@@ -444,7 +444,9 @@ makefd_xprt(int fd, u_int sendsize, u_int recvsize)
 		goto done;
 	}
 	cd->strm_stat = XPRT_IDLE;
-	xdrrec_create(&(cd->xdrs), sendsize, recvsize,
+	xdrrec_create(&(cd->xdrs_in), sendsize, recvsize,
+	    xprt, read_vc, write_vc);
+	xdrrec_create(&(cd->xdrs_out), sendsize, recvsize,
 	    xprt, read_vc, write_vc);
 	xprt->xp_p1 = cd;
 	xprt->xp_auth = NULL;
@@ -553,7 +555,8 @@ again:
 		if (cd->recvsize > cd->maxrec)
 			cd->recvsize = cd->maxrec;
 		cd->nonblock = TRUE;
-		__xdrrec_setnonblock(&cd->xdrs, cd->maxrec);
+		__xdrrec_setnonblock(&cd->xdrs_in, cd->maxrec);
+		__xdrrec_setnonblock(&cd->xdrs_out, cd->maxrec);
 	} else
 		cd->nonblock = FALSE;
 
@@ -603,7 +606,8 @@ __svc_vc_dodestroy(SVCXPRT *xprt)
 		xprt->xp_port = 0;
 	} else {
 		/* an actual connection socket */
-		XDR_DESTROY(&(cd->xdrs));
+		XDR_DESTROY(&(cd->xdrs_in));
+		XDR_DESTROY(&(cd->xdrs_out));
 		mem_free(cd, sizeof(struct cf_conn));
 	}
 	if (xprt->xp_auth != NULL) {
@@ -916,7 +920,7 @@ svc_vc_stat(SVCXPRT *xprt)
 
 	if (cd->strm_stat == XPRT_DIED)
 		return (XPRT_DIED);
-	if (! xdrrec_eof(&(cd->xdrs)))
+	if (! xdrrec_eof(&(cd->xdrs_in)))
 		return (XPRT_MOREREQS);
 	return (XPRT_IDLE);
 }
@@ -931,7 +935,7 @@ svc_vc_recv(SVCXPRT *xprt, struct rpc_msg *msg)
 	assert(msg != NULL);
 
 	cd = (struct cf_conn *)(xprt->xp_p1);
-	xdrs = &(cd->xdrs);
+	xdrs = &(cd->xdrs_in);
 
 	if (cd->nonblock) {
             if (!__xdrrec_getrec(xdrs, &cd->strm_stat, TRUE))
@@ -960,7 +964,7 @@ svc_vc_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr,
     void *u_data)
 {
     bool_t rslt = TRUE;
-    XDR *xdrs = &(((struct cf_conn *)(xprt->xp_p1))->xdrs);
+    XDR *xdrs = &(((struct cf_conn *)(xprt->xp_p1))->xdrs_in);
     xdrs->x_public = u_data;
 
     /* XXXX TODO: duplex unification (xdrs)  */
@@ -1018,7 +1022,7 @@ svc_vc_reply(SVCXPRT *xprt, struct rpc_msg *msg)
 	assert(msg != NULL);
 
 	cd = (struct cf_conn *)(xprt->xp_p1);
-	xdrs = &(cd->xdrs);
+	xdrs = &(cd->xdrs_out);
 
 #if 0 /* XXX duplex debugging */
         if (xprt->xp_p4) {
@@ -1396,7 +1400,8 @@ svc_vc_create_from_clnt(CLIENT *cl,
 	if (cd->recvsize > cd->maxrec)
 	    cd->recvsize = cd->maxrec;
 	cd->nonblock = TRUE;
-	__xdrrec_setnonblock(&cd->xdrs, cd->maxrec);
+	__xdrrec_setnonblock(&cd->xdrs_in, cd->maxrec);
+	__xdrrec_setnonblock(&cd->xdrs_out, cd->maxrec);
     } else
 	cd->nonblock = FALSE;
 
@@ -1441,7 +1446,8 @@ void svc_vc_destroy_xprt(SVCXPRT * xprt)
 
     svc_rqst_finalize_xprt(xprt);
     
-    XDR_DESTROY(&(cd->xdrs));
+    XDR_DESTROY(&(cd->xdrs_in));
+    XDR_DESTROY(&(cd->xdrs_out));
     mem_free(cd, sizeof(struct cf_conn));
     mem_free(xprt, sizeof(SVCXPRT));
 }
@@ -1470,7 +1476,8 @@ SVCXPRT *svc_vc_create_xprt(u_long sendsz, u_long recvsz)
     svc_rqst_init_xprt(xprt);
 
     cd->strm_stat = XPRT_IDLE;
-    xdrrec_create(&(cd->xdrs), sendsz, recvsz, xprt, read_vc, write_vc);
+    xdrrec_create(&(cd->xdrs_in), sendsz, recvsz, xprt, read_vc, write_vc);
+    xdrrec_create(&(cd->xdrs_out), sendsz, recvsz, xprt, read_vc, write_vc);
     
     xprt->xp_p1 = cd;
     xprt->xp_verf.oa_base = cd->verf_body;
