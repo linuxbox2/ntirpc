@@ -201,7 +201,7 @@ typedef struct __rpc_svcxprt {
     u_short  xp_port;  /* associated port number */
     struct xp_ops {
         /* receive incoming requests */
-        bool (*xp_recv)(struct __rpc_svcxprt *, struct rpc_msg *);
+        bool (*xp_recv)(struct __rpc_svcxprt *, struct svc_req *);
         /* get transport status */
         enum xprt_stat (*xp_stat)(struct __rpc_svcxprt *);
         /* get arguments */
@@ -352,47 +352,47 @@ extern SVCXPRT *svc_shim_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig);
 /*
  * Operations defined on an SVCXPRT handle
  *
- * SVCXPRT  *xprt;
- * struct rpc_msg *msg;
- * xdrproc_t   xargs;
- * void *   argsp;
+ * SVCXPRT *xprt;
+ * struct svc_req *req;
+ * xdrproc_t xargs;
+ * void * argsp;
  */
-#define SVC_RECV(xprt, msg)                     \
-    (*(xprt)->xp_ops->xp_recv)((xprt), (msg))
-#define svc_recv(xprt, msg)                     \
-    (*(xprt)->xp_ops->xp_recv)((xprt), (msg))
+#define SVC_RECV(xprt, req) \
+    (*(xprt)->xp_ops->xp_recv)((xprt), (req))
+#define svc_recv(xprt, req) \
+    (*(xprt)->xp_ops->xp_recv)((xprt), (req))
 
-#define SVC_STAT(xprt)                          \
+#define SVC_STAT(xprt) \
     (*(xprt)->xp_ops->xp_stat)(xprt)
-#define svc_stat(xprt)                          \
+#define svc_stat(xprt) \
     (*(xprt)->xp_ops->xp_stat)(xprt)
 
-#define SVC_GETARGS(xprt, xargs, argsp)                         \
+#define SVC_GETARGS(xprt, xargs, argsp) \
     (*(xprt)->xp_ops->xp_getargs)((xprt), (xargs), (argsp))
-#define svc_getargs(xprt, xargs, argsp)                         \
+#define svc_getargs(xprt, xargs, argsp) \
     (*(xprt)->xp_ops->xp_getargs)((xprt), (xargs), (argsp))
 
 #define SVC_GETARGS2(xprt, req, xargs, argsp, u_data) \
-    (*(xprt)->xp_ops->xp_getargs2)((xprt), (req), (xargs), (argsp))
+    (*(xprt)->xp_ops->xp_getargs2)((xprt), (req), (xargs), (argsp), (u_data))
 #define svc_getargs2(xprt, req, xargs, argsp, u_data) \
     (*(xprt)->xp_ops->xp_getargs2)((xprt), (req), (xargs), (argsp), (u_data))
 
 #define SVC_REPLY(xprt, req, msg) \
     (*(xprt)->xp_ops->xp_reply) ((xprt), (req), (msg))
-#define svc_reply(xprt, req, msg) \
+#define svc_reply(xprt, req) \
     (*(xprt)->xp_ops->xp_reply) ((xprt), (req), (msg))
 
-#define SVC_FREEARGS(xprt, xargs, argsp)                        \
+#define SVC_FREEARGS(xprt, xargs, argsp) \
     (*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
-#define svc_freeargs(xprt, xargs, argsp)                        \
+#define svc_freeargs(xprt, xargs, argsp) \
     (*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
 
-#define SVC_DESTROY(xprt)                       \
+#define SVC_DESTROY(xprt) \
     (*(xprt)->xp_ops->xp_destroy)(xprt)
-#define svc_destroy(xprt)                       \
+#define svc_destroy(xprt) \
     (*(xprt)->xp_ops->xp_destroy)(xprt)
 
-#define SVC_CONTROL(xprt, rq, in)                       \
+#define SVC_CONTROL(xprt, rq, in) \
     (*(xprt)->xp_ops2->xp_control)((xprt), (rq), (in))
 
 /*

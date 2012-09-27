@@ -80,7 +80,7 @@
 
 extern struct svc_params __svc_params[1];
 
-static bool rendezvous_request(SVCXPRT *, struct rpc_msg *);
+static bool rendezvous_request(SVCXPRT *, struct svc_req *);
 static enum xprt_stat rendezvous_stat(SVCXPRT *);
 static void svc_vc_destroy(SVCXPRT *);
 static void __svc_vc_dodestroy (SVCXPRT *);
@@ -91,18 +91,17 @@ static size_t readv_vc(void *xprtp, struct iovec *iov, int iovcnt,
 static size_t writev_vc(void *xprtp, struct iovec *iov, int iovcnt,
                         u_int flags);
 static enum xprt_stat svc_vc_stat(SVCXPRT *);
-static bool svc_vc_recv(SVCXPRT *, struct rpc_msg *);
+static bool svc_vc_recv(SVCXPRT *, struct svc_req *);
 static bool svc_vc_getargs(SVCXPRT *, xdrproc_t, void *);
 static bool svc_vc_getargs2(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
                             void *);
 static bool svc_vc_freeargs(SVCXPRT *, xdrproc_t, void *);
-static bool svc_vc_reply(SVCXPRT *, struct svc_req *req, struct rpc_msg *);
+static bool svc_vc_reply(SVCXPRT *, struct svc_req *, struct rpc_msg *);
 static void svc_vc_rendezvous_ops(SVCXPRT *);
 static void svc_vc_ops(SVCXPRT *);
 static void svc_vc_override_ops(SVCXPRT *xprt, SVCXPRT *newxprt);
 static bool svc_vc_control(SVCXPRT *xprt, const u_int rq, void *in);
-static bool svc_vc_rendezvous_control (SVCXPRT *xprt, const u_int rq,
-                                         void *in);
+static bool svc_vc_rendezvous_control (SVCXPRT *xprt, const u_int rq, void *in);
 bool __svc_clean_idle2(int timeout, bool cleanblock);
 
 extern pthread_mutex_t svc_ctr_lock;
@@ -490,7 +489,7 @@ done:
 
 /*ARGSUSED*/
 static bool
-rendezvous_request(SVCXPRT *xprt, struct rpc_msg *msg)
+rendezvous_request(SVCXPRT *xprt, struct svc_req *req)
 {
     int sock;
     struct cf_rendezvous *r;
@@ -501,7 +500,6 @@ rendezvous_request(SVCXPRT *xprt, struct rpc_msg *msg)
     SVCXPRT *newxprt;
 
     assert(xprt != NULL);
-    assert(msg != NULL);
 
     r = (struct cf_rendezvous *)xprt->xp_p1;
 again:
@@ -1020,16 +1018,12 @@ svc_vc_stat(SVCXPRT *xprt)
 }
 
 static bool
-svc_vc_recv(SVCXPRT *xprt, struct rpc_msg *msg)
+svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
 {
-    struct cf_conn *cd;
-    XDR *xdrs;
+    struct cf_conn *cd = (struct cf_conn *)(xprt->xp_p1);
+    XDR *xdrs = &(cd->xdrs_in); /* recv queue */
 
-    cd = (struct cf_conn *)(xprt->xp_p1);
-
-    xdrs = &(cd->xdrs_in); /* recv queue */
-
-    /* XXX assert(!cd->nonblock) */
+    /* XXX assert(! cd->nonblock) */
     if (cd->nonblock) {
         if (!__xdrrec_getrec(xdrs, &cd->strm_stat, TRUE))
             return FALSE;
@@ -1047,9 +1041,19 @@ svc_vc_recv(SVCXPRT *xprt, struct rpc_msg *msg)
         (void) xdrrec_skiprecord(xdrs);
 #endif
 
-    if (xdr_dplx_msg(xdrs, msg)) {
+    req->rq_msg = alloc_rpc_msg();
+    req->rq_clntcred = req->rq_msg->rm_call.cb_cred.oa_base +
+        (2 * MAX_AUTH_BYTES);
+
+    if (xdr_dplx_msg(xdrs, req->rq_msg)) {
+        /* XXX hmm.  maybe we only need the rq_msg */
+        req->rq_prog = req->rq_msg->rm_call.cb_prog;
+        req->rq_vers = req->rq_msg->rm_call.cb_vers;
+        req->rq_proc = req->rq_msg->rm_call.cb_proc;
+        req->rq_xid = req->rq_msg->rm_xid;
+
         /* XXX actually using cd->x_id !MT-SAFE */
-        cd->x_id = msg->rm_xid;
+        cd->x_id = req->rq_msg->rm_xid;
         return (TRUE);
     }
     __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
@@ -1267,6 +1271,7 @@ svc_vc_rendezvous_ops(SVCXPRT *xprt)
     if (ops.xp_recv == NULL) {
         ops.xp_recv = rendezvous_request;
         ops.xp_stat = rendezvous_stat;
+        /* XXX wow */
         ops.xp_getargs =
             (bool (*)(SVCXPRT *, xdrproc_t, void *))abort;
         ops.xp_reply =
