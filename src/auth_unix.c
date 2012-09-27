@@ -305,7 +305,7 @@ authunix_refresh(AUTH *auth, void *dummy)
 {
     struct audata *au = AUTH_PRIVATE(auth);
     struct authunix_parms aup;
-    struct timeval now;
+    struct timespec now;
     XDR xdrs;
     int stat;
 

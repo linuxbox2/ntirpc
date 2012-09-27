@@ -43,7 +43,7 @@
 
 struct authgss_x_part
 {
-    uint64_t gen;
+    uint32_t gen;
     TAILQ_HEAD(ctx_tailq, svc_rpc_gss_data) lru_q;
 };
 
@@ -164,10 +164,10 @@ authgss_ctx_hash_get(struct rpc_gss_cred *gc)
         TAILQ_REMOVE(&axp->lru_q, gd, lru_q);
         TAILQ_INSERT_TAIL(&axp->lru_q, gd, lru_q);
         ++(axp->gen);
-        (void) atomic_inc_uint64_t(&gd->refcnt);
+        (void) atomic_inc_uint32_t(&gd->refcnt);
     }
     spin_unlock(&t->sp);
-    (void) atomic_inc_uint64_t(&gd->gen);
+    (void) atomic_inc_uint32_t(&gd->gen);
 
     return (gd);
 }

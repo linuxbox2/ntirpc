@@ -80,10 +80,10 @@ struct svc_rpc_gss_data
     struct opr_rbtree_node node_k;
     TAILQ_ENTRY(svc_rpc_gss_data) lru_q;
     mutex_t lock;
-    u_int refcnt;
-    uint64_t gen;
+    uint32_t refcnt;
+    uint32_t gen;
     struct {
-        uint64_t k;
+        uint32_t k;
     } hk;
     bool established;
     gss_ctx_id_t ctx;  /* context id */
