@@ -1046,14 +1046,11 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
         (2 * MAX_AUTH_BYTES);
 
     if (xdr_dplx_msg(xdrs, req->rq_msg)) {
-        /* XXX hmm.  maybe we only need the rq_msg */
+        req->rq_xprt = xprt;
         req->rq_prog = req->rq_msg->rm_call.cb_prog;
         req->rq_vers = req->rq_msg->rm_call.cb_vers;
         req->rq_proc = req->rq_msg->rm_call.cb_proc;
         req->rq_xid = req->rq_msg->rm_xid;
-
-        /* XXX actually using cd->x_id !MT-SAFE */
-        cd->x_id = req->rq_msg->rm_xid;
         return (TRUE);
     }
     __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
@@ -1200,10 +1197,6 @@ svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
     }
 
     xdrs->x_op = XDR_ENCODE;
-
-    /* MT-SAFE */
-    if (! (msg->rm_flags & RPC_MSG_FLAG_MT_XID))
-        msg->rm_xid = cd->x_id;
 
     rstat = FALSE;
     if (xdr_replymsg(xdrs, msg) &&

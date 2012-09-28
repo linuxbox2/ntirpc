@@ -300,10 +300,6 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
     xdrs->x_op = XDR_ENCODE;
     XDR_SETPOS(xdrs, 0);
 
-    /* MT-SAFE */
-    if (! (msg->rm_flags & RPC_MSG_FLAG_MT_XID))
-        msg->rm_xid = su->su_xid;
-
     if (xdr_replymsg(xdrs, msg) &&
         (!has_args || (SVCAUTH_WRAP(req->rq_auth, xdrs, xdr_results,
                                     xdr_location)))) {

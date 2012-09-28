@@ -178,7 +178,6 @@ struct cf_rendezvous { /* kept in xprt->xp_p1 for rendezvouser */
 struct cf_conn
 {  /* kept in xprt->xp_p1 for actual connection */
     enum xprt_stat strm_stat;
-    u_int32_t x_id;
 
     /* TODO: bidirectional unification */
     XDR xdrs_in;  /* send queue */
@@ -288,7 +287,7 @@ typedef enum svc_lookup_result
 
 /* functions which can be installed using a control function, e.g.,
  * xp_ops2->xp_control */
-typedef bool (*xp_recv_t)(struct __rpc_svcxprt *, struct rpc_msg *);
+typedef bool (*xp_recv_t)(struct __rpc_svcxprt *, struct svc_req *);
 typedef bool (*xp_getreq_t)(struct __rpc_svcxprt *);
 typedef void (*xp_dispatch_t)(struct __rpc_svcxprt *, struct rpc_msg **);
 typedef u_int (*xp_rdvs_t)(struct __rpc_svcxprt *, struct __rpc_svcxprt *,

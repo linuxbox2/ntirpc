@@ -509,11 +509,9 @@ call_again:
                 struct cf_conn *cd;
                 assert(duplex_xprt);
                 cd = (struct cf_conn *) duplex_xprt->xp_p1;
-                /* XXX Ugh.  Here's another mt-unsafe copy of xid. */
-                cd->x_id = ctx->msg->rm_xid;
                 __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
                         "%s: call intercepted, dispatching (x_id == %d)\n",
-                        __func__, cd->x_id);
+                        __func__, ctx->msg->rm_xid);
                 duplex_xprt->xp_ops2->xp_dispatch(duplex_xprt, &ctx->msg);
             }
             break;

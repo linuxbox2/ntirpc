@@ -570,7 +570,6 @@ svc_sendreply(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_results,
 
     rply.rm_direction = REPLY;
     rply.rm_reply.rp_stat = MSG_ACCEPTED;
-    rply.rm_flags = RPC_MSG_FLAG_MT_XID;
     rply.rm_xid = req->rq_xid;
     rply.acpted_rply.ar_verf = req->rq_verf;
     rply.acpted_rply.ar_stat = SUCCESS;
@@ -591,7 +590,6 @@ svcerr_noproc(SVCXPRT *xprt, struct svc_req *req)
 
     rply.rm_direction = REPLY;
     rply.rm_reply.rp_stat = MSG_ACCEPTED;
-    rply.rm_flags = RPC_MSG_FLAG_MT_XID;
     rply.rm_xid = req->rq_xid;
     rply.acpted_rply.ar_verf = req->rq_verf;
     rply.acpted_rply.ar_stat = PROC_UNAVAIL;
@@ -610,7 +608,6 @@ svcerr_decode(SVCXPRT *xprt, struct svc_req *req)
 
     rply.rm_direction = REPLY;
     rply.rm_reply.rp_stat = MSG_ACCEPTED;
-    rply.rm_flags = RPC_MSG_FLAG_MT_XID;
     rply.rm_xid = req->rq_xid;
     rply.acpted_rply.ar_verf = req->rq_verf;
     rply.acpted_rply.ar_stat = GARBAGE_ARGS;
@@ -629,7 +626,6 @@ svcerr_systemerr(SVCXPRT *xprt, struct svc_req *req)
 
     rply.rm_direction = REPLY;
     rply.rm_reply.rp_stat = MSG_ACCEPTED;
-    rply.rm_flags = RPC_MSG_FLAG_MT_XID;
     rply.rm_xid = req->rq_xid;
     rply.acpted_rply.ar_verf = req->rq_verf;
     rply.acpted_rply.ar_stat = SYSTEM_ERR;
@@ -690,7 +686,6 @@ svcerr_auth(SVCXPRT *xprt, struct svc_req *req, enum auth_stat why)
 
     rply.rm_direction = REPLY;
     rply.rm_reply.rp_stat = MSG_DENIED;
-    rply.rm_flags = RPC_MSG_FLAG_MT_XID;
     rply.rm_xid = req->rq_xid;
     rply.rjcted_rply.rj_stat = AUTH_ERROR;
     rply.rjcted_rply.rj_why = why;
@@ -720,7 +715,6 @@ svcerr_noprog(SVCXPRT *xprt, struct svc_req *req)
 
     rply.rm_direction = REPLY;
     rply.rm_reply.rp_stat = MSG_ACCEPTED;
-    rply.rm_flags = RPC_MSG_FLAG_MT_XID;
     rply.rm_xid = req->rq_xid;
     rply.acpted_rply.ar_verf = req->rq_verf;
     rply.acpted_rply.ar_stat = PROG_UNAVAIL;
@@ -740,7 +734,6 @@ svcerr_progvers(SVCXPRT *xprt, struct svc_req *req, rpcvers_t low_vers,
 
     rply.rm_direction = REPLY;
     rply.rm_reply.rp_stat = MSG_ACCEPTED;
-    rply.rm_flags = RPC_MSG_FLAG_MT_XID;
     rply.rm_xid = req->rq_xid;
     rply.acpted_rply.ar_verf = req->rq_verf;
     rply.acpted_rply.ar_stat = PROG_MISMATCH;

@@ -150,7 +150,6 @@ struct call_body {
  */
 
 #define RPC_MSG_FLAG_NONE       0x0000
-#define RPC_MSG_FLAG_MT_XID     0x0001 /* replymsg rm_xid is preset */
 
 struct rpc_msg {
     u_int32_t  rm_xid;
