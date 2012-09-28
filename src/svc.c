@@ -832,8 +832,8 @@ svc_getreq_common(int fd)
 }
 
 /* Allow internal or external getreq routines to validate xprt
- * has not been recursively disconnected. (I don't completely buy the
- * logic, but it should be unchanged (Matt) */
+ * has not been recursively disconnected.  (I don't completely buy the
+ * logic, but it should be unchanged (Matt)) */
 bool
 svc_validate_xprt_list(SVCXPRT *xprt)
 {
@@ -853,6 +853,7 @@ svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg)
     svc_lookup_result_t lkp_res;
     svc_rec_t *svc_rec;
     enum auth_stat why;
+    bool no_dispatch = FALSE;
 
     r.rq_xprt = xprt;
     r.rq_prog = msg->rm_call.cb_prog;
@@ -862,7 +863,8 @@ svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg)
     r.rq_xid = msg->rm_xid;
 
     /* first authenticate the message */
-    if ((why = _authenticate (&r, msg)) != AUTH_OK)
+    why = svc_auth_authenticate (&r, msg, &no_dispatch);
+    if ((why != AUTH_OK) || no_dispatch)
     {
         svcerr_auth(xprt, &r, why);
         return;
@@ -886,18 +888,15 @@ svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg)
 bool
 svc_getreq_default(SVCXPRT *xprt)
 {
-    struct svc_req r;
-    struct rpc_msg msg;
     enum xprt_stat stat;
-    char cred_area[2 * MAX_AUTH_BYTES + RQCRED_SIZE];
+    struct svc_req req = { .rq_xprt = xprt };
+    bool no_dispatch = FALSE;
 
-    msg.rm_call.cb_cred.oa_base = cred_area;
-    msg.rm_call.cb_verf.oa_base = &(cred_area[MAX_AUTH_BYTES]);
-    r.rq_clntcred = &(cred_area[2 * MAX_AUTH_BYTES]);
+    /* XXX !MT-SAFE */
 
     /* now receive msgs from xprt (support batch calls) */
     do {
-        if (SVC_RECV (xprt, &msg)) {
+        if (SVC_RECV (xprt, &req)) {
 
             /* now find the exported program and call it */
             svc_vers_range_t vrange;
@@ -905,39 +904,41 @@ svc_getreq_default(SVCXPRT *xprt)
             svc_rec_t *svc_rec;
             enum auth_stat why;
 
-            r.rq_xprt = xprt;
-            r.rq_prog = msg.rm_call.cb_prog;
-            r.rq_vers = msg.rm_call.cb_vers;
-            r.rq_proc = msg.rm_call.cb_proc;
-            r.rq_cred = msg.rm_call.cb_cred;
-            r.rq_xid = msg.rm_xid;
-
             /* first authenticate the message */
-            if ((why = _authenticate (&r, &msg)) != AUTH_OK) {
-                svcerr_auth(xprt, &r, why);
+            why = svc_auth_authenticate (&req, req.rq_msg, &no_dispatch);
+            if ((why != AUTH_OK) || no_dispatch) {
+                svcerr_auth(xprt, &req, why);
                 goto call_done;
             }
 
-            lkp_res = svc_lookup(&svc_rec, &vrange, r.rq_prog, r.rq_vers,
+            lkp_res = svc_lookup(&svc_rec, &vrange, req.rq_prog, req.rq_vers,
                                  NULL, 0);
             switch (lkp_res) {
             case SVC_LKP_SUCCESS:
-                (*svc_rec->sc_dispatch)(&r, xprt);
+                (*svc_rec->sc_dispatch)(&req, xprt);
                 goto call_done;
                 break;
             case SVC_LKP_VERS_NOTFOUND:
                 __warnx(TIRPC_DEBUG_FLAG_SVC,
                         "%s: dispatch prog vers notfound\n", __func__);
-                svcerr_progvers(xprt, &r, vrange.lowvers, vrange.highvers);
+                svcerr_progvers(xprt, &req, vrange.lowvers, vrange.highvers);
             default:
                 __warnx(TIRPC_DEBUG_FLAG_SVC,
                         "%s: dispatch prog notfound\n", __func__);
-                svcerr_noprog(xprt, &r);
+                svcerr_noprog(xprt, &req);
                 break;
             }
+
+            /* dispose RPC header */
+            (void) free_rpc_msg(req.rq_msg);
+
         } /* SVC_RECV again? */
 
     call_done:
+
+        /* dispose RPC header */
+        (void) free_rpc_msg(req.rq_msg);
+
         if ((stat = SVC_STAT (xprt)) == XPRT_DIED) {
 
             /* XXX the xp_destroy methods call the new svc_rqst_xprt_unregister
@@ -966,7 +967,7 @@ svc_getreq_default(SVCXPRT *xprt)
              */
             if (! svc_validate_xprt_list(xprt))
                 break;
-        }
+        }        
 
     } while (stat == XPRT_MOREREQS);
 
