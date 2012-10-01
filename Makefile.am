@@ -12,6 +12,7 @@ nobase_include_HEADERS = m4/.dummy \
 			 tirpc/misc/rbtree.h \
 			 tirpc/misc/event.h \
 			 tirpc/misc/opr_queue.h \
+			 tirpc/misc/opr.h \
 			 tirpc/misc/queue.h \
 			 tirpc/rpcsvc/crypt.x \
 			 tirpc/rpcsvc/crypt.h \
