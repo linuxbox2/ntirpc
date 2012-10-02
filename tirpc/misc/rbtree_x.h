@@ -15,7 +15,6 @@ struct rbtree_x_part
     CACHE_PAD(0);
     pthread_rwlock_t lock;
     pthread_mutex_t mtx;
-    pthread_spinlock_t sp;
     void *u1;
     void *u2;
     struct opr_rbtree t;

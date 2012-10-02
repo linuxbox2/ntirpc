@@ -60,8 +60,8 @@ alloc_rpc_call_ctx(CLIENT *cl, rpcproc_t proc, xdrproc_t xdr_args,
 
     assert(rec);
 
-    /* rec->calls and rbtree protected by spinlock */
-    spin_lock(&rec->sp);
+    /* rec->calls and rbtree protected by (adaptive) mtx */
+    mutex_lock(&rec->mtx);
 
     /* XXX we hold the client-fd lock */
     ctx->xid = ++(rec->calls.xid);
@@ -85,13 +85,13 @@ alloc_rpc_call_ctx(CLIENT *cl, rpcproc_t proc, xdrproc_t xdr_args,
                 "%s: call ctx insert failed (xid %d client %p)",
                 __func__,
                 ctx->xid, cl);
-        spin_unlock(&rec->sp);
+        mutex_unlock(&rec->mtx);
         mem_free(ctx, sizeof(rpc_ctx_t));
         ctx = NULL;
         goto out;
     }
 
-    spin_unlock(&rec->sp);
+    mutex_unlock(&rec->mtx);
 
 out:
     return (ctx);
@@ -104,11 +104,11 @@ void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
 
     assert (flags & RPC_CTX_FLAG_LOCKED);
 
-    spin_lock(&rec->sp);
+    mutex_lock(&rec->mtx);
     opr_rbtree_remove(&rec->calls.t, &ctx->node_k);
     ctx->xid = ++(rec->calls.xid);
     if (opr_rbtree_insert(&rec->calls.t, &ctx->node_k)) {
-        spin_unlock(&rec->sp);
+        mutex_unlock(&rec->mtx);
         __warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
                 "%s: call ctx insert failed (xid %d client %p)",
                 __func__,
@@ -116,7 +116,7 @@ void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
                 ctx->ctx_u.clnt.cl);
         goto out;
     }
-    spin_unlock(&rec->sp);
+    mutex_unlock(&rec->mtx);
 out:
     return;
 }
@@ -172,9 +172,9 @@ free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
     struct cx_data *cx = (struct cx_data *) ctx->ctx_u.clnt.cl->cl_private;
     struct rpc_dplx_rec *rec = cx->cx_rec;
 
-    spin_lock(&rec->sp);
+    mutex_lock(&rec->mtx);
     opr_rbtree_remove(&rec->calls.t, &ctx->node_k);
-    spin_unlock(&rec->sp);
+    mutex_unlock(&rec->mtx);
     if (ctx->msg)
         free_rpc_msg(ctx->msg);
     mem_free(ctx, sizeof(rpc_ctx_t));

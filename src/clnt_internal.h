@@ -62,7 +62,7 @@ struct rpc_dplx_rec
     struct opr_rbtree_node node_k;
     int32_t refcnt;
     uint32_t flags;
-    spinlock_t sp;
+    mutex_t mtx;
     struct {
         rpc_dplx_lock_t lock;
     } send;

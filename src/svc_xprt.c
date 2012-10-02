@@ -46,6 +46,7 @@
 #include "rpc_com.h"
 #include <rpc/svc.h>
 #include <misc/rbtree_x.h>
+#include <reentrant.h>
 #include "clnt_internal.h"
 #include "rpc_dplx_internal.h"
 #include "svc_xprt.h"
@@ -55,8 +56,10 @@
 static bool initialized = FALSE;
 
 static struct svc_xprt_set svc_xprt_set_ = {
-    PTHREAD_MUTEX_INITIALIZER /* svc_xprt_lock */,
-    { 0, NULL } /* xt */
+    MUTEX_INITIALIZER /* svc_xprt_lock */,
+    { 
+        0, RBT_X_FLAG_NONE, 0, NULL
+    } /* xt */
 };
 
 #define SVC_XPRT_FLAG_NONE       0x0000
@@ -262,7 +265,7 @@ svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
     struct svc_xprt_rec sk, *srec;
     SVCXPRT *xprt;
     int p_ix, x_ix, restarts, code = 0;
-    uint64_t sgen, tgen;
+    uint64_t tgen;
     uint32_t rflag;
 
     cond_init_svc_xprt();
@@ -298,7 +301,7 @@ svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 
                 /* restart if each_f disposed xprt */
                 rflag = each_f(xprt, arg);
-                if (rflag = SVC_XPRT_FOREACH_CLEAR)
+                if (rflag == SVC_XPRT_FOREACH_CLEAR)
                     goto restart;
 
                 /* invalidate */

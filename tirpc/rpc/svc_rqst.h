@@ -95,7 +95,6 @@ struct svc_rqst_set
     mutex_t mtx;
     struct rbtree_x xt;
     uint32_t next_id;
-    spinlock_t sp;
 };
 
 static inline int rqst_thrd_cmpf(const struct opr_rbtree_node *lhs,

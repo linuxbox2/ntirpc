@@ -84,7 +84,7 @@
 #define NC_NOLOOKUP "-"
 
 /* serialize globals */
-static mutex_t nc_mtx = PTHREAD_MUTEX_INITIALIZER;
+static mutex_t nc_mtx = MUTEX_INITIALIZER;
 
 static const char * const _nc_errors[] = {
     "Netconfig database not found",
@@ -131,7 +131,7 @@ static struct netconfig_info ni = { 0, 0, NULL, NULL};
 static int *
 __nc_error(void)
 {
-    static pthread_mutex_t nc_lock = PTHREAD_MUTEX_INITIALIZER;
+    static pthread_mutex_t nc_lock = MUTEX_INITIALIZER;
     extern thread_key_t nc_key;
     static int nc_error = 0;
     int error, *nc_addr;

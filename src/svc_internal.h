@@ -51,7 +51,7 @@ struct svc_params
     u_int max_connections;
     union {
         struct {
-            pthread_spinlock_t sp;
+            mutex_t mtx;
             u_int nconns;
         } vc;
     } xprt_u;
@@ -92,20 +92,20 @@ static inline bool svc_vc_new_conn_ok(void)
 {
     bool ok = FALSE;
     svc_cond_init();
-    spin_lock((&__svc_params->xprt_u.vc.sp));
+    mutex_lock((&__svc_params->xprt_u.vc.mtx));
     if (__svc_params->xprt_u.vc.nconns < __svc_params->max_connections) {
         ++(__svc_params->xprt_u.vc.nconns);
         ok = TRUE;
     }
-    spin_unlock(&(__svc_params->xprt_u.vc.sp));
+    mutex_unlock(&(__svc_params->xprt_u.vc.mtx));
     return (ok);
 }
 
 #define svc_vc_dec_nconns() \
     do { \
-        spin_lock((&__svc_params->xprt_u.vc.sp)); \
+        mutex_lock((&__svc_params->xprt_u.vc.mtx)); \
         --(__svc_params->xprt_u.vc.nconns); \
-        spin_unlock(&(__svc_params->xprt_u.vc.sp)); \
+        mutex_unlock(&(__svc_params->xprt_u.vc.mtx)); \
     } while (0);
 
 #define	su_data(xprt)	((struct svc_dg_data *)(xprt->xp_p2))

@@ -33,8 +33,10 @@
  * FreeBSD/NetBSD have slightly different definitions for some/most of
  * these functions and types, so they should just use the ones found
  * in their system copy of reentrant.h.
- * These definitions are only guaranteed to be valid on Linux.
  */
+
+#ifndef REENTRANT_H
+#define REENTRANT_H
 
 #if defined(__linux__)
 
@@ -47,11 +49,25 @@
 #define once_t			pthread_once_t
 
 #define thread_key_t		pthread_key_t
-#define MUTEX_INITIALIZER	PTHREAD_MUTEX_INITIALIZER
+#define MUTEX_INITIALIZER	PTHREAD_ADAPTIVE_MUTEX_INITIALIZER_NP
 #define RWLOCK_INITIALIZER	PTHREAD_RWLOCK_INITIALIZER
 #define ONCE_INITIALIZER	PTHREAD_ONCE_INIT
 
-#define mutex_init(m, a)	pthread_mutex_init(m, a)
+static inline int
+mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *a
+           __attribute__((unused)))
+{
+    pthread_mutexattr_t attr;
+    int rslt;
+
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ADAPTIVE_NP);
+    rslt = pthread_mutex_init(m, &attr);
+    pthread_mutexattr_destroy(&attr);
+
+    return (rslt);
+}
+
 #define mutex_lock(m)		pthread_mutex_lock(m)
 #define mutex_trylock(m)		pthread_mutex_trylock(m)
 #define mutex_unlock(m)		pthread_mutex_unlock(m)
@@ -86,4 +102,5 @@
 #define thr_self()		pthread_self()
 #define thr_exit(x)		pthread_exit(x)
 
-#endif
+#endif /* __linux__ */
+#endif /* REENTRANT_H */

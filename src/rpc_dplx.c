@@ -153,7 +153,7 @@ static bool initialized = FALSE;
 
 static struct rpc_dplx_rec_set rpc_dplx_rec_set =
 {
-    PTHREAD_MUTEX_INITIALIZER, /* clnt_fd_lock */
+    MUTEX_INITIALIZER, /* clnt_fd_lock */
     {
         0, /* npart */
         0, /* cachesz */
@@ -183,7 +183,7 @@ void rpc_dplx_init()
 {
     int code = 0;
 
-    /* spin XXXX lockify (but need 2 locks, due to rbtx_init) */
+    /* XXX */
     mutex_lock(&rpc_dplx_rec_set.clnt_fd_lock);
 
     if (initialized)
@@ -220,7 +220,7 @@ alloc_dplx_rec(void)
     struct rpc_dplx_rec *rec = mem_alloc(sizeof(struct rpc_dplx_rec));
     if (rec) {
         rec->refcnt = 0;
-        spin_init(&rec->sp, PTHREAD_PROCESS_PRIVATE);
+        mutex_init(&rec->mtx, NULL);
         /* send channel */
         rpc_dplx_lock_init(&rec->send.lock);
         /* recv channel */
@@ -232,7 +232,7 @@ alloc_dplx_rec(void)
 static inline void
 free_dplx_rec(struct rpc_dplx_rec *rec)
 {
-    spin_destroy(&rec->sp);
+    mutex_destroy(&rec->mtx);
     rpc_dplx_lock_destroy(&rec->send.lock);
     rpc_dplx_lock_destroy(&rec->recv.lock);
     mem_free(rec, sizeof(struct rpc_dplx_rec));
@@ -347,21 +347,21 @@ rpc_dplx_unref(struct rpc_dplx_rec *rec, u_int flags)
     int32_t refcnt;
 
     if (! (flags & RPC_DPLX_FLAG_SPIN_LOCKED))
-        spin_lock(&rec->sp);
+        mutex_lock(&rec->mtx);
 
     refcnt = --(rec->refcnt);
 
     if (rec->refcnt == 0) {
         t = rbtx_partition_of_scalar(&rpc_dplx_rec_set.xt, rec->fd_k);
-        spin_unlock(&rec->sp);
+        mutex_unlock(&rec->mtx);
         rwlock_wrlock(&t->lock);
         nv = opr_rbtree_lookup(&t->t, &rec->node_k);
         if (nv) {
             rec = opr_containerof(nv, struct rpc_dplx_rec, node_k);
-            spin_lock(&rec->sp);
+            mutex_lock(&rec->mtx);
             if (rec->refcnt == 0) {
                 (void) opr_rbtree_remove(&t->t, &rec->node_k);
-                spin_unlock(&rec->sp);
+                mutex_unlock(&rec->mtx);
                 free_dplx_rec(rec);
                 rec = NULL;
             } else
@@ -371,7 +371,7 @@ rpc_dplx_unref(struct rpc_dplx_rec *rec, u_int flags)
     }
 
     if (rec && (! (flags & RPC_DPLX_FLAG_SPIN_LOCKED)))
-        spin_unlock(&rec->sp);
+        mutex_unlock(&rec->mtx);
 
     return (refcnt);
 }

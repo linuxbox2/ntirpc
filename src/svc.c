@@ -81,7 +81,7 @@ extern tirpc_pkg_params __pkg_params;
 struct svc_params __svc_params[1] = {
     {
         FALSE /* !initialized */,
-        PTHREAD_MUTEX_INITIALIZER }
+        MUTEX_INITIALIZER }
 };
 
 /*
@@ -131,7 +131,7 @@ svc_init(svc_init_params * params)
 
     /* svc_vc */
     __svc_params->xprt_u.vc.nconns = 0;
-    spin_init(&__svc_params->xprt_u.vc.sp, PTHREAD_PROCESS_PRIVATE);
+    mutex_init(&__svc_params->xprt_u.vc.mtx, NULL);
 
 #if defined(TIRPC_EPOLL)
     if (params->flags & SVC_INIT_EPOLL) {

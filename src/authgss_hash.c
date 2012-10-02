@@ -56,7 +56,7 @@ struct authgss_hash_st
 
 static struct authgss_hash_st authgss_hash_st =
 {
-    PTHREAD_MUTEX_INITIALIZER, /* lock */
+    MUTEX_INITIALIZER, /* lock */
     {
         0, /* npart */
         RBT_X_FLAG_NONE, /* flags */
@@ -155,7 +155,7 @@ authgss_ctx_hash_get(struct rpc_gss_cred *gc)
     gk.hk.k = gss_ctx_hash(gss_ctx);
 
     t = rbtx_partition_of_scalar(&authgss_hash_st.xt, gk.hk.k);
-    spin_lock(&t->sp);
+    mutex_lock(&t->mtx);
     ngd = rbtree_x_cached_lookup(&authgss_hash_st.xt, t, &gk.node_k, gk.hk.k);
     if (ngd) {
         gd = opr_containerof(ngd, struct svc_rpc_gss_data, node_k);
@@ -166,7 +166,7 @@ authgss_ctx_hash_get(struct rpc_gss_cred *gc)
         ++(axp->gen);
         (void) atomic_inc_uint32_t(&gd->refcnt);
     }
-    spin_unlock(&t->sp);
+    mutex_unlock(&t->mtx);
     (void) atomic_inc_uint32_t(&gd->gen);
 
     return (gd);
@@ -183,7 +183,7 @@ authgss_ctx_hash_set(struct svc_rpc_gss_data *gd)
 
     ++(gd->refcnt); /* locked */
     t = rbtx_partition_of_scalar(&authgss_hash_st.xt, gd->hk.k);
-    spin_lock(&t->sp);
+    mutex_lock(&t->mtx);
     rslt = rbtree_x_cached_insert(&authgss_hash_st.xt, t, &gd->node_k,
                                   gd->hk.k);
     if (rslt) {
@@ -191,7 +191,7 @@ authgss_ctx_hash_set(struct svc_rpc_gss_data *gd)
         axp = (struct authgss_x_part *) t->u1;
         TAILQ_INSERT_TAIL(&axp->lru_q, gd, lru_q);
     }
-    spin_unlock(&t->sp);
+    mutex_unlock(&t->mtx);
 
     return (rslt);
 }
@@ -205,11 +205,11 @@ authgss_ctx_hash_del(struct svc_rpc_gss_data *gd)
     cond_init_authgss_hash();
 
     t = rbtx_partition_of_scalar(&authgss_hash_st.xt, gd->hk.k);
-    spin_lock(&t->sp);
+    mutex_lock(&t->mtx);
     rbtree_x_cached_remove(&authgss_hash_st.xt, t,  &gd->node_k, gd->hk.k);
     axp = (struct authgss_x_part *) t->u1;
     TAILQ_REMOVE(&axp->lru_q, gd, lru_q);
-    spin_unlock(&t->sp);
+    mutex_unlock(&t->mtx);
 
     /* release gd */
     unref_svc_rpc_gss_data(gd);
@@ -232,7 +232,7 @@ authgss_ctx_gc_idle(void)
         xp = &(authgss_hash_st.xt.tree[ix]);
         axp = (struct authgss_x_part *) xp->u1;
         cnt = 0;
-        spin_lock(&xp->sp);
+        mutex_lock(&xp->mtx);
     again:
         gd = TAILQ_FIRST(&axp->lru_q);
         if (! gd)
@@ -243,14 +243,14 @@ authgss_ctx_gc_idle(void)
                 rbtree_x_cached_remove(&authgss_hash_st.xt, xp, &gd->node_k,
                                        gd->hk.k);
                 TAILQ_REMOVE(&axp->lru_q, gd, lru_q);
-                spin_unlock(&xp->sp);
+                mutex_unlock(&xp->mtx);
                 unref_svc_rpc_gss_data(gd);
-                spin_lock(&xp->sp);
+                mutex_lock(&xp->mtx);
             }
             if (cnt++ <  __svc_params->gss.max_gc)
                 goto again;
         }
     next_t:
-        spin_unlock(&xp->sp);
+        mutex_unlock(&xp->mtx);
     }
 }

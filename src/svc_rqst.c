@@ -68,7 +68,7 @@
 static bool_t initialized = FALSE;
 
 static struct svc_rqst_set svc_rqst_set = {
-    PTHREAD_MUTEX_INITIALIZER, /* mtx */
+    MUTEX_INITIALIZER, /* mtx */
     {
         0, /* npart */
         RBT_X_FLAG_NONE, /* flags */
@@ -102,8 +102,7 @@ void svc_rqst_init()
     if (initialized)
         goto unlock;
 
-    spin_init(&svc_rqst_set.sp, PTHREAD_PROCESS_PRIVATE);
-
+    mutex_init(&svc_rqst_set.mtx, NULL);
     code = rbtx_init(&svc_rqst_set.xt, rqst_thrd_cmpf,
                      7 /* partitions */,
                      RBT_X_FLAG_ALLOC|RBT_X_FLAG_CACHE_RT);
@@ -272,9 +271,9 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
     sr_rec->ev_type = SVC_EVENT_FDSET;
 #endif
 
-    spin_lock(&svc_rqst_set.sp);
+    mutex_lock(&svc_rqst_set.mtx);
     n_id = ++(svc_rqst_set.next_id);
-    spin_unlock(&svc_rqst_set.sp);
+    mutex_unlock(&svc_rqst_set.mtx);
 
     sr_rec->id_k = n_id;
     sr_rec->states = SVC_RQST_STATE_NONE;

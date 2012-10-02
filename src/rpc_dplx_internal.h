@@ -94,12 +94,12 @@ rpc_dplx_ref(struct rpc_dplx_rec *rec, u_int flags)
     int32_t refcnt;
 
     if (! (flags & RPC_DPLX_FLAG_SPIN_LOCKED))
-        spin_lock(&rec->sp);
+        mutex_lock(&rec->mtx);
 
     refcnt = ++(rec->refcnt);
 
     if (! (flags & RPC_DPLX_FLAG_SPIN_LOCKED))
-        spin_unlock(&rec->sp);
+        mutex_unlock(&rec->mtx);
 
     return(refcnt);
 }

@@ -235,6 +235,7 @@ typedef struct __rpc_svcxprt {
         /* xprt free hook */
         bool  (*xp_free_xprt)(struct __rpc_svcxprt *);
     } *xp_ops2;
+
     char  *xp_tp;   /* transport provider device name */
     char  *xp_netid;  /* network token */
     struct netbuf xp_ltaddr;  /* local transport address */
@@ -245,7 +246,7 @@ typedef struct __rpc_svcxprt {
     struct SVCAUTH  *xp_auth; /* auth handle */
 
     /* serialize private data */
-    spinlock_t         xp_lock;
+    mutex_t xp_lock;
 
     void            *xp_ev;          /* event handle */
     void  *xp_p1;   /* private: for use by svc ops */

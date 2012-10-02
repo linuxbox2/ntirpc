@@ -208,7 +208,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
     xprt->xp_p1 = r;
     svc_vc_rendezvous_ops(xprt);
     xprt->xp_fd = fd;
-    spin_init(&xprt->xp_lock, PTHREAD_PROCESS_PRIVATE);
+    mutex_init(&xprt->xp_lock, NULL);
     rpc_dplx_init_xprt(xprt);
     svc_rqst_init_xprt(xprt);
 
@@ -440,7 +440,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz)
         goto done;
     }
     memset(xprt, 0, sizeof *xprt);
-    spin_init(&xprt->xp_lock, PTHREAD_PROCESS_PRIVATE);
+    mutex_init(&xprt->xp_lock, NULL);
     mutex_init(&xprt->xp_auth_lock, NULL);
     cd = mem_alloc(sizeof(struct cf_conn));
     if (cd == NULL) {
@@ -790,9 +790,9 @@ svc_vc_rendezvous_control(SVCXPRT *xprt, const u_int rq, void *in)
 static inline void
 cfconn_set_dead(SVCXPRT *xprt, struct cf_conn *cd)
 {
-    spin_lock(&xprt->xp_lock);
+    mutex_lock(&xprt->xp_lock);
     cd->strm_stat = XPRT_DIED;
-    spin_unlock(&xprt->xp_lock);
+    mutex_unlock(&xprt->xp_lock);
 }
 
 /*
@@ -1341,7 +1341,7 @@ svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
 
     if (TRUE) { /* flag in __svc_params->ev_u.epoll? */
 
-        spin_lock(&xprt->xp_lock);
+        mutex_lock(&xprt->xp_lock);
 
         if (xprt == NULL || xprt->xp_ops == NULL ||
             xprt->xp_ops->xp_recv != svc_vc_recv)
@@ -1362,7 +1362,7 @@ svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
         if (acc->ts.tv_sec - cd->last_recv_time.tv_sec > acc->timeout) {
             /* XXX locking */
             rflag = SVC_XPRT_FOREACH_CLEAR;
-            spin_unlock(&xprt->xp_lock);
+            mutex_unlock(&xprt->xp_lock);
             (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
             SVC_DESTROY(xprt);
             acc->ncleaned++;
@@ -1370,7 +1370,7 @@ svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
         }
 
     unlock:
-        spin_unlock(&xprt->xp_lock);
+        mutex_unlock(&xprt->xp_lock);
     } /* TRUE */
 out:
     return (rflag);
@@ -1380,7 +1380,7 @@ bool
 __svc_clean_idle2(int timeout, bool cleanblock)
 {
     struct svc_clean_idle_arg acc;
-    static mutex_t active_mtx = PTHREAD_MUTEX_INITIALIZER;
+    static mutex_t active_mtx = MUTEX_INITIALIZER;
     static uint32_t active = 0;
     bool_t rslt = FALSE;
 
@@ -1433,7 +1433,7 @@ clnt_vc_ncreate_svc(SVCXPRT *xprt,
     struct cf_conn *cd;
     CLIENT *cl;
 
-    spin_lock(&xprt->xp_lock);
+    mutex_lock(&xprt->xp_lock);
 
     /* XXX return allocated client structure, or allocate one if none
      * is currently allocated (it can be destroyed) */
@@ -1444,9 +1444,6 @@ clnt_vc_ncreate_svc(SVCXPRT *xprt,
 
     cd = (struct cf_conn *) xprt->xp_p1;
 
-    /* XXX this is the slow case, and xprt is spin locked.  but racing
-     * here was inviting a delay, so  we don't care if a thread
-     * schedules */
     cl = clnt_vc_ncreate2(xprt->xp_fd,
                           &xprt->xp_rtaddr,
                           prog,
@@ -1467,7 +1464,7 @@ clnt_vc_ncreate_svc(SVCXPRT *xprt,
     xprt->xp_flags |= SVC_XPRT_FLAG_DONTCLOSE;
 
 unlock:
-    spin_unlock(&xprt->xp_lock);
+    mutex_unlock(&xprt->xp_lock);
 
 fail:
     /* for a dedicated channel, unregister and free xprt */
