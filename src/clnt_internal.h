@@ -78,11 +78,11 @@ struct rpc_dplx_rec
 
 #define MCALL_MSG_SIZE 24
 
-#define CT_FLAG_NONE              0x0000
-#define CT_FLAG_DUPLEX            0x0001
-#define CT_FLAG_EVENTS_BLOCKED    0x0002
-#define CT_FLAG_EPOLL_ACTIVE      0x0004
-#define CT_FLAG_XPRT_DESTROYED    0x0008
+#define CT_NONE                 0x0000
+#define CT_BOTHWAYS             0x0001
+#define CT_EVENTS_BLOCKED       0x0002
+#define CT_EPOLL_ACTIVE         0x0004
+#define CT_XPRT_DESTROYED       0x0008
 
 /*
  * A client call context.  Intended to enable efficient multiplexing of
@@ -94,12 +94,9 @@ enum rpc_ctx_state {
     RPC_CTX_FINISHED
 };
 
-typedef struct __rpc_call_ctx {
+typedef struct rpc_call_ctx {
     struct opr_rbtree_node node_k;
-    struct {
-        mutex_t mtx;
-        cond_t  cv;
-    } we;
+    struct ct_wait_entry we;
     uint32_t xid;
     enum rpc_ctx_state state;
     uint32_t flags;
@@ -121,18 +118,21 @@ typedef struct __rpc_call_ctx {
     void *u_data[2]; /* caller user data */
 } rpc_ctx_t;
 
-#define SetDuplex(cl, xprt) do {                                  \
-        struct cx_data *cx = (struct cx_data *) (cl)->cl_private; \
-        cx->cx_duplex.xprt = (xprt);                              \
-        cx->cx_duplex.flags |= CT_FLAG_DUPLEX;                    \
-        cx->cx_duplex.flags &= ~CT_FLAG_XPRT_DESTROYED;           \
-        (xprt)->xp_p4 = (cl);                                     \
+#define BothWays(cx) \
+    (cx)->cx_duplex.flags & CT_BOTHWAYS
+
+#define GoBothWays(cl, xprt) do {                                   \
+        struct cx_data *cx = (struct cx_data *) (cl)->cl_private;   \
+        cx->cx_duplex.xprt = (xprt);                                \
+        cx->cx_duplex.flags |= CT_BOTHWAYS;                         \
+        cx->cx_duplex.flags &= ~CT_XPRT_DESTROYED;                  \
+        (xprt)->xp_p4 = (cl);                                       \
     } while (0);
 
 #define SetDestroyed(cl) do {                                 \
         struct cx_data *cx = (struct cx_data *) (cl)->cl_private;       \
-        cx->cx_duplex.flags &= ~CT_FLAG_DUPLEX;                         \
-        cx->cx_duplex.flags |= CT_FLAG_XPRT_DESTROYED;                  \
+        cx->cx_duplex.flags &= ~CT_BOTHWAYS;                            \
+        cx->cx_duplex.flags |= CT_XPRT_DESTROYED;                       \
         cx->cx_duplex.xprt = NULL;                                      \
     } while (0);
 
@@ -181,9 +181,6 @@ struct ct_data {
     struct timeval ct_wait; /* wait interval in milliseconds */
     bool          ct_waitset; /* wait set by clnt_control? */
     struct netbuf ct_addr; /* remote addr */
-#if 0
-    struct rpc_err ct_error; /* no. */
-#endif
     union {
         char ct_mcallc[MCALL_MSG_SIZE]; /* marshalled callmsg */
         u_int32_t ct_mcalli;
@@ -259,9 +256,5 @@ free_cx_data(struct cx_data *cx)
     };
     mem_free(cx, sizeof(struct cx_data));
 }
-
-/* events */
-bool cond_block_events_client(CLIENT *cl);
-void cond_unblock_events_client(CLIENT *cl);
 
 #endif /* _CLNT_INTERNAL_H */

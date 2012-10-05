@@ -26,9 +26,11 @@
 #ifndef TIRPC_RPC_CTX_H
 #define TIRPC_RPC_CTX_H
 
-#define RPC_CTX_FLAG_NONE    0x0000
-#define RPC_CTX_FLAG_LOCKED  0x0001
+#define RPC_CTX_FLAG_NONE     0x0000
+#define RPC_CTX_FLAG_LOCKED   0x0001
 
+#define RPC_CTX_FLAG_WAITSYNC 0x0002
+#define RPC_CTX_FLAG_SYNCDONE 0x0004
 
 rpc_ctx_t *
 alloc_rpc_call_ctx(CLIENT *cl, rpcproc_t proc, xdrproc_t xdr_args,

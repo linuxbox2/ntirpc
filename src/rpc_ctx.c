@@ -36,11 +36,10 @@
 #include <rpc/types.h>
 #include <unistd.h>
 #include <signal.h>
-
+#include <misc/timespec.h>
 #include <rpc/xdr.h>
 #include <rpc/rpc.h>
 #include <rpc/svc.h>
-
 #include "rpc_com.h"
 #include <misc/rbtree_x.h>
 #include "clnt_internal.h"
@@ -121,41 +120,40 @@ out:
     return;
 }
 
-#if 0
-enum clnt_stat
+#if 0 /* XXX not yet */
+enum rpc_ctx_stat
 rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 {
     struct cx_data *cx = (struct cx_data *) ctx->ctx_u.clnt.cl->cl_private;
     struct ct_data *ct = CT_DATA(cx);
-    struct rpc_dplx_rec *rec __attribute__((unused)) = cx->cx_rec;
+    struct rpc_dplx_rec *rec  = cx->cx_rec;
     XDR *xdrs __attribute__((unused)) = &(ct->ct_xdrs);
     enum clnt_stat stat = RPC_SUCCESS;
+    struct timespec ts;
 
     /* XXX if we keep this convenience flag, it needs to indicate SEND or
      * RECV lock */
     assert (flags & RPC_CTX_FLAG_LOCKED);
 
-    ctx->state = RPC_CTX_REPLY_WAIT;
+    ctx->state = RPC_CTX_REPLY_WAIT; /* XXX diagnostic */
 
-        /* switch on direction */
-    switch (msg->rm_direction) {
+    ctx->flags |= RPC_CTX_FLAG_WAITSYNC;
+    while (! (ctx->flags & RPC_CTX_FLAG_SYNCDONE)) {
+        (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+        timespec_adds(&ts, 20);
+        cond_timedwait(&ctx->we.cv, &ctx->we.mtx, &ts);
+    }
+
+    /* switch on direction */
+    switch (ctx->msg->rm_direction) {
     case REPLY:
-        if (msg->rm_xid == ctx->xid)
-            goto replied;
+        if (ctx->msg->rm_xid == ctx->xid)
+            return (RPC_SUCCESS);
         break;
     case CALL:
-        /* XXX queue or dispatch.  on return from xp_dispatch,
-         * duplex_msg points to a (potentially new, junk) rpc_msg
-         * object owned by this call path */
-        if (duplex) {
-            struct cf_conn *cd;
-            assert(duplex_xprt);
-            cd = (struct cf_conn *) duplex_xprt->xp_p1;
-            cd->x_id = msg->rm_xid;
-            __warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
-                    "%s: call intercepted, dispatching (x_id == %d)\n",
-                    __func__, cd->x_id);
-            duplex_xprt->xp_ops2->xp_dispatch(duplex_xprt, &msg);
+        if (BothWays(cx)) {
+            /* XXX transfer control to svc */
+            /* TODO: finish */
         }
         break;
     default:

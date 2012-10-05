@@ -195,49 +195,50 @@ struct SVCAUTH; /* forward decl. */
 /*
  * Server side transport handle
  */
-typedef struct __rpc_svcxprt {
+typedef struct rpc_svcxprt {
     int  xp_fd;
     u_short  xp_port;  /* associated port number */
     struct xp_ops {
         /* receive incoming requests */
-        bool (*xp_recv)(struct __rpc_svcxprt *, struct svc_req *);
+        bool (*xp_recv)(struct rpc_svcxprt *, struct svc_req *);
         /* get transport status */
-        enum xprt_stat (*xp_stat)(struct __rpc_svcxprt *);
+        enum xprt_stat (*xp_stat)(struct rpc_svcxprt *);
         /* get arguments */
-        bool (*xp_getargs)(struct __rpc_svcxprt *, xdrproc_t,
+        bool (*xp_getargs)(struct rpc_svcxprt *, xdrproc_t,
                              void *);
         /* send reply */
-        bool (*xp_reply)(struct __rpc_svcxprt *, struct svc_req *req,
+        bool (*xp_reply)(struct rpc_svcxprt *, struct svc_req *req,
                          struct rpc_msg *);
         /* free mem allocated for args */
-        bool (*xp_freeargs)(struct __rpc_svcxprt *, xdrproc_t,
+        bool (*xp_freeargs)(struct rpc_svcxprt *, xdrproc_t,
                               void *);
         /* destroy this struct */
-        void (*xp_destroy)(struct __rpc_svcxprt *);
+        void (*xp_destroy)(struct rpc_svcxprt *);
         /* get arguments, thread u_data in arg4*/
-        bool(*xp_getargs2)(struct __rpc_svcxprt *, struct svc_req *req,
+        bool(*xp_getargs2)(struct rpc_svcxprt *, struct svc_req *req,
                            xdrproc_t, void *, void *);
     } *xp_ops;
+
     int  xp_addrlen;  /* length of remote address */
     struct sockaddr_in6 xp_raddr;  /* remote addr (backward ABI compat) */
-    /* XXX - fvdl stick this here for ABI backward compat reasons */
+
     struct xp_ops2 {
         /* catch-all function */
-        bool  (*xp_control)(struct __rpc_svcxprt *, const u_int,
+        bool  (*xp_control)(struct rpc_svcxprt *, const u_int,
                               void *);
         /* handle incoming requests (calls xp_recv) */
-        bool  (*xp_getreq)(struct __rpc_svcxprt *);
+        bool  (*xp_getreq)(struct rpc_svcxprt *);
         /* call dispatch strategy function */
-        void (*xp_dispatch)(struct __rpc_svcxprt *, struct rpc_msg **);
+        void (*xp_dispatch)(struct rpc_svcxprt *, struct rpc_msg **);
         /* rendezvous (epilogue) */
-        u_int (*xp_rdvs)(struct __rpc_svcxprt *, struct __rpc_svcxprt *,
+        u_int (*xp_rdvs)(struct rpc_svcxprt *, struct rpc_svcxprt *,
                          const u_int, void *);
         /* xprt free hook */
-        bool  (*xp_free_xprt)(struct __rpc_svcxprt *);
+        bool  (*xp_free_xprt)(struct rpc_svcxprt *);
     } *xp_ops2;
 
-    char  *xp_tp;   /* transport provider device name */
-    char  *xp_netid;  /* network token */
+    char  *xp_tp; /* transport provider device name */
+    char  *xp_netid; /* network token */
     struct netbuf xp_ltaddr;  /* local transport address */
     struct netbuf xp_rtaddr;  /* remote transport address */
 
@@ -288,12 +289,12 @@ typedef enum svc_lookup_result
 
 /* functions which can be installed using a control function, e.g.,
  * xp_ops2->xp_control */
-typedef bool (*xp_recv_t)(struct __rpc_svcxprt *, struct svc_req *);
-typedef bool (*xp_getreq_t)(struct __rpc_svcxprt *);
-typedef void (*xp_dispatch_t)(struct __rpc_svcxprt *, struct rpc_msg **);
-typedef u_int (*xp_rdvs_t)(struct __rpc_svcxprt *, struct __rpc_svcxprt *,
+typedef bool (*xp_recv_t)(struct rpc_svcxprt *, struct svc_req *);
+typedef bool (*xp_getreq_t)(struct rpc_svcxprt *);
+typedef void (*xp_dispatch_t)(struct rpc_svcxprt *, struct rpc_msg **);
+typedef u_int (*xp_rdvs_t)(struct rpc_svcxprt *, struct rpc_svcxprt *,
                            const u_int, void *);
-typedef bool  (*xp_free_xprt_t)(struct __rpc_svcxprt *);
+typedef bool  (*xp_free_xprt_t)(struct rpc_svcxprt *);
 
 /*
  * Service request

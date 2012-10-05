@@ -110,7 +110,7 @@ enum xdr_op {
 #define XBS_FLAG_GIFT   0x0001
 
 /* XDR buffer descriptors. */
-typedef struct __rpc_buffer {
+typedef struct rpc_buffer {
     void *xb_base;
     int   xb_len;
     u_int xb_flags;
@@ -118,7 +118,7 @@ typedef struct __rpc_buffer {
     void *xb_u1; /* User data */
 } xdr_buffer;
 
-typedef struct __rpc_buffers {
+typedef struct rpc_buffers {
     xdr_buffer *xbs_buf; /* array of buffers */
     int         xbs_cnt; /* count of buffers */
     size_t      xbs_offset; /* not used (yet) */
@@ -138,29 +138,29 @@ typedef struct __rpc_buffers {
  * an operations vector for the particular implementation (e.g. see xdr_mem.c),
  * and two private fields for the use of the particular implementation.
  */
-typedef struct __rpc_xdr {
+typedef struct rpc_xdr {
     enum xdr_op x_op;  /* operation; fast additional param */
     const struct xdr_ops {
         /* get a long from underlying stream */
-        bool (*x_getlong)(struct __rpc_xdr *, long *);
+        bool (*x_getlong)(struct rpc_xdr *, long *);
         /* put a long to " */
-        bool (*x_putlong)(struct __rpc_xdr *, const long *);
+        bool (*x_putlong)(struct rpc_xdr *, const long *);
         /* get some bytes from " */
-        bool (*x_getbytes)(struct __rpc_xdr *, char *, u_int);
+        bool (*x_getbytes)(struct rpc_xdr *, char *, u_int);
         /* put some bytes to " */
-        bool (*x_putbytes)(struct __rpc_xdr *, const char *, u_int);
+        bool (*x_putbytes)(struct rpc_xdr *, const char *, u_int);
         /* returns bytes off from beginning */
-        u_int (*x_getpostn)(struct __rpc_xdr *);
+        u_int (*x_getpostn)(struct rpc_xdr *);
         /* lets you reposition the stream */
-        bool (*x_setpostn)(struct __rpc_xdr *, u_int);
+        bool (*x_setpostn)(struct rpc_xdr *, u_int);
         /* buf quick ptr to buffered data */
-        int32_t *(*x_inline)(struct __rpc_xdr *, u_int);
+        int32_t *(*x_inline)(struct rpc_xdr *, u_int);
         /* free private resources of this xdr_stream */
-        void (*x_destroy)(struct __rpc_xdr *);
-        bool (*x_control)(struct __rpc_xdr *, int, void *);
+        void (*x_destroy)(struct rpc_xdr *);
+        bool (*x_control)(struct rpc_xdr *, int, void *);
         /* new vector and refcounted interfaces */
-        bool (*x_getbufs)(struct __rpc_xdr *, xdr_uio *, u_int, u_int);
-        bool (*x_putbufs)(struct __rpc_xdr *, xdr_uio *, u_int);
+        bool (*x_getbufs)(struct rpc_xdr *, xdr_uio *, u_int, u_int);
+        bool (*x_putbufs)(struct rpc_xdr *, xdr_uio *, u_int);
     } *x_ops;
     void *x_public; /* users' data */
     void *x_private; /* pointer to private data */
