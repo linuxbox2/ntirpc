@@ -216,9 +216,13 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
     /* if a clnt handle exists, return it ref'd (rec is ref'd) */
     if (! (oflags & RPC_DPLX_LKP_OFLAG_ALLOC)) {
         if (rec->hdl.clnt) {
-            clnt = rec->hdl.clnt;
-            /* inc shared refcnt */
-            ++(xd->refcnt);
+            xd = (struct x_vc_data *) rec->hdl.clnt->cl_p1;
+            /* dont return destroyed clients */
+            if (! (xd->flags & X_VC_DATA_FLAG_CLNT_DESTROYED)) {
+                clnt = rec->hdl.clnt;
+                /* inc shared refcnt */
+                ++(xd->refcnt);
+            }
             /* return extra ref */
             if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
                 mutex_unlock(&rec->mtx);

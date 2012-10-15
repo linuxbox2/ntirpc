@@ -455,9 +455,13 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
     /* if a svcxprt handle exists, return it ref'd (rec is ref'd) */
     if (! (oflags & RPC_DPLX_LKP_OFLAG_ALLOC)) {
         if (rec->hdl.xprt) {
-            xprt = rec->hdl.xprt;
-            /* inc shared refcnt */
-            ++(xd->refcnt);
+            xd = (struct x_vc_data *) rec->hdl.xprt->xp_p1;
+            /* dont return destroyed xprts */
+            if (! (xd->flags & X_VC_DATA_FLAG_SVC_DESTROYED)) {
+                xprt = rec->hdl.xprt;
+                /* inc shared refcnt */
+                ++(xd->refcnt);
+            }
             /* return extra ref */
             if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
                 mutex_unlock(&rec->mtx);
@@ -679,7 +683,7 @@ svc_vc_release(SVCXPRT *xprt)
     mutex_lock(&rec->mtx);
 
     /* if shared refcnt drops to 0, do shared destroy */
-    --xd->refcnt;
+    --(xd->refcnt);
     if (xd->refcnt == 0) {
         vc_shared_destroy(xd); /* RECLOCKED */
     } else {
@@ -701,7 +705,7 @@ svc_vc_destroy(SVCXPRT *xprt)
     xd->flags |= X_VC_DATA_FLAG_SVC_DESTROYED; /* destroyed handle is dead */
 
     /* if shared refcnt drops to 0, do shared destroy */
-    --xd->refcnt;
+    --(xd->refcnt);
     if (xd->refcnt == 0) {
         vc_shared_destroy(xd); /* RECLOCKED */
     } else {
