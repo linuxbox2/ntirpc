@@ -61,14 +61,6 @@ struct svc_params
         int max_idle_gen;
         int max_gc;
     } gss;
-
-    struct __svc_ops {
-        bool (*svc_clean_idle)(fd_set *fds, int timeout, bool cleanblock);
-        void (*svc_run)(void);
-        void (*svc_getreq)(int rdfds); /* XXX */
-        void (*svc_getreqset)(fd_set *readfds); /* XXX */
-        void (*svc_exit)(void);
-    } *svc_ops;
 };
 
 extern struct svc_params __svc_params[1];
@@ -107,6 +99,14 @@ static inline bool svc_vc_new_conn_ok(void)
         --(__svc_params->xprt_u.vc.nconns); \
         mutex_unlock(&(__svc_params->xprt_u.vc.mtx)); \
     } while (0);
+
+struct __svc_ops {
+    bool (*svc_clean_idle)(fd_set *fds, int timeout, bool cleanblock);
+    void (*svc_run)(void);
+    void (*svc_getreq)(int rdfds); /* XXX */
+    void (*svc_getreqset)(fd_set *readfds); /* XXX */
+    void (*svc_exit)(void);
+} *svc_ops;
 
 #define	su_data(xprt)	((struct svc_dg_data *)(xprt->xp_p2))
 

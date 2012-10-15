@@ -47,27 +47,27 @@
 #include "rpc_ctx.h"
 
 rpc_ctx_t *
-alloc_rpc_call_ctx(CLIENT *cl, rpcproc_t proc, xdrproc_t xdr_args,
+alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
                    void *args_ptr, xdrproc_t xdr_results, void *results_ptr,
                    struct timeval timeout)
 {
-    struct cx_data *cx = (struct cx_data *) cl->cl_private;
-    struct rpc_dplx_rec *rec = cx->cx_rec;
-    rpc_ctx_t *ctx = mem_alloc(sizeof(rpc_ctx_t));
+    struct x_vc_data *xd = (struct x_vc_data *) clnt->cl_p1;
+    struct rpc_dplx_rec *rec = xd->rec;
+    rpc_ctx_t *ctx;
+
+    ctx = mem_alloc(sizeof(rpc_ctx_t));
     if (! ctx)
         goto out;
-
-    assert(rec);
 
     /* rec->calls and rbtree protected by (adaptive) mtx */
     mutex_lock(&rec->mtx);
 
     /* XXX we hold the client-fd lock */
-    ctx->xid = ++(rec->calls.xid);
+    ctx->xid = ++(xd->cx.calls.xid);
 
     /* some of this looks like overkill;  it's here to support future,
      * fully async calls */
-    ctx->ctx_u.clnt.cl = cl;
+    ctx->ctx_u.clnt.clnt = clnt;
     ctx->ctx_u.clnt.proc = proc;
     ctx->ctx_u.clnt.xdr_args = xdr_args;
     ctx->ctx_u.clnt.args_ptr = args_ptr;
@@ -79,11 +79,11 @@ alloc_rpc_call_ctx(CLIENT *cl, rpcproc_t proc, xdrproc_t xdr_args,
     ctx->flags = 0;
 
     /* stash it */
-    if (opr_rbtree_insert(&rec->calls.t, &ctx->node_k)) {
+    if (opr_rbtree_insert(&xd->cx.calls.t, &ctx->node_k)) {
         __warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
                 "%s: call ctx insert failed (xid %d client %p)",
                 __func__,
-                ctx->xid, cl);
+                ctx->xid, clnt);
         mutex_unlock(&rec->mtx);
         mem_free(ctx, sizeof(rpc_ctx_t));
         ctx = NULL;
@@ -98,21 +98,21 @@ out:
 
 void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
 {
-    struct cx_data *cx = (struct cx_data *) ctx->ctx_u.clnt.cl->cl_private;
-    struct rpc_dplx_rec *rec = cx->cx_rec;
+    struct x_vc_data *xd = (struct x_vc_data *) ctx->ctx_u.clnt.clnt->cl_p1;
+    struct rpc_dplx_rec *rec = xd->rec;
 
     assert (flags & RPC_CTX_FLAG_LOCKED);
 
     mutex_lock(&rec->mtx);
-    opr_rbtree_remove(&rec->calls.t, &ctx->node_k);
-    ctx->xid = ++(rec->calls.xid);
-    if (opr_rbtree_insert(&rec->calls.t, &ctx->node_k)) {
+    opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
+    ctx->xid = ++(xd->cx.calls.xid);
+    if (opr_rbtree_insert(&xd->cx.calls.t, &ctx->node_k)) {
         mutex_unlock(&rec->mtx);
         __warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
                 "%s: call ctx insert failed (xid %d client %p)",
                 __func__,
                 ctx->xid,
-                ctx->ctx_u.clnt.cl);
+                ctx->ctx_u.clnt.clnt);
         goto out;
     }
     mutex_unlock(&rec->mtx);
@@ -124,9 +124,8 @@ out:
 enum rpc_ctx_stat
 rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 {
-    struct cx_data *cx = (struct cx_data *) ctx->ctx_u.clnt.cl->cl_private;
-    struct ct_data *ct = CT_DATA(cx);
-    struct rpc_dplx_rec *rec  = cx->cx_rec;
+    struct x_vc_data *xd = (struct x_vc_data *) ctx->ctx_u.clnt.clnt->cl_p1;
+    struct rpc_dplx_rec *rec  = xd->rec;
     XDR *xdrs __attribute__((unused)) = &(ct->ct_xdrs);
     enum clnt_stat stat = RPC_SUCCESS;
     struct timespec ts;
@@ -151,10 +150,8 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
             return (RPC_SUCCESS);
         break;
     case CALL:
-        if (BothWays(cx)) {
-            /* XXX transfer control to svc */
-            /* TODO: finish */
-        }
+        /* XXX cond transfer control to svc */
+        /* TODO: finish */
         break;
     default:
         break;
@@ -167,11 +164,11 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 void
 free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
 {
-    struct cx_data *cx = (struct cx_data *) ctx->ctx_u.clnt.cl->cl_private;
-    struct rpc_dplx_rec *rec = cx->cx_rec;
+    struct x_vc_data *xd = (struct x_vc_data *) ctx->ctx_u.clnt.clnt->cl_p1;
+    struct rpc_dplx_rec *rec  = xd->rec;
 
     mutex_lock(&rec->mtx);
-    opr_rbtree_remove(&rec->calls.t, &ctx->node_k);
+    opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
     mutex_unlock(&rec->mtx);
     if (ctx->msg)
         free_rpc_msg(ctx->msg);

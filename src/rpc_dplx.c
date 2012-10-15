@@ -50,7 +50,7 @@
 /* public */
 
 void
-rpc_dplx_slxi(SVCXPRT *xprt, sigset_t *mask, const char *file, int line)
+rpc_dplx_slxi(SVCXPRT *xprt, const char *file, int line)
 { 
     struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) xprt->xp_p5;
     rpc_dplx_lock_t *lk = &rec->send.lock;
@@ -62,14 +62,14 @@ rpc_dplx_slxi(SVCXPRT *xprt, sigset_t *mask, const char *file, int line)
 }
 
 void
-rpc_dplx_sux(SVCXPRT *xprt, sigset_t *mask)
+rpc_dplx_sux(SVCXPRT *xprt)
 {
     struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) xprt->xp_p5;
     mutex_unlock(&rec->send.lock.we.mtx);
 }
 
 void
-rpc_dplx_rlxi(SVCXPRT *xprt, sigset_t *mask, const char *file, int line)
+rpc_dplx_rlxi(SVCXPRT *xprt, const char *file, int line)
 { 
     struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) xprt->xp_p5;
     rpc_dplx_lock_t *lk = &rec->recv.lock;
@@ -81,23 +81,17 @@ rpc_dplx_rlxi(SVCXPRT *xprt, sigset_t *mask, const char *file, int line)
 }
 
 void
-rpc_dplx_rux(SVCXPRT *xprt, sigset_t *mask)
+rpc_dplx_rux(SVCXPRT *xprt)
 {
     struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) xprt->xp_p5;
     mutex_unlock(&rec->recv.lock.we.mtx);
 }
 
 void
-rpc_dplx_slci(CLIENT *clnt, sigset_t *mask, const char *file, int line)
+rpc_dplx_slci(CLIENT *clnt, const char *file, int line)
 { 
-    struct cx_data *cx;
-    struct rpc_dplx_rec *rec;
-    rpc_dplx_lock_t *lk;
-
-    rpc_dplx_init_client(clnt);
-    cx = (struct cx_data *) clnt->cl_private;
-    rec = cx->cx_rec;
-    lk = &rec->send.lock;
+    struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) clnt->cl_p2;
+    rpc_dplx_lock_t *lk = &rec->send.lock;
 
     mutex_lock(&lk->we.mtx);
     if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_LOCK) {
@@ -107,26 +101,17 @@ rpc_dplx_slci(CLIENT *clnt, sigset_t *mask, const char *file, int line)
 }
 
 void
-rpc_dplx_suc(CLIENT *clnt, sigset_t *mask)
+rpc_dplx_suc(CLIENT *clnt)
 {
-    struct cx_data *cx;
-
-    rpc_dplx_init_client(clnt);
-    cx = (struct cx_data *) clnt->cl_private;
-    mutex_unlock(&cx->cx_rec->send.lock.we.mtx);
+    struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) clnt->cl_p2;
+    mutex_unlock(&rec->send.lock.we.mtx);
 }
 
 void
-rpc_dplx_rlci(CLIENT *clnt, sigset_t *mask, const char *file, int line)
-{ 
-    struct cx_data *cx;
-    struct rpc_dplx_rec *rec;
-    rpc_dplx_lock_t *lk;
-
-    rpc_dplx_init_client(clnt);
-    cx = (struct cx_data *) clnt->cl_private;
-    rec = cx->cx_rec;
-    lk = &rec->recv.lock;
+rpc_dplx_rlci(CLIENT *clnt, const char *file, int line)
+{
+    struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) clnt->cl_p2; 
+    rpc_dplx_lock_t *lk = &rec->recv.lock;
 
     mutex_lock(&lk->we.mtx);
     if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_LOCK) {
@@ -136,13 +121,10 @@ rpc_dplx_rlci(CLIENT *clnt, sigset_t *mask, const char *file, int line)
 }
 
 void
-rpc_dplx_ruc(CLIENT *clnt, sigset_t *mask)
+rpc_dplx_ruc(CLIENT *clnt)
 {
-    struct cx_data *cx;
-
-    rpc_dplx_init_client(clnt);
-    cx = (struct cx_data *) clnt->cl_private;
-    mutex_unlock(&cx->cx_rec->recv.lock.we.mtx);
+    struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) clnt->cl_p2; 
+    mutex_unlock(&rec->recv.lock.we.mtx);
 }
 
 /* private */
@@ -156,6 +138,7 @@ static struct rpc_dplx_rec_set rpc_dplx_rec_set =
     MUTEX_INITIALIZER, /* clnt_fd_lock */
     {
         0, /* npart */
+        RBT_X_FLAG_NONE /* flags */,
         0, /* cachesz */
         NULL /* tree */
     } /* xt */
@@ -239,7 +222,7 @@ free_dplx_rec(struct rpc_dplx_rec *rec)
 }
 
 struct rpc_dplx_rec *
-rpc_dplx_lookup_rec(int fd)
+rpc_dplx_lookup_rec(int fd, uint32_t iflags, uint32_t *oflags)
 {
     struct rbtree_x_part *t;
     struct rpc_dplx_rec rk, *rec = NULL;
@@ -268,12 +251,13 @@ rpc_dplx_lookup_rec(int fd)
                 goto unlock;
             }
 
-            /* XXX allocation fail */
-            rec->fd_k = fd;
+            /* tell the caller */
+            *oflags = RPC_DPLX_LKP_OFLAG_ALLOC;
 
-            /* tracks outstanding calls */
-            opr_rbtree_init(&rec->calls.t, call_xid_cmpf);
-            rec->calls.xid = 0; /* next xid is 1 */
+            if (iflags & RPC_DPLX_LKP_IFLAG_LOCKREC)
+                mutex_lock(&rec->mtx);
+
+            rec->fd_k = fd;
 
             if (opr_rbtree_insert(&t->t, &rec->node_k)) {
                 /* cant happen */
@@ -284,8 +268,10 @@ rpc_dplx_lookup_rec(int fd)
             }
         }
     }
-    else
+    else {
         rec = opr_containerof(nv, struct rpc_dplx_rec, node_k);
+        *oflags = RPC_DPLX_LKP_FLAG_NONE;
+    }
 
     rpc_dplx_ref(rec, RPC_DPLX_FLAG_NONE);
 
@@ -296,9 +282,11 @@ unlock:
 }
 
 void
-rpc_dplx_slfi(int fd, sigset_t *mask, const char *file, int line)
+rpc_dplx_slfi(int fd, const char *file, int line)
 {
-    struct rpc_dplx_rec *rec = rpc_dplx_lookup_rec(fd);
+    uint32_t oflags;
+    struct rpc_dplx_rec *rec =
+        rpc_dplx_lookup_rec(fd, RPC_DPLX_FLAG_NONE, &oflags);
     rpc_dplx_lock_t *lk = &rec->send.lock;
 
     mutex_lock(&lk->we.mtx);
@@ -310,17 +298,21 @@ rpc_dplx_slfi(int fd, sigset_t *mask, const char *file, int line)
 }
 
 void
-rpc_dplx_suf(int fd, sigset_t *mask)
+rpc_dplx_suf(int fd)
 {
-    struct rpc_dplx_rec *rec = rpc_dplx_lookup_rec(fd);
+    uint32_t oflags;
+    struct rpc_dplx_rec *rec =
+        rpc_dplx_lookup_rec(fd, RPC_DPLX_FLAG_NONE, &oflags);
     /* assert: initialized */
     mutex_unlock(&rec->send.lock.we.mtx);
 }
 
 void
-rpc_dplx_rlfi(int fd, sigset_t *mask, const char *file, int line)
+rpc_dplx_rlfi(int fd, const char *file, int line)
 {
-    struct rpc_dplx_rec *rec = rpc_dplx_lookup_rec(fd);
+    uint32_t oflags;
+    struct rpc_dplx_rec *rec =
+        rpc_dplx_lookup_rec(fd, RPC_DPLX_FLAG_NONE, &oflags);
     rpc_dplx_lock_t *lk = &rec->recv.lock;
 
     mutex_lock(&lk->we.mtx);
@@ -332,9 +324,11 @@ rpc_dplx_rlfi(int fd, sigset_t *mask, const char *file, int line)
 }
 
 void
-rpc_dplx_ruf(int fd, sigset_t *mask)
+rpc_dplx_ruf(int fd)
 {
-    struct rpc_dplx_rec *rec = rpc_dplx_lookup_rec(fd);
+    uint32_t oflags;
+    struct rpc_dplx_rec *rec =
+        rpc_dplx_lookup_rec(fd, RPC_DPLX_FLAG_NONE, &oflags);
     /* assert: initialized */
     mutex_unlock(&rec->recv.lock.we.mtx);
 }
@@ -346,7 +340,7 @@ rpc_dplx_unref(struct rpc_dplx_rec *rec, u_int flags)
     struct opr_rbtree_node *nv;
     int32_t refcnt;
 
-    if (! (flags & RPC_DPLX_FLAG_SPIN_LOCKED))
+    if (! (flags & RPC_DPLX_FLAG_LOCKED))
         mutex_lock(&rec->mtx);
 
     refcnt = --(rec->refcnt);
@@ -370,7 +364,7 @@ rpc_dplx_unref(struct rpc_dplx_rec *rec, u_int flags)
         rwlock_unlock(&t->lock);
     }
 
-    if (rec && (! (flags & RPC_DPLX_FLAG_SPIN_LOCKED)))
+    if (rec && (! (flags & RPC_DPLX_FLAG_LOCKED)))
         mutex_unlock(&rec->mtx);
 
     return (refcnt);

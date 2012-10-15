@@ -377,8 +377,8 @@ vrec_next(V_RECSTREAM *vstrm, enum vrec_cursor wh_pos, u_int flags)
 void
 xdr_vrec_create(XDR *xdrs,
                 enum xdr_vrec_direction direction, void *xhandle,
-                size_t (*xreadv)(void *, struct iovec *, int, u_int),
-                size_t (*xwritev)(void *, struct iovec *, int, u_int),
+                size_t (*xreadv)(XDR *, void *, struct iovec *, int, u_int),
+                size_t (*xwritev)(XDR *, void *, struct iovec *, int, u_int),
                 u_int def_bsize, u_int flags)
 {
     V_RECSTREAM *vstrm = mem_alloc(sizeof(V_RECSTREAM));
@@ -1101,7 +1101,7 @@ vrec_flush_segments(V_RECSTREAM *vstrm, struct iovec *iov, int iovcnt,
         }
         /* blocking write */
         nbytes = vstrm->ops.writev(
-            vstrm->vp_handle, tiov, iovcnt, VREC_FLAG_NONE);
+            vstrm->xdrs, vstrm->vp_handle, tiov, iovcnt, VREC_FLAG_NONE);
         if (unlikely(nbytes < 0)) {
             __warnx(TIRPC_DEBUG_FLAG_XDRREC, "%s ops.writev failed %d\n",
                     __func__, errno);
@@ -1212,7 +1212,8 @@ restart:
             return (FALSE);
         goto restart;
     }
-    nbytes = vstrm->ops.readv(vstrm->vp_handle, iov, 2, VREC_FLAG_NONE);
+    nbytes = vstrm->ops.readv(vstrm->xdrs, vstrm->vp_handle, iov, 2,
+                              VREC_FLAG_NONE);
     if (likely(nbytes > 0)) {
         delta = (nbytes - sizeof(u_int32_t));
         if (likely(decode_fragment_header(vstrm, header))) {
@@ -1271,7 +1272,7 @@ vrec_skip_input_bytes(V_RECSTREAM *vstrm, long cnt)
             /* iov->iov_len = sizeof(u_int32_t); */
             ++ix;
         }
-        nbytes = vstrm->ops.readv(vstrm->vp_handle,
+        nbytes = vstrm->ops.readv(vstrm->xdrs, vstrm->vp_handle,
                                   (struct iovec *) &(vstrm->iovsink),
                                   ix+1 /* iovcnt */,
                                   VREC_FLAG_NONE);
@@ -1323,7 +1324,8 @@ static bool vrec_get_input_segments(V_RECSTREAM *vstrm, int cnt)
         resid -= delta;
     }
     /* XXX callers will re-try if we get a short read */
-    resid = vstrm->ops.readv(vstrm->vp_handle, iov, ix, VREC_FLAG_NONE);
+    resid = vstrm->ops.readv(vstrm->xdrs, vstrm->vp_handle, iov, ix,
+                             VREC_FLAG_NONE);
 
 
     for (ix = 0; ((ix < VREC_NFILL) && (resid > 0)); ++ix) {

@@ -110,11 +110,12 @@ static const struct  xdr_ops xdrrec_ops = {
 #define LAST_FRAG ((u_int32_t)(1 << 31))
 
 typedef struct rec_strm {
+    XDR *xdrs;
     char *tcp_handle;
     /*
      * out-goung bits
      */
-    int (*writeit)(void *, void *, int);
+    int (*writeit)(XDR *, void *, void *, int);
     char *out_base; /* output buffer (points to frag header) */
     char *out_finger; /* next output position */
     char *out_boundry; /* data cannot up to this address */
@@ -123,7 +124,7 @@ typedef struct rec_strm {
     /*
      * in-coming bits
      */
-    int (*readit)(void *, void *, int);
+    int (*readit)(XDR *, void *, void *, int);
     u_long in_size; /* fixed size of the input buffer */
     char *in_base;
     char *in_finger; /* location of next byte to be had */
@@ -167,9 +168,9 @@ xdrrec_create(XDR *xdrs,
               u_int recvsize,
               void *tcp_handle,
               /* like read, but pass it a tcp_handle, not sock */
-              int (*readit)(void *, void *, int),
+              int (*readit)(XDR *, void *, void *, int),
               /* like write, but pass it a tcp_handle, not sock */
-              int (*writeit)(void *, void *, int))
+              int (*writeit)(XDR *, void *, void *, int))
 {
     RECSTREAM *rstrm = mem_alloc(sizeof(RECSTREAM));
 
@@ -204,6 +205,7 @@ xdrrec_create(XDR *xdrs,
      */
     xdrs->x_ops = &xdrrec_ops;
     xdrs->x_private = rstrm;
+    rstrm->xdrs = xdrs;
     rstrm->tcp_handle = tcp_handle;
     rstrm->readit = readit;
     rstrm->writeit = writeit;
@@ -524,7 +526,7 @@ __xdrrec_getrec(XDR *xdrs, enum xprt_stat *statp, bool expectdata)
     int fraglen;
 
     if (!rstrm->in_haveheader) {
-        n = rstrm->readit(rstrm->tcp_handle, rstrm->in_hdrp,
+        n = rstrm->readit(xdrs, rstrm->tcp_handle, rstrm->in_hdrp,
                           (int)sizeof (rstrm->in_header) - rstrm->in_hdrlen);
         if (n == 0) {
             *statp = expectdata ? XPRT_DIED : XPRT_IDLE;
@@ -556,7 +558,8 @@ __xdrrec_getrec(XDR *xdrs, enum xprt_stat *statp, bool expectdata)
         }
     }
 
-    n =  rstrm->readit(rstrm->tcp_handle,
+    n =  rstrm->readit(xdrs,
+                       rstrm->tcp_handle,
                        rstrm->in_base + rstrm->in_received,
                        (rstrm->in_reclen - rstrm->in_received));
 
@@ -615,8 +618,8 @@ flush_out(RECSTREAM *rstrm, bool eor)
     *(rstrm->frag_header) = htonl(len | eormask);
     len = (u_int32_t)((u_long)(rstrm->out_finger) -
                       (u_long)(rstrm->out_base));
-    if ((*(rstrm->writeit))(rstrm->tcp_handle, rstrm->out_base, (int)len)
-        != (int)len)
+    if ((*(rstrm->writeit))(rstrm->xdrs, rstrm->tcp_handle, rstrm->out_base,
+                            (int)len) != (int)len)
         return (FALSE);
     rstrm->frag_header = (u_int32_t *)(void *)rstrm->out_base;
     rstrm->out_finger = (char *)rstrm->out_base + sizeof(u_int32_t);
@@ -637,7 +640,8 @@ fill_input_buf(RECSTREAM *rstrm)
     i = (u_int32_t)((u_long)rstrm->in_boundry % BYTES_PER_XDR_UNIT);
     where += i;
     len = (u_int32_t)(rstrm->in_size - i);
-    if ((len = (*(rstrm->readit))(rstrm->tcp_handle, where, len)) == -1)
+    if ((len = (*(rstrm->readit))(rstrm->xdrs, rstrm->tcp_handle, where,
+                                  len)) == -1)
         return (FALSE);
     rstrm->in_finger = where;
     where += len;

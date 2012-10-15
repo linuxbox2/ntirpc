@@ -106,8 +106,8 @@ static bool clnt_vc_control(CLIENT *, u_int, void *);
 static void clnt_vc_destroy(CLIENT *);
 static struct clnt_ops *clnt_vc_ops(void);
 static bool time_not_ok(struct timeval *);
-static int read_vc(void *, void *, int);
-static int write_vc(void *, void *, int);
+int generic_read_vc(XDR *, void *, void *, int);
+int generic_write_vc(XDR *, void *, void *, int);
 
 #include "clnt_internal.h"
 
@@ -137,7 +137,6 @@ static int write_vc(void *, void *, int);
 
 static const char clnt_vc_errstr[] = "%s : %s";
 static const char clnt_vc_str[] = "clnt_vc_ncreate";
-static const char clnt_read_vc_str[] = "read_vc";
 static const char __no_mem_str[] = "out of memory";
 
 /*
@@ -172,65 +171,93 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
                  u_int recvsz,      /* buffer send size */
                  u_int flags)
 {
-    CLIENT *cl;   /* client handle */
-    struct cx_data *cx = NULL;
+    CLIENT *clnt;
+    struct rpc_dplx_rec *rec = NULL;
+    struct x_vc_data *xd = NULL;
     struct ct_data *ct = NULL;
     struct rpc_msg call_msg;
-    static u_int32_t disrupt;
-    sigset_t mask;
-    sigset_t newmask;
-    struct sockaddr_storage ss;
-    socklen_t slen;
+    sigset_t mask, newmask;
     struct __rpc_sockinfo si;
+    struct sockaddr_storage ss;
+    XDR ct_xdrs[1]; /* temp XDR stream */
+    uint32_t oflags;
+    socklen_t slen;
 
-    if (disrupt == 0)
-        disrupt = (u_int32_t)(long)raddr;
-
-    cl = (CLIENT *)mem_alloc(sizeof (*cl));
-    cx = alloc_cx_data(CX_VC_DATA, 0, 0);
-    if ((cl == NULL) || (cx == NULL)) {
-        (void) syslog(LOG_ERR, clnt_vc_errstr,
-                      clnt_vc_str, __no_mem_str);
-        rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-        rpc_createerr.cf_error.re_errno = errno;
-        goto err;
-    }
-    ct = CT_DATA(cx);
-    ct->ct_addr.buf = NULL;
     sigfillset(&newmask);
     thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 
-    /*
-     * XXX - fvdl connecting while holding a mutex?
-     */
     if (flags & CLNT_CREATE_FLAG_CONNECT) {
         slen = sizeof ss;
         if (getpeername(fd, (struct sockaddr *)&ss, &slen) < 0) {
             if (errno != ENOTCONN) {
                 rpc_createerr.cf_stat = RPC_SYSTEMERROR;
                 rpc_createerr.cf_error.re_errno = errno;
-                thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
                 goto err;
             }
             if (connect(fd, (struct sockaddr *)raddr->buf, raddr->len) < 0){
                 rpc_createerr.cf_stat = RPC_SYSTEMERROR;
                 rpc_createerr.cf_error.re_errno = errno;
-                thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
                 goto err;
             }
         }
-    } /* FLAG_CONNECT */
+    } /* connect */
 
     if (!__rpc_fd2sockinfo(fd, &si))
         goto err;
-    thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 
+    /* atomically find or create shared fd state */
+    rec = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_IFLAG_LOCKREC, &oflags);
+    if (! rec) {
+        __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                "clnt_vc_ncreate2: rpc_dplx_lookup_rec failed");
+        goto err;
+    }
+
+    /* if a clnt handle exists, return it ref'd (rec is ref'd) */
+    if (! (oflags & RPC_DPLX_LKP_OFLAG_ALLOC)) {
+        if (rec->hdl.clnt) {
+            clnt = rec->hdl.clnt;
+            /* inc shared refcnt */
+            ++(xd->refcnt);
+            /* return extra ref */
+            if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
+                mutex_unlock(&rec->mtx);
+            goto done;
+        }
+    }
+
+    clnt = (CLIENT *) mem_alloc(sizeof(CLIENT));
+    if (! clnt) {
+        (void) syslog(LOG_ERR, clnt_vc_errstr,
+                      clnt_vc_str, __no_mem_str);
+        rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+        rpc_createerr.cf_error.re_errno = errno;
+        goto err;
+    }
+
+    /* other-direction shared state? */
+    if (rec->hdl.xprt) {
+        /* XXX check subtype of xprt handle? */
+        xd = (struct x_vc_data *) rec->hdl.xprt->xp_p1;
+    } else {
+        xd = alloc_x_vc_data();
+        if (! xd) {
+            (void) syslog(LOG_ERR, clnt_vc_errstr,
+                          clnt_vc_str, __no_mem_str);
+            rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+            rpc_createerr.cf_error.re_errno = errno;
+            goto err;
+        }
+        xd->rec = rec;
+        /* XXX tracks outstanding calls */
+        opr_rbtree_init(&xd->cx.calls.t, call_xid_cmpf);
+        xd->cx.calls.xid = 0; /* next call xid is 1 */
+    }
+
+    /* private data struct */
+    xd->cx.data.ct_fd = fd;
+    ct = &xd->cx.data;
     ct->ct_closeit = FALSE;
-
-    /*
-     * Set up private data struct
-     */
-    cx->cx_fd = fd;
     ct->ct_wait.tv_usec = 0;
     ct->ct_waitset = FALSE;
     ct->ct_addr.buf = mem_alloc(raddr->maxlen);
@@ -239,11 +266,11 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
     memcpy(ct->ct_addr.buf, raddr->buf, raddr->len);
     ct->ct_addr.len = raddr->len;
     ct->ct_addr.maxlen = raddr->maxlen;
-    cl->cl_netid = NULL;
-    cl->cl_tp = NULL;
+    clnt->cl_netid = NULL;
+    clnt->cl_tp = NULL;
 
     /*
-     * Initialize call message
+     * initialize call message
      */
     call_msg.rm_xid = 1;
     call_msg.rm_direction = CALL;
@@ -254,74 +281,103 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
     /*
      * pre-serialize the static part of the call msg and stash it away
      */
-    xdrmem_create(&(ct->ct_xdrs), ct->ct_u.ct_mcallc,
-                  MCALL_MSG_SIZE, XDR_ENCODE);
-    if (! xdr_callhdr(&(ct->ct_xdrs), &call_msg)) {
+    xdrmem_create(ct_xdrs, ct->ct_u.ct_mcallc, MCALL_MSG_SIZE, XDR_ENCODE);
+    if (! xdr_callhdr(ct_xdrs, &call_msg)) {
         if (ct->ct_closeit) {
             (void)close(fd);
         }
         goto err;
     }
-    ct->ct_mpos = XDR_GETPOS(&(ct->ct_xdrs));
-    XDR_DESTROY(&(ct->ct_xdrs));
+    ct->ct_mpos = XDR_GETPOS(ct_xdrs);
+    XDR_DESTROY(ct_xdrs);
 
     /*
      * Create a client handle which uses xdrrec for serialization
      * and authnone for authentication.
      */
-    cl->cl_ops = clnt_vc_ops();
-    cl->cl_private = cx;
+    clnt->cl_ops = clnt_vc_ops();
+    clnt->cl_p1 = xd;
+    clnt->cl_p2 = rec;
 
-    /*
-     * Register lock channel (sync)
-     */
-    rpc_dplx_init_client(cl);
+    if (! rec->hdl.xprt) {
 
-    /*
-     * Setup auth
-     */
-    cl->cl_auth = authnone_create();
+        xd->shared.sendsz =
+            __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
+        xd->shared.recvsz =
+            __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
 
-    sendsz = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
-    recvsz = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
+#if XDR_VREC
+    /* duplex streams, plus buffer sharing, readv/writev */
+    xdr_vrec_create(&(cd->xdrs_in),
+                    XDR_VREC_IN, xprt, readv_vc, NULL, xd->shared.recvsz,
+                    VREC_FLAG_NONE);
 
-    /*
-     * Create XDRS.  TODO:  duplex unification
-     */
-    xdrrec_create(&(ct->ct_xdrs), sendsz, recvsz,
-                  cx, read_vc, write_vc);
-    return (cl);
+    xdr_vrec_create(&(cd->xdrs_out),
+                    XDR_VREC_OUT, xprt, NULL, writev_vc, xd->shared.sendsz,
+                    VREC_FLAG_NONE);
+#else
+    /* duplex streams */
+    xdrrec_create(&(xd->shared.xdrs_in), sendsz, xd->shared.recvsz, xd,
+                  generic_read_vc,
+                  generic_write_vc);
+
+    xdrrec_create(&(xd->shared.xdrs_out), sendsz, xd->shared.recvsz, xd,
+                  generic_read_vc,
+                  generic_write_vc);
+#endif
+    } /* XPRT */
+
+    /* setup auth */
+    clnt->cl_auth = authnone_create();
+
+    /* make reachable from rec */
+    rec->hdl.clnt = clnt;
+
+    /* inc shared refcnt */
+    ++(xd->refcnt);
+
+    /* release rec */
+    mutex_unlock(&rec->mtx);
+
+done:
+    thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
+    return (clnt);
 
 err:
-    if (cl) {
-        if (cx) {
+    if (clnt) {
+        /* XXX fix */
+        if (xd) {
             if (ct->ct_addr.len)
                 mem_free(ct->ct_addr.buf,
                          ct->ct_addr.len);
-            free_cx_data(cx);
+            free_x_vc_data(xd);
         }
-        if (cl)
-            mem_free(cl, sizeof (CLIENT));
+        mem_free(clnt, sizeof (CLIENT));
     }
-    return ((CLIENT *)NULL);
+    if (rec) {
+        if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
+            mutex_unlock(&rec->mtx);
+    }
+    thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
+    return (NULL);
 }
 
 #define vc_call_return_slocked(r) \
     do { \
         result=(r); \
-        rpc_dplx_suc(cl, &mask); \
+        rpc_dplx_suc(clnt); \
         goto out; \
     } while (0);
 
 #define vc_call_return_rlocked(r) \
     do { \
         result=(r); \
-        rpc_dplx_ruc(cl, &mask); \
+        rpc_dplx_ruc(clnt); \
         goto out; \
     } while (0);
 
 static enum clnt_stat
-clnt_vc_call(CLIENT *cl,
+clnt_vc_call(CLIENT *clnt,
              rpcproc_t proc,
              xdrproc_t xdr_args,
              void *args_ptr,
@@ -329,18 +385,15 @@ clnt_vc_call(CLIENT *cl,
              void *results_ptr,
              struct timeval timeout)
 {
-    struct cx_data *cx = (struct cx_data *) cl->cl_private;
+    struct x_vc_data *xd = (struct x_vc_data *) clnt->cl_p1;
+    struct cx_data *cx = (struct cx_data *) &xd->cx.data;
     struct ct_data *ct = CT_DATA(cx);
     enum clnt_stat result = RPC_SUCCESS;
-    XDR *xdrs = &(ct->ct_xdrs); /* XXX consolidation */
     rpc_ctx_t *ctx = NULL;
     SVCXPRT *xprt = NULL;
+    XDR *xdrs;
     int refreshes = 2;
-    sigset_t mask;
     bool shipnow;
-
-    assert(cl != NULL);
-    thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
 
     /* Create a call context.  A lot of TI-RPC decisions need to be
      * looked at, including:
@@ -362,11 +415,8 @@ clnt_vc_call(CLIENT *cl,
      * contexts.  We'll keep the call parameters, control transfer machinery,
      * etc, in an rpc_ctx_t, to permit this.
      */
-    ctx = alloc_rpc_call_ctx(cl, proc, xdr_args, args_ptr, xdr_results,
+    ctx = alloc_rpc_call_ctx(clnt, proc, xdr_args, args_ptr, xdr_results,
                              results_ptr, timeout);
-
-    if (BothWays(cx))
-        xprt = cx->cx_duplex.xprt;
 
     if (! ct->ct_waitset) {
         /* If time is not within limits, we ignore it. */
@@ -379,18 +429,20 @@ clnt_vc_call(CLIENT *cl,
          && timeout.tv_usec == 0) ? FALSE : TRUE;
 
 call_again:
-    rpc_dplx_slc(cl, &mask);
+    rpc_dplx_slc(clnt);
 
+    xdrs = &(xd->shared.xdrs_out);
     xdrs->x_op = XDR_ENCODE;
-    xdrs->x_lib = (void *) ctx; /* transiently thread call ctx */
+    xdrs->x_lib[0] = (void *) RPC_DPLX_CLNT;
+    xdrs->x_lib[1] = (void *) ctx; /* transiently thread call ctx */
 
     ctx->error.re_status = RPC_SUCCESS;
     ct->ct_u.ct_mcalli = ntohl(ctx->xid);
 
     if ((! XDR_PUTBYTES(xdrs, ct->ct_u.ct_mcallc, ct->ct_mpos)) ||
         (! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
-        (! AUTH_MARSHALL(cl->cl_auth, xdrs)) ||
-        (! AUTH_WRAP(cl->cl_auth, xdrs, xdr_args, args_ptr))) {
+        (! AUTH_MARSHALL(clnt->cl_auth, xdrs)) ||
+        (! AUTH_WRAP(clnt->cl_auth, xdrs, xdr_args, args_ptr))) {
         if (ctx->error.re_status == RPC_SUCCESS)
             ctx->error.re_status = RPC_CANTENCODEARGS;
         (void)xdrrec_endofrecord(xdrs, TRUE);
@@ -415,16 +467,17 @@ call_again:
      * XXX This behavior is incompatible with bi-directional operation.  We'll
      * remove it shortly.
      */
-    rpc_dplx_suc(cl, &mask);
-    rpc_dplx_rlc(cl, &mask);
+    rpc_dplx_suc(clnt);
+    rpc_dplx_rlc(clnt);
 
+    xdrs = &(xd->shared.xdrs_in);
     xdrs->x_op = XDR_DECODE;
     while (TRUE) {
         ctx->msg->acpted_rply.ar_verf = _null_auth;
         ctx->msg->acpted_rply.ar_results.where = NULL;
         ctx->msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
 
-        /* XXX skiprecord */
+        /* skiprecord */
         if (! xdrrec_skiprecord(xdrs)) {
             __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
                     "%s: error at skiprecord", __func__);
@@ -455,15 +508,15 @@ call_again:
                 goto replied;
             break;
         case CALL:
+#if 0
             /* XXX queue or dispatch */
             if (BothWays(cx)) {
-                struct cf_conn *cd;
-                cd = (struct cf_conn *) xprt->xp_p1;
                 __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
                         "%s: call intercepted, dispatching (x_id == %d)\n",
                         __func__, ctx->msg->rm_xid);
                 xprt->xp_ops2->xp_dispatch(xprt, &ctx->msg);
             }
+#endif
             break;
         default:
             break;
@@ -476,10 +529,10 @@ call_again:
 replied:
     _seterr_reply(ctx->msg, &(ctx->error));
     if (ctx->error.re_status == RPC_SUCCESS) {
-        if (! AUTH_VALIDATE(cl->cl_auth, &(ctx->msg->acpted_rply.ar_verf))) {
+        if (! AUTH_VALIDATE(clnt->cl_auth, &(ctx->msg->acpted_rply.ar_verf))) {
             ctx->error.re_status = RPC_AUTHERROR;
             ctx->error.re_why = AUTH_INVALIDRESP;
-        } else if (! AUTH_UNWRAP(cl->cl_auth, xdrs,
+        } else if (! AUTH_UNWRAP(clnt->cl_auth, xdrs,
                                  xdr_results, results_ptr)) {
             if (ctx->error.re_status == RPC_SUCCESS)
                 ctx->error.re_status = RPC_CANTDECODERES;
@@ -492,9 +545,9 @@ replied:
     }  /* end successful completion */
     else {
         /* maybe our credentials need to be refreshed ... */
-        if (refreshes-- && AUTH_REFRESH(cl->cl_auth, &(ctx->msg))) {
+        if (refreshes-- && AUTH_REFRESH(clnt->cl_auth, &(ctx->msg))) {
             rpc_ctx_next_xid(ctx, RPC_CTX_FLAG_NONE);
-            rpc_dplx_ruc(cl, &mask);
+            rpc_dplx_ruc(clnt);
             goto call_again;
         }
     }  /* end of unsuccessful completion */
@@ -508,17 +561,15 @@ out:
 }
 
 static void
-clnt_vc_geterr(cl, errp)
-    CLIENT *cl;
-    struct rpc_err *errp;
+clnt_vc_geterr(CLIENT *clnt, struct rpc_err *errp)
 {
-    struct ct_data *ct = CT_DATA((struct cx_data *) cl->cl_private);
+    struct x_vc_data *xd = (struct x_vc_data *) clnt->cl_p1;
+    XDR *xdrs;
 
-    assert(cl != NULL);
-    assert(errp != NULL);
-
-    if (ct->ct_xdrs.x_lib) {
-        rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_lib;
+    /* assert: it doesn't matter which we use */
+    xdrs = &xd->shared.xdrs_out;
+    if (xdrs->x_lib[0]) {
+        rpc_ctx_t *ctx = (rpc_ctx_t *) xdrs->x_lib[1];
         *errp = ctx->error;
     } else {
         /* XXX we don't want (overhead of) an unsafe last-error value */
@@ -529,17 +580,17 @@ clnt_vc_geterr(cl, errp)
 }
 
 static bool
-clnt_vc_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
+clnt_vc_freeres(CLIENT *clnt, xdrproc_t xdr_res, void *res_ptr)
 {
-    struct ct_data *ct;
-    XDR *xdrs;
-    bool dummy;
+    XDR xdrs = {
+        .x_public = NULL,
+        .x_lib = { NULL, NULL }
+    };
     sigset_t mask, newmask;
+    bool rslt;
+    xdrmem_create(&xdrs, res_ptr, ~0, XDR_FREE);
 
-    assert(cl != NULL);
-
-    ct = CT_DATA((struct cx_data *)cl->cl_private);
-    xdrs = &(ct->ct_xdrs);
+    /* XXX is this (legacy) signalling/barrier logic needed? */
 
     /* Handle our own signal mask here, the signal section is
      * larger than the wait (not 100% clear why) */
@@ -547,40 +598,35 @@ clnt_vc_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
     thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 
     /* barrier recv channel */
-    rpc_dplx_rwc(cl, rpc_flag_clear);
+    rpc_dplx_rwc(clnt, rpc_flag_clear);
 
-    xdrs->x_op = XDR_FREE;
-    dummy = (*xdr_res)(xdrs, res_ptr);
+    rslt = (*xdr_res)(&xdrs, res_ptr);
 
     thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 
     /* signal recv channel */
-    rpc_dplx_rsc(cl, RPC_DPLX_FLAG_NONE);
+    rpc_dplx_rsc(clnt, RPC_DPLX_FLAG_NONE);
 
-    return dummy;
+    return (rslt);
 }
 
 /*ARGSUSED*/
 static void
-clnt_vc_abort(CLIENT *cl)
+clnt_vc_abort(CLIENT *clnt)
 {
 }
 
 static bool
-clnt_vc_control(CLIENT *cl, u_int request, void *info)
+clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 {
-    struct cx_data *cx = (struct cx_data *)cl->cl_private;
-    struct ct_data *ct = CT_DATA(cx);
+    struct x_vc_data *xd = (struct x_vc_data *) clnt->cl_p1;
+    struct ct_data *ct = &(xd->cx.data);
     void *infop = info;
     bool rslt = TRUE;
-    sigset_t mask;
 
-    assert(cl);
-
-    /* lock both channels */
-    thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
-    rpc_dplx_slc(cl, &mask);
-    rpc_dplx_rlc(cl, &mask);
+    /* always take recv lock first if taking together */
+    rpc_dplx_rlc(clnt);
+    rpc_dplx_slc(clnt);
 
     switch (request) {
     case CLSET_FD_CLOSE:
@@ -616,7 +662,7 @@ clnt_vc_control(CLIENT *cl, u_int request, void *info)
         (void) memcpy(info, ct->ct_addr.buf, (size_t)ct->ct_addr.len);
         break;
     case CLGET_FD:
-        *(int *)info = cx->cx_fd;
+        *(int *)info = ct->ct_fd;
         break;
     case CLGET_SVC_ADDR:
         /* The caller should not free this memory area */
@@ -689,138 +735,47 @@ clnt_vc_control(CLIENT *cl, u_int request, void *info)
     }
 
 unlock:
-    rpc_dplx_ruc(cl, &mask);
-    rpc_dplx_suc(cl, &mask);
+    rpc_dplx_ruc(clnt);
+    rpc_dplx_suc(clnt);
 
-    return (TRUE);
+    return (rslt);
 }
-
 
 static void
-clnt_vc_destroy(CLIENT *cl)
+clnt_vc_release(CLIENT *clnt, uint32_t flags)
 {
-    struct cx_data *cx = (struct cx_data *) cl->cl_private;
-    sigset_t mask, newmask;
+    struct x_vc_data *xd = (struct x_vc_data *) clnt->cl_p1;
+    struct rpc_dplx_rec *rec = xd->rec;
 
-    /* Handle our own signal mask here, the signal section is
-     * larger than the wait (not 100% clear why) */
-    sigfillset(&newmask);
-    thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
+    mutex_lock(&rec->mtx);
 
-    /* barrier both channels */
-    rpc_dplx_swc(cl, rpc_flag_clear);
-    rpc_dplx_rwc(cl, rpc_flag_clear);
-
-    if (CT_DATA(cx)->ct_closeit && cx->cx_fd != -1)
-        (void)close(cx->cx_fd);
-    XDR_DESTROY(&(CT_DATA(cx)->ct_xdrs));
-    if (CT_DATA(cx)->ct_addr.buf)
-        mem_free(CT_DATA(cx)->ct_addr.buf, 0); /* XXX */
-
-    /* signal both channels */
-    rpc_dplx_ssc(cl, RPC_DPLX_FLAG_NONE);
-    rpc_dplx_rsc(cl, RPC_DPLX_FLAG_NONE);
-
-    rpc_dplx_unref_clnt(cl);
-    free_cx_data(cx);
-
-    if (cl->cl_netid && cl->cl_netid[0])
-        mem_free(cl->cl_netid, strlen(cl->cl_netid) +1);
-    if (cl->cl_tp && cl->cl_tp[0])
-        mem_free(cl->cl_tp, strlen(cl->cl_tp) +1);
-    mem_free(cl, sizeof(CLIENT));
-    thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
+    /* if shared refcnt drops to 0, do shared destroy */
+    --xd->refcnt;
+    if (xd->refcnt == 0) {
+        vc_shared_destroy(xd); /* RECLOCKED */
+    } else {
+        if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
+            mutex_unlock(&rec->mtx);
+    }
 }
 
-/*
- * Interface between xdr serializer and tcp connection.
- * Behaves like the system calls, read & write, but keeps some error state
- * around for the rpc level.
- */
-static int
-read_vc(void *ctp, void *buf, int len)
+static void
+clnt_vc_destroy(CLIENT *clnt)
 {
-    struct cx_data *cx = (struct cx_data *)ctp;
-    struct ct_data *ct = CT_DATA(cx);
-    rpc_ctx_t *ctx = NULL;
-    struct pollfd fd;
-    int milliseconds = (int)((ct->ct_wait.tv_sec * 1000) +
-                             (ct->ct_wait.tv_usec / 1000));
+    struct x_vc_data *xd = (struct x_vc_data *) clnt->cl_p1;
+    struct rpc_dplx_rec *rec = xd->rec;
 
-    if (len == 0)
-        return (0);
+    mutex_lock(&rec->mtx);
+    xd->flags |= X_VC_DATA_FLAG_CLNT_DESTROYED; /* destroyed handle is dead */
 
-    /* Though not previously used by TI-RPC, this is an ONC-compliant
-     * use of x_public.  However, we'd like to reserve x_public for
-     * application layer code. */
-    ctx = (rpc_ctx_t *) ct->ct_xdrs.x_lib;
-
-    /* if ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX, in the current
-     * strategy (cf. clnt_vc_call and the duplex-aware getreq
-     * implementation), we assert that the current thread may safely
-     * block in poll (though we are not constrained to blocking
-     * semantics) */
-
-    fd.fd = cx->cx_fd;
-    fd.events = POLLIN;
-    for (;;) {
-        switch (poll(&fd, 1, milliseconds)) {
-        case 0:
-            ctx->error.re_status = RPC_TIMEDOUT;
-            return (-1);
-
-        case -1:
-            if (errno == EINTR)
-                continue;
-            ctx->error.re_status = RPC_CANTRECV;
-            ctx->error.re_errno = errno;
-            return (-1);
-        }
-        break;
+    /* if shared refcnt drops to 0, do shared destroy */
+    --xd->refcnt;
+    if (xd->refcnt == 0) {
+        vc_shared_destroy(xd); /* RECLOCKED */
+    } else {
+        if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
+            mutex_unlock(&rec->mtx);
     }
-
-    len = read(cx->cx_fd, buf, (size_t)len);
-
-    switch (len) {
-    case 0:
-        /* premature eof */
-        ctx->error.re_errno = ECONNRESET;
-        ctx->error.re_status = RPC_CANTRECV;
-        len = -1;  /* it's really an error */
-        break;
-
-    case -1:
-        ctx->error.re_errno = errno;
-        ctx->error.re_status = RPC_CANTRECV;
-        break;
-    }
-    return (len);
-}
-
-static int
-write_vc(void *ctp, void *buf, int len)
-{
-    struct cx_data *cx = (struct cx_data *)ctp;
-    struct ct_data *ct = CT_DATA(cx);
-    rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_lib;
-
-    int i = 0, cnt;
-
-    for (cnt = len; cnt > 0; cnt -= i, buf += i) {
-        if ((i = write(cx->cx_fd, buf, (size_t)cnt)) == -1) {
-            ctx->error.re_errno = errno;
-            ctx->error.re_status = RPC_CANTSEND;
-            return (-1);
-        }
-    }
-    return (len);
-}
-
-static void *
-clnt_vc_xdrs(CLIENT *cl)
-{
-    struct ct_data *ct = (struct ct_data *) cl->cl_private;
-    return ((void *) & ct->ct_xdrs);
 }
 
 static struct clnt_ops *
@@ -837,7 +792,6 @@ clnt_vc_ops(void)
     mutex_lock(&ops_lock);
     if (ops.cl_call == NULL) {
         ops.cl_call = clnt_vc_call;
-        ops.cl_xdrs = clnt_vc_xdrs;
         ops.cl_abort = clnt_vc_abort;
         ops.cl_geterr = clnt_vc_geterr;
         ops.cl_freeres = clnt_vc_freeres;

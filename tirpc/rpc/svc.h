@@ -1,4 +1,4 @@
-/* $NetBSD: svc.h,v 1.17 2000/06/02 22:57:56 fvdl Exp $ */
+/* $netbsd: svc.h,v 1.17 2000/06/02 22:57:56 fvdl Exp $ */
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
@@ -174,22 +174,6 @@ struct cf_rendezvous { /* kept in xprt->xp_p1 for rendezvouser */
     int maxrec;
 };
 
-/* XXX TODO: bidirectional unification */
-struct cf_conn
-{  /* kept in xprt->xp_p1 for actual connection */
-    enum xprt_stat strm_stat;
-
-    /* TODO: bidirectional unification */
-    XDR xdrs_in;  /* send queue */
-    XDR xdrs_out; /* recv queue */
-
-    u_int sendsize;
-    u_int recvsize;
-    int maxrec;
-    bool nonblock;
-    struct timespec last_recv_time;
-};
-
 struct SVCAUTH; /* forward decl. */
 
 /*
@@ -215,8 +199,14 @@ typedef struct rpc_svcxprt {
         /* destroy this struct */
         void (*xp_destroy)(struct rpc_svcxprt *);
         /* get arguments, thread u_data in arg4*/
-        bool(*xp_getargs2)(struct rpc_svcxprt *, struct svc_req *req,
-                           xdrproc_t, void *, void *);
+        bool (*xp_getargs2)(struct rpc_svcxprt *, struct svc_req *req,
+                            xdrproc_t, void *, void *);
+        /* xprt locking (may be duplex-aware, etc) */
+        void (*xp_lock)(struct rpc_svcxprt *, uint32_t flags,
+                        const char *file, int line);
+        void (*xp_unlock)(struct rpc_svcxprt *, uint32_t flags,
+                          const char *file, int line);
+
     } *xp_ops;
 
     int  xp_addrlen;  /* length of remote address */
@@ -259,7 +249,7 @@ typedef struct rpc_svcxprt {
     int             xp_si_type;      /* si type */
     int             xp_type;         /* xprt type */
     u_int  xp_flags;  /* flags */
-    uint64_t        xp_gen;          /* svc_xprt generation number */
+    uint64_t        xp_gen; /* svc_xprt generation number */
 
 } SVCXPRT;
 
@@ -396,6 +386,22 @@ extern SVCXPRT *svc_shim_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig);
 #define SVC_CONTROL(xprt, rq, in) \
     (*(xprt)->xp_ops2->xp_control)((xprt), (rq), (in))
 
+#define XP_LOCK_NONE    0x0000
+#define XP_LOCK_SEND    0x0001
+#define XP_LOCK_RECV    0x0002
+
+#define SVC_LOCK(xprt, flags) \
+    (*(xprt)->xp_ops2->xp_lock)((xprt), (flags))
+
+#define svc_lock(xprt, flags) \
+    (*(xprt)->xp_ops2->xp_lock)((xprt), (flags))
+
+#define SVC_UNLOCK(xprt, flags) \
+    (*(xprt)->xp_ops2->xp_unlock)((xprt), (flags))
+
+#define svc_unlock(xprt, flags) \
+    (*(xprt)->xp_ops2->xp_unlock)((xprt), (flags))
+
 /*
  * Service init (optional).
  */
@@ -459,18 +465,6 @@ __END_DECLS
  */
 __BEGIN_DECLS
 extern void xprt_unregister(SVCXPRT *);
-__END_DECLS
-
-/*
- * Create transport from file descriptor
- *
- * makefd_xprt(fd, sendsize, recvsize)
- * int fd;
- * u_int sendsize;
- * u_int recvsize;
- */
-__BEGIN_DECLS
-SVCXPRT *makefd_xprt(int, u_int, u_int);
 __END_DECLS
 
 /*
@@ -622,12 +616,12 @@ extern SVCXPRT *svc_vc_ncreate2(const int, const u_int, const u_int,
 
 __END_DECLS
 
-#define SVC_VC_CREATE_FLAG_NONE             0x0000
-#define SVC_VC_CREATE_FLAG_DPLX             0x0001
-#define SVC_VC_CREATE_FLAG_SPLX             0x0002 /* !dplx */
-#define SVC_VC_CREATE_FLAG_DISPOSE          0x0004 /* !dplx */
-#define SVC_VC_CREATE_FLAG_XPRT_NOREG       0x0008
-#define SVC_VC_CREATE_FLAG_LISTEN           0x0010
+#define SVC_VC_CREATE_NONE             0x0000
+#define SVC_VC_CREATE_BOTHWAYS         0x0001
+#define SVC_VC_CREATE_ONEWAY           0x0002 /* !bothways */
+#define SVC_VC_CREATE_DISPOSE          0x0004 /* !bothways */
+#define SVC_VC_CREATE_XPRT_NOREG       0x0008
+#define SVC_VC_CREATE_LISTEN           0x0010
 
 __BEGIN_DECLS
 

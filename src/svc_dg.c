@@ -83,6 +83,8 @@ static bool svc_dg_reply(SVCXPRT *, struct svc_req *req, struct rpc_msg *);
 static bool svc_dg_getargs(SVCXPRT *, xdrproc_t, void *);
 static bool svc_dg_getargs2(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
                             void *);
+static void svc_dg_lock(SVCXPRT *, uint32_t, const char *, int);
+static void svc_dg_unlock(SVCXPRT *, uint32_t, const char *, int);
 static bool svc_dg_freeargs(SVCXPRT *, xdrproc_t, void *);
 static void svc_dg_destroy(SVCXPRT *);
 static bool svc_dg_control(SVCXPRT *, const u_int, void *);
@@ -137,7 +139,7 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
     memset(xprt, 0, sizeof (SVCXPRT));
 
     /* Init SVCXPRT locks, etc */
-    spin_init(&xprt->xp_lock, PTHREAD_PROCESS_PRIVATE);
+    mutex_init(&xprt->xp_lock, NULL);
     mutex_init(&xprt->xp_auth_lock, NULL);
 
     su = mem_alloc(sizeof (*su));
@@ -353,6 +355,20 @@ svc_dg_getargs2(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
     return TRUE;
 }
 
+static void
+svc_dg_lock(SVCXPRT *xprt, uint32_t flags, const char *file, int line)
+{
+    rpc_dplx_rlxi(xprt, file, line);
+    rpc_dplx_slxi(xprt, file, line);
+}
+
+static void
+svc_dg_unlock(SVCXPRT *xprt, uint32_t flags, const char *file, int line)
+{
+    rpc_dplx_ruxi(xprt, file, line);
+    rpc_dplx_suxi(xprt, file, line);
+}
+
 static bool
 svc_dg_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
@@ -469,6 +485,8 @@ svc_dg_ops(SVCXPRT *xprt)
         ops.xp_stat = svc_dg_stat;
         ops.xp_getargs = svc_dg_getargs;
         ops.xp_getargs2 = svc_dg_getargs2;
+        ops.xp_lock = svc_dg_lock;
+        ops.xp_unlock = svc_dg_unlock;
         ops.xp_reply = svc_dg_reply;
         ops.xp_freeargs = svc_dg_freeargs;
         ops.xp_destroy = svc_dg_destroy;

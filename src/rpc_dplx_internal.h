@@ -40,9 +40,17 @@ struct rpc_dplx_rec_set
 #define rpc_flag_clear 0
 #define rpc_lock_value 1
 
+enum rpc_duplex_callpath
+{
+    RPC_DPLX_CLNT=1,
+    RPC_DPLX_SVC
+};
+
 #define RPC_DPLX_FLAG_NONE          0x0000
-#define RPC_DPLX_FLAG_SPIN_LOCKED   0x0001
+#define RPC_DPLX_FLAG_LOCKED        0x0001
 #define RPC_DPLX_FLAG_LOCK          0x0002 /* take chan lock before signal */
+#define RPC_DPLX_FLAG_LOCKREC       0x0004
+#define RPC_DPLX_FLAG_RECLOCKED     0x0008
 
 #ifndef HAVE_STRLCAT
 extern size_t strlcat(char *dst, const char *src, size_t siz);
@@ -52,7 +60,12 @@ extern size_t strlcat(char *dst, const char *src, size_t siz);
 extern size_t strlcpy(char *dst, const char *src, size_t siz);
 #endif
 
-struct rpc_dplx_rec *rpc_dplx_lookup_rec(int fd);
+#define RPC_DPLX_LKP_FLAG_NONE        0x0000
+#define RPC_DPLX_LKP_IFLAG_LOCKREC    0x0001
+#define RPC_DPLX_LKP_OFLAG_ALLOC      0x0002
+
+struct rpc_dplx_rec *rpc_dplx_lookup_rec(int fd, uint32_t iflags,
+                                         uint32_t *oflags);
 
 static inline void
 rpc_dplx_lock_init(struct rpc_dplx_lock *lock)
@@ -69,36 +82,17 @@ rpc_dplx_lock_destroy(struct rpc_dplx_lock *lock)
     cond_destroy(&lock->we.cv);
 }
 
-static inline
-void rpc_dplx_init_client(CLIENT *cl)
-{
-    struct cx_data *cx = (struct cx_data *) cl->cl_private;
-    if (! cx->cx_rec) {
-        /* many clients (and xprts) shall point to rec */
-        cx->cx_rec = rpc_dplx_lookup_rec(cx->cx_fd); /* ref+1 */
-    }
-}
-
-static inline
-void rpc_dplx_init_xprt(SVCXPRT *xprt)
-{
-    if (! xprt->xp_p5) {
-        /* many xprts shall point to rec */
-        xprt->xp_p5 = rpc_dplx_lookup_rec(xprt->xp_fd); /* ref+1 */
-    }
-}
-
 static inline int32_t
 rpc_dplx_ref(struct rpc_dplx_rec *rec, u_int flags)
 {
     int32_t refcnt;
 
-    if (! (flags & RPC_DPLX_FLAG_SPIN_LOCKED))
+    if (! (flags & RPC_DPLX_FLAG_LOCKED))
         mutex_lock(&rec->mtx);
 
     refcnt = ++(rec->refcnt);
 
-    if (! (flags & RPC_DPLX_FLAG_SPIN_LOCKED))
+    if (! (flags & RPC_DPLX_FLAG_LOCKED))
         mutex_unlock(&rec->mtx);
 
     return(refcnt);
@@ -122,9 +116,8 @@ rpc_dplx_swi(struct rpc_dplx_rec *rec, uint32_t wait_for)
 static inline void
 rpc_dplx_swc(CLIENT *clnt, uint32_t wait_for)
 {
-    struct cx_data *cx = (struct cx_data *) clnt->cl_private;
-    rpc_dplx_init_client(clnt);
-    rpc_dplx_swi(cx->cx_rec, wait_for);
+    struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) clnt->cl_p2;
+    rpc_dplx_swi(rec, wait_for);
 }
 
 /* rwi:  recv wait impl */
@@ -143,9 +136,8 @@ rpc_dplx_rwi(struct rpc_dplx_rec *rec, uint32_t wait_for)
 static inline void
 rpc_dplx_rwc(CLIENT *clnt, uint32_t wait_for)
 {
-    struct cx_data *cx = (struct cx_data *) clnt->cl_private;
-    rpc_dplx_init_client(clnt);
-    rpc_dplx_rwi(cx->cx_rec, wait_for);
+    struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) clnt->cl_p2;
+    rpc_dplx_rwi(rec, wait_for);
 }
 
 /* ssi: send signal impl */
@@ -165,10 +157,8 @@ rpc_dplx_ssi(struct rpc_dplx_rec *rec, uint32_t flags)
 static inline void
 rpc_dplx_ssc(CLIENT *clnt, uint32_t flags)
 {
-    struct cx_data *cx = (struct cx_data *) clnt->cl_private;
-
-    rpc_dplx_init_client(clnt);
-    rpc_dplx_ssi(cx->cx_rec, flags);
+    struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) clnt->cl_p2;
+    rpc_dplx_ssi(rec, flags);
 }
 
 /* swf: send wait fd */
@@ -196,12 +186,9 @@ rpc_dplx_rsi(struct rpc_dplx_rec *rec, uint32_t flags)
 static inline void
 rpc_dplx_rsc(CLIENT *clnt, uint32_t flags)
 {
-    struct cx_data *cx = (struct cx_data *) clnt->cl_private;
-
-    rpc_dplx_init_client(clnt);
-    rpc_dplx_rsi(cx->cx_rec, flags);
+    struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) clnt->cl_p2;
+    rpc_dplx_rsi(rec, flags);
 }
-
 
 /* rwf: recv wait fd */
 #define rpc_dplx_rwf(fd, wait_for) \
@@ -223,30 +210,6 @@ rpc_dplx_rsc(CLIENT *clnt, uint32_t flags)
         struct vc_fd_rec *rec = rpc_dplx_lookup_rec(fd); \
         rpc_dplx_rsi(rec, flags); \
     } while (0);
-
-static inline void
-rpc_dplx_unref_clnt(CLIENT *clnt)
-{
-    int32_t refcnt __attribute__((unused)) = 0;
-    struct cx_data *cx = (struct cx_data *) clnt->cl_private;
-
-    if (cx->cx_rec) {
-        refcnt = rpc_dplx_unref(cx->cx_rec, RPC_DPLX_FLAG_NONE);
-        cx->cx_rec = NULL;
-    }
-}
-
-static inline void
-rpc_dplx_unref_xprt(SVCXPRT *xprt)
-{
-    int32_t refcnt __attribute__((unused)) = 0;
-
-    if (xprt->xp_p5) {
-        refcnt = rpc_dplx_unref((struct rpc_dplx_rec *) xprt->xp_p5,
-                                RPC_DPLX_FLAG_NONE);
-        xprt->xp_p5 = NULL;
-    }
-}
 
 void rpc_dplx_shutdown(void);
 

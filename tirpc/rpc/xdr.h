@@ -164,7 +164,7 @@ typedef struct rpc_xdr {
     } *x_ops;
     void *x_public; /* users' data */
     void *x_private; /* pointer to private data */
-    char *x_lib; /* RPC library private */
+    void *x_lib[2]; /* RPC library private */
     void *x_base;  /* private used for position info */
     u_int x_handy; /* extra private word */
 } XDR;
@@ -409,8 +409,8 @@ extern void xdrstdio_create(XDR *, FILE *, enum xdr_op);
 
 /* XDR pseudo records for tcp */
 extern void xdrrec_create(XDR *, u_int, u_int, void *,
-                          int (*)(void *, void *, int),
-                          int (*)(void *, void *, int));
+                          int (*)(XDR *xdrs, void *, void *, int),
+                          int (*)(XDR *xdrs, void *, void *, int));
 
 /* make end of xdr record */
 extern bool xdrrec_endofrecord(XDR *, bool);

@@ -41,6 +41,7 @@
 
 #include <rpc/clnt_stat.h>
 #include <rpc/auth.h>
+#include "reentrant.h"
 
 #include <sys/cdefs.h>
 #include <netconfig.h>
@@ -122,9 +123,12 @@ typedef struct __rpc_client {
         bool          (*cl_control)(struct __rpc_client *, u_int,
                                       void *);
     } *cl_ops;
-    void    *cl_private; /* private stuff */
-    char   *cl_netid; /* network token */
-    char   *cl_tp;  /* device name */
+
+    void *cl_p1; /* private data */
+    void *cl_p2;
+    char *cl_netid; /* network token */
+    char *cl_tp; /* device name */
+
 } CLIENT;
 
 

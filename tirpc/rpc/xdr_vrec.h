@@ -81,6 +81,9 @@ struct v_rec_strm
 {
     enum xdr_vrec_direction direction;
 
+    /* XDR */
+    XDR *xdrs;
+
     /* buffer queues */
     struct v_rec_queue ioq;
 
@@ -91,8 +94,8 @@ struct v_rec_strm
      * ops
      */
     union {
-        size_t (*readv)(void *, struct iovec *, int, u_int);
-        size_t (*writev)(void *, struct iovec *, int, u_int);
+        size_t (*readv)(XDR *, void *, struct iovec *, int, u_int);
+        size_t (*writev)(XDR *, void *, struct iovec *, int, u_int);
     } ops;
 
     /* stream params */
@@ -141,8 +144,10 @@ typedef struct v_rec_strm V_RECSTREAM;
 /* vector equivalents */
 
 extern void xdr_vrec_create(XDR *, enum xdr_vrec_direction, void *,
-                            size_t (*)(void *, struct iovec *, int, u_int),
-                            size_t (*)(void *, struct iovec *, int, u_int),
+                            size_t (*)(XDR *, void *, struct iovec *, int,
+                                       u_int),
+                            size_t (*)(XDR *, void *, struct iovec *, int,
+                                       u_int),
                             u_int, u_int);
 
 /* make end of xdr record */
