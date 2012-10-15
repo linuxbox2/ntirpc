@@ -169,7 +169,6 @@ struct rpc_dplx_rec
     mutex_t mtx;
     struct opr_rbtree_node node_k;
     uint32_t refcnt;
-    uint32_t flags;
     struct {
         rpc_dplx_lock_t lock;
     } send;
@@ -189,12 +188,10 @@ struct cx_data
         struct cu_data cu;
         struct ct_data ct;
     } c_u;
-    int cx_fd;                   /* connection's fd */
+    int cx_fd; /* connection's fd */
     struct rpc_dplx_rec *cx_rec; /* unified sync */
 };
 
-/* XXX move (file reorg) */
-/* kept in xprt->xp_p1, clnt->xp_?? */
 struct x_vc_data
 {
     uint32_t flags;
