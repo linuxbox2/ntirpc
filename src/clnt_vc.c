@@ -476,7 +476,9 @@ call_again:
 
     xdrs = &(xd->shared.xdrs_in);
     xdrs->x_op = XDR_DECODE;
+
     while (TRUE) {
+
         ctx->msg->acpted_rply.ar_verf = _null_auth;
         ctx->msg->acpted_rply.ar_results.where = NULL;
         ctx->msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
@@ -512,15 +514,7 @@ call_again:
                 goto replied;
             break;
         case CALL:
-#if 0
-            /* XXX queue or dispatch */
-            if (BothWays(cx)) {
-                __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
-                        "%s: call intercepted, dispatching (x_id == %d)\n",
-                        __func__, ctx->msg->rm_xid);
-                xprt->xp_ops2->xp_dispatch(xprt, &ctx->msg);
-            }
-#endif
+            rpc_ctx_xfer_callmsg(ctx);
             break;
         default:
             break;

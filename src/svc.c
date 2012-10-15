@@ -167,6 +167,7 @@ alloc_rpc_msg(void)
     struct rpc_msg *msg = mem_alloc(sizeof(struct rpc_msg));
     if (! msg)
         goto out;
+    TAILQ_INIT_ENTRY(msg, msg_q);
     msg->rm_call.cb_cred.oa_base = mem_alloc(2 * MAX_AUTH_BYTES + RQCRED_SIZE);
     if (! msg->rm_call.cb_cred.oa_base) {
         mem_free(msg, sizeof(struct rpc_msg));

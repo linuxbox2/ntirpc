@@ -544,7 +544,6 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 #endif
     } /* CLNT */
 
-
     xprt->xp_p1 = xd;
     if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
         xprt->xp_netid = rpc_strdup(netid);

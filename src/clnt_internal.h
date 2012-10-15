@@ -212,6 +212,8 @@ struct x_vc_data
         enum xprt_stat strm_stat;
         struct timespec last_recv; /* XXX move to shared? */
         int32_t maxrec;
+        TAILQ_HEAD(sx_tailq, rpc_msg) msg_q;
+        int32_t qlen;
     } sx;
     struct {
         bool nonblock;
@@ -230,6 +232,8 @@ static inline struct x_vc_data *
 alloc_x_vc_data(void)
 {
     struct x_vc_data *xd = mem_zalloc(sizeof(struct x_vc_data));
+    TAILQ_INIT(&xd->sx.msg_q);
+    xd->sx.qlen = 0;
     return (xd);
 }
 

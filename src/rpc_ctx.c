@@ -120,6 +120,27 @@ out:
     return;
 }
 
+void
+rpc_ctx_xfer_callmsg(rpc_ctx_t *ctx)
+{
+    struct x_vc_data *xd = (struct x_vc_data *) ctx->ctx_u.clnt.clnt->cl_p1;
+    struct rpc_dplx_rec *rec  = xd->rec;
+
+    if (rec->hdl.xprt) {
+        /* queue msg */
+        mutex_lock(&xd->rec->mtx);
+        TAILQ_INSERT_TAIL(&xd->sx.msg_q, ctx->msg, msg_q);
+        ++(xd->sx.qlen);
+        mutex_unlock(&xd->rec->mtx);
+        /* reset it */
+        ctx->state = RPC_CTX_START;
+        ctx->msg = alloc_rpc_msg();
+    } else {
+        /* unexpected msg (abuse?)--just reuse it */
+        ctx->state = RPC_CTX_START;
+    }    
+}
+
 #if 0 /* XXX not yet */
 enum rpc_ctx_stat
 rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)

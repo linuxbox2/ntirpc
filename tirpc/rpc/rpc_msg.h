@@ -46,6 +46,7 @@
 #define RPC_SERVICE_PORT ((u_short) 2048)
 
 #include <rpc/auth.h>
+#include <misc/queue.h>
 
 /*
  * Bottom up definition of an rpc message.
@@ -163,6 +164,8 @@ struct rpc_msg {
     caddr_t fr_vec[1];
     int32_t *rm_ibuf;
     uint32_t rm_flags;
+    /* queue of msgs for control xfer */
+    TAILQ_ENTRY(rpc_msg) msg_q;
 };
 #define acpted_rply ru.RM_rmb.ru.RP_ar
 #define rjcted_rply ru.RM_rmb.ru.RP_dr
