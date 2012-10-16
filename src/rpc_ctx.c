@@ -46,6 +46,8 @@
 #include "rpc_dplx_internal.h"
 #include "rpc_ctx.h"
 
+#define tv_to_ms(tv) (1000 * ((tv)->tv_sec) + (tv)->tv_usec/1000)
+
 rpc_ctx_t *
 alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
                    void *args_ptr, xdrproc_t xdr_results, void *results_ptr,
@@ -68,14 +70,14 @@ alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
     /* some of this looks like overkill;  it's here to support future,
      * fully async calls */
     ctx->ctx_u.clnt.clnt = clnt;
+    ctx->ctx_u.clnt.timeout.tv_sec = 0;
+    ctx->ctx_u.clnt.timeout.tv_nsec = 0;
+    timespec_addms(&ctx->ctx_u.clnt.timeout, tv_to_ms(&timeout));
     ctx->ctx_u.clnt.proc = proc;
     ctx->ctx_u.clnt.xdr_args = xdr_args;
     ctx->ctx_u.clnt.args_ptr = args_ptr;
     ctx->ctx_u.clnt.results_ptr = results_ptr;
     ctx->msg = alloc_rpc_msg();
-    ctx->u_data[0] = NULL;
-    ctx->u_data[1] = NULL;
-    ctx->state = RPC_CTX_START;
     ctx->flags = 0;
 
     /* stash it */
@@ -133,35 +135,27 @@ rpc_ctx_xfer_callmsg(rpc_ctx_t *ctx)
         ++(xd->sx.qlen);
         mutex_unlock(&xd->rec->mtx);
         /* reset it */
-        ctx->state = RPC_CTX_START;
         ctx->msg = alloc_rpc_msg();
     } else {
         /* unexpected msg (abuse?)--just reuse it */
-        ctx->state = RPC_CTX_START;
     }    
 }
 
-#if 0 /* XXX not yet */
-enum rpc_ctx_stat
+int
 rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 {
     struct x_vc_data *xd = (struct x_vc_data *) ctx->ctx_u.clnt.clnt->cl_p1;
     struct rpc_dplx_rec *rec  = xd->rec;
-    XDR *xdrs __attribute__((unused)) = &(ct->ct_xdrs);
-    enum clnt_stat stat = RPC_SUCCESS;
     struct timespec ts;
+    int code = 0;
 
-    /* XXX if we keep this convenience flag, it needs to indicate SEND or
-     * RECV lock */
     assert (flags & RPC_CTX_FLAG_LOCKED);
-
-    ctx->state = RPC_CTX_REPLY_WAIT; /* XXX diagnostic */
 
     ctx->flags |= RPC_CTX_FLAG_WAITSYNC;
     while (! (ctx->flags & RPC_CTX_FLAG_SYNCDONE)) {
         (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
-        timespec_adds(&ts, 20);
-        cond_timedwait(&ctx->we.cv, &ctx->we.mtx, &ts);
+        timespecadd(&ts, &ctx->ctx_u.clnt.timeout);
+        code = cond_timedwait(&ctx->we.cv, &ctx->we.mtx, &ts);
     }
 
     /* switch on direction */
@@ -178,9 +172,8 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
         break;
     }
 
-    return (stat);
+    return (code);
 }
-#endif
 
 void
 free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)

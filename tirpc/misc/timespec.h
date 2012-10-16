@@ -56,7 +56,7 @@
     do {                                                                \
         long as = (ms) / 1000;                                          \
         (vvp)->tv_sec += (ms) / 1000;                                   \
-        (vvp)->tv_nsec += ((ms) - ((ms) % 1000) * 1000000;              \
+        (vvp)->tv_nsec += ((ms) - ((ms) % 1000) * 1000000);             \
         if ((vvp)->tv_nsec >= 1000000000) {                             \
             (vvp)->tv_sec++;                                            \
             (vvp)->tv_nsec -= 1000000000;                               \

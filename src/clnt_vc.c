@@ -390,13 +390,13 @@ clnt_vc_call(CLIENT *clnt,
              struct timeval timeout)
 {
     struct x_vc_data *xd = (struct x_vc_data *) clnt->cl_p1;
-    struct cx_data *cx = (struct cx_data *) &xd->cx.data;
-    struct ct_data *ct = CT_DATA(cx);
+    struct ct_data *ct = &(xd->cx.data);
+    struct rpc_dplx_rec *rec = xd->rec;
     enum clnt_stat result = RPC_SUCCESS;
     rpc_ctx_t *ctx = NULL;
     SVCXPRT *xprt = NULL;
     XDR *xdrs;
-    int refreshes = 2;
+    int code, ix, refreshes = 2;
     bool shipnow;
 
     /* Create a call context.  A lot of TI-RPC decisions need to be
@@ -405,7 +405,7 @@ clnt_vc_call(CLIENT *clnt,
      * 1. the client has a serialized call.  This looks harmless, so long
      * as the xid is adjusted.
      *
-     * 2. the last xid used is now saved in the shared crec structure, it
+     * 2. the last xid used is now saved in handle shared private data, it
      * will be incremented by rpc_call_create (successive calls).  There's no
      * more reason to use the old time-dependent xid logic.  It should be
      * preferable to count atomically from 1.
@@ -420,7 +420,7 @@ clnt_vc_call(CLIENT *clnt,
      * etc, in an rpc_ctx_t, to permit this.
      */
     ctx = alloc_rpc_call_ctx(clnt, proc, xdr_args, args_ptr, xdr_results,
-                             results_ptr, timeout);
+                             results_ptr, timeout); /*add total timeout? */
 
     if (! ct->ct_waitset) {
         /* If time is not within limits, we ignore it. */
@@ -465,61 +465,75 @@ call_again:
     if (timeout.tv_sec == 0 && timeout.tv_usec == 0)
         vc_call_return_slocked(ctx->error.re_status = RPC_TIMEDOUT);
 
-    /*
-     * Keep receiving until we get a valid transaction id.
-     *
-     * XXX This behavior is incompatible with bi-directional operation.  We'll
-     * remove it shortly.
-     */
+    /* reply */
     rpc_dplx_suc(clnt);
     rpc_dplx_rlc(clnt);
 
-    xdrs = &(xd->shared.xdrs_in);
-    xdrs->x_op = XDR_DECODE;
-
-    while (TRUE) {
-
-        ctx->msg->acpted_rply.ar_verf = _null_auth;
-        ctx->msg->acpted_rply.ar_results.where = NULL;
-        ctx->msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
-
-        /* skiprecord */
-        if (! xdrrec_skiprecord(xdrs)) {
-            __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
-                    "%s: error at skiprecord", __func__);
-            vc_call_return_rlocked(ctx->error.re_status);
-        }
-
-        /* now decode and validate the response header */
-        if (! xdr_dplx_msg_decode_start(xdrs, ctx->msg)) {
-            __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
-                    "%s: error at xdr_dplx_msg_start", __func__);
-            vc_call_return_rlocked(ctx->error.re_status);
-        }
-
-        if (! xdr_dplx_msg_decode_continue(xdrs, ctx->msg)) {
-            __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
-                    "%s: error at xdr_dplx_msg_continue", __func__);
-            vc_call_return_rlocked(ctx->error.re_status);
-        }
-
-        __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
-                "%s: successful xdr_dplx_msg (direction==%d)\n",
-                __func__, ctx->msg->rm_direction);
-
-        /* switch on direction */
-        switch (ctx->msg->rm_direction) {
-        case REPLY:
-            if (ctx->msg->rm_xid == ctx->xid)
-                goto replied;
+    /* if the channel is bi-directional, then the the shared conn is in a
+     * svc event loop, and recv processing decodes reply headers */
+    if (rec->hdl.xprt) {
+        /* XXX unless we are talking to an evil interlocutor, the
+         * reply loop will terminate in 1 step */
+        for (ix = 0; ix < 10; ++ix) {
+            code = rpc_ctx_wait_reply(ctx, RPC_DPLX_FLAG_LOCKED); /* RECV! */
+            /* we can't just loop forever */
+            if (code == ETIMEDOUT)
+                break;
+            /* switch on direction */
+            switch (ctx->msg->rm_direction) {
+            case REPLY:
+                if (ctx->msg->rm_xid == ctx->xid)
+                    goto replied;
+                break;
+            case CALL:
+                /* in this configuration, we do not expect calls */
+                break;
+            default:
             break;
-        case CALL:
-            rpc_ctx_xfer_callmsg(ctx);
-            break;
-        default:
-            break;
-        }
-    } /* while (TRUE) */
+            }
+        } /* for (ix) */
+    } else {
+
+        /*
+         * Keep receiving until we get a valid transaction id.
+         */
+        xdrs = &(xd->shared.xdrs_in);
+        xdrs->x_op = XDR_DECODE;
+
+        while (TRUE) {
+
+            ctx->msg->acpted_rply.ar_verf = _null_auth;
+            ctx->msg->acpted_rply.ar_results.where = NULL;
+            ctx->msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
+
+            /* skiprecord */
+            if (! xdrrec_skiprecord(xdrs)) {
+                __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+                        "%s: error at skiprecord", __func__);
+                vc_call_return_rlocked(ctx->error.re_status);
+            }
+
+            /* now decode and validate the response header */
+            if (! xdr_dplx_msg(xdrs, ctx->msg)) {
+                __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+                        "%s: error at xdr_dplx_msg_start", __func__);
+                vc_call_return_rlocked(ctx->error.re_status);
+            }
+
+            /* switch on direction */
+            switch (ctx->msg->rm_direction) {
+            case REPLY:
+                if (ctx->msg->rm_xid == ctx->xid)
+                    goto replied;
+                break;
+            case CALL:
+                /* in this configuration, we do not expect calls */
+                break;
+            default:
+                break;
+            }
+        } /* while (TRUE) */
+    } /* ! bi-directional */
 
     /*
      * process header

@@ -67,23 +67,19 @@ typedef struct rpc_dplx_lock
  * A client call context.  Intended to enable efficient multiplexing of
  * client calls sharing a client channel.
  */
-enum rpc_ctx_state {
-    RPC_CTX_START,
-    RPC_CTX_REPLY_WAIT,
-    RPC_CTX_FINISHED
-};
-
 typedef struct rpc_call_ctx {
     struct opr_rbtree_node node_k;
     struct ct_wait_entry we;
     uint32_t xid;
-    enum rpc_ctx_state state;
     uint32_t flags;
     struct rpc_msg *msg;
     struct rpc_err error;
     union {
         struct {
             struct __rpc_client *clnt;
+            struct x_vc_data *xd;
+            struct timespec timeout;
+            /* XXX need all this? */
             rpcproc_t proc;
             xdrproc_t xdr_args;
             void *args_ptr;
@@ -94,7 +90,9 @@ typedef struct rpc_call_ctx {
             /* nothing */
         } svc;
     } ctx_u;
+#if 0
     void *u_data[2]; /* caller user data */
+#endif
 } rpc_ctx_t;
 
 static inline int
