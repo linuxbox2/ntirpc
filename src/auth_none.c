@@ -89,16 +89,18 @@ authnone_create(void)
 
     if (! ap) {
         mutex_lock(&init_lock);
-        ap = &auth_none_priv; /* many clients shall point to this */
-        ap->no_client.ah_cred = ap->no_client.ah_verf = _null_auth;
-        ap->no_client.ah_ops = authnone_ops();
-        xdrs = &xdr_stream;
-        xdrmem_create(xdrs, ap->marshalled_client,
-                      (u_int)MAX_MARSHAL_SIZE, XDR_ENCODE);
-        (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_cred);
-        (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_verf);
-        ap->mcnt = XDR_GETPOS(xdrs);
-        XDR_DESTROY(xdrs);
+        if (! ap) {
+            ap = &auth_none_priv; /* many clients shall point to this */
+            ap->no_client.ah_cred = ap->no_client.ah_verf = _null_auth;
+            ap->no_client.ah_ops = authnone_ops();
+            xdrs = &xdr_stream;
+            xdrmem_create(xdrs, ap->marshalled_client,
+                          (u_int)MAX_MARSHAL_SIZE, XDR_ENCODE);
+            (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_cred);
+            (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_verf);
+            ap->mcnt = XDR_GETPOS(xdrs);
+            XDR_DESTROY(xdrs);
+        }
         mutex_unlock(&init_lock);
     }
 
