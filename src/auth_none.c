@@ -76,27 +76,31 @@ struct authnone_private {
     u_int mcnt;
 };
 
+static struct authnone_private auth_none_priv;
+static struct authnone_private *ap = NULL; /* already */
+
+static pthread_mutex_t init_lock = MUTEX_INITIALIZER;
+
 AUTH *
 authnone_create(void)
 {
-    struct authnone_private *ap;
     XDR xdr_stream;
     XDR *xdrs;
 
-    if ((ap = mem_alloc(sizeof(struct authnone_private))) == NULL) {
-        rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-        rpc_createerr.cf_error.re_errno = ENOMEM;
-        return (NULL);
+    if (! ap) {
+        mutex_lock(&init_lock);
+        ap = &auth_none_priv; /* many clients shall point to this */
+        ap->no_client.ah_cred = ap->no_client.ah_verf = _null_auth;
+        ap->no_client.ah_ops = authnone_ops();
+        xdrs = &xdr_stream;
+        xdrmem_create(xdrs, ap->marshalled_client,
+                      (u_int)MAX_MARSHAL_SIZE, XDR_ENCODE);
+        (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_cred);
+        (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_verf);
+        ap->mcnt = XDR_GETPOS(xdrs);
+        XDR_DESTROY(xdrs);
+        mutex_unlock(&init_lock);
     }
-    ap->no_client.ah_cred = ap->no_client.ah_verf = _null_auth;
-    ap->no_client.ah_ops = authnone_ops();
-    xdrs = &xdr_stream;
-    xdrmem_create(xdrs, ap->marshalled_client,
-                  (u_int)MAX_MARSHAL_SIZE, XDR_ENCODE);
-    (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_cred);
-    (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_verf);
-    ap->mcnt = XDR_GETPOS(xdrs);
-    XDR_DESTROY(xdrs);
 
     return (&ap->no_client);
 }
@@ -108,8 +112,6 @@ authnone_marshal(AUTH *client, XDR *xdrs)
     struct authnone_private *ap =
         opr_containerof(client, struct authnone_private, no_client);
 
-    assert(xdrs != NULL);
-
     return( (*xdrs->x_ops->x_putbytes)
             (xdrs, ap->marshalled_client, ap->mcnt) );
 }
@@ -117,23 +119,24 @@ authnone_marshal(AUTH *client, XDR *xdrs)
 /* All these unused parameters are required to keep ANSI-C from grumbling */
 /*ARGSUSED*/
 static void
-authnone_verf(AUTH *client)
+authnone_verf(__attribute__((unused)) AUTH *client)
 {
+    /* do nothing */
 }
 
 /*ARGSUSED*/
 static bool
-authnone_validate(AUTH *client, struct opaque_auth *opaque)
+authnone_validate(__attribute__((unused)) AUTH *client,
+                  __attribute__((unused)) struct opaque_auth *opaque)
 {
-
     return (TRUE);
 }
 
 /*ARGSUSED*/
 static bool
-authnone_refresh(AUTH *client, void *dummy)
+authnone_refresh(__attribute__((unused)) AUTH *client,
+                 __attribute__((unused)) void *dummy)
 {
-
     return (FALSE);
 }
 
@@ -141,9 +144,7 @@ authnone_refresh(AUTH *client, void *dummy)
 static void
 authnone_destroy(AUTH *client)
 {
-    struct authnone_private *ap =
-        opr_containerof(client, struct authnone_private, no_client);
-    mem_free(ap, 0);
+    /* do nothing */
 }
 
 static bool
