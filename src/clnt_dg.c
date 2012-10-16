@@ -68,8 +68,8 @@
 
 static struct clnt_ops *clnt_dg_ops(void);
 static bool time_not_ok(struct timeval *);
-static enum clnt_stat clnt_dg_call(CLIENT *, rpcproc_t, xdrproc_t, void *,
-                                   xdrproc_t, void *, struct timeval);
+static enum clnt_stat clnt_dg_call(CLIENT *, AUTH *, rpcproc_t, xdrproc_t,
+                                   void *, xdrproc_t, void *, struct timeval);
 static void clnt_dg_geterr(CLIENT *, struct rpc_err *);
 static bool clnt_dg_freeres(CLIENT *, xdrproc_t, void *);
 static void clnt_dg_abort(CLIENT *);
@@ -82,8 +82,6 @@ static const char mem_err_clnt_dg[] = "clnt_dg_create: out of memory";
  * Connection less client creation returns with client handle parameters.
  * Default options are set, which the user can change using clnt_control().
  * fd should be open and bound.
- * NB: The rpch->cl_auth is initialized to null authentication.
- *  Caller may wish to set this something more useful.
  *
  * sendsz and recvsz are the maximum allowable packet sizes that can be
  * sent and received. Normally they are the same, but they can be
@@ -188,7 +186,6 @@ clnt_dg_ncreate(int fd,           /* open file descriptor */
     clnt->cl_p1 = cx;
     clnt->cl_p2 = rpc_dplx_lookup_rec(
         fd, RPC_DPLX_LKP_FLAG_NONE, &oflags); /* ref+1 */
-    clnt->cl_auth = authnone_create();
     clnt->cl_tp = NULL;
     clnt->cl_netid = NULL;
 
@@ -208,6 +205,7 @@ err2:
 
 static enum clnt_stat
 clnt_dg_call(CLIENT *clnt,           /* client handle */
+             AUTH *auth,             /* auth handle */
              rpcproc_t proc,         /* procedure number */
              xdrproc_t xargs,        /* xdr routine for args */
              void *argsp,            /* pointer to args */
@@ -281,8 +279,8 @@ call_again:
     *(u_int32_t *)(void *)(cu->cu_outbuf) = htonl(xid);
 
     if ((! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
-        (! AUTH_MARSHALL(clnt->cl_auth, xdrs)) ||
-        (! AUTH_WRAP(clnt->cl_auth, xdrs, xargs, argsp))) {
+        (! AUTH_MARSHALL(auth, xdrs)) ||
+        (! AUTH_WRAP(auth, xdrs, xargs, argsp))) {
         cu->cu_error.re_status = RPC_CANTENCODEARGS;
         goto out;
     }
@@ -435,12 +433,10 @@ get_reply:
             _seterr_reply(&reply_msg, &(cu->cu_error));
 
         if (cu->cu_error.re_status == RPC_SUCCESS) {
-            if (! AUTH_VALIDATE(clnt->cl_auth,
-                                &reply_msg.acpted_rply.ar_verf)) {
+            if (! AUTH_VALIDATE(auth, &reply_msg.acpted_rply.ar_verf)) {
                 cu->cu_error.re_status = RPC_AUTHERROR;
                 cu->cu_error.re_why = AUTH_INVALIDRESP;
-            } else if (! AUTH_UNWRAP(clnt->cl_auth, &reply_xdrs,
-                                     xresults, resultsp)) {
+            } else if (! AUTH_UNWRAP(auth, &reply_xdrs, xresults, resultsp)) {
                 if (cu->cu_error.re_status == RPC_SUCCESS)
                     cu->cu_error.re_status = RPC_CANTDECODERES;
             }
@@ -457,7 +453,7 @@ get_reply:
         else if (cu->cu_error.re_status == RPC_AUTHERROR)
             /* maybe our credentials need to be refreshed ... */
             if (nrefreshes > 0 &&
-                AUTH_REFRESH(clnt->cl_auth, &reply_msg)) {
+                AUTH_REFRESH(auth, &reply_msg)) {
                 nrefreshes--;
                 rpc_dplx_ruc(clnt);
                 rlocked = FALSE;

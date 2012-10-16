@@ -97,8 +97,8 @@ struct cmessage {
     struct cmsgcred cmcred;
 };
 
-static enum clnt_stat clnt_vc_call(CLIENT *, rpcproc_t, xdrproc_t, void *,
-                                   xdrproc_t, void *, struct timeval);
+static enum clnt_stat clnt_vc_call(CLIENT *, AUTH *, rpcproc_t, xdrproc_t,
+                                   void *, xdrproc_t, void *, struct timeval);
 static void clnt_vc_geterr(CLIENT *, struct rpc_err *);
 static bool clnt_vc_freeres(CLIENT *, xdrproc_t, void *);
 static void clnt_vc_abort(CLIENT *);
@@ -331,9 +331,6 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
 #endif
     } /* XPRT */
 
-    /* setup auth */
-    clnt->cl_auth = authnone_create();
-
     /* make reachable from rec */
     rec->hdl.clnt = clnt;
 
@@ -382,6 +379,7 @@ err:
 
 static enum clnt_stat
 clnt_vc_call(CLIENT *clnt,
+             AUTH *auth,
              rpcproc_t proc,
              xdrproc_t xdr_args,
              void *args_ptr,
@@ -445,8 +443,8 @@ call_again:
 
     if ((! XDR_PUTBYTES(xdrs, ct->ct_u.ct_mcallc, ct->ct_mpos)) ||
         (! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
-        (! AUTH_MARSHALL(clnt->cl_auth, xdrs)) ||
-        (! AUTH_WRAP(clnt->cl_auth, xdrs, xdr_args, args_ptr))) {
+        (! AUTH_MARSHALL(auth, xdrs)) ||
+        (! AUTH_WRAP(auth, xdrs, xdr_args, args_ptr))) {
         if (ctx->error.re_status == RPC_SUCCESS)
             ctx->error.re_status = RPC_CANTENCODEARGS;
         (void)xdrrec_endofrecord(xdrs, TRUE);
@@ -541,10 +539,10 @@ call_again:
 replied:
     _seterr_reply(ctx->msg, &(ctx->error));
     if (ctx->error.re_status == RPC_SUCCESS) {
-        if (! AUTH_VALIDATE(clnt->cl_auth, &(ctx->msg->acpted_rply.ar_verf))) {
+        if (! AUTH_VALIDATE(auth, &(ctx->msg->acpted_rply.ar_verf))) {
             ctx->error.re_status = RPC_AUTHERROR;
             ctx->error.re_why = AUTH_INVALIDRESP;
-        } else if (! AUTH_UNWRAP(clnt->cl_auth, xdrs,
+        } else if (! AUTH_UNWRAP(auth, xdrs,
                                  xdr_results, results_ptr)) {
             if (ctx->error.re_status == RPC_SUCCESS)
                 ctx->error.re_status = RPC_CANTDECODERES;
@@ -557,7 +555,7 @@ replied:
     }  /* end successful completion */
     else {
         /* maybe our credentials need to be refreshed ... */
-        if (refreshes-- && AUTH_REFRESH(clnt->cl_auth, &(ctx->msg))) {
+        if (refreshes-- && AUTH_REFRESH(auth, &(ctx->msg))) {
             rpc_ctx_next_xid(ctx, RPC_CTX_FLAG_NONE);
             rpc_dplx_ruc(clnt);
             goto call_again;

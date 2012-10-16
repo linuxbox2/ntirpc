@@ -64,27 +64,28 @@
 struct pmaplist *
 pmap_getmaps(struct sockaddr_in *address)
 {
-	struct pmaplist *head = NULL;
-	int sock = -1;
-	struct timeval minutetimeout;
-	CLIENT *client;
+    struct pmaplist *head = NULL;
+    int sock = -1;
+    struct timeval minutetimeout;
+    CLIENT *client;
+    AUTH *auth;
 
-	assert(address != NULL);
+    assert(address != NULL);
 
-	minutetimeout.tv_sec = 60;
-	minutetimeout.tv_usec = 0;
-	address->sin_port = htons(PMAPPORT);
-	client = clnttcp_ncreate(address, PMAPPROG,
-                                 PMAPVERS, &sock, 50, 500);
-	if (client != NULL) {
-		if (CLNT_CALL(client, (rpcproc_t)PMAPPROC_DUMP,
-		    (xdrproc_t)xdr_void, NULL,
-		    (xdrproc_t)xdr_pmaplist, &head, minutetimeout) !=
-		    RPC_SUCCESS) {
-			clnt_perror(client, "pmap_getmaps rpc problem");
-		}
-		CLNT_DESTROY(client);
-	}
-	address->sin_port = 0;
-	return (head);
+    minutetimeout.tv_sec = 60;
+    minutetimeout.tv_usec = 0;
+    address->sin_port = htons(PMAPPORT);
+    client = clnttcp_ncreate(address, PMAPPROG, PMAPVERS, &sock, 50, 500);
+    if (client != NULL) {
+        auth = authnone_create(); /* idempotent */
+        if (CLNT_CALL(client, auth, (rpcproc_t)PMAPPROC_DUMP,
+                      (xdrproc_t)xdr_void, NULL,
+                      (xdrproc_t)xdr_pmaplist, &head, minutetimeout) !=
+            RPC_SUCCESS) {
+            clnt_perror(client, "pmap_getmaps rpc problem");
+        }
+        CLNT_DESTROY(client);
+    }
+    address->sin_port = 0;
+    return (head);
 }

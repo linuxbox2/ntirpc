@@ -223,6 +223,7 @@ __rpc_get_time_offset(struct timeval *td, /* Time difference */
                       struct sockaddr_in *netid /* known network identifier */)
 {
     CLIENT   *clnt;   /* Client handle  */
+    AUTH     *auth;
     endpoint  *ep,  /* useful endpoints */
         *useep = NULL; /* endpoint of xp */
     char   *useua = NULL; /* uaddr of selected xp */
@@ -331,10 +332,12 @@ __rpc_get_time_offset(struct timeval *td, /* Time difference */
         return (0);
     }
 
+    auth = authnone_create(); /* idempotent */
+
     tv.tv_sec = 5;
     tv.tv_usec = 0;
     time_valid = 0;
-    status = clnt_call(clnt, RPCBPROC_GETTIME, (xdrproc_t)xdr_void, NULL,
+    status = clnt_call(clnt, auth, RPCBPROC_GETTIME, (xdrproc_t)xdr_void, NULL,
                        (xdrproc_t)xdr_u_long, &thetime, tv);
     /*
      * The only error we check for is anything but success. In

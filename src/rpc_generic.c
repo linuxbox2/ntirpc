@@ -463,8 +463,10 @@ void *
 rpc_nullproc(CLIENT *clnt)
 {
     struct timeval TIMEOUT = {25, 0};
+    AUTH *auth;
 
-    if (clnt_call(clnt, NULLPROC, (xdrproc_t) xdr_void, NULL,
+    auth = authnone_create(); /* idempotent */
+    if (clnt_call(clnt, auth, NULLPROC, (xdrproc_t) xdr_void, NULL,
                   (xdrproc_t) xdr_void, NULL, TIMEOUT) != RPC_SUCCESS) {
         return (NULL);
     }

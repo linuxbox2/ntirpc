@@ -424,10 +424,11 @@ rpcb_set(rpcprog_t program,
          const struct netconfig *nconf, /* Network structure of transport */
          const struct netbuf *address /* Services netconfig address */)
 {
-    CLIENT *client;
     RPCB parms;
     char uidbuf[32];
     bool_t rslt = FALSE; /* yes, bool_t */
+    CLIENT *client;
+    AUTH *auth;
 
     /* parameter checking */
     if (nconf == NULL) {
@@ -442,6 +443,8 @@ rpcb_set(rpcprog_t program,
     if (! client) {
         return (FALSE);
     }
+
+    auth = authnone_create(); /* idempotent */
 
     /* convert to universal */
     /*LINTED const castaway*/
@@ -463,7 +466,7 @@ rpcb_set(rpcprog_t program,
     (void) snprintf(uidbuf, sizeof uidbuf, "%d", geteuid());
     parms.r_owner = uidbuf;
 
-    CLNT_CALL(client, (rpcproc_t)RPCBPROC_SET, (xdrproc_t) xdr_rpcb,
+    CLNT_CALL(client, auth, RPCBPROC_SET, (xdrproc_t) xdr_rpcb,
               (char *)&parms, (xdrproc_t) xdr_bool,
               (char *)&rslt, tottimeout);
 
@@ -482,15 +485,18 @@ bool
 rpcb_unset(rpcprog_t program, rpcvers_t version,
            const struct netconfig *nconf)
 {
-    CLIENT *client;
     RPCB parms;
     char uidbuf[32];
     bool_t rslt = FALSE; /* yes, bool_t */
+    CLIENT *client;
+    AUTH *auth;
 
     client = local_rpcb();
     if (! client) {
         return (FALSE);
     }
+
+    auth = authnone_create(); /* idempotent */
 
     parms.r_prog = program;
     parms.r_vers = version;
@@ -505,7 +511,7 @@ rpcb_unset(rpcprog_t program, rpcvers_t version,
     (void) snprintf(uidbuf, sizeof uidbuf, "%d", geteuid());
     parms.r_owner = uidbuf;
 
-    CLNT_CALL(client, (rpcproc_t)RPCBPROC_UNSET, (xdrproc_t) xdr_rpcb,
+    CLNT_CALL(client, auth, RPCBPROC_UNSET, (xdrproc_t) xdr_rpcb,
               (char *)(void *)&parms, (xdrproc_t) xdr_bool,
               (char *)(void *)&rslt, tottimeout);
 
@@ -613,7 +619,6 @@ __rpcb_findaddr_timed(rpcprog_t program,
 #ifdef NOTUSED
     static bool check_rpcbind = TRUE;
 #endif
-    CLIENT *client = NULL;
     RPCB parms;
     enum clnt_stat clnt_st;
     char *ua = NULL;
@@ -621,6 +626,8 @@ __rpcb_findaddr_timed(rpcprog_t program,
     struct netbuf *address = NULL;
     rpcvers_t start_vers = RPCBVERS4;
     struct netbuf servaddr;
+    CLIENT *client;
+    AUTH *auth;
 
     /* parameter checking */
     if (nconf == NULL) {
@@ -629,6 +636,9 @@ __rpcb_findaddr_timed(rpcprog_t program,
     }
 
     parms.r_addr = NULL;
+
+    /* authnone handle */
+    auth = authnone_create(); /* idempotent */    
 
     /*
      * Use default total timeout if no timeout is specified.
@@ -675,7 +685,7 @@ __rpcb_findaddr_timed(rpcprog_t program,
         pmapparms.pm_prot = strcmp(nconf->nc_proto, NC_TCP) ?
             IPPROTO_UDP : IPPROTO_TCP;
         pmapparms.pm_port = 0; /* not needed */
-        clnt_st = CLNT_CALL(client, (rpcproc_t)PMAPPROC_GETPORT,
+        clnt_st = CLNT_CALL(client, auth, PMAPPROC_GETPORT,
                             (xdrproc_t) xdr_pmap, (caddr_t)(void *)&pmapparms,
                             (xdrproc_t) xdr_u_short, (caddr_t)(void *)&port,
                             *tp);
@@ -753,7 +763,7 @@ try_rpcbind:
     for (vers = start_vers;  vers >= RPCBVERS; vers--) {
         /* Set the version */
         CLNT_CONTROL(client, CLSET_VERS, (char *)(void *)&vers);
-        clnt_st = CLNT_CALL(client, (rpcproc_t)RPCBPROC_GETADDR,
+        clnt_st = CLNT_CALL(client, auth, RPCBPROC_GETADDR,
                             (xdrproc_t) xdr_rpcb, (char *)(void *)&parms,
                             (xdrproc_t) xdr_wrapstring, (char *)(void *) &ua, *tp);
         if (clnt_st == RPC_SUCCESS) {
@@ -871,17 +881,22 @@ rpcblist *
 rpcb_getmaps(const struct netconfig *nconf, const char *host)
 {
     rpcblist_ptr head = NULL;
-    CLIENT *client;
     enum clnt_stat clnt_st;
     rpcvers_t vers = 0;
+    CLIENT *client;
+    AUTH *auth;
 
     client = getclnthandle(host, nconf, NULL);
     if (client == NULL) {
         return (head);
     }
-    clnt_st = CLNT_CALL(client, (rpcproc_t)RPCBPROC_DUMP,
-                        (xdrproc_t) xdr_void, NULL, (xdrproc_t) xdr_rpcblist_ptr,
-                        (char *)(void *)&head, tottimeout);
+
+    auth = authnone_create(); /* idempotent */
+
+    clnt_st = CLNT_CALL(
+        client, auth, RPCBPROC_DUMP,
+        (xdrproc_t) xdr_void, NULL, (xdrproc_t) xdr_rpcblist_ptr,
+        (char *)(void *)&head, tottimeout);
     if (clnt_st == RPC_SUCCESS)
         goto done;
 
@@ -897,7 +912,7 @@ rpcb_getmaps(const struct netconfig *nconf, const char *host)
     if (vers == RPCBVERS4) {
         vers = RPCBVERS;
         CLNT_CONTROL(client, CLSET_VERS, (char *)(void *)&vers);
-        if (CLNT_CALL(client, (rpcproc_t)RPCBPROC_DUMP,
+        if (CLNT_CALL(client, auth, RPCBPROC_DUMP,
                       (xdrproc_t) xdr_void, NULL, (xdrproc_t) xdr_rpcblist_ptr,
                       (char *)(void *)&head, tottimeout) == RPC_SUCCESS)
             goto done;
@@ -930,17 +945,21 @@ rpcb_rmtcall(const struct netconfig *nconf, /* Netconfig structure */
              struct timeval tout,  /* Timeout value for this call */
              const struct netbuf *addr_ptr /* Preallocated netbuf address */)
 {
-    CLIENT *client;
     enum clnt_stat stat;
     struct r_rpcb_rmtcallargs a;
     struct r_rpcb_rmtcallres r;
     rpcvers_t rpcb_vers;
+    CLIENT *client;
+    AUTH *auth;
 
     stat = 0;
     client = getclnthandle(host, nconf, NULL);
     if (client == NULL) {
         return (RPC_FAILED);
     }
+
+    auth = authnone_create(); /* idempotent */
+
     /*LINTED const castaway*/
     CLNT_CONTROL(client, CLSET_RETRY_TIMEOUT, (char *)(void *)&rmttimeout);
     a.prog = prog;
@@ -954,9 +973,10 @@ rpcb_rmtcall(const struct netconfig *nconf, /* Netconfig structure */
 
     for (rpcb_vers = RPCBVERS4; rpcb_vers >= RPCBVERS; rpcb_vers--) {
         CLNT_CONTROL(client, CLSET_VERS, (char *)(void *)&rpcb_vers);
-        stat = CLNT_CALL(client, (rpcproc_t)RPCBPROC_CALLIT,
-                         (xdrproc_t) xdr_rpcb_rmtcallargs, (char *)(void *)&a,
-                         (xdrproc_t) xdr_rpcb_rmtcallres, (char *)(void *)&r, tout);
+        stat = CLNT_CALL(
+            client, auth, RPCBPROC_CALLIT,
+            (xdrproc_t) xdr_rpcb_rmtcallargs, (char *)(void *)&a,
+            (xdrproc_t) xdr_rpcb_rmtcallres, (char *)(void *)&r, tout);
         if ((stat == RPC_SUCCESS) && (addr_ptr != NULL)) {
             struct netbuf *na;
             /*LINTED const castaway*/
@@ -1002,11 +1022,12 @@ bool
 rpcb_gettime(const char *host,
              time_t *timep)
 {
-    CLIENT *client = NULL;
     void *handle;
     struct netconfig *nconf;
     rpcvers_t vers;
     enum clnt_stat st;
+    CLIENT *client;
+    AUTH *auth;
 
     if ((host == NULL) || (host[0] == 0)) {
         time(timep);
@@ -1033,7 +1054,9 @@ rpcb_gettime(const char *host,
         return (FALSE);
     }
 
-    st = CLNT_CALL(client, (rpcproc_t)RPCBPROC_GETTIME,
+    auth = authnone_create(); /* idempotent */
+
+    st = CLNT_CALL(client, auth, RPCBPROC_GETTIME,
                    (xdrproc_t) xdr_void, NULL,
                    (xdrproc_t) xdr_int, (char *)(void *)timep, tottimeout);
 
@@ -1043,7 +1066,7 @@ rpcb_gettime(const char *host,
             /* fall back to earlier version */
             vers = RPCBVERS;
             CLNT_CONTROL(client, CLSET_VERS, (char *)(void *)&vers);
-            st = CLNT_CALL(client, (rpcproc_t)RPCBPROC_GETTIME,
+            st = CLNT_CALL(client, auth, RPCBPROC_GETTIME,
                            (xdrproc_t) xdr_void, NULL,
                            (xdrproc_t) xdr_int, (char *)(void *)timep,
                            tottimeout);
@@ -1062,6 +1085,7 @@ rpcb_taddr2uaddr(struct netconfig *nconf,
                  struct netbuf *taddr)
 {
     CLIENT *client;
+    AUTH *auth;
     char *uaddr = NULL;
 
 
@@ -1079,7 +1103,7 @@ rpcb_taddr2uaddr(struct netconfig *nconf,
         return (NULL);
     }
 
-    CLNT_CALL(client, (rpcproc_t)RPCBPROC_TADDR2UADDR,
+    CLNT_CALL(client, auth, RPCBPROC_TADDR2UADDR,
               (xdrproc_t) xdr_netbuf, (char *)(void *)taddr,
               (xdrproc_t) xdr_wrapstring, (char *)(void *)&uaddr,
               tottimeout);
@@ -1095,9 +1119,9 @@ struct netbuf *
 rpcb_uaddr2taddr(struct netconfig *nconf,
                  char *uaddr)
 {
-    CLIENT *client;
     struct netbuf *taddr;
-
+    CLIENT *client;
+    AUTH *auth;
 
     /* parameter checking */
     if (nconf == NULL) {
@@ -1113,12 +1137,14 @@ rpcb_uaddr2taddr(struct netconfig *nconf,
         return (NULL);
     }
 
+    auth = authnone_create(); /* idempotent */
+
     taddr = (struct netbuf *) mem_zalloc(sizeof (struct netbuf));
     if (taddr == NULL) {
         CLNT_DESTROY(client);
         return (NULL);
     }
-    if (CLNT_CALL(client, (rpcproc_t)RPCBPROC_UADDR2TADDR,
+    if (CLNT_CALL(client, auth, RPCBPROC_UADDR2TADDR,
                   (xdrproc_t) xdr_wrapstring, (char *)(void *)&uaddr,
                   (xdrproc_t) xdr_netbuf, (char *)(void *)taddr,
                   tottimeout) != RPC_SUCCESS) {

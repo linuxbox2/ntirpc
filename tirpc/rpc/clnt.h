@@ -99,29 +99,22 @@ struct rpc_err {
  * Client is responsible for initializing auth, see e.g. auth_none.c.
  */
 typedef struct __rpc_client {
-    AUTH *cl_auth;   /* authenticator */
+
     struct clnt_ops {
         /* call remote procedure */
-        enum clnt_stat (*cl_call)(struct __rpc_client *,
+        enum clnt_stat (*cl_call)(struct __rpc_client *, AUTH *,
                                   rpcproc_t, xdrproc_t, void *, xdrproc_t,
                                   void *, struct timeval);
-
-        /* XXX return pointer to private XDRS */
-        void *(*cl_xdrs)(struct __rpc_client *);
-
         /* abort a call */
         void  (*cl_abort)(struct __rpc_client *);
         /* get specific error code */
-        void  (*cl_geterr)(struct __rpc_client *,
-                           struct rpc_err *);
+        void  (*cl_geterr)(struct __rpc_client *, struct rpc_err *);
         /* frees results */
-        bool  (*cl_freeres)(struct __rpc_client *,
-                              xdrproc_t, void *);
+        bool  (*cl_freeres)(struct __rpc_client *, xdrproc_t, void *);
         /* destroy this structure */
         void  (*cl_destroy)(struct __rpc_client *);
         /* the ioctl() of rpc */
-        bool          (*cl_control)(struct __rpc_client *, u_int,
-                                      void *);
+        bool  (*cl_control)(struct __rpc_client *, u_int,  void *);
     } *cl_ops;
 
     void *cl_p1; /* private data */
@@ -165,6 +158,7 @@ struct rpc_timers {
  * enum clnt_stat
  * CLNT_CALL(rh, proc, xargs, argsp, xres, resp, timeout)
  *  CLIENT *rh;
+ * AUTH * auth;
  * rpcproc_t proc;
  * xdrproc_t xargs;
  * void *argsp;
@@ -172,30 +166,11 @@ struct rpc_timers {
  * void *resp;
  * struct timeval timeout;
  */
-#define CLNT_CALL(rh, proc, xargs, argsp, xres, resp, secs)     \
-    ((*(rh)->cl_ops->cl_call)(rh, proc, xargs,                  \
-                              argsp, xres, resp, secs))
-#define clnt_call(rh, proc, xargs, argsp, xres, resp, secs)     \
-    ((*(rh)->cl_ops->cl_call)(rh, proc, xargs,                  \
-                              argsp, xres, resp, secs))
+#define CLNT_CALL(rh, ah, proc, xargs, argsp, xres, resp, secs) \
+    ((*(rh)->cl_ops->cl_call)(rh, ah, proc, xargs, argsp, xres, resp, secs))
 
-/*
- * enum clnt_stat
- * CLNT_SEND(rh, proc, xargs, argsp)
- *  CLIENT *rh;
- * rpcproc_t proc;
- * xdrproc_t xargs;
- * void *argsp;
- *
- * This macro, and the cl_send operation signature, are that of clnt_call and
- * cl_call with reply processing arguments stripped off.  The implementation
- * has been based on extrapolation from code in libtirpc, and not with
- * reference to more recent Solaris or OpenSolaris files.
- */
-#define CLNT_SEND(rh, proc, xargs, argsp)               \
-    ((*(rh)->cl_ops->cl_send)(rh, proc, xargs, argsp))
-#define clnt_send(rh, proc, xargs, argsp)               \
-    ((*(rh)->cl_ops->cl_call)(rh, proc, xargs, argsp))
+#define clnt_call(rh, ah, proc, xargs, argsp, xres, resp, secs) \
+    ((*(rh)->cl_ops->cl_call)(rh, ah, proc, xargs, argsp, xres, resp, secs))
 
 /*
  * void

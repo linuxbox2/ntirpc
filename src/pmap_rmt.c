@@ -76,6 +76,7 @@ pmap_rmtcall(struct sockaddr_in *addr, u_long prog, u_long vers, u_long proc,
 {
     int sock = -1;
     CLIENT *client;
+    AUTH *auth;
     struct rmtcallargs a;
     struct rmtcallres r;
     enum clnt_stat stat;
@@ -86,6 +87,7 @@ pmap_rmtcall(struct sockaddr_in *addr, u_long prog, u_long vers, u_long proc,
     addr->sin_port = htons(PMAPPORT);
     client = clntudp_ncreate(addr, PMAPPROG, PMAPVERS, timeout, &sock);
     if (client != NULL) {
+        auth = authnone_create();
         a.prog = prog;
         a.vers = vers;
         a.proc = proc;
@@ -94,7 +96,7 @@ pmap_rmtcall(struct sockaddr_in *addr, u_long prog, u_long vers, u_long proc,
         r.port_ptr = port_ptr;
         r.results_ptr = resp;
         r.xdr_results = xdrres;
-        stat = CLNT_CALL(client, (rpcproc_t)PMAPPROC_CALLIT,
+        stat = CLNT_CALL(client, auth, (rpcproc_t)PMAPPROC_CALLIT,
                          (xdrproc_t)xdr_rmtcall_args, &a,
                          (xdrproc_t)xdr_rmtcallres,
                          &r, tout);

@@ -208,15 +208,11 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
     auth->ah_ops = &authgss_ops;
     auth->ah_private = (caddr_t)gd;
 
-    save_auth = clnt->cl_auth;
-    clnt->cl_auth = auth;
 
     if (!authgss_refresh(auth, NULL))
         auth = NULL;
     else
         auth_get(auth); /* Reference for caller */
-
-    clnt->cl_auth = save_auth;
 
     return (auth);
 }
@@ -469,7 +465,7 @@ authgss_refresh(AUTH *auth, void *arg)
             gss_log_hexdump(send_token.value, send_token.length, 0);
 #endif
 
-            call_stat = clnt_call(gd->clnt, NULLPROC,
+            call_stat = clnt_call(gd->clnt, auth, NULLPROC,
                                   (xdrproc_t)xdr_rpc_gss_init_args,
                                   &send_token,
                                   (xdrproc_t)xdr_rpc_gss_init_res,
@@ -572,20 +568,9 @@ authgss_destroy_context(AUTH *auth)
 
     if (gd->gc.gc_ctx.length != 0) {
         if (gd->established) {
-            AUTH *save_auth = NULL;
-
-            /* Make sure we use the right auth_ops */
-            if (gd->clnt->cl_auth != auth) {
-                save_auth = gd->clnt->cl_auth;
-                gd->clnt->cl_auth = auth;
-            }
-
             gd->gc.gc_proc = RPCSEC_GSS_DESTROY;
-            clnt_call(gd->clnt, NULLPROC, (xdrproc_t)xdr_void, NULL,
+            clnt_call(gd->clnt, auth, NULLPROC, (xdrproc_t)xdr_void, NULL,
                       (xdrproc_t)xdr_void, NULL, AUTH_TIMEOUT);
-
-            if (save_auth != NULL)
-                gd->clnt->cl_auth = save_auth;
         }
         gss_release_buffer(&min_stat, &gd->gc.gc_ctx);
         /* XXX ANDROS check size of context  - should be 8 */

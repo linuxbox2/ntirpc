@@ -65,8 +65,8 @@ static struct clntraw_private {
     u_int mcnt;
 } *clntraw_private;
 
-static enum clnt_stat clnt_raw_call(CLIENT *, rpcproc_t, xdrproc_t, void *,
-                                    xdrproc_t, void *, struct timeval);
+static enum clnt_stat clnt_raw_call(CLIENT *, AUTH *, rpcproc_t, xdrproc_t,
+                                    void *, xdrproc_t, void *, struct timeval);
 static void clnt_raw_geterr(CLIENT *, struct rpc_err *);
 static bool clnt_raw_freeres(CLIENT *, xdrproc_t, void *);
 static void clnt_raw_abort(CLIENT *);
@@ -125,15 +125,15 @@ clnt_raw_ncreate(rpcprog_t prog, rpcvers_t vers)
      * create client handle
      */
     client->cl_ops = clnt_raw_ops();
-    client->cl_auth = authnone_create();
     mutex_unlock(&clntraw_lock);
     return (client);
 }
 
 /* ARGSUSED */
 static enum clnt_stat
-clnt_raw_call(CLIENT *h, rpcproc_t proc, xdrproc_t xargs, void *argsp,
-              xdrproc_t xresults, void *resultsp, struct timeval timeout)
+clnt_raw_call(CLIENT *h, AUTH *auth, rpcproc_t proc, xdrproc_t xargs,
+              void *argsp, xdrproc_t xresults, void *resultsp,
+              struct timeval timeout)
 {
     struct clntraw_private *clp = clntraw_private;
     XDR *xdrs = &clp->xdr_stream;
@@ -159,7 +159,7 @@ call_again:
     clp->u.mashl_rpcmsg.rm_xid ++ ;
     if ((! XDR_PUTBYTES(xdrs, clp->u.mashl_callmsg, clp->mcnt)) ||
         (! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
-        (! AUTH_MARSHALL(h->cl_auth, xdrs)) ||
+        (! AUTH_MARSHALL(auth, xdrs)) ||
         (! (*xargs)(xdrs, argsp))) {
         return (RPC_CANTENCODEARGS);
     }
@@ -200,17 +200,17 @@ call_again:
     status = error.re_status;
 
     if (status == RPC_SUCCESS) {
-        if (! AUTH_VALIDATE(h->cl_auth, &msg.acpted_rply.ar_verf)) {
+        if (! AUTH_VALIDATE(auth, &msg.acpted_rply.ar_verf)) {
             status = RPC_AUTHERROR;
         }
     }  /* end successful completion */
     else {
-        if (AUTH_REFRESH(h->cl_auth, &msg))
+        if (AUTH_REFRESH(auth, &msg))
             goto call_again;
     }  /* end of unsuccessful completion */
 
     if (status == RPC_SUCCESS) {
-        if (! AUTH_VALIDATE(h->cl_auth, &msg.acpted_rply.ar_verf)) {
+        if (! AUTH_VALIDATE(auth, &msg.acpted_rply.ar_verf)) {
             status = RPC_AUTHERROR;
         }
         if (msg.acpted_rply.ar_verf.oa_base != NULL) {

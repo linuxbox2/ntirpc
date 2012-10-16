@@ -60,6 +60,7 @@
 struct rpc_call_private {
     int valid;   /* Is this entry valid ? */
     CLIENT *client;  /* Client handle */
+    AUTH *auth;
     pid_t pid;   /* process-id at moment of creation */
     rpcprog_t prognum;  /* Program */
     rpcvers_t versnum;  /* Version */
@@ -143,6 +144,10 @@ rpc_call(const char *host,   /* host name */
         if (rcp->client == NULL) {
             return (rpc_createerr.cf_stat);
         }
+
+        /* Create null auth handle--idempotent */
+        rcp->auth = authnone_create();
+
         /*
          * Set time outs for connectionless case.  Do it
          * unconditionally.  Faster than doing a t_getinfo()
@@ -169,7 +174,7 @@ rpc_call(const char *host,   /* host name */
     tottimeout.tv_usec = 0;
 
     /* LINTED const castaway */
-    clnt_stat = CLNT_CALL(rcp->client, procnum, inproc, (char *) in,
+    clnt_stat = CLNT_CALL(rcp->client, rcp->auth, procnum, inproc, (char *) in,
                           outproc, out, tottimeout);
     /*
      * if call failed, empty cache

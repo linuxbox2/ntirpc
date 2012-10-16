@@ -87,6 +87,7 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
     struct timeval to;
     enum clnt_stat rpc_stat;
     struct rpc_err rpcerr;
+    AUTH *auth = authnone_create(); /* idempotent */
 
     clnt = clnt_ncreate_timed(hostname, prog, vers_high, nettype, tp);
     if (clnt == NULL) {
@@ -94,7 +95,7 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
     }
     to.tv_sec = 10;
     to.tv_usec = 0;
-    rpc_stat = clnt_call(clnt, NULLPROC, (xdrproc_t)xdr_void,
+    rpc_stat = clnt_call(clnt, auth, NULLPROC, (xdrproc_t)xdr_void,
                          (char *)NULL, (xdrproc_t)xdr_void, (char *)NULL, to);
     if (rpc_stat == RPC_SUCCESS) {
         *vers_out = vers_high;
@@ -116,7 +117,7 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
             goto error;
         }
         CLNT_CONTROL(clnt, CLSET_VERS, (char *)&vers_high);
-        rpc_stat = clnt_call(clnt, NULLPROC, (xdrproc_t)xdr_void,
+        rpc_stat = clnt_call(clnt, auth, NULLPROC, (xdrproc_t)xdr_void,
                              (char *)NULL, (xdrproc_t)xdr_void,
                              (char *)NULL, to);
         if (rpc_stat == RPC_SUCCESS) {
