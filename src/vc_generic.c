@@ -40,6 +40,7 @@
 #include <rpc/xdr.h>
 #include <rpc/rpc.h>
 #include <rpc/svc.h>
+#include <rpc/auth.h>
 #include "rpc_com.h"
 #include <misc/rbtree_x.h>
 #include "clnt_internal.h"
@@ -50,9 +51,9 @@
 static inline int
 clnt_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
-    struct cx_data *cx = (struct cx_data *)ctp;
-    struct ct_data *ct = CT_DATA(cx);
-    rpc_ctx_t *ctx = NULL;
+    struct x_vc_data *xd = (struct x_vc_data *) ctp;
+    struct ct_data *ct = &xd->cx.data;
+    rpc_ctx_t *ctx = (rpc_ctx_t *) xdrs->x_lib[1];
     struct pollfd fd;
     int milliseconds = (int)((ct->ct_wait.tv_sec * 1000) +
                              (ct->ct_wait.tv_usec / 1000));
@@ -60,18 +61,7 @@ clnt_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
     if (len == 0)
         return (0);
 
-    /* Though not previously used by TI-RPC, this is an ONC-compliant
-     * use of x_public.  However, we'd like to reserve x_public for
-     * application layer code. */
-    ctx = (rpc_ctx_t *) ct->ct_xdrs.x_lib[1];
-
-    /* if ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX, in the current
-     * strategy (cf. clnt_vc_call and the duplex-aware getreq
-     * implementation), we assert that the current thread may safely
-     * block in poll (though we are not constrained to blocking
-     * semantics) */
-
-    fd.fd = cx->cx_fd;
+    fd.fd = xd->cx.data.ct_fd;
     fd.events = POLLIN;
     for (;;) {
         switch (poll(&fd, 1, milliseconds)) {
@@ -89,7 +79,7 @@ clnt_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
         break;
     }
 
-    len = read(cx->cx_fd, buf, (size_t)len);
+    len = read(xd->cx.data.ct_fd, buf, (size_t)len);
 
     switch (len) {
     case 0:
@@ -110,14 +100,13 @@ clnt_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
 static inline int
 clnt_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
-    struct cx_data *cx = (struct cx_data *)ctp;
-    struct ct_data *ct = CT_DATA(cx);
-    rpc_ctx_t *ctx = (rpc_ctx_t *) ct->ct_xdrs.x_lib[1];
+    struct x_vc_data *xd = (struct x_vc_data *) ctp;
+    rpc_ctx_t *ctx = (rpc_ctx_t *) xdrs->x_lib[1];
 
     int i = 0, cnt;
 
     for (cnt = len; cnt > 0; cnt -= i, buf += i) {
-        if ((i = write(cx->cx_fd, buf, (size_t)cnt)) == -1) {
+        if ((i = write(xd->cx.data.ct_fd, buf, (size_t)cnt)) == -1) {
             ctx->error.re_errno = errno;
             ctx->error.re_status = RPC_CANTSEND;
             return (-1);
@@ -195,7 +184,7 @@ svc_read_vc(XDR *xdrs, void *xprtp, void *buf, int len)
     }
 
 fatal_err:
-    cfconn_set_dead(xprt, cd);
+    cfconn_set_dead(xprt, xd);
     return (-1);
 }
 
@@ -224,7 +213,7 @@ svc_write_vc(XDR *xdrs, void *xprtp, void *buf, int len)
                 __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
                         "%s: short write !EAGAIN (will set dead)",
                         __func__);
-                cfconn_set_dead(xprt, cd);
+                cfconn_set_dead(xprt, xd);
                 return (-1);
             }
             if (xd->shared.nonblock && i != cnt) {
@@ -240,7 +229,7 @@ svc_write_vc(XDR *xdrs, void *xprtp, void *buf, int len)
                     __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
                             "%s: short write !EAGAIN (will set dead)",
                             __func__);
-                    cfconn_set_dead(xprt, cd);
+                    cfconn_set_dead(xprt, xd);
                     return (-1);
                 }
             }
@@ -363,14 +352,17 @@ generic_write_vc(XDR *xdrs, void *ctp, void* buf, int len)
 }
 
 size_t
-generic_readv_vc(XDR *xdrs, void *ctp, void* buf, int len)
+generic_readv_vc(XDR *xdrs, void *xprtp, struct iovec *iov, int iovcnt,
+                 u_int flags)
 {
     switch ((enum rpc_duplex_callpath) xdrs->x_lib[0]) {
+#if 0 /* XXX implmenent */
     case RPC_DPLX_CLNT:
-        return (clnt_readv_vc(xdrs, ctp, buf, len));
+        return (clnt_readv_vc(xdrs, xprtp, iov, iovcnt, flags));
         break;
+#endif
     case RPC_DPLX_SVC:
-        return (svc_readv_vc(xdrs, ctp, buf, len));
+        return (svc_readv_vc(xdrs, xprtp, iov, iovcnt, flags));
         break;
     default:
         /* better not */
@@ -379,14 +371,17 @@ generic_readv_vc(XDR *xdrs, void *ctp, void* buf, int len)
 }
 
 size_t
-generic_writev_vc(XDR *xdrs, void *ctp, void* buf, int len)
+generic_writev_vc(XDR *xdrs, void *xprtp, struct iovec *iov, int iovcnt,
+                  u_int flags)
 {
     switch ((enum rpc_duplex_callpath) xdrs->x_lib[0]) {
+#if 0 /* XXX implement */
     case RPC_DPLX_CLNT:
-        return (clnt_writev_vc(xdrs, ctp, buf, len));
+        return (clnt_writev_vc(xdrs, xprtp, iov, iovcnt, flags));
         break;
+#endif
     case RPC_DPLX_SVC:
-        return (svc_writev_vc(xdrs, ctp, buf, len));
+        return (svc_writev_vc(xdrs, xprtp, iov, iovcnt, flags));
         break;
     default:
         /* better not */
@@ -396,10 +391,10 @@ generic_writev_vc(XDR *xdrs, void *ctp, void* buf, int len)
 
 void vc_shared_destroy(struct x_vc_data *xd)
 {
-    struct rpc_dplx_rec *rec = &xd->rec;
+    struct rpc_dplx_rec *rec = xd->rec;
     struct ct_data *ct = &xd->cx.data;
     CLIENT *clnt;
-    SVCXPRT XPRT;
+    SVCXPRT *xprt;
     bool closed = FALSE;
     bool xdrs_destroyed = FALSE;
     sigset_t mask, newmask;
@@ -452,8 +447,10 @@ void vc_shared_destroy(struct x_vc_data *xd)
         switch (xprt->xp_type) {
         case XPRT_TCP_RENDEZVOUS:
             /* rendezvous socket */
-            rdvs = (struct cf_rendezvous *)xprt->xp_p1;
+        {
+            struct cf_rendezvous *rdvs = (struct cf_rendezvous *)xprt->xp_p1;
             mem_free(rdvs, sizeof (struct cf_rendezvous));
+        }
             break;
         default:
             /* request socket */
