@@ -136,15 +136,15 @@ cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
 #define EARLY_DEATH_DEBUG 1
 
 static inline int
-svc_read_vc(XDR *xdrs, void *xprtp, void *buf, int len)
+svc_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
     SVCXPRT *xprt;
     int milliseconds = 35 * 1000; /* XXX shouldn't this be configurable? */
     struct pollfd pollfd;
     struct x_vc_data *xd;
 
-    xprt = (SVCXPRT *) xprtp;
-    xd = (struct x_vc_data *) xprt->xp_p1;
+    xd = (struct x_vc_data *) ctp;
+    xprt = xd->rec->hdl.xprt;
 
     if (xd->shared.nonblock) {
         len = read(xprt->xp_fd, buf, (size_t)len);
@@ -196,15 +196,15 @@ fatal_err:
  * Any error is fatal and the connection is closed.
  */
 static inline int
-svc_write_vc(XDR *xdrs, void *xprtp, void *buf, int len)
+svc_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
     SVCXPRT *xprt;
     struct x_vc_data *xd;
     struct timespec ts0, ts1;
     int i, cnt;
 
-    xprt = (SVCXPRT *) xprtp;
-    xd = (struct x_vc_data *) xprt->xp_p1;
+    xd = (struct x_vc_data *) ctp;
+    xprt = xd->rec->hdl.xprt;
 
     if (xd->shared.nonblock)
         (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &ts0);
@@ -252,7 +252,7 @@ svc_write_vc(XDR *xdrs, void *xprtp, void *buf, int len)
  * fatal for the connection.
  */
 static inline size_t
-svc_readv_vc(XDR *xdrs, void *xprtp, struct iovec *iov, int iovcnt,
+svc_readv_vc(XDR *xdrs, void *ctp, struct iovec *iov, int iovcnt,
              u_int flags)
 {
     SVCXPRT *xprt;
@@ -261,8 +261,8 @@ svc_readv_vc(XDR *xdrs, void *xprtp, struct iovec *iov, int iovcnt,
     struct x_vc_data *xd;
     size_t nbytes = -1;
 
-    xprt = (SVCXPRT *) xprtp;
-    xd = (struct x_vc_data *) xprt->xp_p1;
+    xd = (struct x_vc_data *) ctp;
+    xprt = xd->rec->hdl.xprt;
 
     do {
         pollfd.fd = xprt->xp_fd;
@@ -299,15 +299,15 @@ out:
  * Any error is fatal and the connection is closed.
  */
 static size_t
-svc_writev_vc(XDR *xdrs, void *xprtp, struct iovec *iov, int iovcnt,
+svc_writev_vc(XDR *xdrs, void *ctp, struct iovec *iov, int iovcnt,
               u_int flags)
 {
     SVCXPRT *xprt;
     struct x_vc_data *xd;
     size_t nbytes;
 
-    xprt = (SVCXPRT *) xprtp;
-    xd = (struct x_vc_data *) xprt->xp_p1;
+    xd = (struct x_vc_data *) ctp;
+    xprt = xd->rec->hdl.xprt;
 
     nbytes = writev(xprt->xp_fd, iov, iovcnt);
     if (nbytes  < 0) {
