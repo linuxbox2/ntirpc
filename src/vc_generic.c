@@ -40,10 +40,13 @@
 #include <rpc/xdr.h>
 #include <rpc/rpc.h>
 #include <rpc/svc.h>
+#include <rpc/clnt.h>
 #include <rpc/auth.h>
+#include <rpc/svc_auth.h>
 #include "rpc_com.h"
 #include <misc/rbtree_x.h>
 #include "clnt_internal.h"
+#include "svc_internal.h"
 #include "rpc_dplx_internal.h"
 #include "rpc_ctx.h"
 
