@@ -198,7 +198,6 @@ struct x_vc_data
         struct ct_data data;
         struct {
             uint32_t xid; /* current xid */
-            uint32_t depends_xid;
             struct opr_rbtree t;
         } calls;
     } cx;
