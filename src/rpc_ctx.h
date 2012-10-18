@@ -38,7 +38,8 @@ alloc_rpc_call_ctx(CLIENT *cl, rpcproc_t proc, xdrproc_t xdr_args,
                        struct timeval timeout);
 void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags);
 int rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags);
-void rpc_ctx_xfer_callmsg(rpc_ctx_t *ctx);
+bool rpc_ctx_xfer_callmsg(rpc_ctx_t *ctx);
+bool rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg);
 void free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags);
 
 #endif /* TIRPC_RPC_CTX_H */

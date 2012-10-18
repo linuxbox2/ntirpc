@@ -71,9 +71,9 @@
 #include "svc_internal.h"
 #include "svc_xprt.h"
 #include "rpc_dplx_internal.h"
+#include "rpc_ctx.h"
 #include <rpc/svc_rqst.h>
 #include <rpc/xdr_vrec.h>
-
 #include <getpeereid.h>
 
 #define XDR_VREC 0
@@ -894,12 +894,28 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
         (2 * MAX_AUTH_BYTES);
 
     if (xdr_dplx_msg(xdrs, req->rq_msg)) {
-        req->rq_xprt = xprt;
-        req->rq_prog = req->rq_msg->rm_call.cb_prog;
-        req->rq_vers = req->rq_msg->rm_call.cb_vers;
-        req->rq_proc = req->rq_msg->rm_call.cb_proc;
-        req->rq_xid = req->rq_msg->rm_xid;
-        return (TRUE);
+        switch (req->rq_msg->rm_direction) {
+        case CALL:
+            /* an ordinary call header */
+            req->rq_xprt = xprt;
+            req->rq_prog = req->rq_msg->rm_call.cb_prog;
+            req->rq_vers = req->rq_msg->rm_call.cb_vers;
+            req->rq_proc = req->rq_msg->rm_call.cb_proc;
+            req->rq_xid = req->rq_msg->rm_xid;
+            return (TRUE);
+            break;
+        case REPLY:
+            /* reply header (xprt OK) */
+            if (xd->rec->hdl.clnt) {
+                rpc_ctx_xfer_replymsg(xd, req->rq_msg);
+            }
+            break;
+        default:
+            /* not good (but xprt OK) */
+            break;
+        }
+        /* XXX skiprecord? */
+        return (FALSE);
     }
     __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
             "%s: xdr_dplx_msg failed (will set dead)");

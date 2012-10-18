@@ -156,10 +156,6 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
     xprt->xp_fd = fd;
     xprt->xp_p2 = su;
     xprt->xp_auth = NULL;
-#warning XXX fixme /* XXX check and or fixme */
-#if 0
-    xprt->xp_verf.oa_base = su->su_verfbody;
-#endif
     svc_dg_ops(xprt);
     xprt->xp_rtaddr.maxlen = sizeof (struct sockaddr_storage);
 
@@ -365,8 +361,8 @@ svc_dg_lock(SVCXPRT *xprt, uint32_t flags, const char *file, int line)
 static void
 svc_dg_unlock(SVCXPRT *xprt, uint32_t flags, const char *file, int line)
 {
-    rpc_dplx_ruxi(xprt, file, line);
-    rpc_dplx_suxi(xprt, file, line);
+    rpc_dplx_rux(xprt);
+    rpc_dplx_sux(xprt);
 }
 
 static bool
@@ -374,7 +370,7 @@ svc_dg_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
     XDR xdrs = {
         .x_public = NULL,
-        .x_lib = NULL
+        .x_lib = { NULL, NULL }
     };
     xdrmem_create(&xdrs, args_ptr, ~0, XDR_FREE);
     return (*xdr_args)(&xdrs, args_ptr);

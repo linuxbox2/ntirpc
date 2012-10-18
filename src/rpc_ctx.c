@@ -122,7 +122,7 @@ out:
     return;
 }
 
-void
+bool
 rpc_ctx_xfer_callmsg(rpc_ctx_t *ctx)
 {
     struct x_vc_data *xd = (struct x_vc_data *) ctx->ctx_u.clnt.clnt->cl_p1;
@@ -138,14 +138,39 @@ rpc_ctx_xfer_callmsg(rpc_ctx_t *ctx)
         ctx->msg = alloc_rpc_msg();
     } else {
         /* unexpected msg (abuse?)--just reuse it */
-    }    
+    }
+    return (TRUE);
+}
+
+bool
+rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg)
+{
+    rpc_ctx_t ctx_k, *ctx;
+    struct opr_rbtree_node *nv;
+    rpc_dplx_lock_t *lk = &xd->rec->recv.lock;
+    
+    ctx_k.xid = msg->rm_xid;
+    mutex_lock(&xd->rec->mtx);
+    nv = opr_rbtree_lookup(&xd->cx.calls.t, &ctx_k.node_k);
+    if (nv) {
+        ctx = opr_containerof(nv, rpc_ctx_t, node_k);
+        opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
+        free_rpc_msg(msg); /* free call header */
+        ctx->msg = msg; /* and stash reply header */
+        ctx->flags |= RPC_CTX_FLAG_SYNCDONE;
+        mutex_unlock(&xd->rec->mtx);
+        cond_signal(&lk->we.cv); /* XXX we hold lk->we.mtx */
+        return (TRUE);
+    }
+    mutex_unlock(&xd->rec->mtx);
+    return (FALSE);
 }
 
 int
 rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 {
     struct x_vc_data *xd = (struct x_vc_data *) ctx->ctx_u.clnt.clnt->cl_p1;
-    struct rpc_dplx_rec *rec  = xd->rec;
+    rpc_dplx_lock_t *lk = &xd->rec->recv.lock;
     struct timespec ts;
     int code = 0;
 
@@ -155,7 +180,7 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
     while (! (ctx->flags & RPC_CTX_FLAG_SYNCDONE)) {
         (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
         timespecadd(&ts, &ctx->ctx_u.clnt.timeout);
-        code = cond_timedwait(&ctx->we.cv, &ctx->we.mtx, &ts);
+        code = cond_timedwait(&lk->we.cv, &lk->we.mtx, &ts);
     }
 
     /* switch on direction */
@@ -166,7 +191,7 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
         break;
     case CALL:
         /* XXX cond transfer control to svc */
-        /* TODO: finish */
+        /* */
         break;
     default:
         break;
