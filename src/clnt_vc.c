@@ -435,6 +435,7 @@ call_again:
 
     xdrs = &(xd->shared.xdrs_out);
     xdrs->x_op = XDR_ENCODE;
+
     xdrs->x_lib[0] = (void *) RPC_DPLX_CLNT;
     xdrs->x_lib[1] = (void *) ctx; /* transiently thread call ctx */
 
@@ -497,6 +498,9 @@ call_again:
          */
         xdrs = &(xd->shared.xdrs_in);
         xdrs->x_op = XDR_DECODE;
+
+        xdrs->x_lib[0] = (void *) RPC_DPLX_CLNT;
+        xdrs->x_lib[1] = (void *) ctx; /* transiently thread call ctx */
 
         while (TRUE) {
 

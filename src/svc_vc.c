@@ -879,6 +879,9 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
 
     xdrs->x_op = XDR_DECODE;
 
+    xdrs->x_lib[0] = (void *) RPC_DPLX_SVC;
+    xdrs->x_lib[1] = (void *) xprt; /* transiently thread xprt */
+
     /*
      * No need skip records with nonblocking connections
      */
@@ -1017,6 +1020,9 @@ svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
     }
 
     xdrs->x_op = XDR_ENCODE;
+
+    xdrs->x_lib[0] = (void *) RPC_DPLX_SVC;
+    xdrs->x_lib[1] = (void *) xprt; /* transiently thread xprt */
 
     rstat = FALSE;
     if (xdr_replymsg(xdrs, msg) &&
