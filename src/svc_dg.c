@@ -116,6 +116,7 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
     struct __rpc_sockinfo si;
     struct sockaddr_storage ss;
     socklen_t slen;
+    uint32_t oflags;
 
     if (!__rpc_fd2sockinfo(fd, &si)) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_DG,
@@ -185,7 +186,8 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
     svc_dg_enable_pktinfo(fd, &si);
 
     /* Make reachable */
-    rpc_dplx_init_xprt(xprt);
+    xprt->xp_p5 = rpc_dplx_lookup_rec(xprt->xp_fd,
+                                      RPC_DPLX_FLAG_NONE, &oflags); /* ref+1 */
     svc_rqst_init_xprt(xprt);
 
     /* Conditional xprt_register */
@@ -397,6 +399,7 @@ svc_dg_destroy(SVCXPRT *xprt)
         (void) mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
     if (xprt->xp_tp)
         (void) free(xprt->xp_tp);
+    rpc_dplx_unref((struct rpc_dplx_rec *) xprt->xp_p5, RPC_DPLX_FLAG_NONE);
     svc_rqst_finalize_xprt(xprt);
     /* call free hook */
     if (xprt->xp_ops2->xp_free_xprt)
