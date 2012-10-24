@@ -110,6 +110,9 @@ xdrmem_create(XDR *xdrs,
     xdrs->x_op = op;
     xdrs->x_ops = ((unsigned long)addr & (sizeof(int32_t) - 1))
         ? &xdrmem_ops_unaligned : &xdrmem_ops_aligned;
+    xdrs->x_lib[0] = NULL;
+    xdrs->x_lib[1] = NULL;
+    xdrs->x_public = NULL;
     xdrs->x_private = xdrs->x_base = addr;
     xdrs->x_handy = size;
 }

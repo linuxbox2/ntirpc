@@ -89,6 +89,9 @@ xdrstdio_create(XDR *xdrs, FILE *file, enum xdr_op op)
 
     xdrs->x_op = op;
     xdrs->x_ops = &xdrstdio_ops;
+    xdrs->x_lib[0] = NULL;
+    xdrs->x_lib[1] = NULL;
+    xdrs->x_public = NULL;
     xdrs->x_private = file;
     xdrs->x_handy = 0;
     xdrs->x_base = 0;

@@ -393,6 +393,9 @@ xdr_vrec_create(XDR *xdrs,
     init_discard_buffers(vstrm);
 
     xdrs->x_ops = &xdr_vrec_ops;
+    xdrs->x_lib[0] = NULL;
+    xdrs->x_lib[1] = NULL;
+    xdrs->x_public = NULL;
     xdrs->x_private = vstrm;
 
     vstrm->direction = direction;
