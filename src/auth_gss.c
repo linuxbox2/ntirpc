@@ -159,7 +159,6 @@ AUTH *
 authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 {
     AUTH *auth;
-    AUTH *save_auth __attribute__((unused));
     struct rpc_gss_data *gd;
     OM_uint32  min_stat = 0;
 
