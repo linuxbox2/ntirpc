@@ -196,8 +196,13 @@ typedef struct rpc_svcxprt {
         /* free mem allocated for args */
         bool (*xp_freeargs)(struct rpc_svcxprt *, xdrproc_t,
                               void *);
-        /* destroy this struct */
+
+        /* release ref (destroy if no refs) */
+        void (*xp_release)(struct rpc_svcxprt *);
+
+        /* release and mark destroyed */
         void (*xp_destroy)(struct rpc_svcxprt *);
+
         /* get arguments, thread u_data in arg4*/
         bool (*xp_getargs2)(struct rpc_svcxprt *, struct svc_req *req,
                             xdrproc_t, void *, void *);
@@ -329,18 +334,6 @@ struct svc_req {
 #define svc_get_xprt_si_type(x) ((x)->xp_si_type);
 
 /*
- * XXX Ganesha.  Return "current" xid/su_xid.  Deprecated, going away
- * (layering and cardinality problem).
- */
-extern u_int svc_shim_get_xid(SVCXPRT *xprt);
-
-/*
- * XXX Ganesha.  Duplicate xprt from original to copy.  GOING AWAY.
- */
-extern SVCXPRT *svc_shim_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig);
-
-
-/*
  * Operations defined on an SVCXPRT handle
  *
  * SVCXPRT *xprt;
@@ -377,6 +370,11 @@ extern SVCXPRT *svc_shim_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig);
     (*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
 #define svc_freeargs(xprt, xargs, argsp) \
     (*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
+
+#define SVC_RELEASE(xprt) \
+    (*(xprt)->xp_ops->xp_release)(xprt)
+#define svc_release(xprt) \
+    (*(xprt)->xp_ops->xp_release)(xprt)
 
 #define SVC_DESTROY(xprt) \
     (*(xprt)->xp_ops->xp_destroy)(xprt)

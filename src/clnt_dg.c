@@ -716,6 +716,7 @@ clnt_dg_ops(void)
         ops.cl_abort = clnt_dg_abort;
         ops.cl_geterr = clnt_dg_geterr;
         ops.cl_freeres = clnt_dg_freeres;
+        ops.cl_release = clnt_dg_destroy;
         ops.cl_destroy = clnt_dg_destroy;
         ops.cl_control = clnt_dg_control;
     }

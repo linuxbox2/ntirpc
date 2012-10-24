@@ -228,6 +228,7 @@ svc_raw_ops(SVCXPRT *xprt)
         ops.xp_getargs = svc_raw_getargs;
         ops.xp_reply = svc_raw_reply;
         ops.xp_freeargs = svc_raw_freeargs;
+        ops.xp_release = svc_raw_destroy;
         ops.xp_destroy = svc_raw_destroy;
         ops2.xp_control = svc_raw_control;
         ops2.xp_getreq = svc_getreq_default;

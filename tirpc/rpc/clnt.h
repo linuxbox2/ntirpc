@@ -107,12 +107,19 @@ typedef struct __rpc_client {
                                   void *, struct timeval);
         /* abort a call */
         void  (*cl_abort)(struct __rpc_client *);
+
         /* get specific error code */
         void  (*cl_geterr)(struct __rpc_client *, struct rpc_err *);
+
         /* frees results */
         bool  (*cl_freeres)(struct __rpc_client *, xdrproc_t, void *);
-        /* destroy this structure */
+
+        /* release (destroys if no refs) */
+        void  (*cl_release)(struct __rpc_client *);
+
+        /* release and mark destroyed */
         void  (*cl_destroy)(struct __rpc_client *);
+
         /* the ioctl() of rpc */
         bool  (*cl_control)(struct __rpc_client *, u_int,  void *);
     } *cl_ops;

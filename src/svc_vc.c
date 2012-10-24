@@ -82,6 +82,7 @@ extern struct svc_params __svc_params[1];
 
 static bool rendezvous_request(SVCXPRT *, struct svc_req *);
 static enum xprt_stat rendezvous_stat(SVCXPRT *);
+static void svc_vc_release(SVCXPRT *xprt);
 static void svc_vc_destroy(SVCXPRT *);
 int generic_read_vc(XDR *, void *, void *, int);
 int generic_write_vc(XDR *, void *, void *, int);
@@ -690,8 +691,6 @@ rendezvous_stat(SVCXPRT *xprt)
     return (XPRT_IDLE);
 }
 
-static void svc_vc_release(SVCXPRT *xprt) __attribute__((unused));
-
 static void
 svc_vc_release(SVCXPRT *xprt)
 {
@@ -1095,6 +1094,7 @@ svc_vc_ops(SVCXPRT *xprt)
         ops.xp_unlock = svc_vc_unlock;
         ops.xp_reply = svc_vc_reply;
         ops.xp_freeargs = svc_vc_freeargs;
+        ops.xp_destroy = svc_vc_release;
         ops.xp_destroy = svc_vc_destroy;
         ops2.xp_control = svc_vc_control;
         ops2.xp_getreq = svc_getreq_default;

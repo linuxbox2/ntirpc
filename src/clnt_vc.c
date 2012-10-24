@@ -103,6 +103,7 @@ static void clnt_vc_geterr(CLIENT *, struct rpc_err *);
 static bool clnt_vc_freeres(CLIENT *, xdrproc_t, void *);
 static void clnt_vc_abort(CLIENT *);
 static bool clnt_vc_control(CLIENT *, u_int, void *);
+static void clnt_vc_release(CLIENT *);
 static void clnt_vc_destroy(CLIENT *);
 static struct clnt_ops *clnt_vc_ops(void);
 static bool time_not_ok(struct timeval *);
@@ -754,11 +755,8 @@ unlock:
     return (rslt);
 }
 
-static void clnt_vc_release(CLIENT *clnt, uint32_t flags)
-__attribute__((unused));
-
 static void
-clnt_vc_release(CLIENT *clnt, uint32_t flags)
+clnt_vc_release(CLIENT *clnt)
 {
     struct x_vc_data *xd = (struct x_vc_data *) clnt->cl_p1;
     struct rpc_dplx_rec *rec = xd->rec;
@@ -811,6 +809,7 @@ clnt_vc_ops(void)
         ops.cl_abort = clnt_vc_abort;
         ops.cl_geterr = clnt_vc_geterr;
         ops.cl_freeres = clnt_vc_freeres;
+        ops.cl_release = clnt_vc_release;
         ops.cl_destroy = clnt_vc_destroy;
         ops.cl_control = clnt_vc_control;
     }

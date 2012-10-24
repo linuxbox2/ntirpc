@@ -490,6 +490,7 @@ svc_dg_ops(SVCXPRT *xprt)
         ops.xp_unlock = svc_dg_unlock;
         ops.xp_reply = svc_dg_reply;
         ops.xp_freeargs = svc_dg_freeargs;
+        ops.xp_release = svc_dg_destroy;
         ops.xp_destroy = svc_dg_destroy;
         ops2.xp_control = svc_dg_control;
         ops2.xp_getreq = svc_getreq_default;
