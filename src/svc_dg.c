@@ -78,7 +78,8 @@ extern struct svc_params __svc_params[1];
 
 static void svc_dg_ops(SVCXPRT *);
 static enum xprt_stat svc_dg_stat(SVCXPRT *);
-static bool svc_dg_recv(SVCXPRT *, struct rpc_msg *);
+static bool svc_dg_recv(SVCXPRT *, struct svc_req *);
+
 static bool svc_dg_reply(SVCXPRT *, struct svc_req *req, struct rpc_msg *);
 static bool svc_dg_getargs(SVCXPRT *, xdrproc_t, void *);
 static bool svc_dg_getargs2(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
@@ -216,8 +217,9 @@ svc_dg_stat(xprt)
 }
 
 static bool
-svc_dg_recv(SVCXPRT *xprt, struct rpc_msg *msg)
+svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 {
+    struct rpc_msg *msg = req->rq_msg;
     struct svc_dg_data *su = su_data(xprt);
     XDR *xdrs = &(su->su_xdrs);
     char *reply;

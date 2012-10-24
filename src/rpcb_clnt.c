@@ -1085,7 +1085,7 @@ rpcb_taddr2uaddr(struct netconfig *nconf,
                  struct netbuf *taddr)
 {
     CLIENT *client;
-    AUTH *auth;
+    AUTH *auth = NULL;
     char *uaddr = NULL;
 
 

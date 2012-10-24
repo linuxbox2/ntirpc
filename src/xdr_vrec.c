@@ -924,6 +924,7 @@ xdr_vrec_control(XDR *xdrs, /* const */ int rq, void *in)
     return (TRUE);
 }
 
+static bool xdr_vrec_noop(void) __attribute__((unused));
 
 static bool
 xdr_vrec_noop(void)
@@ -1005,7 +1006,7 @@ bool
 xdr_vrec_eof(XDR *xdrs)
 {
     V_RECSTREAM *vstrm = (V_RECSTREAM *)(xdrs->x_private);
-    struct v_rec_pos_t *pos;
+    struct v_rec_pos_t *pos __attribute__((unused));
 
     /* XXX a potential open issue here is if readahead could have
      * consumed a fragment ahead in the stream.  How do we recognize and
@@ -1279,7 +1280,7 @@ vrec_skip_input_bytes(V_RECSTREAM *vstrm, long cnt)
         if (unlikely(nbytes < 0)) {
             __warnx(TIRPC_DEBUG_FLAG_XDRREC, "%s ops.readv failed %d\n",
                     __func__, errno);
-            return; /* XXX is there any way to recover? */
+            return false; /* XXX is there any way to recover? */
         } else {
             /* bytes read into current fragment count against fbtbc */
             __warnx(TIRPC_DEBUG_FLAG_XDRREC,

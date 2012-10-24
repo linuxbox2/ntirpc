@@ -170,6 +170,7 @@ int svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt);
 int svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags);
 int svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags);
+void svc_rqst_finalize_xprt(SVCXPRT *xprt);
 
 /* xprt/connection rendezvous callout */
 typedef int (*svc_rqst_rendezvous_t)

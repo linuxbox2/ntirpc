@@ -392,7 +392,6 @@ clnt_vc_call(CLIENT *clnt,
     struct rpc_dplx_rec *rec = xd->rec;
     enum clnt_stat result = RPC_SUCCESS;
     rpc_ctx_t *ctx = NULL;
-    SVCXPRT *xprt = NULL;
     XDR *xdrs;
     int code, ix, refreshes = 2;
     bool shipnow;
@@ -754,6 +753,9 @@ unlock:
 
     return (rslt);
 }
+
+static void clnt_vc_release(CLIENT *clnt, uint32_t flags)
+__attribute__((unused));
 
 static void
 clnt_vc_release(CLIENT *clnt, uint32_t flags)

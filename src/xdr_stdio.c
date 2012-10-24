@@ -58,7 +58,8 @@ static int32_t *xdrstdio_inline(XDR *, u_int);
 static bool xdrstdio_noop(void);
 
 typedef bool (* dummyfunc3)(XDR *, int, void *);
-typedef bool (* dummyfunc4)(XDR *, const char *, u_int, u_int);
+typedef bool (* dummy_getbufs)(XDR *, xdr_uio *, u_int, u_int);
+typedef bool (* dummy_putbufs)(XDR *, xdr_uio *, u_int);
 
 /*
  * Ops vector for stdio type XDR
@@ -73,8 +74,8 @@ static const struct xdr_ops xdrstdio_ops = {
     xdrstdio_inline, /* prime stream for inline macros */
     xdrstdio_destroy, /* destroy stream */
     (dummyfunc3) xdrstdio_noop, /* x_control */
-    (dummyfunc4) xdrstdio_noop, /* x_getbufs */
-    (dummyfunc4) xdrstdio_noop  /* x_putbufs */
+    (dummy_getbufs) xdrstdio_noop, /* x_getbufs */
+    (dummy_putbufs) xdrstdio_noop  /* x_putbufs */
 };
 
 /*

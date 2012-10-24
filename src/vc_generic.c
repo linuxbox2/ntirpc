@@ -43,6 +43,7 @@
 #include <rpc/clnt.h>
 #include <rpc/auth.h>
 #include <rpc/svc_auth.h>
+#include <rpc/svc_rqst.h>
 #include "rpc_com.h"
 #include <misc/rbtree_x.h>
 #include "clnt_internal.h"

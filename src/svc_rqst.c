@@ -45,6 +45,7 @@
 #ifdef PORTMAP
 #include <rpc/pmap_clnt.h>
 #endif /* PORTMAP */
+#include <rpc/svc_rqst.h>
 
 #include "rpc_com.h"
 

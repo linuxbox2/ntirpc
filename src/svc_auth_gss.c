@@ -127,6 +127,8 @@ svcauth_gss_acquire_cred(void)
     return (TRUE);
 }
 
+static bool svcauth_gss_release_cred(void) __attribute__((unused));
+
 static bool
 svcauth_gss_release_cred(void)
 {

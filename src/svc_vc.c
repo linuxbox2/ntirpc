@@ -86,7 +86,9 @@ static void svc_vc_destroy(SVCXPRT *);
 int generic_read_vc(XDR *, void *, void *, int);
 int generic_write_vc(XDR *, void *, void *, int);
 static size_t readv_vc(void *xprtp, struct iovec *iov, int iovcnt,
-                       u_int flags);
+		       u_int flags) __attribute__((unused));
+static size_t writev_vc(void *xprtp, struct iovec *iov, int iovcnt,
+			u_int flags) __attribute__((unused));
 static size_t writev_vc(void *xprtp, struct iovec *iov, int iovcnt,
                         u_int flags);
 static enum xprt_stat svc_vc_stat(SVCXPRT *);
@@ -108,6 +110,21 @@ static SVCXPRT * makefd_xprt(int fd, u_int sendsz, u_int recvsz,
                              bool *allocated);
 
 extern pthread_mutex_t svc_ctr_lock;
+
+static size_t readv_vc(void *xprtp, struct iovec *iov, int iovcnt,
+                       u_int flags)
+{
+    /* To be written */
+    abort();
+}
+
+static size_t writev_vc(void *xprtp, struct iovec *iov, int iovcnt,
+                        u_int flags)
+{
+    /* To be written */
+    abort();
+}
+
 
 static void map_ipv4_to_ipv6(sin, sin6)
     struct sockaddr_in *sin;
@@ -673,6 +690,8 @@ rendezvous_stat(SVCXPRT *xprt)
     return (XPRT_IDLE);
 }
 
+static void svc_vc_release(SVCXPRT *xprt) __attribute__((unused));
+
 static void
 svc_vc_release(SVCXPRT *xprt)
 {
@@ -1114,7 +1133,8 @@ svc_vc_rendezvous_ops(SVCXPRT *xprt)
         ops.xp_getargs =
             (bool (*)(SVCXPRT *, xdrproc_t, void *))abort;
         ops.xp_reply =
-            (bool (*)(SVCXPRT *, struct rpc_msg *))abort;
+            (bool (*)(SVCXPRT *, struct svc_req *req,
+		      struct rpc_msg *))abort;
         ops.xp_freeargs =
             (bool (*)(SVCXPRT *, xdrproc_t, void *))abort,
             ops.xp_destroy = svc_vc_destroy;
