@@ -219,7 +219,6 @@ svc_dg_stat(xprt)
 static bool
 svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 {
-    struct rpc_msg *msg = req->rq_msg;
     struct svc_dg_data *su = su_data(xprt);
     XDR *xdrs = &(su->su_xdrs);
     char *reply;
@@ -228,6 +227,8 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
     struct iovec iov;
     size_t replylen;
     ssize_t rlen;
+
+    req->rq_msg = alloc_rpc_msg();
 
 again:
     iov.iov_base = rpc_buffer(xprt);
@@ -258,13 +259,22 @@ again:
     __xprt_set_raddr(xprt, &ss);
     xdrs->x_op = XDR_DECODE;
     XDR_SETPOS(xdrs, 0);
-    if (! xdr_callmsg(xdrs, msg)) {
+    if (! xdr_callmsg(xdrs, req->rq_msg)) {
         return (FALSE);
     }
-    /* XXX actually using su->su_xid !MT-SAFE */
-    su->su_xid = msg->rm_xid;
+
+    req->rq_xprt = xprt;
+    req->rq_prog = req->rq_msg->rm_call.cb_prog;
+    req->rq_vers = req->rq_msg->rm_call.cb_vers;
+    req->rq_proc = req->rq_msg->rm_call.cb_proc;
+    req->rq_xid = req->rq_msg->rm_xid;
+    req->rq_clntcred = req->rq_msg->rm_call.cb_cred.oa_base +
+	    (2 * MAX_AUTH_BYTES);
+
+    /* XXX su->su_xid !MT-SAFE */
+    su->su_xid = req->rq_msg->rm_xid;
     if (su->su_cache != NULL) {
-        if (svc_dg_cache_get(xprt, msg, &reply, &replylen)) {
+        if (svc_dg_cache_get(xprt, req->rq_msg, &reply, &replylen)) {
             iov.iov_base = reply;
             iov.iov_len = replylen;
             (void) sendmsg(xprt->xp_fd, mesgp, 0);
