@@ -196,6 +196,8 @@ xdrrec_create(XDR *xdrs,
 	 * now the rest ...
 	 */
 	xdrs->x_ops = &xdrrec_ops;
+	xdrs->x_lib = NULL;
+	xdrs->x_public = NULL;
 	xdrs->x_private = rstrm;
 	rstrm->tcp_handle = tcp_handle;
 	rstrm->readit = readit;

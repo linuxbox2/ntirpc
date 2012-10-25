@@ -46,6 +46,7 @@
 #include <string.h>
 
 #include <rpc/types.h>
+#include <rpc/xdr.h>
 #include <rpc/xdr_inline.h>
 #include <rpc/rpc.h>
 
