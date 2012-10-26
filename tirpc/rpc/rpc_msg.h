@@ -155,7 +155,7 @@ struct call_body {
 struct rpc_msg {
     u_int32_t  rm_xid;
     enum msg_type  rm_direction;
-    union {
+    struct {
         struct call_body RM_cmb;
         struct reply_body RM_rmb;
     } ru;

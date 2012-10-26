@@ -504,6 +504,7 @@ call_again:
 
         while (TRUE) {
 
+	    /* XXXX remote next 3 if all goes well */
             ctx->msg->acpted_rply.ar_verf = _null_auth;
             ctx->msg->acpted_rply.ar_results.where = NULL;
             ctx->msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;

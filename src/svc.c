@@ -167,6 +167,7 @@ alloc_rpc_msg(void)
     struct rpc_msg *msg = mem_alloc(sizeof(struct rpc_msg));
     if (! msg)
         goto out;
+
     TAILQ_INIT_ENTRY(msg, msg_q);
     msg->rm_call.cb_cred.oa_base = mem_alloc(2 * MAX_AUTH_BYTES + RQCRED_SIZE);
     if (! msg->rm_call.cb_cred.oa_base) {
@@ -174,10 +175,17 @@ alloc_rpc_msg(void)
         msg = NULL;
         goto out;
     }
+
     /* save original address */
     msg->fr_vec[0] = msg->rm_call.cb_cred.oa_base;
     msg->rm_call.cb_verf.oa_base =
         msg->rm_call.cb_cred.oa_base + MAX_AUTH_BYTES;
+
+    /* required for REPLY decodes */
+    msg->acpted_rply.ar_verf = _null_auth;
+    msg->acpted_rply.ar_results.where = NULL;
+    msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
+
 out:
     return (msg);
 }
