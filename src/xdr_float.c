@@ -86,7 +86,11 @@ static struct sgl_limits {
 };
 #else
 
+#if defined(__linux__)
 #include <bits/endian.h>
+#else
+#include <sys/endian.h>
+#endif
 #define IEEEFP
 
 #endif /* vax */

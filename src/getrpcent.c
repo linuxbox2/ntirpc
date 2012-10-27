@@ -31,6 +31,7 @@
  */
 
 #include <config.h>
+#include <misc/portable.h>
 #include <sys/types.h>
 
 #include <netinet/in.h>
@@ -43,6 +44,7 @@
 #include <string.h>
 
 #include <rpc/rpc.h>
+#include <rpc/rpcent.h>
 #ifdef YP
 #include <rpcsvc/yp_prot.h>
 #include <rpcsvc/ypclnt.h>

@@ -38,8 +38,6 @@
 #ifndef REENTRANT_H
 #define REENTRANT_H
 
-#if defined(__linux__)
-
 #include <pthread.h>
 
 #define mutex_t			pthread_mutex_t
@@ -61,7 +59,9 @@ mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *a
     int rslt;
 
     pthread_mutexattr_init(&attr);
+#if defined(__linux__)
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ADAPTIVE_NP);
+#endif
     rslt = pthread_mutex_init(m, &attr);
     pthread_mutexattr_destroy(&attr);
 
@@ -102,5 +102,4 @@ mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *a
 #define thr_self()		pthread_self()
 #define thr_exit(x)		pthread_exit(x)
 
-#endif /* __linux__ */
 #endif /* REENTRANT_H */

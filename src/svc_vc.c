@@ -27,6 +27,7 @@
  */
 
 #include <config.h>
+#include <misc/portable.h>
 
 /*
  * svc_vc.c, Server side for Connection Oriented RPC.
@@ -43,7 +44,7 @@
 #include <sys/param.h>
 #include <sys/poll.h>
 #if defined(TIRPC_EPOLL)
-#include <sys/epoll.h> /* before rpc.h */
+#include <misc/epoll.h> /* before rpc.h */
 #endif
 #include <sys/un.h>
 #include <sys/time.h>
@@ -131,12 +132,14 @@ static void map_ipv4_to_ipv6(sin, sin6)
     struct sockaddr_in *sin;
     struct sockaddr_in6 *sin6;
 {
+#if defined(__linux__)
     sin6->sin6_family = AF_INET6;
     sin6->sin6_port = sin->sin_port;
     sin6->sin6_addr.s6_addr32[0] = 0;
     sin6->sin6_addr.s6_addr32[1] = 0;
     sin6->sin6_addr.s6_addr32[2] = htonl(0xffff);
     sin6->sin6_addr.s6_addr32[3] = *(uint32_t *) & sin->sin_addr; /* XXX strict */
+#endif
 }
 
 /*
@@ -675,7 +678,7 @@ again:
 #else
     xd->shared.nonblock = FALSE;
 #endif
-    (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &xd->sx.last_recv);
+    (void) clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
 
     /* if parent has xp_rdvs, use it */
     if (xprt->xp_ops2->xp_rdvs)
@@ -1260,7 +1263,7 @@ __svc_clean_idle2(int timeout, bool cleanblock)
     ++active;
 
     memset(&acc, 0, sizeof(struct svc_clean_idle_arg));
-    (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &acc.ts);
+    (void) clock_gettime(CLOCK_MONOTONIC_FAST, &acc.ts);
     acc.timeout = timeout;
 
     /* XXX refcounting, state? */
@@ -1405,7 +1408,7 @@ svc_vc_ncreate_clnt(CLIENT *clnt,
 #else
     xd->shared.nonblock = FALSE;
 #endif
-    (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &xd->sx.last_recv);
+    (void) clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
 
     /* conditional xprt_register */
     if ((! (__svc_params->flags & SVC_FLAG_NOREG_XPRTS)) &&

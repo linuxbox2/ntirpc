@@ -24,6 +24,7 @@
  */
 
 #include <config.h>
+#include <misc/portable.h>
 
 #include <pthread.h>
 #include <reentrant.h>
@@ -154,7 +155,7 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 
     ctx->flags |= RPC_CTX_FLAG_WAITSYNC;
     while (! (ctx->flags & RPC_CTX_FLAG_SYNCDONE)) {
-        (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+        (void) clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
         timespecadd(&ts, &ctx->ctx_u.clnt.timeout);
         code = cond_timedwait(&lk->we.cv, &lk->we.mtx, &ts);
     }

@@ -35,8 +35,9 @@
 #ifndef _RPC_PMAP_PROT_H
 #define _RPC_PMAP_PROT_H 1
 
+#if defined(__linux__)
 #include <features.h>
-
+#endif
 #include <rpc/xdr.h>
 
 __BEGIN_DECLS
@@ -91,14 +92,14 @@ struct pmap {
     long unsigned pm_port;
 };
 
-extern bool xdr_pmap (XDR *__xdrs, struct pmap *__regs) __THROW;
+extern bool xdr_pmap (XDR *__xdrs, struct pmap *__regs);
 
 struct pmaplist {
     struct pmap pml_map;
     struct pmaplist *pml_next;
 };
 
-extern bool xdr_pmaplist (XDR *__xdrs, struct pmaplist **__rp) __THROW;
+extern bool xdr_pmaplist (XDR *__xdrs, struct pmaplist **__rp);
 
 __END_DECLS
 

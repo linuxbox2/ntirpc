@@ -24,6 +24,7 @@
  */
 
 #include <config.h>
+#include <misc/portable.h>
 
 #include <pthread.h>
 #include <reentrant.h>
@@ -31,7 +32,7 @@
 #include <sys/poll.h>
 #include <stdint.h>
 #if defined(TIRPC_EPOLL)
-#include <sys/epoll.h>
+#include <misc/epoll.h>
 #endif
 #include <assert.h>
 #include <err.h>

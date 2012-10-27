@@ -24,6 +24,7 @@
  */
 
 #include <config.h>
+#include <misc/portable.h>
 
 #include <pthread.h>
 #include <reentrant.h>
@@ -157,7 +158,7 @@ svc_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
         }
         if (len != 0)
             (void) clock_gettime(
-                CLOCK_MONOTONIC_COARSE, &xd->sx.last_recv);
+                CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
         return len;
     }
 
@@ -183,7 +184,7 @@ svc_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
 
     if ((len = read(xprt->xp_fd, buf, (size_t)len)) > 0) {
         (void) clock_gettime(
-            CLOCK_MONOTONIC_COARSE, &xd->sx.last_recv);
+            CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
         return (len);
     }
 
@@ -208,7 +209,7 @@ svc_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
     xprt = xd->rec->hdl.xprt;
 
     if (xd->shared.nonblock)
-        (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &ts0);
+        (void) clock_gettime(CLOCK_MONOTONIC_FAST, &ts0);
 
     for (cnt = len; cnt > 0; cnt -= i, buf += i) {
         i = write(xprt->xp_fd, buf, (size_t)cnt);
@@ -228,7 +229,7 @@ svc_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
                  *
                  * XXX 2 is an arbitrary amount.
                  */
-                (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &ts1);
+                (void) clock_gettime(CLOCK_MONOTONIC_FAST, &ts1);
                 if (ts1.tv_sec - ts0.tv_sec >= 2) {
                     __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
                             "%s: short write !EAGAIN (will set dead)",
@@ -285,7 +286,7 @@ svc_readv_vc(XDR *xdrs, void *ctp, struct iovec *iov, int iovcnt,
     } while ((pollfd.revents & POLLIN) == 0);
 
     if ((nbytes = readv(xprt->xp_fd, iov, iovcnt)) > 0) {
-        (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &xd->sx.last_recv);
+        (void) clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
         goto out;
     }
 

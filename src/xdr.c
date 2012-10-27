@@ -27,6 +27,7 @@
  */
 
 #include <config.h>
+#include <misc/portable.h>
 #include <sys/cdefs.h>
 
 /*
@@ -44,7 +45,7 @@
 #include <stdlib.h>
 #include <string.h>
 #if defined(TIRPC_EPOLL)
-#include <sys/epoll.h> /* before rpc.h */
+#include <misc/epoll.h> /* before rpc.h */
 #endif
 
 #include <rpc/types.h>

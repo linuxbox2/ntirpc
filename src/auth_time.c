@@ -26,6 +26,8 @@
  */
 
 #include <config.h>
+#include <misc/portable.h>
+
 #include <sys/cdefs.h>
 #include <stdio.h>
 #include <string.h>
@@ -446,7 +448,7 @@ __rpc_get_time_offset(struct timeval *td, /* Time difference */
             thetime = 0;
     }
 
-    (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+    (void) clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
     tv.tv_sec = ts.tv_sec;
     q = div(ts.tv_nsec, 1000);
     tv.tv_usec = q.quot;

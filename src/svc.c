@@ -37,13 +37,14 @@
  * Copyright (C) 1984, Sun Microsystems, Inc.
  */
 #include <config.h>
+#include <misc/portable.h>
 
 #include <pthread.h>
 #include <reentrant.h>
 #include <sys/types.h>
 #include <sys/poll.h>
 #if defined(TIRPC_EPOLL)
-#include <sys/epoll.h>
+#include <misc/epoll.h>
 #endif
 #include <assert.h>
 #include <err.h>

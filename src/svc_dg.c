@@ -32,6 +32,7 @@
  */
 
 #include <config.h>
+#include <misc/portable.h>
 
 /*
  * svc_dg.c, Server side for connectionless RPC.
@@ -46,7 +47,7 @@
 #include <sys/param.h>
 #include <sys/poll.h>
 #if defined(TIRPC_EPOLL)
-#include <sys/epoll.h> /* before rpc.h */
+#include <misc/epoll.h> /* before rpc.h */
 #endif
 #include <rpc/rpc.h>
 #include <rpc/svc_dg.h>

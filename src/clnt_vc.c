@@ -42,9 +42,10 @@
  * return message.  Batched calls that produce many result messages can
  * deadlock (netlock) the client and the server....
  *
- * Now go hang yourself.
+ * Now go hang yourself.  [Ouch, that was intemperate.]
  */
 #include <config.h>
+#include <misc/portable.h>
 #include <pthread.h>
 
 #include <reentrant.h>
@@ -54,6 +55,7 @@
 #include <sys/un.h>
 #include <sys/uio.h>
 #include <sys/socket.h>
+#include <misc/socket.h>
 #include <arpa/inet.h>
 #include <assert.h>
 #include <err.h>
@@ -72,25 +74,6 @@
 #include "rpc_dplx_internal.h"
 #include "rpc_ctx.h"
 #include <rpc/svc_rqst.h>
-
-#define CMGROUP_MAX    16
-#define SCM_CREDS      0x03            /* process creds (struct cmsgcred) */
-
-/*
- * Credentials structure, used to verify the identity of a peer
- * process that has sent us a message. This is allocated by the
- * peer process but filled in by the kernel. This prevents the
- * peer from lying about its identity. (Note that cmcred_groups[0]
- * is the effective GID.)
- */
-struct cmsgcred {
-    pid_t   cmcred_pid;             /* PID of sending process */
-    uid_t   cmcred_uid;             /* real UID of sending process */
-    uid_t   cmcred_euid;            /* effective UID of sending process */
-    gid_t   cmcred_gid;             /* real GID of sending process */
-    short   cmcred_ngroups;         /* number or groups */
-    gid_t   cmcred_groups[CMGROUP_MAX];     /* groups */
-};
 
 struct cmessage {
     struct cmsghdr cmsg;

@@ -29,6 +29,7 @@
  * Copyright (c) 1986-1991 by Sun Microsystems Inc.
  */
 #include <config.h>
+#include <misc/portable.h>
 #include <sys/cdefs.h>
 
 /*
@@ -74,11 +75,6 @@
 #define MAXBCAST 20 /* Max no of broadcasting transports */
 #define INITTIME 4000 /* Time to wait initially */
 #define WAITTIME 8000 /* Maximum time to wait */
-
-# define POLLRDNORM     0x040           /* Normal data may be read.  */
-# define POLLRDBAND     0x080           /* Priority data may be read.  */
-
-
 
 /*
  * If nettype is NULL, it broadcasts on all the available
@@ -368,7 +364,7 @@ rpc_broadcast_exp(rpcprog_t prog,  /* program number */
     }
 
     /* Serialize all the arguments which have to be sent */
-    (void)clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+    (void)clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
     msg.rm_xid = __RPC_GETXID(&ts);
     msg.rm_direction = CALL;
     msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
