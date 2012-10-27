@@ -24,6 +24,7 @@
  */
 
 #include <config.h>
+#include <misc/portable.h>
 
 #include <sys/types.h>
 #include <netinet/in.h>
@@ -44,7 +45,7 @@
 #include <stddef.h>
 #include <assert.h>
 
-#include "intrinsic.h"
+#include <intrinsic.h>
 #include "rpc_com.h"
 
 #include <rpc/xdr_vrec.h>

@@ -1,53 +1,86 @@
-/*
- * Copyright (c) 2001 Dima Dorfman.
- * All rights reserved.
+/*-------------------------------------------------------------------------
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
+ * getpeereid.c
+ *		get peer userid for UNIX-domain socket connection
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * Portions Copyright (c) 1996-2012, PostgreSQL Global Development Group
+ *
+ *
+ * IDENTIFICATION
+ *	  src/port/getpeereid.c
+ *
+ *-------------------------------------------------------------------------
  */
 
 #include <config.h>
-#include <sys/cdefs.h>
+#include <misc/portable.h>
 
 #include <sys/param.h>
 #include <sys/socket.h>
-#include <sys/un.h>
-
-#include <errno.h>
 #include <unistd.h>
+#include <errno.h>
 
+#ifdef HAVE_SYS_UN_H
+#include <sys/un.h>
+#endif
+#ifdef HAVE_UCRED_H
+#include <ucred.h>
+#endif
+#ifdef HAVE_SYS_UCRED_H
+#include <sys/ucred.h>
+#endif
+
+#if !HAVE_GETPEEREID
+
+/*
+ * BSD-style getpeereid() for platforms that lack it.
+ */
 int
-getpeereid(int s, uid_t *euid, gid_t *egid)
+getpeereid(int sock, uid_t *uid, gid_t *gid)
 {
-	struct ucred uc;
-	socklen_t uclen;
-	int error;
+#if defined(SO_PEERCRED)
+	/* Linux: use getsockopt(SO_PEERCRED) */
+	struct ucred peercred;
+	ACCEPT_TYPE_ARG3 so_len = sizeof(peercred);
 
-	uclen = sizeof(uc); 
-	error = getsockopt(s, SOL_SOCKET, SO_PEERCRED, &uc, &uclen); /* SCM_CREDENTIALS */
-	if (error != 0)
-		return (error);
-	/*	if (uc.cr_version != XUCRED_VERSION) */
-	/*	return (EINVAL); */
-	*euid = uc.uid;
-	*egid = uc.gid;
-	return (0);
- }
+	if (getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &peercred, &so_len) != 0 ||
+		so_len != sizeof(peercred))
+		return -1;
+	*uid = peercred.uid;
+	*gid = peercred.gid;
+	return 0;
+#elif defined(LOCAL_PEERCRED)
+	/* Debian with FreeBSD kernel: use getsockopt(LOCAL_PEERCRED) */
+	struct xucred peercred;
+	ACCEPT_TYPE_ARG3 so_len = sizeof(peercred);
+
+	if (getsockopt(sock, 0, LOCAL_PEERCRED, &peercred, &so_len) != 0 ||
+		so_len != sizeof(peercred) ||
+		peercred.cr_version != XUCRED_VERSION)
+		return -1;
+	*uid = peercred.cr_uid;
+	*gid = peercred.cr_gid;
+	return 0;
+#elif defined(HAVE_GETPEERUCRED)
+	/* Solaris: use getpeerucred() */
+	ucred_t    *ucred;
+
+	ucred = NULL;				/* must be initialized to NULL */
+	if (getpeerucred(sock, &ucred) == -1)
+		return -1;
+
+	*uid = ucred_geteuid(ucred);
+	*gid = ucred_getegid(ucred);
+	ucred_free(ucred);
+
+	if (*uid == (uid_t) (-1) || *gid == (gid_t) (-1))
+		return -1;
+	return 0;
+#else
+	/* No implementation available on this platform */
+	errno = ENOSYS;
+	return -1;
+#endif
+}
+
+#endif /* HAVE_PEEREID */

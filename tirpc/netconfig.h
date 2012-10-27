@@ -1,7 +1,9 @@
 #ifndef _NETCONFIG_H_
 #define _NETCONFIG_H_
 
+#if defined(__linux__)
 #include <features.h>
+#endif
 
 #define NETCONFIG "/etc/netconfig"
 #define NETPATH	  "NETPATH"

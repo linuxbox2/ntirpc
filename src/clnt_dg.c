@@ -33,6 +33,7 @@
  * Implements a connectionless client side RPC.
  */
 #include <config.h>
+#include <misc/portable.h>
 #include <pthread.h>
 #include <reentrant.h>
 #include <sys/types.h>
@@ -151,7 +152,7 @@ clnt_dg_ncreate(int fd,           /* open file descriptor */
     cu->cu_async = FALSE;
     cu->cu_connect = FALSE;
     cu->cu_connected = FALSE;
-    (void)clock_gettime(CLOCK_MONOTONIC_COARSE, &now);
+    (void)clock_gettime(CLOCK_MONOTONIC_FAST, &now);
     call_msg.rm_xid = __RPC_GETXID(&now); /* XXX? */
     call_msg.rm_call.cb_prog = program;
     call_msg.rm_call.cb_vers = version;

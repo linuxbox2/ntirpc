@@ -2,13 +2,11 @@
 #ifndef _RBTREE_X_H
 #define _RBTREE_X_H
 
+#include <config.h>
+#include <misc/portable.h>
 #include <inttypes.h>
 #include <stdio.h>
-
 #include <misc/rbtree.h>
-
-#define CACHE_LINE_SIZE 64
-#define CACHE_PAD(_n) char __pad ## _n [CACHE_LINE_SIZE]
 
 struct rbtree_x_part
 {

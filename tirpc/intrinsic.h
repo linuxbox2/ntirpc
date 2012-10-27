@@ -32,8 +32,8 @@
 #define unlikely(x)  __builtin_expect (!!(x), 0)
 #endif
 #else
-#define likely(x)
-#define unlikely(x)
+#define likely(x) (x)
+#define unlikely(x) (x)
 #endif
 
 #endif /* _RPC_INTRINSIC_H */

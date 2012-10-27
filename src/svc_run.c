@@ -42,7 +42,7 @@
 #include <signal.h>
 
 #if defined(TIRPC_EPOLL)
-#include <sys/epoll.h> /* before rpc.h */
+#include <misc/epoll.h> /* before rpc.h */
 #endif
 #include <rpc/rpc.h>
 #include "rpc_com.h"
