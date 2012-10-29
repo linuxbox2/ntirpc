@@ -99,12 +99,15 @@ rbtree_x_cached_insert(struct rbtree_x *xt, struct rbtree_x_part *t,
     if (xt->flags & RBT_X_FLAG_CACHE_WT) {
         if (! v_cached)
             nv = t->cache[offset] = nk;
-        else
+        else {
             nv = opr_rbtree_insert(&t->t, nk);
+	    if (! nv)
+	      nv = nk;
+	}
     } else {
         /* RBT_X_FLAG_CACHE_RT */
         nv = v_cached = t->cache[offset] = nk;
-        nv = opr_rbtree_insert(&t->t, nk);
+        (void) opr_rbtree_insert(&t->t, nk);
     }
 
     __warnx(TIRPC_DEBUG_FLAG_LOCK,

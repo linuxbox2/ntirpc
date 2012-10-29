@@ -401,8 +401,7 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg, bool *no_dispatch)
         if (! gd) {
             svcauth_gss_return(AUTH_REJECTEDCRED);
         }
-        else
-            gd_hashed = TRUE;
+	gd_hashed = TRUE;
 
         /* If you 'mount -o sec=krb5i' you will have gc->gc_proc > 
          * RPCSEC_GSS_SVN_NONE, but the negociation will have been made as
@@ -434,7 +433,8 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg, bool *no_dispatch)
     mutex_lock(&gd->lock);
     gd_locked = TRUE;
 
-    req->rq_auth = auth;
+    /* thread auth */
+    req->rq_auth = gd->auth;
 
     /* Check sequence number. */
     if (gd->established) {
