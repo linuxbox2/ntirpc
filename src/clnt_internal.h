@@ -78,20 +78,11 @@ typedef struct rpc_call_ctx {
             struct __rpc_client *clnt;
             struct x_vc_data *xd;
             struct timespec timeout;
-            /* XXX need all this? */
-            rpcproc_t proc;
-            xdrproc_t xdr_args;
-            void *args_ptr;
-            xdrproc_t xdr_results;
-            void *results_ptr;
         } clnt;
         struct {
             /* nothing */
         } svc;
     } ctx_u;
-#if 0
-    void *u_data[2]; /* caller user data */
-#endif
 } rpc_ctx_t;
 
 static inline int
@@ -205,8 +196,6 @@ struct x_vc_data
         enum xprt_stat strm_stat;
         struct timespec last_recv; /* XXX move to shared? */
         int32_t maxrec;
-        TAILQ_HEAD(sx_tailq, rpc_msg) msg_q;
-        int32_t qlen;
     } sx;
     struct {
         bool nonblock;
@@ -225,8 +214,6 @@ static inline struct x_vc_data *
 alloc_x_vc_data(void)
 {
     struct x_vc_data *xd = mem_zalloc(sizeof(struct x_vc_data));
-    TAILQ_INIT(&xd->sx.msg_q);
-    xd->sx.qlen = 0;
     return (xd);
 }
 

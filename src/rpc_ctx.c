@@ -73,10 +73,6 @@ alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
     ctx->ctx_u.clnt.timeout.tv_sec = 0;
     ctx->ctx_u.clnt.timeout.tv_nsec = 0;
     timespec_addms(&ctx->ctx_u.clnt.timeout, tv_to_ms(&timeout));
-    ctx->ctx_u.clnt.proc = proc;
-    ctx->ctx_u.clnt.xdr_args = xdr_args;
-    ctx->ctx_u.clnt.args_ptr = args_ptr;
-    ctx->ctx_u.clnt.results_ptr = results_ptr;
     ctx->msg = alloc_rpc_msg();
     ctx->flags = 0;
 
@@ -120,26 +116,6 @@ void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
     mutex_unlock(&rec->mtx);
 out:
     return;
-}
-
-bool
-rpc_ctx_xfer_callmsg(rpc_ctx_t *ctx)
-{
-    struct x_vc_data *xd = (struct x_vc_data *) ctx->ctx_u.clnt.clnt->cl_p1;
-    struct rpc_dplx_rec *rec  = xd->rec;
-
-    if (rec->hdl.xprt) {
-        /* queue msg */
-        mutex_lock(&xd->rec->mtx);
-        TAILQ_INSERT_TAIL(&xd->sx.msg_q, ctx->msg, msg_q);
-        ++(xd->sx.qlen);
-        mutex_unlock(&xd->rec->mtx);
-        /* reset it */
-        ctx->msg = alloc_rpc_msg();
-    } else {
-        /* unexpected msg (abuse?)--just reuse it */
-    }
-    return (TRUE);
 }
 
 bool
