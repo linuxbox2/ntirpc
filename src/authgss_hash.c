@@ -190,11 +190,9 @@ authgss_ctx_hash_set(struct svc_rpc_gss_data *gd)
     mutex_lock(&t->mtx);
     rslt = rbtree_x_cached_insert(&authgss_hash_st.xt, t, &gd->node_k,
                                   gd->hk.k);
-    if (rslt) {
-        /* lru */
-        axp = (struct authgss_x_part *) t->u1;
-        TAILQ_INSERT_TAIL(&axp->lru_q, gd, lru_q);
-    }
+    /* lru */
+    axp = (struct authgss_x_part *) t->u1;
+    TAILQ_INSERT_TAIL(&axp->lru_q, gd, lru_q);
     mutex_unlock(&t->mtx);
 
     return (rslt);
