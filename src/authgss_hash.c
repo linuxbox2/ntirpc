@@ -165,9 +165,9 @@ authgss_ctx_hash_get(struct rpc_gss_cred *gc)
         TAILQ_INSERT_TAIL(&axp->lru_q, gd, lru_q);
         ++(axp->gen);
         (void) atomic_inc_uint32_t(&gd->refcnt);
+	(void) atomic_inc_uint32_t(&gd->gen);
     }
     mutex_unlock(&t->mtx);
-    (void) atomic_inc_uint32_t(&gd->gen);
 
     return (gd);
 }
