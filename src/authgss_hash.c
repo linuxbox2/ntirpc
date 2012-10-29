@@ -177,9 +177,13 @@ authgss_ctx_hash_set(struct svc_rpc_gss_data *gd)
 {
     struct rbtree_x_part *t;
     struct authgss_x_part *axp;
+    gss_union_ctx_id_desc *gss_ctx;
     bool rslt;
 
     cond_init_authgss_hash();
+
+    gss_ctx = (gss_union_ctx_id_desc *) (gd->ctx);
+    gd->hk.k = gss_ctx_hash(gss_ctx);
 
     ++(gd->refcnt); /* locked */
     t = rbtx_partition_of_scalar(&authgss_hash_st.xt, gd->hk.k);
