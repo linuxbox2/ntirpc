@@ -158,10 +158,10 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
     /* Deserialize arguments. */
     memset(&recv_tok, 0, sizeof(recv_tok));
 
-    if (! svc_getargs2(req->rq_xprt, req,
-		       (xdrproc_t)xdr_rpc_gss_init_args,
-		       (caddr_t)&recv_tok,
-		       NULL /* u_data */))
+    if (! svc_getargs(req->rq_xprt, req,
+		      (xdrproc_t)xdr_rpc_gss_init_args,
+		      (caddr_t)&recv_tok,
+		      NULL /* u_data */))
       return (FALSE);
 
     gr->gr_major = gss_accept_sec_context(&gr->gr_minor,
