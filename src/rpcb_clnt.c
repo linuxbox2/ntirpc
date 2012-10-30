@@ -626,7 +626,7 @@ __rpcb_findaddr_timed(rpcprog_t program,
     struct netbuf *address = NULL;
     rpcvers_t start_vers = RPCBVERS4;
     struct netbuf servaddr;
-    CLIENT *client;
+    CLIENT *client = NULL;
     AUTH *auth;
 
     /* parameter checking */
