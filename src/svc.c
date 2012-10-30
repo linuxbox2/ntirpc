@@ -964,13 +964,6 @@ svc_getreq_default(SVCXPRT *xprt)
             break;
 
         } else {
-
-            /* XXX check */
-            if ((xprt->xp_auth != NULL) &&
-                (xprt->xp_auth->svc_ah_private == NULL)) {
-                xprt->xp_auth = NULL;
-            }
-
             /*
              * Check if the xprt has been disconnected in a
              * recursive call in the service dispatch routine.

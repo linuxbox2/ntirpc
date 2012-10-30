@@ -82,9 +82,8 @@ static enum xprt_stat svc_dg_stat(SVCXPRT *);
 static bool svc_dg_recv(SVCXPRT *, struct svc_req *);
 
 static bool svc_dg_reply(SVCXPRT *, struct svc_req *req, struct rpc_msg *);
-static bool svc_dg_getargs(SVCXPRT *, xdrproc_t, void *);
-static bool svc_dg_getargs2(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
-                            void *);
+static bool svc_dg_getargs(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
+			   void *);
 static void svc_dg_lock(SVCXPRT *, uint32_t, const char *, int);
 static void svc_dg_unlock(SVCXPRT *, uint32_t, const char *, int);
 static bool svc_dg_freeargs(SVCXPRT *, xdrproc_t, void *);
@@ -158,7 +157,6 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
     xprt->xp_flags = SVC_XPRT_FLAG_NONE;
     xprt->xp_fd = fd;
     xprt->xp_p2 = su;
-    xprt->xp_auth = NULL;
     svc_dg_ops(xprt);
     xprt->xp_rtaddr.maxlen = sizeof (struct sockaddr_storage);
 
@@ -336,21 +334,9 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
     return (stat);
 }
 
-/* XXX may not work.  Going away. */
 static bool
-svc_dg_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
-{
-    if (! SVCAUTH_UNWRAP(xprt->xp_auth, &(su_data(xprt)->su_xdrs),
-                         xdr_args, args_ptr)) {
-        (void)svc_freeargs(xprt, xdr_args, args_ptr);
-        return FALSE;
-    }
-    return TRUE;
-}
-
-static bool
-svc_dg_getargs2(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
-                void *args_ptr, void *u_data)
+svc_dg_getargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
+	       void *args_ptr, void *u_data)
 {
     struct svc_dg_data *su = su_data(xprt);
     XDR *xdrs = &(su->su_xdrs);
@@ -399,10 +385,6 @@ svc_dg_destroy(SVCXPRT *xprt)
     (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
     if (xprt->xp_fd != -1)
         (void)close(xprt->xp_fd);
-    if (xprt->xp_auth != NULL) {
-        SVCAUTH_DESTROY(xprt->xp_auth);
-        xprt->xp_auth = NULL;
-    }
     XDR_DESTROY(&(su->su_xdrs));
     (void) mem_free(rpc_buffer(xprt), su->su_iosz);
     (void) mem_free(su, sizeof (*su));
@@ -496,7 +478,6 @@ svc_dg_ops(SVCXPRT *xprt)
         ops.xp_recv = svc_dg_recv;
         ops.xp_stat = svc_dg_stat;
         ops.xp_getargs = svc_dg_getargs;
-        ops.xp_getargs2 = svc_dg_getargs2;
         ops.xp_lock = svc_dg_lock;
         ops.xp_unlock = svc_dg_unlock;
         ops.xp_reply = svc_dg_reply;

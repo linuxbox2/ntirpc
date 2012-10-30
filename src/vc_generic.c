@@ -466,12 +466,6 @@ void vc_shared_destroy(struct x_vc_data *xd)
             break;
         }
 
-        /* XXX auth lock */
-        if (xprt->xp_auth != NULL) {
-            SVCAUTH_DESTROY(xprt->xp_auth);
-            xprt->xp_auth = NULL;
-        }
-
         if (xprt->xp_rtaddr.buf)
             mem_free(xprt->xp_rtaddr.buf, xprt->xp_rtaddr.maxlen);
         if (xprt->xp_ltaddr.buf)

@@ -95,9 +95,8 @@ static size_t writev_vc(void *xprtp, struct iovec *iov, int iovcnt,
                         u_int flags);
 static enum xprt_stat svc_vc_stat(SVCXPRT *);
 static bool svc_vc_recv(SVCXPRT *, struct svc_req *);
-static bool svc_vc_getargs(SVCXPRT *, xdrproc_t, void *);
-static bool svc_vc_getargs2(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
-                            void *);
+static bool svc_vc_getargs(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
+			   void *);
 static void svc_vc_lock(SVCXPRT *, uint32_t, const char *, int);
 static void svc_vc_unlock(SVCXPRT *, uint32_t, const char *, int);
 static bool svc_vc_freeargs(SVCXPRT *, xdrproc_t, void *);
@@ -947,45 +946,9 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
     return (FALSE);
 }
 
-/* XXX may not work.  Going away. */
 static bool
-svc_vc_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
-{
-    bool rslt = TRUE;
-    struct x_vc_data *xd = (struct x_vc_data *) xprt->xp_p1;
-
-    if (! SVCAUTH_UNWRAP(xprt->xp_auth,
-                         &xd->shared.xdrs_in,
-                         xdr_args, args_ptr)) {
-#if 0 /* XXX bidrectional unification (there will be only one queue pair) */
-        CLIENT *cl;
-        cl = (CLIENT *) xprt->xp_p4;
-        if (cl) {
-            struct cx_data *cx = (struct cx_data *) cl->cl_private;
-            struct ct_data *ct = CT_DATA(cx);
-            if (cx->cx_duplex.flags & CT_FLAG_DUPLEX) {
-                if (! SVCAUTH_UNWRAP(xprt->xp_auth,
-                                     &(ct->ct_xdrs),
-                                     xdr_args, args_ptr)) {
-                    rslt = FALSE;
-                }
-            }
-        }
-#endif /* 0 */
-        rslt = FALSE;
-    }
-
-    /* XXX Upstream TI-RPC lacks this call, but -does- call svc_dg_freeargs
-     * in svc_dg_getargs if SVCAUTH_UNWRAP fails. */
-    if (! rslt)
-        svc_vc_freeargs(xprt, xdr_args, args_ptr);
-
-    return (rslt);
-}
-
-static bool
-svc_vc_getargs2(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
-                void *args_ptr, void *u_data)
+svc_vc_getargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
+	       void *args_ptr, void *u_data)
 {
     bool rslt = TRUE;
     struct x_vc_data *xd = (struct x_vc_data *) xprt->xp_p1;
@@ -1092,7 +1055,6 @@ svc_vc_ops(SVCXPRT *xprt)
         ops.xp_recv = svc_vc_recv;
         ops.xp_stat = svc_vc_stat;
         ops.xp_getargs = svc_vc_getargs;
-        ops.xp_getargs2 = svc_vc_getargs2;
         ops.xp_lock = svc_vc_lock;
         ops.xp_unlock = svc_vc_unlock;
         ops.xp_reply = svc_vc_reply;
@@ -1134,13 +1096,14 @@ svc_vc_rendezvous_ops(SVCXPRT *xprt)
         ops.xp_stat = rendezvous_stat;
         /* XXX wow */
         ops.xp_getargs =
-            (bool (*)(SVCXPRT *, xdrproc_t, void *))abort;
+		(bool (*)(SVCXPRT *, struct svc_req *,  xdrproc_t,
+			  void *, void *))abort;
         ops.xp_reply =
-            (bool (*)(SVCXPRT *, struct svc_req *req,
-		      struct rpc_msg *))abort;
+		(bool (*)(SVCXPRT *, struct svc_req *req,
+			  struct rpc_msg *))abort;
         ops.xp_freeargs =
-            (bool (*)(SVCXPRT *, xdrproc_t, void *))abort,
-            ops.xp_destroy = svc_vc_destroy;
+		(bool (*)(SVCXPRT *, xdrproc_t, void *))abort;
+	ops.xp_destroy = svc_vc_destroy;
         ops2.xp_control = svc_vc_rendezvous_control;
         ops2.xp_getreq = svc_getreq_default;
         ops2.xp_dispatch = svc_dispatch_default;
