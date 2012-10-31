@@ -27,9 +27,11 @@
 #include <misc/portable.h>
 
 #include <sys/types.h>
+#if !defined(_WIN32)
 #include <netinet/in.h>
-
 #include <err.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

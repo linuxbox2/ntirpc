@@ -42,7 +42,9 @@
 #include "namespace.h"
 #include <stdio.h>
 
+#if !defined(_WIN32)
 #include <arpa/inet.h>
+#endif
 #include <rpc/types.h>
 #include <rpc/xdr.h>
 #include "un-namespace.h"

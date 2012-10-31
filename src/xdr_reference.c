@@ -28,7 +28,6 @@
 
 #include <config.h>
 #include <sys/cdefs.h>
-#include <sys/cdefs.h>
 
 /*
  * xdr_reference.c, Generic XDR routines impelmentation.
@@ -40,7 +39,9 @@
  */
 
 #include "namespace.h"
+#if !defined(_WIN32)
 #include <err.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

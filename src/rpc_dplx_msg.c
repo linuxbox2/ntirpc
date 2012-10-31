@@ -42,8 +42,6 @@
 #include <rpc/xdr_inline.h>
 #include <rpc/auth_inline.h>
 
-#include <sys/select.h>
-
 static const struct xdr_discrim reply_dscrm[3] = {
     { (int)MSG_ACCEPTED, (xdrproc_t)xdr_accepted_reply },
     { (int)MSG_DENIED, (xdrproc_t)xdr_rejected_reply },

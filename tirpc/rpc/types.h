@@ -63,6 +63,11 @@ typedef char * caddr_t;
 typedef uint32_t uid_t;
 typedef uint32_t gid_t;
 
+struct iovec {
+  void *iov_base;
+  size_t iov_len;
+};
+
 #include <winsock2.h>
 #include <ws2tcpip.h> /* XXX mingw */
 

@@ -41,6 +41,8 @@
 #define _TIRPC_RPCCOM_H
 
 #include <sys/cdefs.h>
+#include <rpc/clnt.h>
+#include <rpc/svc.h>
 
 /* #pragma ident "@(#)rpc_com.h 1.11 93/07/05 SMI" */
 

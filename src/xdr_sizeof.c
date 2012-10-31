@@ -47,7 +47,7 @@
 
 /* ARGSUSED */
 static bool
-x_putlong(XDR *xdrs, long *longp)
+x_putlong(XDR *xdrs, const long *longp)
 {
     xdrs->x_handy += BYTES_PER_XDR_UNIT;
     return (TRUE);
@@ -55,7 +55,7 @@ x_putlong(XDR *xdrs, long *longp)
 
 /* ARGSUSED */
 static bool
-x_putbytes(XDR *xdrs, char *bp, u_int len)
+x_putbytes(XDR *xdrs, const char *bp, u_int len)
 {
     xdrs->x_handy += len;
     return (TRUE);
@@ -84,7 +84,7 @@ x_inline(XDR *xdrs, u_int len)
     if (xdrs->x_op != XDR_ENCODE) {
         return (NULL);
     }
-    if (len < (u_int)xdrs->x_base) {
+    if (len < PtrToUlong(xdrs->x_base)) {
         /* x_private was already allocated */
         xdrs->x_handy += len;
         return ((int32_t *) xdrs->x_private);
@@ -96,7 +96,7 @@ x_inline(XDR *xdrs, u_int len)
             xdrs->x_base = 0;
             return (NULL);
         }
-        xdrs->x_base = (caddr_t) len;
+        xdrs->x_base = (void*)(intptr_t)len; /* XXX */
         xdrs->x_handy += len;
         return ((int32_t *) xdrs->x_private);
     }
@@ -131,6 +131,8 @@ xdr_sizeof(xdrproc_t func,  void *data)
     typedef bool (* dummyfunc1)(XDR *, long *);
     typedef bool (* dummyfunc2)(XDR *, caddr_t, u_int);
     typedef bool (* dummyfunc3)(XDR *, const char *, u_int, u_int);
+    typedef bool (* dummy_getbufs)(XDR *, xdr_uio *, u_int, u_int);
+    typedef bool (* dummy_putbufs)(XDR *, xdr_uio *, u_int);
 
     ops.x_putlong = x_putlong;
     ops.x_putbytes = x_putbytes;
@@ -142,8 +144,8 @@ xdr_sizeof(xdrproc_t func,  void *data)
     /* the other harmless ones */
     ops.x_getlong =  (dummyfunc1) harmless;
     ops.x_getbytes = (dummyfunc2) harmless;
-    ops.x_getbufs = (dummyfunc3) harmless;
-    ops.x_putbufs = (dummyfunc3) harmless;
+    ops.x_getbufs = (dummy_getbufs) harmless;
+    ops.x_putbufs = (dummy_putbufs) harmless;
 
     x.x_op = XDR_ENCODE;
     x.x_ops = &ops;

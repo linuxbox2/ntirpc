@@ -7,11 +7,19 @@ LIBNTIRPC = libntirpc.a
 SOURCES = \
 	rbtree.c \
 	rbtree_x.c \
+	rpc_ctx.c \
+	rpc_dplx_msg.c \
+	strlcat.c \
+	strlcpy.c \
 	xdr.c \
 	xdr_array.c \
 	xdr_float.c \
 	xdr_mem.c \
-	xdr_rec.c
+	xdr_rec.c \
+	xdr_reference.c \
+	xdr_sizeof.c \
+	xdr_stdio.c \
+	xdr_vrec.c 
 
 OBJECTS = $(SOURCES:%.c=%.o)
 

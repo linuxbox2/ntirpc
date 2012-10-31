@@ -69,6 +69,7 @@ int __rpc_seman2socktype(int);
 int __rpc_socktype2seman(int);
 void *rpc_nullproc(CLIENT *);
 int __rpc_sockisbound(int);
+#error sos
 struct netbuf *__rpc_set_netbuf(struct netbuf *, const void *, size_t);
 
 struct netbuf *__rpcb_findaddr(rpcprog_t, rpcvers_t, const struct netconfig *,
