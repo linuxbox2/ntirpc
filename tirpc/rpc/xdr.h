@@ -43,8 +43,9 @@
 #include <sys/cdefs.h>
 #include <stdio.h>
 #include <stdbool.h>
+#if !defined(_WIN32)
 #include <netinet/in.h>
-
+#endif
 #include <rpc/types.h>
 
 /*

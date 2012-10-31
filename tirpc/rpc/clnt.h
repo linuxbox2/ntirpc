@@ -45,7 +45,9 @@
 
 #include <sys/cdefs.h>
 #include <netconfig.h>
+#if !defined(_WIN32)
 #include <sys/un.h>
+#endif
 
 /*
  * Well-known IPV6 RPC broadcast address.
@@ -401,11 +403,15 @@ extern CLIENT *clnt_vc_ncreate(const int, const struct netbuf *,
 extern CLIENT *clnt_vc_ncreate2(const int, const struct netbuf *,
                                 const rpcprog_t, const rpcvers_t,
                                 u_int, u_int, u_int);
+
+#if !defined(_WIN32)
 /*
  * Added for compatibility to old rpc 4.0. Obsoleted by clnt_vc_create().
  */
 extern CLIENT *clntunix_ncreate(struct sockaddr_un *,
                                 u_long, u_long, int *, u_int, u_int);
+#endif
+
 /*
  * const int fd;    -- open file descriptor
  * const struct netbuf *svcaddr;  -- servers address

@@ -50,9 +50,10 @@
 
 #include <sys/types.h>
 
+#if !defined(_WIN32)
 #include <netinet/in.h>
-
 #include <err.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -246,7 +247,8 @@ xdrrec_getlong(XDR *xdrs,  long *lp)
 
     /* first try the inline, fast case */
     if ((rstrm->fbtbc >= sizeof(int32_t)) &&
-        (((long)rstrm->in_boundry - (long)buflp) >= sizeof(int32_t))) {
+        ((PtrToUlong(rstrm->in_boundry) - PtrToUlong(buflp)) >=
+	 sizeof(int32_t))) {
         *lp = (long)ntohl((u_int32_t)(*buflp));
         rstrm->fbtbc -= sizeof(int32_t);
         rstrm->in_finger += sizeof(int32_t);
@@ -313,8 +315,8 @@ xdrrec_putbytes(XDR *xdrs, const char *addr, u_int len)
     size_t current;
 
     while (len > 0) {
-        current = (size_t)((u_long)rstrm->out_boundry -
-                           (u_long)rstrm->out_finger);
+        current = (size_t)(PtrToUlong(rstrm->out_boundry) -
+			   PtrToUlong(rstrm->out_finger));
         current = (len < current) ? len : current;
         memmove(rstrm->out_finger, addr, current);
         rstrm->out_finger += current;
@@ -505,12 +507,12 @@ xdrrec_endofrecord(XDR *xdrs, bool sendnow)
     u_long len;  /* fragment length */
 
     if (sendnow || rstrm->frag_sent ||
-        ((u_long)rstrm->out_finger + sizeof(u_int32_t) >=
-         (u_long)rstrm->out_boundry)) {
+        (PtrToUlong(rstrm->out_finger) + sizeof(u_int32_t) >=
+         PtrToUlong(rstrm->out_boundry))) {
         rstrm->frag_sent = FALSE;
         return (flush_out(rstrm, TRUE));
     }
-    len = (u_long)(rstrm->out_finger) - (u_long)(rstrm->frag_header) -
+    len = PtrToUlong((rstrm->out_finger)) - PtrToUlong((rstrm->frag_header)) -
         sizeof(u_int32_t);
     *(rstrm->frag_header) = htonl((u_int32_t)len | LAST_FRAG);
     rstrm->frag_header = (u_int32_t *)(void *)rstrm->out_finger;
@@ -616,12 +618,12 @@ static bool
 flush_out(RECSTREAM *rstrm, bool eor)
 {
     u_int32_t eormask = (eor == TRUE) ? LAST_FRAG : 0;
-    u_int32_t len = (u_int32_t)((u_long)(rstrm->out_finger) -
-                                (u_long)(rstrm->frag_header) - sizeof(u_int32_t));
+    u_int32_t len = (u_int32_t)(PtrToUlong(rstrm->out_finger) -
+                                PtrToUlong(rstrm->frag_header) - sizeof(u_int32_t));
 
     *(rstrm->frag_header) = htonl(len | eormask);
-    len = (u_int32_t)((u_long)(rstrm->out_finger) -
-                      (u_long)(rstrm->out_base));
+    len = (u_int32_t)(PtrToUlong(rstrm->out_finger) -
+                      PtrToUlong(rstrm->out_base));
     if ((*(rstrm->writeit))(rstrm->xdrs, rstrm->tcp_handle, rstrm->out_base,
                             (int)len) != (int)len)
         return (FALSE);
@@ -641,7 +643,7 @@ fill_input_buf(RECSTREAM *rstrm)
         return FALSE;
 
     where = rstrm->in_base;
-    i = (u_int32_t)((u_long)rstrm->in_boundry % BYTES_PER_XDR_UNIT);
+    i = (u_int32_t)(PtrToUlong(rstrm->in_boundry) % BYTES_PER_XDR_UNIT);
     where += i;
     len = (u_int32_t)(rstrm->in_size - i);
     if ((len = (*(rstrm->readit))(rstrm->xdrs, rstrm->tcp_handle, where,
@@ -667,8 +669,8 @@ get_input_bytes(RECSTREAM *rstrm, char *addr, int len)
     }
 
     while (len > 0) {
-        current = (size_t)((long)rstrm->in_boundry -
-                           (long)rstrm->in_finger);
+      current = (size_t)(PtrToUlong(rstrm->in_boundry) -
+			 PtrToUlong(rstrm->in_finger));
         if (current == 0) {
             if (! fill_input_buf(rstrm))
                 return (FALSE);
@@ -714,8 +716,8 @@ skip_input_bytes(RECSTREAM *rstrm, long cnt)
     u_int32_t current;
 
     while (cnt > 0) {
-        current = (size_t)((long)rstrm->in_boundry -
-                           (long)rstrm->in_finger);
+      current = (size_t)(PtrToUlong(rstrm->in_boundry) -
+			 PtrToUlong(rstrm->in_finger));
         if (current == 0) {
             if (! fill_input_buf(rstrm))
                 return (FALSE);

@@ -49,7 +49,9 @@
 #include <rpc/xdr.h>
 #include <rpc/clnt_stat.h>
 #include <sys/cdefs.h>
+#if !defined(_WIN32)
 #include <sys/socket.h>
+#endif
 #include <sys/types.h>
 
 

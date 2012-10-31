@@ -5,7 +5,11 @@
 #include <features.h>
 #endif
 
+#if defined(_WIN32)
+#define NETCONFIG "c:\\etc\\netconfig"
+#else
 #define NETCONFIG "/etc/netconfig"
+#endif
 #define NETPATH	  "NETPATH"
 
 struct netconfig {

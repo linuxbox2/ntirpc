@@ -42,8 +42,9 @@
 
 #include "namespace.h"
 #include <sys/types.h>
-
+#if !defined(_WIN32)
 #include <netinet/in.h>
+#endif
 
 #include <string.h>
 
@@ -106,9 +107,8 @@ xdrmem_create(XDR *xdrs,
               u_int size,
               enum xdr_op op)
 {
-
     xdrs->x_op = op;
-    xdrs->x_ops = ((unsigned long)addr & (sizeof(int32_t) - 1))
+    xdrs->x_ops = (PtrToUlong(addr) & (sizeof(int32_t) - 1))
         ? &xdrmem_ops_unaligned : &xdrmem_ops_aligned;
     xdrs->x_lib[0] = NULL;
     xdrs->x_lib[1] = NULL;
@@ -202,8 +202,8 @@ xdrmem_putbytes(XDR *xdrs, const char *addr, u_int len)
 static u_int
 xdrmem_getpos(XDR *xdrs)
 {
-    /* XXX w/64-bit pointers, u_int not enough! */
-    return (u_int)((u_long)xdrs->x_private - (u_long)xdrs->x_base);
+    /* XXX check */
+    return (u_int)(xdrs->x_private - xdrs->x_base);
 }
 
 static bool

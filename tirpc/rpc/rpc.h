@@ -36,8 +36,12 @@
 #define _TIRPC_RPC_H
 
 #include <rpc/types.h>  /* some typedefs */
+#if defined(_WIN32)
+#include <winsock2.h>
+#else
 #include <sys/socket.h>
 #include <netinet/in.h>
+#endif
 
 /* external data representation interfaces */
 #include <rpc/xdr.h>  /* generic (de)serializer */

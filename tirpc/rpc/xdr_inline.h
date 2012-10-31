@@ -41,7 +41,9 @@
 #ifndef _TIRPC_INLINE_XDR_H
 #define _TIRPC_INLINE_XDR_H
 
+#if !defined(_WIN32)
 #include <err.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

@@ -40,7 +40,9 @@
  */
 
 #include "namespace.h"
+#if !defined(_WIN32)
 #include <err.h>
+#endif
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>

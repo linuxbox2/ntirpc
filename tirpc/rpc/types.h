@@ -38,7 +38,35 @@
 #ifndef _TIRPC_TYPES_H
 #define _TIRPC_TYPES_H
 
+#include <stdint.h>
 #include <sys/types.h>
+
+#if defined(_WIN32)
+
+#define __BEGIN_DECLS
+#define __END_DECLS
+
+/* integral types */
+#include <_bsd_types.h> /* XXX mingw (defines u_long) */
+typedef uint8_t u_char;
+typedef uint16_t u_int16_t;
+typedef uint16_t u_short_t;
+typedef uint16_t u_short;
+typedef uint32_t u_int;
+typedef uint32_t u_int32_t;
+typedef int64_t quad_t;
+typedef uint64_t u_int64_t;
+typedef uint64_t u_quad_t;
+
+/* misc */
+typedef char * caddr_t;
+typedef uint32_t uid_t;
+typedef uint32_t gid_t;
+
+#include <winsock2.h>
+#include <ws2tcpip.h> /* XXX mingw */
+
+#endif
 
 typedef int32_t bool_t;
 typedef int32_t enum_t;
@@ -151,7 +179,7 @@ extern tirpc_pkg_params __pkg_params;
 /*
  * The netbuf structure is defined here, because FreeBSD / NetBSD only use
  * it inside the RPC code. It's in <xti.h> on SVR4, but it would be confusing
- * to have an xti.h, since FreeBSD / NetBSD does not support XTI/TLI.
+ * to have an xti.h, since FreeBSD / NetBSD do not support XTI/TLI.
  */
 
 /*

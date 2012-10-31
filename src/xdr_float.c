@@ -88,6 +88,8 @@ static struct sgl_limits {
 
 #if defined(__linux__)
 #include <bits/endian.h>
+#elif defined(_WIN32)
+/* XXX */
 #else
 #include <sys/endian.h>
 #endif

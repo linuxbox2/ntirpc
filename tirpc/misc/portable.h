@@ -37,6 +37,11 @@ struct in_pktinfo {
 
 #endif
 
+#if defined(_WIN32)
+#else
+#define PtrToUlong(addr) ((unsigned long)(addr))
+#endif
+
 #if !defined(CACHE_LINE_SIZE)
 #define CACHE_LINE_SIZE 64
 #endif

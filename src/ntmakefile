@@ -1,0 +1,35 @@
+
+# Minimal makefile for compilation with mingw64--almost certain to
+# be replaced with something more flexible
+
+LIBNTIRPC = libntirpc.a
+
+SOURCES = \
+	rbtree.c \
+	rbtree_x.c \
+	xdr.c \
+	xdr_array.c \
+	xdr_float.c \
+	xdr_mem.c \
+	xdr_rec.c
+
+OBJECTS = $(SOURCES:%.c=%.o)
+
+# Compiler flags 
+CC =  x86_64-w64-mingw32-gcc
+CFLAGS += -g3 -O0 -I../tirpc/ -D_REENTRANT
+
+#LDFLAGS += -L$(CUNIT)/lib $(TIRPC)/src/.libs/libntirpc.a \
+#	-lcunit -lgssapi_krb5 -lkrb5 -lk5crypto -lcom_err -lpthread \
+#	-lc -lrt -lgssglue
+
+# Targets 
+all : $(LIBNTIRPC)
+
+$(LIBNTIRPC) : $(OBJECTS)
+
+$(OBJECTS) : $(SOURCES)
+
+clean:
+	$(RM) $(OBJECTS) $(LIBTIRPC)
+

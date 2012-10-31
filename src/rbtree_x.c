@@ -28,10 +28,12 @@
 #include <pthread.h>
 #include <reentrant.h>
 #include <sys/types.h>
+#if !defined(_WIN32)
 #include <sys/poll.h>
+#include <err.h>
+#endif
 #include <stdint.h>
 #include <assert.h>
-#include <err.h>
 #include <errno.h>
 #include <rpc/types.h>
 
