@@ -24,7 +24,6 @@
  */
 
 #include <config.h>
-#include <misc/portable.h>
 
 #include <sys/types.h>
 #if !defined(_WIN32)
@@ -32,12 +31,14 @@
 #include <err.h>
 #endif
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
 #include <rpc/types.h>
+#include <sys/types.h>
+#include <reentrant.h>
+#include <misc/portable.h>
 #include <rpc/xdr.h>
 #include <rpc/rpc.h>
 #include <rpc/auth.h>
@@ -1182,6 +1183,12 @@ decode_fragment_header(V_RECSTREAM *vstrm, u_int32_t header)
     }
     return (FALSE);
 }
+
+#if defined(__MINGW32__)
+/* XXX Ick. */
+#undef readv
+#undef writev
+#endif
 
 /* Read an initial fragment.  Tries readahead to improve buffering. */
 static bool

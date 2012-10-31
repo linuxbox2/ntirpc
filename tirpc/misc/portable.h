@@ -2,6 +2,8 @@
 #ifndef NTIRPC_PORTABLE_H
 #define NTIRPC_PORTABLE_H
 
+#include <misc/timespec.h>
+
 #if defined(__FreeBSD__)
 /* EPOLL->kevent shim by Boaz Harrosh */
 #include <misc/epoll.h>
@@ -38,9 +40,17 @@ struct in_pktinfo {
 #endif
 
 #if defined(_WIN32)
+#include <stdint.h>
+#include <misc/winpthreads.h>
+#include <misc/timespec.h>
+
+#define CLOCK_MONOTONIC_FAST 6
+
+typedef uint32_t clockid_t;
+extern int clock_gettime(clockid_t clock, struct timespec *ts);
 #else
 #define PtrToUlong(addr) ((unsigned long)(addr))
-#endif
+#endif /* !_WIN32 */
 
 #if !defined(CACHE_LINE_SIZE)
 #define CACHE_LINE_SIZE 64

@@ -5,6 +5,8 @@
 LIBNTIRPC = libntirpc.a
 
 SOURCES = \
+	auth_none.c \
+	portable.c \
 	rbtree.c \
 	rbtree_x.c \
 	rpc_ctx.c \

@@ -44,12 +44,11 @@
  * Copyright (C) 1984, Sun Microsystems, Inc.
  */
 #include <config.h>
-#include <pthread.h>
-#include <reentrant.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <rpc/types.h>
+#include <reentrant.h>
 #include <rpc/rpc.h>
 #include <rpc/xdr_inline.h>
 #include <rpc/auth_inline.h>

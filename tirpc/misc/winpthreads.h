@@ -46,15 +46,16 @@
 #ifndef WIN_PTHREADS
 #define WIN_PTHREADS
 
-
 #include <windows.h>
+
 #include <setjmp.h>
 #include <errno.h>
 #include <sys/timeb.h>
 
+#if !defined(__MINGW32__) /* XXX 64? */
 #define ETIMEDOUT	110
 #define ENOTSUP		134
-
+#endif
 
 #define PTHREAD_CANCEL_DISABLE 0
 #define PTHREAD_CANCEL_ENABLE 0x01
@@ -101,7 +102,7 @@
 
 #define PTHREAD_BARRIER_SERIAL_THREAD 1
 
-
+#if !defined(__MINGW32__)
 /* Windows doesn't have this, so declare it ourselves. */
 struct timespec
 {
@@ -109,6 +110,7 @@ struct timespec
 	long long tv_sec;
 	long long tv_nsec;
 };
+#endif
 
 typedef struct _pthread_cleanup _pthread_cleanup;
 struct _pthread_cleanup
@@ -123,7 +125,7 @@ struct _pthread_v
 	void *ret_arg;
 	void *(* func)(void *);
 	_pthread_cleanup *clean;
-	HANDLE h;
+	uintptr_t h;
 	int cancelled;
 	unsigned p_state;
 	int keymax;
@@ -133,6 +135,19 @@ struct _pthread_v
 };
 
 typedef struct _pthread_v *pthread_t;
+
+#if defined(__MINGW32__)
+#include <winbase.h>
+
+typedef struct _RTL_CONDITION_VARIABLE {
+  PVOID Ptr;
+} CONDITION_VARIABLE, *PCONDITION_VARIABLE;
+
+typedef struct _RTL_SRWLOCK {
+  PVOID Ptr;
+} SRWLOCK, *PSRWLOCK;
+
+#endif
 
 typedef struct pthread_barrier_t pthread_barrier_t;
 struct pthread_barrier_t
@@ -176,20 +191,26 @@ long _pthread_key_max;
 long _pthread_key_sch;
 void (**_pthread_key_dest)(void *);
 
-
 #define pthread_cleanup_push(F, A)\
-{\
-	const _pthread_cleanup _pthread_cup = {(F), (A), pthread_self()->clean};\
-	_ReadWriteBarrier();\
-	pthread_self()->clean = (_pthread_cleanup *) &_pthread_cup;\
-	_ReadWriteBarrier()
+  do { \
+    const _pthread_cleanup _pthread_cup = {(F), (A), pthread_self()->clean}; \
+    _ReadWriteBarrier(); \
+    pthread_self()->clean = (_pthread_cleanup *) &_pthread_cup;	\
+    _ReadWriteBarrier(); \
+} while(0)
 
-/* Note that if async cancelling is used, then there is a race here */
 #define pthread_cleanup_pop(E)\
-	(pthread_self()->clean = _pthread_cup.next, (E?_pthread_cup.func(_pthread_cup.arg):0));}
+  do { \
+    _pthread_cleanup *_pthread_cup = pthread_self()->clean; \
+    if (_pthread_cup)  { \
+    _pthread_cup->func(_pthread_cup->arg); \
+    pthread_self()->clean = _pthread_cup->next; \
+    } \
+  } while(0)
 
-static void _pthread_once_cleanup(pthread_once_t *o)
+static void _pthread_once_cleanup(void *arg)
 {
+	pthread_once_t *o =  (pthread_once_t *) arg;
 	*o = 0;
 }
 
@@ -333,6 +354,24 @@ static int pthread_rwlock_wrlock(pthread_rwlock_t *l)
 	return 0;
 }
 
+static int pthread_rwlock_unlock(pthread_rwlock_t *l)
+{
+	void *state = *(void **)l;
+
+	if (state == (void *) 1)
+	{
+		/* Known to be an exclusive lock */
+		ReleaseSRWLockExclusive(l);
+	}
+	else
+	{
+		/* A shared unlock will work */
+		ReleaseSRWLockShared(l);
+	}
+
+	return 0;
+}
+
 static void pthread_tls_init(void)
 {
 	_pthread_tls = TlsAlloc();
@@ -395,7 +434,7 @@ static pthread_t pthread_self(void)
 		t->p_state = PTHREAD_DEFAULT_ATTR;
 		t->keymax = 0;
 		t->keyval = NULL;
-		t->h = GetCurrentThread();
+		t->h = (uintptr_t) GetCurrentThread();
 
 		/* Save for later */
 		TlsSetValue(_pthread_tls, t);
@@ -412,25 +451,6 @@ static pthread_t pthread_self(void)
 
 	return t;
 }
-
-static int pthread_rwlock_unlock(pthread_rwlock_t *l)
-{
-	void *state = *(void **)l;
-
-	if (state == (void *) 1)
-	{
-		/* Known to be an exclusive lock */
-		ReleaseSRWLockExclusive(l);
-	}
-	else
-	{
-		/* A shared unlock will work */
-		ReleaseSRWLockShared(l);
-	}
-
-	return 0;
-}
-
 
 static int pthread_rwlock_tryrdlock(pthread_rwlock_t *l)
 {
@@ -601,14 +621,14 @@ static int pthread_cancel(pthread_t t)
 
 		ctxt.ContextFlags = CONTEXT_CONTROL;
 
-		SuspendThread(t->h);
-		GetThreadContext(t->h, &ctxt);
+		SuspendThread((HANDLE) t->h);
+		GetThreadContext((HANDLE) t->h, &ctxt);
 #ifdef _M_X64
 		ctxt.Rip = (uintptr_t) _pthread_invoke_cancel;
 #else
 		ctxt.Eip = (uintptr_t) _pthread_invoke_cancel;
 #endif
-		SetThreadContext(t->h, &ctxt);
+		SetThreadContext((HANDLE) t->h, &ctxt);
 
 		/* Also try deferred Cancelling */
 		t->cancelled = 1;
@@ -616,7 +636,7 @@ static int pthread_cancel(pthread_t t)
 		/* Notify everyone to look */
 		_InterlockedIncrement(&_pthread_cancelling);
 
-		ResumeThread(t->h);
+		ResumeThread((HANDLE) t->h);
 	}
 	else
 	{
@@ -767,7 +787,7 @@ static int pthread_create_wrapper(void *args)
 	}
 
 	/* If we exit too early, then we can race with create */
-	while (tv->h == (HANDLE) -1)
+	while ((HANDLE) tv->h == (HANDLE) -1)
 	{
 		YieldProcessor();
 		_ReadWriteBarrier();
@@ -796,7 +816,7 @@ static int pthread_create(pthread_t *th, pthread_attr_t *attr, void *(* func)(vo
 	tv->p_state = PTHREAD_DEFAULT_ATTR;
 	tv->keymax = 0;
 	tv->keyval = NULL;
-	tv->h = (HANDLE) -1;
+	tv->h = (uintptr_t) -1;
 
 	if (attr)
 	{
@@ -807,14 +827,14 @@ static int pthread_create(pthread_t *th, pthread_attr_t *attr, void *(* func)(vo
 	/* Make sure tv->h has value of -1 */
 	_ReadWriteBarrier();
 
-	tv->h = (HANDLE) _beginthreadex(NULL, ssize, pthread_create_wrapper, tv, 0, NULL);
+	tv->h = _beginthreadex(NULL, ssize, pthread_create_wrapper, tv, 0, NULL);
 
 	/* Failed */
 	if (!tv->h) return 1;
 
 	if (tv->p_state & PTHREAD_CREATE_DETACHED)
 	{
-		CloseHandle(tv->h);
+		CloseHandle((HANDLE) tv->h);
 		_ReadWriteBarrier();
 		tv->h = 0;
 	}
@@ -828,8 +848,8 @@ static int pthread_join(pthread_t t, void **res)
 
 	pthread_testcancel();
 
-	WaitForSingleObject(tv->h, INFINITE);
-	CloseHandle(tv->h);
+	WaitForSingleObject((HANDLE) tv->h, INFINITE);
+	CloseHandle((HANDLE) tv->h);
 
 	/* Obtain return value */
 	if (res) *res = tv->ret_arg;
@@ -848,7 +868,7 @@ static int pthread_detach(pthread_t t)
 	 * our call would be undefined if called on a dead thread.
 	 */
 
-	CloseHandle(tv->h);
+	CloseHandle((HANDLE) tv->h);
 	_ReadWriteBarrier();
 	tv->h = 0;
 
@@ -1059,7 +1079,7 @@ static int pthread_barrierattr_destroy(void **attr)
 
 static int pthread_barrierattr_setpshared(void **attr, int s)
 {
-	*attr = (void *) s;
+        *attr = (void *) (uintptr_t) s;
 	return 0;
 }
 
@@ -1364,7 +1384,7 @@ static int pthread_rwlockattr_setpshared(pthread_rwlockattr_t *a, int s)
 #define pthread_sigmask(H, S1, S2) 0
 
 
-/* Wrap cancellation points */
+/* Wrap cancellation points -- seems incompatible with decls in stdio.h */
 #define accept(...) (pthread_testcancel(), accept(__VA_ARGS__))
 #define aio_suspend(...) (pthread_testcancel(), aio_suspend(__VA_ARGS__))
 #define clock_nanosleep(...) (pthread_testcancel(), clock_nanosleep(__VA_ARGS__))

@@ -40,8 +40,9 @@
 
 #ifndef _TIRPC_XDR_H
 #define _TIRPC_XDR_H
+
 #include <sys/cdefs.h>
-#include <stdio.h>
+#include <misc/stdio.h>
 #include <stdbool.h>
 #if !defined(_WIN32)
 #include <netinet/in.h>

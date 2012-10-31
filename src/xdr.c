@@ -27,7 +27,6 @@
  */
 
 #include <config.h>
-#include <misc/portable.h>
 #include <sys/cdefs.h>
 
 /*
@@ -40,17 +39,18 @@
  * xdr.
  */
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#if defined(TIRPC_EPOLL)
-#include <misc/epoll.h> /* before rpc.h */
-#endif
 
 #include <rpc/types.h>
+#include <misc/portable.h>
+#include <reentrant.h>
 #include <rpc/xdr.h>
 #include <rpc/xdr_inline.h>
 #include <rpc/rpc.h>
+#if defined(TIRPC_EPOLL)
+#include <misc/epoll.h> /* before rpc.h */
+#endif
 
 typedef quad_t          longlong_t;     /* ANSI long long type */
 typedef u_quad_t        u_longlong_t;   /* ANSI unsigned long long type */

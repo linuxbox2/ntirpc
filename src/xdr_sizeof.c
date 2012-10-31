@@ -35,12 +35,14 @@
  */
 
 #include <sys/cdefs.h>
+#include <stdlib.h>
 
 #include "namespace.h"
 #include <rpc/types.h>
-#include <rpc/xdr.h>
 #include <sys/types.h>
-#include <stdlib.h>
+#include <misc/portable.h>
+#include <reentrant.h>
+#include <rpc/xdr.h>
 #include "un-namespace.h"
 
 #include "rpc_com.h"

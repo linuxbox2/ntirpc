@@ -38,7 +38,11 @@
 #ifndef REENTRANT_H
 #define REENTRANT_H
 
+#if defined(_WIN32)
+#include <misc/winpthreads.h>
+#else
 #include <pthread.h>
+#endif
 
 #define mutex_t			pthread_mutex_t
 #define cond_t			pthread_cond_t
@@ -47,7 +51,11 @@
 #define once_t			pthread_once_t
 
 #define thread_key_t		pthread_key_t
+#if defined(__linux__)
 #define MUTEX_INITIALIZER	PTHREAD_ADAPTIVE_MUTEX_INITIALIZER_NP
+#else
+#define MUTEX_INITIALIZER	PTHREAD_MUTEX_INITIALIZER
+#endif
 #define RWLOCK_INITIALIZER	PTHREAD_RWLOCK_INITIALIZER
 #define ONCE_INITIALIZER	PTHREAD_ONCE_INIT
 

@@ -5,7 +5,7 @@
 #include <config.h>
 #include <misc/portable.h>
 #include <inttypes.h>
-#include <stdio.h>
+#include <misc/stdio.h>
 #include <misc/rbtree.h>
 
 struct rbtree_x_part
