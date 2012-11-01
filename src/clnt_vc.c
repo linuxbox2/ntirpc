@@ -155,7 +155,7 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
                  u_int recvsz,      /* buffer send size */
                  u_int flags)
 {
-    CLIENT *clnt;
+    CLIENT *clnt = NULL;
     struct rpc_dplx_rec *rec = NULL;
     struct x_vc_data *xd = NULL;
     struct ct_data *ct = NULL;
