@@ -13,6 +13,7 @@ SOURCES = \
 	rpc_dplx_msg.c \
 	strlcat.c \
 	strlcpy.c \
+	svc.c \
 	xdr.c \
 	xdr_array.c \
 	xdr_float.c \

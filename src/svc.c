@@ -37,23 +37,26 @@
  * Copyright (C) 1984, Sun Microsystems, Inc.
  */
 #include <config.h>
-#include <misc/portable.h>
 
-#include <pthread.h>
-#include <reentrant.h>
 #include <sys/types.h>
-#include <sys/poll.h>
-#if defined(TIRPC_EPOLL)
-#include <misc/epoll.h>
-#endif
 #include <assert.h>
-#include <err.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
 
+#if !defined (_WIN32)
+#include <err.h>
+#include <sys/poll.h>
+#endif
+#if defined(TIRPC_EPOLL)
+#include <misc/epoll.h>
+#endif
+
+#include <rpc/types.h>
+#include <reentrant.h>
+#include <misc/portable.h>
 #include <rpc/rpc.h>
 #ifdef PORTMAP
 #include <rpc/pmap_clnt.h>
@@ -74,8 +77,6 @@
 
 #define SVC_VERSQUIET 0x0001 /* keep quiet about vers mismatch */
 #define version_keepquiet(xp) ((u_long)(xp)->xp_p3 & SVC_VERSQUIET)
-
-#define max(a, b) (a > b ? a : b)
 
 extern tirpc_pkg_params __pkg_params;
 

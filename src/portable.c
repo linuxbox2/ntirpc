@@ -25,9 +25,11 @@
 
 #include <config.h>
 #include <misc/portable.h>
+#include <misc/stdio.h>
 #include <stdbool.h>
 #include <reentrant.h>
 
+#if defined(_WIN32)
 pthread_mutex_t clock_mtx = PTHREAD_MUTEX_INITIALIZER;
 
 int
@@ -64,3 +66,23 @@ clock_gettime(clockid_t clock, struct timespec *ts)
 
   return (rslt);
 }
+
+/* XXX this mutex actually -is- serializing calls, however, these
+ * calls should be rare */
+pthread_mutex_t warn_mtx = PTHREAD_MUTEX_INITIALIZER;
+
+void warnx(const char *fmt, ...)
+{
+	va_list ap;
+	static char msg[128];
+
+	va_start(ap, fmt);
+	if (fmt != NULL)
+		_vsnprintf(msg, 128, fmt, ap);
+	else
+		msg[0]='\0';
+	va_end(ap);
+	fprintf(stderr, "%s\n", msg);
+}
+
+#endif /* _WIN32 */
