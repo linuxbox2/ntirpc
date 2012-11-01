@@ -59,6 +59,7 @@
 #include <string.h>
 
 #include <rpc/types.h>
+#include <misc/portable.h>
 #include <rpc/xdr.h>
 #include <rpc/rpc.h>
 #include <rpc/auth.h>

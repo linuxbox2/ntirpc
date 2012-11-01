@@ -49,6 +49,7 @@
 #include <string.h>
 
 #include <rpc/types.h>
+#include <misc/portable.h>
 #include <rpc/xdr.h>
 #include "un-namespace.h"
 
