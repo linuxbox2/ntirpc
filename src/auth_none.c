@@ -48,7 +48,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <rpc/types.h>
-#include <reentrant.h>
+#include <misc/portable.h>
 #include <rpc/rpc.h>
 #include <rpc/xdr_inline.h>
 #include <rpc/auth_inline.h>

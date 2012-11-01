@@ -44,7 +44,6 @@
 
 #include <rpc/types.h>
 #include <misc/portable.h>
-#include <reentrant.h>
 #include <rpc/xdr.h>
 #include <rpc/xdr_inline.h>
 #include <rpc/rpc.h>

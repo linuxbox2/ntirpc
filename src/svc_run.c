@@ -32,21 +32,21 @@
  */
 #include <config.h>
 
-#include <pthread.h>
-#include <reentrant.h>
+#if !defined(_WIN32)
+#include <sys/select.h>
 #include <err.h>
-#include <errno.h>
-#include <stdio.h>
+#endif
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
 
+#include <rpc/types.h> /* before portable.h */
+#include <misc/portable.h>
 #if defined(TIRPC_EPOLL)
 #include <misc/epoll.h> /* before rpc.h */
 #endif
 #include <rpc/rpc.h>
 #include "rpc_com.h"
-#include <sys/select.h>
 
 #include "clnt_internal.h"
 #include "svc_internal.h"

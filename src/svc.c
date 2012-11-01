@@ -362,7 +362,7 @@ svc_reg(SVCXPRT *xprt,
     svc_head = s;
 
     if ((xprt->xp_netid == NULL) && (flag == 1) && netid)
-        ((SVCXPRT *) xprt)->xp_netid = rpc_strdup (netid);
+        ((SVCXPRT *) xprt)->xp_netid = rpc_strdup(netid);
 
 rpcb_it:
     rwlock_unlock(&svc_lock);
@@ -765,20 +765,9 @@ svcerr_progvers(SVCXPRT *xprt, struct svc_req *req, rpcvers_t low_vers,
 
 /*
  * Get server side input from some transport.
- *
- * Statement of authentication parameters management:
- * This function owns and manages all authentication parameters, specifically
- * the "raw" parameters (msg.rm_call.cb_cred and msg.rm_call.cb_verf) and
- * the "cooked" credentials (rqst->rq_clntcred).
- * However, this function does not know the structure of the cooked
- * credentials, so it make the following assumptions:
- *   a) the structure is contiguous (no pointers), and
- *   b) the cred structure size does not exceed RQCRED_SIZE bytes.
- * In all events, all three parameters are freed upon exit from this routine.
- * The storage is trivially management on the call stack in user land, but
- * is mallocated in kernel land.
  */
 
+#if !defined(_WIN32) /* XXX */
 void
 svc_getreq(int rdfds)
 {
@@ -809,6 +798,38 @@ svc_getreqset(fd_set *readfds)
         }
     }
 }
+
+void
+svc_getreq_poll(struct pollfd *pfdp, int pollretval)
+{
+    int i;
+    int fds_found;
+
+    for (i = fds_found = 0; fds_found < pollretval; i++)
+    {
+        struct pollfd *p = &pfdp[i];
+
+        if (p->revents)
+        {
+            /* fd has input waiting */
+            fds_found++;
+            /*
+             *      We assume that this function is only called
+             *      via someone _select()ing from svc_fdset or
+             *      _poll()ing from svc_pollset[].  Thus it's safe
+             *      to handle the POLLNVAL event by simply turning
+             *      the corresponding bit off in svc_fdset.  The
+             *      svc_pollset[] array is derived from svc_fdset
+             *      and so will also be updated eventually.
+             *
+             *      XXX Should we do an xprt_unregister() instead?
+             */
+            if (! (p->revents & POLLNVAL))
+                svc_getreq_common (p->fd);
+        }
+    }
+}
+#endif /* _WIN32 */
 
 #if defined(TIRPC_EPOLL)
 void
@@ -977,37 +998,6 @@ svc_getreq_default(SVCXPRT *xprt)
     } while (stat == XPRT_MOREREQS);
 
     return (stat);
-}
-
-void
-svc_getreq_poll(struct pollfd *pfdp, int pollretval)
-{
-    int i;
-    int fds_found;
-
-    for (i = fds_found = 0; fds_found < pollretval; i++)
-    {
-        struct pollfd *p = &pfdp[i];
-
-        if (p->revents)
-        {
-            /* fd has input waiting */
-            fds_found++;
-            /*
-             *      We assume that this function is only called
-             *      via someone _select()ing from svc_fdset or
-             *      _poll()ing from svc_pollset[].  Thus it's safe
-             *      to handle the POLLNVAL event by simply turning
-             *      the corresponding bit off in svc_fdset.  The
-             *      svc_pollset[] array is derived from svc_fdset
-             *      and so will also be updated eventually.
-             *
-             *      XXX Should we do an xprt_unregister() instead?
-             */
-            if (! (p->revents & POLLNVAL))
-                svc_getreq_common (p->fd);
-        }
-    }
 }
 
 bool
