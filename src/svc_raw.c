@@ -63,9 +63,9 @@ extern mutex_t svcraw_lock;
 
 static enum xprt_stat svc_raw_stat(SVCXPRT *);
 static bool svc_raw_recv(SVCXPRT *, struct svc_req *);
-
 static bool svc_raw_reply(SVCXPRT *, struct svc_req *req, struct rpc_msg *);
-static bool svc_raw_getargs(SVCXPRT *, xdrproc_t, void *);
+static bool svc_raw_getargs(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
+			    void *);
 static bool svc_raw_freeargs(SVCXPRT *, xdrproc_t, void *);
 static void svc_raw_destroy(SVCXPRT *);
 static void svc_raw_ops(SVCXPRT *);
@@ -165,7 +165,8 @@ svc_raw_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 
 /*ARGSUSED*/
 static bool
-svc_raw_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
+svc_raw_getargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
+		void *args_ptr, void *u_data)
 {
     struct svc_raw_private *srp;
 
