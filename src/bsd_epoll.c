@@ -53,7 +53,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <sys/epoll.h>
+#include <misc/epoll.h>
 
 /* Create a new epoll file descriptor. */
 int epoll_create(int size)

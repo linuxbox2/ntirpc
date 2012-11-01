@@ -31,18 +31,17 @@
  */
 
 #include <config.h>
-#include <misc/portable.h>
 #include <sys/types.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
 #include <assert.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <rpc/types.h>
+#include <misc/portable.h>
 #include <rpc/rpc.h>
 #include <rpc/rpcent.h>
 #ifdef YP

@@ -30,15 +30,12 @@
  */
 
 #include <config.h>
-#include <misc/portable.h>
 #include <sys/cdefs.h>
 
 /*
  * rpc_generic.c, Miscl routines for RPC.
  *
  */
-#include <pthread.h>
-#include <reentrant.h>
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -47,6 +44,8 @@
 #include <sys/resource.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <rpc/types.h>
+#include <misc/portable.h>
 #include <rpc/rpc.h>
 #include <ctype.h>
 #include <stddef.h>

@@ -24,10 +24,7 @@
  */
 
 #include <config.h>
-#include <misc/portable.h>
 
-#include <pthread.h>
-#include <reentrant.h>
 #include <sys/types.h>
 #include <sys/poll.h>
 #include <stdint.h>
@@ -38,6 +35,8 @@
 #include <unistd.h>
 #include <signal.h>
 #include <misc/timespec.h>
+#include <rpc/types.h>
+#include <misc/portable.h>
 #include <rpc/xdr.h>
 #include <rpc/rpc.h>
 #include <rpc/svc.h>

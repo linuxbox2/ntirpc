@@ -45,10 +45,7 @@
  * Now go hang yourself.  [Ouch, that was intemperate.]
  */
 #include <config.h>
-#include <misc/portable.h>
-#include <pthread.h>
 
-#include <reentrant.h>
 #include <sys/types.h>
 #include <sys/poll.h>
 #include <sys/syslog.h>
@@ -66,10 +63,11 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
-
+#include <rpc/types.h>
+#include <misc/portable.h>
+#include <reentrant.h>
 #include <rpc/rpc.h>
 #include "rpc_com.h"
-
 #include "clnt_internal.h"
 #include "rpc_dplx_internal.h"
 #include "rpc_ctx.h"

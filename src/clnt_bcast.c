@@ -29,7 +29,6 @@
  * Copyright (c) 1986-1991 by Sun Microsystems Inc.
  */
 #include <config.h>
-#include <misc/portable.h>
 #include <sys/cdefs.h>
 
 /*
@@ -43,15 +42,14 @@
  */
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <sys/queue.h>
 
-/* new queue functions */
 #include <misc/queue.h>
-
 #include <net/if.h>
 #include <netinet/in.h>
 #include <ifaddrs.h>
 #include <sys/poll.h>
+#include <rpc/types.h>
+#include <misc/portable.h>
 #include <rpc/rpc.h>
 #ifdef PORTMAP
 #include <rpc/pmap_prot.h>

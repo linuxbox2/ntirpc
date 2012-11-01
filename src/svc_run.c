@@ -42,9 +42,6 @@
 
 #include <rpc/types.h> /* before portable.h */
 #include <misc/portable.h>
-#if defined(TIRPC_EPOLL)
-#include <misc/epoll.h> /* before rpc.h */
-#endif
 #include <rpc/rpc.h>
 #include "rpc_com.h"
 

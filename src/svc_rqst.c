@@ -24,16 +24,10 @@
  */
 
 #include <config.h>
-#include <misc/portable.h>
 
-#include <pthread.h>
-#include <reentrant.h>
 #include <sys/types.h>
 #include <sys/poll.h>
 #include <stdint.h>
-#if defined(TIRPC_EPOLL)
-#include <misc/epoll.h>
-#endif
 #include <assert.h>
 #include <err.h>
 #include <errno.h>
@@ -42,6 +36,7 @@
 #include <signal.h>
 
 #include <rpc/types.h>
+#include <misc/portable.h>
 #include <rpc/rpc.h>
 #ifdef PORTMAP
 #include <rpc/pmap_clnt.h>

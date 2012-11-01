@@ -43,20 +43,28 @@
 #define EPOLL_PACKED
 #endif
 
+union epoll_data
+{
+  int fd;
+  uint32_t u32;
+  uint64_t u64;
+  void *ptr;
+};
+
 struct epoll_event {
-        uint32_t        events;
-        uint64_t        data;
+        uint32_t events;
+        union epoll_data data;
 } EPOLL_PACKED;
 
-#define LINUX_EPOLLIN           0x001
-#define LINUX_EPOLLPRI          0x002
-#define LINUX_EPOLLOUT          0x004
-#define LINUX_EPOLLONESHOT      (1 << 30)
-#define LINUX_EPOLLET           (1 << 31)
+#define EPOLLIN           0x001
+#define EPOLLPRI          0x002
+#define EPOLLOUT          0x004
+#define EPOLLONESHOT      (1 << 30)
+#define EPOLLET           (1 << 31)
 
-#define LINUX_EPOLL_CTL_ADD     1
-#define LINUX_EPOLL_CTL_DEL     2
-#define LINUX_EPOLL_CTL_MOD     3
+#define EPOLL_CTL_ADD     1
+#define EPOLL_CTL_DEL     2
+#define EPOLL_CTL_MOD     3
 
 #define LINUX_MAX_EVENTS        (INT_MAX / sizeof(struct linux_epoll_event))
 

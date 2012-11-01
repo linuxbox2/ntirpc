@@ -47,9 +47,6 @@
 #include <rpc/xdr.h>
 #include <rpc/xdr_inline.h>
 #include <rpc/rpc.h>
-#if defined(TIRPC_EPOLL)
-#include <misc/epoll.h> /* before rpc.h */
-#endif
 
 typedef quad_t          longlong_t;     /* ANSI long long type */
 typedef u_quad_t        u_longlong_t;   /* ANSI unsigned long long type */

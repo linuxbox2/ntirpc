@@ -33,19 +33,18 @@
  * Implements a connectionless client side RPC.
  */
 #include <config.h>
-#include <misc/portable.h>
-#include <pthread.h>
-#include <reentrant.h>
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <stdint.h>
 #include <sys/poll.h>
-
 #include <sys/time.h>
-
 #include <sys/ioctl.h>
 #include <rpc/clnt.h>
 #include <arpa/inet.h>
+#include <rpc/types.h>
+#include <misc/portable.h>
+#include <reentrant.h>
 #include <rpc/rpc.h>
 #include <rpc/xdr.h>
 #include <errno.h>

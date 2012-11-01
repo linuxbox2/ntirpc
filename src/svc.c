@@ -50,12 +50,8 @@
 #include <err.h>
 #include <sys/poll.h>
 #endif
-#if defined(TIRPC_EPOLL)
-#include <misc/epoll.h>
-#endif
 
 #include <rpc/types.h>
-#include <reentrant.h>
 #include <misc/portable.h>
 #include <rpc/rpc.h>
 #ifdef PORTMAP

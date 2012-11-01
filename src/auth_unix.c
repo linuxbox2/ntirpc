@@ -27,7 +27,6 @@
  */
 
 #include <config.h>
-#include <misc/portable.h>
 #include <sys/cdefs.h>
 
 /*
@@ -41,8 +40,6 @@
  * for the credentials.
  *
  */
-#include <pthread.h>
-#include <reentrant.h>
 #include <sys/param.h>
 
 #include <assert.h>
@@ -53,10 +50,12 @@
 #include <string.h>
 #include <errno.h>
 
-#include <rpc/clnt.h>
 #include <rpc/types.h>
+#include <misc/portable.h>
+#include <reentrant.h>
 #include <rpc/rpc.h>
 #include <rpc/xdr.h>
+#include <rpc/clnt.h>
 #include <rpc/auth.h>
 #include <rpc/auth_unix.h>
 

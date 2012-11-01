@@ -27,7 +27,6 @@
  */
 
 #include <config.h>
-#include <misc/portable.h>
 
 /*
  * svc_vc.c, Server side for Connection Oriented RPC.
@@ -37,15 +36,11 @@
  * and a record/tcp stream.
  */
 #include <sys/cdefs.h>
-#include <pthread.h>
-#include <reentrant.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/poll.h>
-#if defined(TIRPC_EPOLL)
-#include <misc/epoll.h> /* before rpc.h */
-#endif
+
 #include <sys/un.h>
 #include <sys/time.h>
 #include <sys/uio.h>
@@ -63,6 +58,8 @@
 #include <signal.h>
 #include <misc/timespec.h>
 
+#include <rpc/types.h>
+#include <misc/portable.h>
 #include <rpc/rpc.h>
 #include <rpc/svc.h>
 #include <rpc/svc_auth.h>

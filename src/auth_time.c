@@ -26,7 +26,6 @@
  */
 
 #include <config.h>
-#include <misc/portable.h>
 
 #include <sys/cdefs.h>
 #include <stdio.h>
@@ -40,10 +39,10 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <err.h>
+#include <rpc/types.h>
 #include <rpc/rpc.h>
 #include <rpc/rpc_com.h>
 #include <rpc/rpcb_prot.h>
-//#include <clnt_soc.h>
 #include <sys/select.h>
 #undef NIS
 #include <rpcsvc/nis.h>

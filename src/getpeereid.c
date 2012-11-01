@@ -13,7 +13,6 @@
  */
 
 #include <config.h>
-#include <misc/portable.h>
 
 #include <stdint.h>
 #include <sys/param.h>

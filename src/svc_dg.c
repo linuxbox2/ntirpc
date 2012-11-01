@@ -32,7 +32,6 @@
  */
 
 #include <config.h>
-#include <misc/portable.h>
 
 /*
  * svc_dg.c, Server side for connectionless RPC.
@@ -40,15 +39,12 @@
  * Does some caching in the hopes of achieving execute-at-most-once semantics.
  */
 #include <sys/cdefs.h>
-#include <pthread.h>
-#include <reentrant.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/param.h>
 #include <sys/poll.h>
-#if defined(TIRPC_EPOLL)
-#include <misc/epoll.h> /* before rpc.h */
-#endif
+#include <rpc/types.h>
+#include <misc/portable.h>
 #include <rpc/rpc.h>
 #include <rpc/svc_dg.h>
 #include <rpc/svc_auth.h>

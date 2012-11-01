@@ -43,6 +43,7 @@
 #define CMGROUP_MAX 16
 #define SCM_CREDS       0x03            /* process creds (struct cmsgcred) */
 
+#if 0 /* XXX needed?? */
 /*
  * Credentials structure, used to verify the identity of a peer
  * process that has sent us a message. This is allocated by the
@@ -58,5 +59,6 @@ struct cmsgcred {
 	short	cmcred_ngroups;		/* number or groups */
 	gid_t	cmcred_groups[CMGROUP_MAX];	/* groups */
 };
+#endif
 
 #endif /* _MISC_SYS_SOCKET_H_ */
