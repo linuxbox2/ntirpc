@@ -2,7 +2,6 @@
 #ifndef _RBTREE_X_H
 #define _RBTREE_X_H
 
-#include <config.h>
 #include <misc/portable.h>
 #include <inttypes.h>
 #include <misc/stdio.h>
