@@ -77,4 +77,19 @@
 #define svcunixfd_create(a, b, c) svcunixfd_ncreate(a, b, c)
 #define svc_raw_create() svc_raw_ncreate() 
 
+/* auth */
+#define authunix_create(a, b, c, d, e) authunix_ncreate(a, b, c, d, e)
+#define authunix_create_default() authunix_ncreate_default()
+#define authnone_create() authnone_ncreate()
+#define authdes_create(a, b, c, d) authdes_ncreate(a, b, c, d)
+#define authdes_seccreate(a, b, c, d) authdes_nseccreate(a, b, c, d)
+#define authsys_create(c,i1,i2,i3,ip) authunix_ncreate((c),(i1),(i2),(i3),(ip))
+#define authsys_create_default() authunix_ncreate_default()
+#define authkerb_seccreate(a, b, c, d, e, f) authkerb_nseccreate(a, b, c, d, e, f)
+#define authkerb_create(a, b, c, d, e, f, g, h, i) \
+    authkerb_ncreate(a, b, c, d, e, f, g, h, i)
+#define authgss_create(a, b, c) authgss_ncreate(a, b, c)
+#define authgss_create_default(a, b, c) authgss_ncreate_default(a, b, c)
+
+
 #endif /* !TIRPC_COMPAT_H */

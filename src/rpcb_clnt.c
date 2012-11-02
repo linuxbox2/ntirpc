@@ -444,7 +444,7 @@ rpcb_set(rpcprog_t program,
         return (FALSE);
     }
 
-    auth = authnone_create(); /* idempotent */
+    auth = authnone_ncreate(); /* idempotent */
 
     /* convert to universal */
     /*LINTED const castaway*/
@@ -496,7 +496,7 @@ rpcb_unset(rpcprog_t program, rpcvers_t version,
         return (FALSE);
     }
 
-    auth = authnone_create(); /* idempotent */
+    auth = authnone_ncreate(); /* idempotent */
 
     parms.r_prog = program;
     parms.r_vers = version;
@@ -638,7 +638,7 @@ __rpcb_findaddr_timed(rpcprog_t program,
     parms.r_addr = NULL;
 
     /* authnone handle */
-    auth = authnone_create(); /* idempotent */    
+    auth = authnone_ncreate(); /* idempotent */    
 
     /*
      * Use default total timeout if no timeout is specified.
@@ -891,7 +891,7 @@ rpcb_getmaps(const struct netconfig *nconf, const char *host)
         return (head);
     }
 
-    auth = authnone_create(); /* idempotent */
+    auth = authnone_ncreate(); /* idempotent */
 
     clnt_st = CLNT_CALL(
         client, auth, RPCBPROC_DUMP,
@@ -958,7 +958,7 @@ rpcb_rmtcall(const struct netconfig *nconf, /* Netconfig structure */
         return (RPC_FAILED);
     }
 
-    auth = authnone_create(); /* idempotent */
+    auth = authnone_ncreate(); /* idempotent */
 
     /*LINTED const castaway*/
     CLNT_CONTROL(client, CLSET_RETRY_TIMEOUT, (char *)(void *)&rmttimeout);
@@ -1054,7 +1054,7 @@ rpcb_gettime(const char *host,
         return (FALSE);
     }
 
-    auth = authnone_create(); /* idempotent */
+    auth = authnone_ncreate(); /* idempotent */
 
     st = CLNT_CALL(client, auth, RPCBPROC_GETTIME,
                    (xdrproc_t) xdr_void, NULL,
@@ -1137,7 +1137,7 @@ rpcb_uaddr2taddr(struct netconfig *nconf,
         return (NULL);
     }
 
-    auth = authnone_create(); /* idempotent */
+    auth = authnone_ncreate(); /* idempotent */
 
     taddr = (struct netbuf *) mem_zalloc(sizeof (struct netbuf));
     if (taddr == NULL) {

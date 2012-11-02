@@ -81,7 +81,7 @@ static struct authnone_private *ap = NULL; /* already */
 static pthread_mutex_t init_lock = MUTEX_INITIALIZER;
 
 AUTH *
-authnone_create(void)
+authnone_ncreate(void)
 {
     XDR xdr_stream;
     XDR *xdrs;

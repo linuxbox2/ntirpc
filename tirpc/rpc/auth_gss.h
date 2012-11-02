@@ -113,9 +113,9 @@ bool xdr_rpc_gss_data __P((XDR *xdrs, xdrproc_t xdr_func,
                            gss_qop_t qop, rpc_gss_svc_t svc,
                            u_int seq));
 
-AUTH   *authgss_create  __P((CLIENT *, gss_name_t,
-                             struct rpc_gss_sec *));
-AUTH   *authgss_create_default __P((CLIENT *, char *, struct rpc_gss_sec *));
+AUTH   *authgss_ncreate  __P((CLIENT *, gss_name_t,
+                              struct rpc_gss_sec *));
+AUTH   *authgss_ncreate_default __P((CLIENT *, char *, struct rpc_gss_sec *));
 bool authgss_service  __P((AUTH *auth, int svc));
 bool authgss_get_private_data __P((AUTH *auth,
                                    struct authgss_private_data *));
@@ -126,5 +126,8 @@ void log_status  __P((char *m, OM_uint32 major,
 void gss_log_hexdump  __P((const u_char *buf, int len, int offset));
 
 __END_DECLS
+
+/* for backward compatibility */
+#include <rpc/tirpc_compat.h>
 
 #endif /* !_TIRPC_AUTH_GSS_H */

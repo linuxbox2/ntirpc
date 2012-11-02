@@ -490,10 +490,10 @@ clnt_broadcast(u_long  prog,  /* program number */
  * authdes_seccreate().
  */
 AUTH *
-authdes_create(char *servername, /* network name of server */
-               u_int window,     /* time to live */
-               struct sockaddr *syncaddr, /* optional hostaddr to sync with */
-               des_block *ckey /* optional conversation key to use */)
+authdes_ncreate(char *servername, /* network name of server */
+                u_int window,     /* time to live */
+                struct sockaddr *syncaddr, /* optional hostaddr to sync with */
+                des_block *ckey /* optional conversation key to use */)
 {
     AUTH *dummy;
     AUTH *nauth;
@@ -508,11 +508,11 @@ authdes_create(char *servername, /* network name of server */
                         sizeof hostname, NULL, 0, 0) != 0)
             goto fallback;
 
-        nauth = authdes_seccreate(servername, window, hostname, ckey);
+        nauth = authdes_nseccreate(servername, window, hostname, ckey);
         return (nauth);
     }
 fallback:
-    dummy = authdes_seccreate(servername, window, NULL, ckey);
+    dummy = authdes_nseccreate(servername, window, NULL, ckey);
     return (dummy);
 }
 

@@ -66,7 +66,7 @@ extern bool xdr_authdes_cred( XDR *, struct authdes_cred *);
 extern bool xdr_authdes_verf( XDR *, struct authdes_verf *);
 
 extern bool __rpc_get_time_offset(struct timeval *, nis_server *, char *,
-                                    char **, char **);
+                                  char **, char **);
 
 /*
  * DES authenticator operations vector
@@ -103,11 +103,11 @@ struct ad_private {
     nis_server *ad_nis_srvr; /* NIS+ server struct */
 };
 
-AUTH *authdes_pk_seccreate(const char *, netobj *, u_int, const char *,
-                           const des_block *, nis_server *);
+AUTH *authdes_pk_nseccreate(const char *, netobj *, u_int, const char *,
+                            const des_block *, nis_server *);
 
 /*
- * documented version of authdes_seccreate
+ * documented version of authdes_nseccreate
  */
 /*
   servername: network name of server
@@ -117,8 +117,8 @@ AUTH *authdes_pk_seccreate(const char *, netobj *, u_int, const char *,
 */
 
 AUTH *
-authdes_seccreate(const char *servername, const u_int win,
-                  const char *timehost, const des_block *ckey)
+authdes_nseccreate(const char *servername, const u_int win,
+                   const char *timehost, const des_block *ckey)
 {
     u_char  pkey_data[1024];
     netobj  pkey;
@@ -126,14 +126,14 @@ authdes_seccreate(const char *servername, const u_int win,
 
     if (! getpublickey(servername, (char *) pkey_data)) {
         __warnx(TIRPC_DEBUG_FLAG_AUTH,
-                "authdes_seccreate: no public key found for %s",
+                "authdes_nseccreate: no public key found for %s",
                 servername);
         return (NULL);
     }
 
     pkey.n_bytes = (char *) pkey_data;
     pkey.n_len = (u_int)strlen((char *)pkey_data) + 1;
-    dummy = authdes_pk_seccreate(servername, &pkey, win, timehost,
+    dummy = authdes_pk_nseccreate(servername, &pkey, win, timehost,
                                  ckey, NULL);
     return (dummy);
 }
@@ -144,9 +144,9 @@ authdes_seccreate(const char *servername, const u_int win,
  * getpublickey() which in the nameserver context can cause a deadlock.
  */
 AUTH *
-authdes_pk_seccreate(const char *servername, netobj *pkey, u_int window,
-                     const char *timehost, const des_block *ckey,
-                     nis_server *srvr)
+authdes_pk_nseccreate(const char *servername, netobj *pkey, u_int window,
+                      const char *timehost, const des_block *ckey,
+                      nis_server *srvr)
 {
     AUTH *auth;
     struct ad_private *ad;
@@ -158,13 +158,13 @@ authdes_pk_seccreate(const char *servername, netobj *pkey, u_int window,
     auth = ALLOC(AUTH);
     if (auth == NULL) {
         __warnx(TIRPC_DEBUG_FLAG_AUTH,
-                "authdes_pk_seccreate: out of memory");
+                "authdes_pk_nseccreate: out of memory");
         return (NULL);
     }
     ad = ALLOC(struct ad_private);
     if (ad == NULL) {
         __warnx(TIRPC_DEBUG_FLAG_AUTH,
-                "authdes_pk_seccreate: out of memory");
+                "authdes_pk_nseccreate: out of memory");
         goto failed;
     }
     ad->ad_fullname = ad->ad_servername = NULL; /* Sanity reasons */
@@ -184,14 +184,14 @@ authdes_pk_seccreate(const char *servername, netobj *pkey, u_int window,
 
     if (ad->ad_fullname == NULL || ad->ad_servername == NULL) {
         __warnx(TIRPC_DEBUG_FLAG_AUTH,
-                "authdes_seccreate: out of memory");
+                "authdes_nseccreate: out of memory");
         goto failed;
     }
     if (timehost != NULL) {
         ad->ad_timehost = (char *)mem_alloc(strlen(timehost) + 1);
         if (ad->ad_timehost == NULL) {
             __warnx(TIRPC_DEBUG_FLAG_AUTH,
-                    "authdes_seccreate: out of memory");
+                    "authdes_nseccreate: out of memory");
             goto failed;
         }
         memcpy(ad->ad_timehost, timehost, strlen(timehost) + 1);
@@ -208,7 +208,7 @@ authdes_pk_seccreate(const char *servername, netobj *pkey, u_int window,
     if (ckey == NULL) {
         if (key_gendes(&auth->ah_key) < 0) {
             __warnx(TIRPC_DEBUG_FLAG_AUTH,
-                    "authdes_seccreate: keyserv(1m) is unable to generate "
+                    "authdes_nseccreate: keyserv(1m) is unable to generate "
                     "session key");
             goto failed;
         }

@@ -129,12 +129,15 @@ struct authkerb_verf {
 /*
  * Register the service name, instance and realm.
  */
-extern int authkerb_create(char *, char *, char *, u_int,
-                           struct netbuf *, int *, dev_t, int, AUTH **);
+extern int authkerb_ncreate(char *, char *, char *, u_int,
+                            struct netbuf *, int *, dev_t, int, AUTH **);
 extern bool xdr_authkerb_cred(XDR *, struct authkerb_cred *);
 extern bool xdr_authkerb_verf(XDR *, struct authkerb_verf *);
 extern int svc_kerb_reg(SVCXPRT *, char *, char *, char *);
 extern enum auth_stat _svcauth_kerb(struct svc_req *, struct rpc_msg *);
+
+/* for backward compatibility */
+#include <rpc/tirpc_compat.h>
 
 #endif KERBEROS
 #endif /* !_RPC_AUTH_KERB_H */

@@ -333,7 +333,7 @@ __rpc_get_time_offset(struct timeval *td, /* Time difference */
         return (0);
     }
 
-    auth = authnone_create(); /* idempotent */
+    auth = authnone_ncreate(); /* idempotent */
 
     tv.tv_sec = 5;
     tv.tv_usec = 0;

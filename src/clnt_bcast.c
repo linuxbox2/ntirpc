@@ -243,7 +243,7 @@ rpc_broadcast_exp(rpcprog_t prog,  /* program number */
     char  *inbuf = NULL; /* Reply buf */
     int  inlen;
     u_int   maxbufsize = 0;
-    AUTH   *sys_auth = authunix_create_default();
+    AUTH   *sys_auth = authunix_ncreate_default();
     int  i;
     void  *handle;
     char  uaddress[1024]; /* A self imposed limit */

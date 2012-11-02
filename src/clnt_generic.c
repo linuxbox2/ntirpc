@@ -87,7 +87,7 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
     struct timeval to;
     enum clnt_stat rpc_stat;
     struct rpc_err rpcerr;
-    AUTH *auth = authnone_create(); /* idempotent */
+    AUTH *auth = authnone_ncreate(); /* idempotent */
 
     clnt = clnt_ncreate_timed(hostname, prog, vers_high, nettype, tp);
     if (clnt == NULL) {

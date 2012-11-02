@@ -156,13 +156,13 @@ struct rpc_gss_data {
 static struct timeval AUTH_TIMEOUT = { 25, 0 };
 
 AUTH *
-authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
+authgss_ncreate(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 {
     AUTH *auth;
     struct rpc_gss_data *gd;
     OM_uint32  min_stat = 0;
 
-    log_debug("in authgss_create()");
+    log_debug("in authgss_ncreate()");
 
     memset(&rpc_createerr, 0, sizeof(rpc_createerr));
 
@@ -179,7 +179,7 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
     }
 #ifdef DEBUG
     __warnx(TIRPC_DEBUG_FLAG_AUTH,
-            "authgss_create: name is %p\n", name);
+            "authgss_ncreate: name is %p\n", name);
 #endif
     if (name != GSS_C_NO_NAME) {
         if (gss_duplicate_name(&min_stat, name, &gd->name)
@@ -195,7 +195,7 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 
 #ifdef DEBUG
     __warnx(TIRPC_DEBUG_FLAG_AUTH,
-            "authgss_create: gd->name is %p\n", gd->name);
+            "authgss_ncreate: gd->name is %p\n", gd->name);
 #endif
     gd->clnt = clnt;
     gd->ctx = GSS_C_NO_CONTEXT;
@@ -218,14 +218,14 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 }
 
 AUTH *
-authgss_create_default(CLIENT *clnt, char *service, struct rpc_gss_sec *sec)
+authgss_ncreate_default(CLIENT *clnt, char *service, struct rpc_gss_sec *sec)
 {
     AUTH   *auth;
     OM_uint32   maj_stat = 0, min_stat = 0;
     gss_buffer_desc   sname;
     gss_name_t   name = GSS_C_NO_NAME;
 
-    log_debug("in authgss_create_default()");
+    log_debug("in authgss_ncreate_default()");
 
 
     sname.value = service;
@@ -241,12 +241,12 @@ authgss_create_default(CLIENT *clnt, char *service, struct rpc_gss_sec *sec)
         return (NULL);
     }
 
-    auth = authgss_create(clnt, name, sec);
+    auth = authgss_ncreate(clnt, name, sec);
 
     if (name != GSS_C_NO_NAME) {
 #ifdef DEBUG
         __warnx(TIRPC_DEBUG_FLAG_AUTH,
-                "authgss_create_default: freeing name %p\n", name);
+                "authgss_ncreate_default: freeing name %p\n", name);
 #endif
         gss_release_name(&min_stat, &name);
     }

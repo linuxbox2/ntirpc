@@ -309,9 +309,9 @@ int authany_wrap(void), authany_unwrap(void);
  * int *aup_gids;
  */
 __BEGIN_DECLS
-extern AUTH *authunix_create(char *, uid_t, uid_t, int, uid_t *);
-extern AUTH *authunix_create_default(void); /* takes no parameters */
-extern AUTH *authnone_create(void);  /* takes no parameters */
+extern AUTH *authunix_ncreate(char *, uid_t, uid_t, int, uid_t *);
+extern AUTH *authunix_ncreate_default(void); /* takes no parameters */
+extern AUTH *authnone_ncreate(void);  /* takes no parameters */
 __END_DECLS
 /*
  * DES style authentication
@@ -322,17 +322,14 @@ __END_DECLS
  *  des_block *ckey;  - optional conversation key to use
  */
 __BEGIN_DECLS
-extern AUTH *authdes_create(char *, u_int, struct sockaddr *, des_block *);
-extern AUTH *authdes_seccreate(const char *, const u_int, const  char *,
+extern AUTH *authdes_ncreate(char *, u_int, struct sockaddr *, des_block *);
+extern AUTH *authdes_nseccreate(const char *, const u_int, const  char *,
                                const  des_block *);
 __END_DECLS
 
 __BEGIN_DECLS
 extern bool xdr_opaque_auth (XDR *, struct opaque_auth *);
 __END_DECLS
-
-#define authsys_create(c,i1,i2,i3,ip) authunix_create((c),(i1),(i2),(i3),(ip))
-#define authsys_create_default() authunix_create_default()
 
 /*
  * Netname manipulation routines.
@@ -381,8 +378,8 @@ __END_DECLS
  * int *status;    - kerberos status returned
  */
 __BEGIN_DECLS
-extern AUTH *authkerb_seccreate(const char *, const char *, const  char *,
-                                const u_int, const char *, int *);
+extern AUTH *authkerb_nseccreate(const char *, const char *, const  char *,
+                                 const u_int, const char *, int *);
 __END_DECLS
 
 /*
@@ -420,5 +417,8 @@ __END_DECLS
 #define AUTH_DES AUTH_DH  /* for backward compatibility */
 #define AUTH_KERB 4  /* kerberos style */
 #define RPCSEC_GSS 6 /* RPCSEC_GSS */
+
+/* for backward compatibility */
+#include <rpc/tirpc_compat.h>
 
 #endif /* !_TIRPC_AUTH_H */

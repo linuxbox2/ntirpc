@@ -85,8 +85,8 @@ struct audata {
  * Returns an auth handle with the given stuff in it.
  */
 AUTH *
-authunix_create(char *machname, uid_t uid, gid_t gid, int len,
-                gid_t *aup_gids)
+authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
+                 gid_t *aup_gids)
 {
     struct authunix_parms aup;
     char mymem[MAX_AUTH_BYTES];
@@ -180,7 +180,7 @@ cleanup_authunix_create:
  * syscalls.
  */
 AUTH *
-authunix_create_default(void)
+authunix_ncreate_default(void)
 {
     int len;
     char machname[MAXHOSTNAMELEN + 1];
@@ -236,7 +236,7 @@ retry:
         len = NGRPS;
 
     /* XXX: interface problem; those should all have been unsigned */
-    result = authunix_create(machname, uid, gid, len, gids);
+    result = authunix_ncreate(machname, uid, gid, len, gids);
     mem_free(gids, 0); /* XXX */
     return result;
 
