@@ -40,7 +40,7 @@ lib_LTLIBRARIES = libntirpc.la
 # release number of your package. This is an abuse that only fosters
 # misunderstanding of the purpose of library versions."
 #
-libntirpc_la_LDFLAGS = -lnsl -lpthread -version-info 1:10:0
+libntirpc_la_LDFLAGS = @NSLLIB@ -lpthread -version-info 1:10:0
 
 include_HEADERS = clnt_internal.h  svc_internal.h rpc_dplx_internal.h \
 	rpc_com.h rpc_ctx.h svc_xprt.h 

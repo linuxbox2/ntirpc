@@ -21,6 +21,9 @@ fi
 dnl EPOLL always enabled for now
 AC_DEFINE(TIRPC_EPOLL, 1, [Linux EPOLL notifications])
 
+AC_CHECK_LIB(nsl, inet_addr, NSLLIB=-lnsl, NSLLIB="")
+AC_SUBST(NSLLIB) 
+
 AC_PROG_CC
 AM_CONFIG_HEADER(config.h)
 AC_PROG_LIBTOOL
