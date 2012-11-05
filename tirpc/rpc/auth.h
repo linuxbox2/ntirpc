@@ -48,6 +48,8 @@
 
 #include <rpc/xdr.h>
 #include <rpc/clnt_stat.h>
+#include <misc/abstract_atomic.h>
+
 #include <sys/cdefs.h>
 #if !defined(_WIN32)
 #include <sys/socket.h>
@@ -211,13 +213,13 @@ typedef struct __auth {
 static __inline int
 auth_get(AUTH *auth)
 {
-    return __sync_add_and_fetch(&auth->ah_refcnt, 1);
+    return atomic_add_uint32_t(&auth->ah_refcnt, 1);
 }
 
 static __inline int
 auth_put(AUTH *auth)
 {
-    return __sync_sub_and_fetch(&auth->ah_refcnt, 1);
+    return atomic_sub_uint32_t(&auth->ah_refcnt, 1);
 }
 
 
