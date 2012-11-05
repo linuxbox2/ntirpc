@@ -40,6 +40,7 @@
 #include <arpa/inet.h>
 #include <err.h>
 #include <rpc/types.h>
+#include <misc/portable.h>
 #include <rpc/rpc.h>
 #include <rpc/rpc_com.h>
 #include <rpc/rpcb_prot.h>
