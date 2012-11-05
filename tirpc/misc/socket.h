@@ -43,7 +43,7 @@
 #define CMGROUP_MAX 16
 #define SCM_CREDS       0x03            /* process creds (struct cmsgcred) */
 
-#if 0 /* XXX needed?? */
+#if defined(__linux__)
 /*
  * Credentials structure, used to verify the identity of a peer
  * process that has sent us a message. This is allocated by the
