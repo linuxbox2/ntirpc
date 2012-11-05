@@ -30,8 +30,8 @@
  * $FreeBSD: src/sys/sys/queue.h,v 1.75.2.1.2.1 2011/11/11 04:20:22 kensmith Exp $
  */
 
-#ifndef _SYS_QUEUE_H_
-#define	_SYS_QUEUE_H_
+#ifndef _TIRPC_SYS_QUEUE_H_
+#define	_TIRPC_SYS_QUEUE_H_
 
 #include <sys/cdefs.h>
 

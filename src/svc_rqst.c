@@ -738,6 +738,7 @@ out:
 
 bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
 
+#ifdef TIRPC_EPOLL
 static inline int 
 svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
                         uint32_t __attribute__((unused)) flags)
@@ -818,6 +819,8 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
 
     return (code);
 }
+#endif
+
 
 int
 svc_rqst_thrd_run(uint32_t chan_id, __attribute__((unused)) uint32_t flags)
