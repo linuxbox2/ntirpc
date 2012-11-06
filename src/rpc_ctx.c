@@ -130,7 +130,7 @@ rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg)
     if (nv) {
         ctx = opr_containerof(nv, rpc_ctx_t, node_k);
         opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
-        free_rpc_msg(msg); /* free call header */
+        free_rpc_msg(ctx->msg); /* free call header */
         ctx->msg = msg; /* and stash reply header */
         ctx->flags |= RPC_CTX_FLAG_SYNCDONE;
         mutex_unlock(&xd->rec->mtx);
