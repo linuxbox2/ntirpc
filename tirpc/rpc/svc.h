@@ -297,6 +297,7 @@ struct svc_req {
 	u_int32_t	rq_vers;	/* service protocol version */
 	u_int32_t	rq_proc;	/* the desired procedure */
 	struct opaque_auth rq_cred;	/* raw creds from the wire */
+	struct opaque_auth rq_verf;	 /* raw response verifier */
 	void		*rq_clntcred;	/* read only cooked cred */
 	SVCXPRT		*rq_xprt;	/* associated transport */
 
