@@ -653,10 +653,11 @@ svc_dg_enable_pktinfo(int fd, const struct __rpc_sockinfo *si)
 	case AF_INET:
 		(void) setsockopt(fd, SOL_IP, IP_PKTINFO, &val, sizeof(val));
 		break;
-
+#ifdef INET6
 	case AF_INET6:
 		(void) setsockopt(fd, SOL_IPV6, IPV6_RECVPKTINFO, &val, sizeof(val));
 		break;
+#endif
 	}
 }
 
@@ -694,6 +695,7 @@ svc_dg_valid_pktinfo(struct msghdr *msg)
 		}
 		break;
 
+#ifdef INET6
 	case AF_INET6:
 		if (cmsg->cmsg_level != SOL_IPV6
 		 || cmsg->cmsg_type != IPV6_PKTINFO
@@ -706,6 +708,7 @@ svc_dg_valid_pktinfo(struct msghdr *msg)
 			pkti->ipi6_ifindex = 0;
 		}
 		break;
+#endif
 
 	default:
 		return 0;

@@ -535,7 +535,9 @@ __rpc_nconf2fd_flags(const struct netconfig *nconf, int flags)
 	    si.si_af == AF_INET6) {
 		int val = 1;
 
+#ifdef INET6
 		setsockopt(fd, SOL_IPV6, IPV6_V6ONLY, &val, sizeof(val));
+#endif
 	}
 	return fd;
 }
