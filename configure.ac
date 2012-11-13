@@ -15,6 +15,13 @@ if test x$gss = xtrue; then
 	PKG_CHECK_MODULES(GSSGLUE, libgssglue, [],
 	AC_MSG_ERROR([Unable to locate information required to use libgssglue.]))
 fi
+AC_ARG_ENABLE(ipv6,
+	[AC_HELP_STRING([--disable-ipv6], [Disable IPv6 support @<:@default=no@:>@])],
+	[],[enable_ipv6=yes])
+AM_CONDITIONAL(INET6, test "x$disable_ipv6" != xno)
+if test "x$enable_ipv6" != xno; then
+	AC_DEFINE(INET6, 1, [Define to 1 if IPv6 is available])
+fi
 
 AC_PROG_CC
 AM_CONFIG_HEADER(config.h)
