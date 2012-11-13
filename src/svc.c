@@ -74,6 +74,8 @@
 #define SVC_VERSQUIET 0x0001 /* keep quiet about vers mismatch */
 #define version_keepquiet(xp) ((u_long)(xp)->xp_p3 & SVC_VERSQUIET)
 
+int __svc_maxrec = 0;
+
 extern tirpc_pkg_params __pkg_params;
 
 struct svc_params __svc_params[1] = {

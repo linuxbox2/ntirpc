@@ -161,14 +161,14 @@ static void map_ipv4_to_ipv6(sin, sin6)
 SVCXPRT *
 svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 {
-    SVCXPRT *xprt;
+    SVCXPRT *xprt = NULL;
     struct cf_rendezvous *rdvs = NULL;
     struct __rpc_sockinfo si;
     struct sockaddr_storage sslocal;
     struct sockaddr *salocal;
     struct sockaddr_in *salocal_in;
     struct sockaddr_in6 *salocal_in6;
-    struct rpc_dplx_rec *rec;
+    struct rpc_dplx_rec *rec = NULL;
     uint32_t oflags;
     socklen_t slen;
 
@@ -444,7 +444,7 @@ err:
 static SVCXPRT *
 makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 {
-    SVCXPRT *xprt;
+    SVCXPRT *xprt = NULL;
     struct x_vc_data *xd = NULL;
     struct rpc_dplx_rec *rec;
     struct __rpc_sockinfo si;

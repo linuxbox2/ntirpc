@@ -73,10 +73,12 @@
 #include "rpc_ctx.h"
 #include <rpc/svc_rqst.h>
 
+#ifndef __APPLE__
 struct cmessage {
     struct cmsghdr cmsg;
     struct cmsgcred cmcred;
 };
+#endif
 
 static enum clnt_stat clnt_vc_call(CLIENT *, AUTH *, rpcproc_t, xdrproc_t,
                                    void *, xdrproc_t, void *, struct timeval);

@@ -563,8 +563,8 @@ __rpc_nconf2fd_flags(const struct netconfig *nconf, int flags)
 
     if ((fd = socket(si.si_af, si.si_socktype | flags, si.si_proto)) >= 0 &&
         si.si_af == AF_INET6) {
-        int val = 1;
 #ifdef SOL_IPV6
+        int val = 1;
         setsockopt(fd, SOL_IPV6, IPV6_V6ONLY, &val, sizeof(val));
 #endif
     }

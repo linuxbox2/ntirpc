@@ -37,7 +37,7 @@
 #ifndef _LINUX_EPOLL_H_
 #define _LINUX_EPOLL_H_
 
-#ifdef __amd64__
+#if defined(__amd64__) && defined(TIRPC_EPOLL)
 #define EPOLL_PACKED    __packed
 #else
 #define EPOLL_PACKED

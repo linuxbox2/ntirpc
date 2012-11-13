@@ -25,6 +25,8 @@
  *	needed to deal with TCP connections.
  */
 
+#ifndef __APPLE__
+
 #include <config.h>
 
 #include <sys/cdefs.h>
@@ -492,3 +494,6 @@ error:
 
     return (time_valid);
 }
+
+#endif
+

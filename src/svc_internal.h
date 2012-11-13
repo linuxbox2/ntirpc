@@ -106,7 +106,9 @@ struct __svc_ops {
     void (*svc_getreq)(int rdfds); /* XXX */
     void (*svc_getreqset)(fd_set *readfds); /* XXX */
     void (*svc_exit)(void);
-} *svc_ops;
+};
+
+extern struct __svc_ops *svc_ops;
 
 #define	su_data(xprt)	((struct svc_dg_data *)(xprt->xp_p2))
 

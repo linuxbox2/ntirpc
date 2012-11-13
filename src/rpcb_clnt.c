@@ -33,6 +33,7 @@
 #include <config.h>
 #include <pthread.h>
 #include <reentrant.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -280,6 +281,9 @@ getclnthandle(const char *host, const struct netconfig *nconf,
     struct addrinfo hints, *res, *tres;
     struct address_cache *ad_cache;
     char *tmpaddr;
+
+
+    memset(&addr_to_delete, '\0', sizeof(addr_to_delete));
 
 /* VARIABLES PROTECTED BY rpcbaddr_cache_lock:  ad_cache */
 
@@ -1026,7 +1030,7 @@ rpcb_gettime(const char *host,
     struct netconfig *nconf;
     rpcvers_t vers;
     enum clnt_stat st;
-    CLIENT *client;
+    CLIENT *client = NULL;
     AUTH *auth;
 
     if ((host == NULL) || (host[0] == 0)) {

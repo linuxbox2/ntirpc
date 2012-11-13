@@ -31,6 +31,9 @@
 /*
  * auth_des.c, client-side implementation of DES authentication
  */
+
+#ifndef __APPLE__
+
 #include <config.h>
 #include <pthread.h>
 #include <reentrant.h>
@@ -507,3 +510,7 @@ authdes_ops(void)
     mutex_unlock(&authdes_ops_lock);
     return (&ops);
 }
+
+#endif
+
+

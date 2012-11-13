@@ -711,11 +711,15 @@ svc_dg_enable_pktinfo(int fd, const struct __rpc_sockinfo *si)
 
     switch (si->si_af) {
     case AF_INET:
+#ifdef SOL_IP
         (void) setsockopt(fd, SOL_IP, IP_PKTINFO, &val, sizeof(val));
+#endif
         break;
 
     case AF_INET6:
+#ifdef SOL_IPV6
         (void) setsockopt(fd, SOL_IPV6, IPV6_PKTINFO, &val, sizeof(val));
+#endif
         break;
     }
 }
@@ -742,6 +746,7 @@ svc_dg_valid_pktinfo(struct msghdr *msg)
 
     switch (((struct sockaddr *) msg->msg_name)->sa_family) {
     case AF_INET:
+#ifdef SOL_IP
         if (cmsg->cmsg_level != SOL_IP
             || cmsg->cmsg_type != IP_PKTINFO
             || cmsg->cmsg_len < CMSG_LEN(sizeof (struct in_pktinfo))) {
@@ -752,9 +757,11 @@ svc_dg_valid_pktinfo(struct msghdr *msg)
             pkti = (struct in_pktinfo *) CMSG_DATA (cmsg);
             pkti->ipi_ifindex = 0;
         }
+#endif
         break;
 
     case AF_INET6:
+#ifdef SOL_IPV6
         if (cmsg->cmsg_level != SOL_IPV6
             || cmsg->cmsg_type != IPV6_PKTINFO
             || cmsg->cmsg_len < CMSG_LEN(sizeof (struct in6_pktinfo))) {
@@ -765,6 +772,7 @@ svc_dg_valid_pktinfo(struct msghdr *msg)
             pkti = (struct in6_pktinfo *) CMSG_DATA (cmsg);
             pkti->ipi6_ifindex = 0;
         }
+#endif
         break;
 
     default:

@@ -41,7 +41,6 @@ clock_gettime(clockid_t clock, struct timespec *ts)
 }
 #endif
 
-
 #if defined(_WIN32)
 pthread_mutex_t clock_mtx = PTHREAD_MUTEX_INITIALIZER;
 

@@ -107,7 +107,7 @@ static inline char *rpc_strdup(const char *s)
 
 void __rpc_free(void *ptr);
 
-int __svc_maxrec;
+extern int __svc_maxrec;
 
 __END_DECLS
 
