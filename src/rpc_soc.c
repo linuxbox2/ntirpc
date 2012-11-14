@@ -104,6 +104,7 @@ clnt_com_create(raddr, prog, vers, sockp, sendsz, recvsz, tp, flags)
 	if (fd == RPC_ANYSOCK) {
 		static int have_cloexec;
 		fd = __rpc_nconf2fd_flags(nconf, flags);
+#ifdef SOCK_CLOEXEC
 		if (fd == -1) {
 			if ((flags & SOCK_CLOEXEC) && have_cloexec <= 0) {
 				fd = __rpc_nconf2fd(nconf);
@@ -117,6 +118,10 @@ clnt_com_create(raddr, prog, vers, sockp, sendsz, recvsz, tp, flags)
 				goto syserror;
 		} else if (flags & SOCK_CLOEXEC)
 			have_cloexec = 1;
+#else
+		if (fd == -1)
+			goto syserror;
+#endif
 		madefd = TRUE;
 	}
 
