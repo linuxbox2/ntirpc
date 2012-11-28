@@ -120,6 +120,7 @@ authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
     auth->ah_ops = authunix_ops();
     auth->ah_private = (caddr_t)au;
     auth->ah_verf = au->au_shcred = _null_auth;
+    auth->ah_refcnt = 1;
     au->au_shfaults = 0;
     au->au_origcred.oa_base = NULL;
 
