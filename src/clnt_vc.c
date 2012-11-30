@@ -308,10 +308,12 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
     xdrrec_create(&(xd->shared.xdrs_in), sendsz, xd->shared.recvsz, xd,
                   generic_read_vc,
                   generic_write_vc);
+    xd->shared.xdrs_in.x_op = XDR_DECODE;
 
     xdrrec_create(&(xd->shared.xdrs_out), sendsz, xd->shared.recvsz, xd,
                   generic_read_vc,
                   generic_write_vc);
+    xd->shared.xdrs_out.x_op = XDR_ENCODE;
 #endif
     } /* XPRT */
 
@@ -349,8 +351,8 @@ err:
 
 #define vc_call_return_slocked(r) \
     do { \
-        result=(r); \
-        rpc_dplx_suc(clnt); \
+	result=(r);							\
+	rpc_dplx_suc(clnt);						\
         goto out; \
     } while (0);
 
@@ -418,7 +420,6 @@ call_again:
     rpc_dplx_slc(clnt);
 
     xdrs = &(xd->shared.xdrs_out);
-    xdrs->x_op = XDR_ENCODE;
 
     xdrs->x_lib[0] = (void *) RPC_DPLX_CLNT;
     xdrs->x_lib[1] = (void *) ctx; /* transiently thread call ctx */
@@ -454,6 +455,12 @@ call_again:
 
     /* if the channel is bi-directional, then the the shared conn is in a
      * svc event loop, and recv processing decodes reply headers */
+
+    xdrs = &(xd->shared.xdrs_in);
+
+    xdrs->x_lib[0] = (void *) RPC_DPLX_CLNT;
+    xdrs->x_lib[1] = (void *) ctx; /* transiently thread call ctx */
+    
     if (rec->hdl.xprt) {
         /* XXX unless we are talking to an evil interlocutor, the
          * reply loop will terminate in 1 step */
@@ -474,20 +481,13 @@ call_again:
                 /* in this configuration, we do not expect calls */
                 break;
             default:
-            break;
+		break;
             }
         } /* for (ix) */
     } else {
-
         /*
          * Keep receiving until we get a valid transaction id.
          */
-        xdrs = &(xd->shared.xdrs_in);
-        xdrs->x_op = XDR_DECODE;
-
-        xdrs->x_lib[0] = (void *) RPC_DPLX_CLNT;
-        xdrs->x_lib[1] = (void *) ctx; /* transiently thread call ctx */
-
         while (TRUE) {
 
             /* skiprecord */

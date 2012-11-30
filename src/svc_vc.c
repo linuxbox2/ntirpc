@@ -554,10 +554,12 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
     xdrrec_create(&(xd->shared.xdrs_in), sendsz, recvsz, xd,
                   generic_read_vc,
                   generic_write_vc);
+    xd->shared.xdrs_in.x_op = XDR_DECODE;
 
     xdrrec_create(&(xd->shared.xdrs_out), sendsz, recvsz, xd,
                   generic_read_vc,
                   generic_write_vc);
+    xd->shared.xdrs_out.x_op = XDR_ENCODE;
 #endif
     } /* CLNT */
 
