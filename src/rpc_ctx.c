@@ -135,6 +135,9 @@ rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg)
         ctx->flags |= RPC_CTX_FLAG_SYNCDONE;
         mutex_unlock(&xd->rec->mtx);
         cond_signal(&lk->we.cv); /* XXX we hold lk->we.mtx */
+	/* now, we must ourselves wait for the other side to run */
+	while (! (ctx->flags & RPC_CTX_FLAG_ACKSYNC))
+	    cond_wait(&lk->we.cv, &lk->we.mtx);
         return (TRUE);
     }
     mutex_unlock(&xd->rec->mtx);
@@ -173,6 +176,16 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
     }
 
     return (code);
+}
+
+void
+rpc_ctx_ack_xfer(rpc_ctx_t *ctx)
+{
+    struct x_vc_data *xd = (struct x_vc_data *) ctx->ctx_u.clnt.clnt->cl_p1;
+    rpc_dplx_lock_t *lk = &xd->rec->recv.lock;
+
+    ctx->flags |= RPC_CTX_FLAG_ACKSYNC;
+    cond_signal(&lk->we.cv); /* XXX we hold lk->we.mtx */
 }
 
 void

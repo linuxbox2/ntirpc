@@ -378,6 +378,7 @@ clnt_vc_call(CLIENT *clnt,
     rpc_ctx_t *ctx = NULL;
     XDR *xdrs;
     int code, ix, refreshes = 2;
+    bool ctx_needack = false;
     bool shipnow;
 
     /* Create a call context.  A lot of TI-RPC decisions need to be
@@ -464,8 +465,10 @@ call_again:
             /* switch on direction */
             switch (ctx->msg->rm_direction) {
             case REPLY:
-                if (ctx->msg->rm_xid == ctx->xid)
+	        if (ctx->msg->rm_xid == ctx->xid) {
+		    ctx_needack = true;
                     goto replied;
+		}
                 break;
             case CALL:
                 /* in this configuration, we do not expect calls */
@@ -535,12 +538,16 @@ replied:
             xdrs->x_op = XDR_FREE;
             (void)xdr_opaque_auth(xdrs, &(ctx->msg->acpted_rply.ar_verf));
         }
+	if (ctx_needack)
+	    rpc_ctx_ack_xfer(ctx);
     }  /* end successful completion */
     else {
         /* maybe our credentials need to be refreshed ... */
         if (refreshes-- && AUTH_REFRESH(auth, &(ctx->msg))) {
             rpc_ctx_next_xid(ctx, RPC_CTX_FLAG_NONE);
             rpc_dplx_ruc(clnt);
+            if (ctx_needack)
+		rpc_ctx_ack_xfer(ctx);
             goto call_again;
         }
     }  /* end of unsuccessful completion */
