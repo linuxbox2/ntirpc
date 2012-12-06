@@ -69,6 +69,7 @@ typedef struct rpc_dplx_lock
  */
 typedef struct rpc_call_ctx {
     struct opr_rbtree_node node_k;
+    struct ct_wait_entry we;
     uint32_t xid;
     uint32_t flags;
     struct rpc_msg *msg;

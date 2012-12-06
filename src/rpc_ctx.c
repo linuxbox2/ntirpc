@@ -60,6 +60,10 @@ alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
     if (! ctx)
         goto out;
 
+    /* potects this */
+    mutex_init(&ctx->we.mtx, NULL);
+    cond_init(&ctx->we.cv, 0, NULL);
+
     /* rec->calls and rbtree protected by (adaptive) mtx */
     mutex_lock(&rec->mtx);
 
@@ -138,6 +142,14 @@ rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg)
 	/* now, we must ourselves wait for the other side to run */
 	while (! (ctx->flags & RPC_CTX_FLAG_ACKSYNC))
 	    cond_wait(&lk->we.cv, &lk->we.mtx);
+
+	/* ctx-specific signal--indicates we will make no further
+	 * references to ctx whatsoever */
+	mutex_lock(&ctx->we.mtx);
+	ctx->flags &= ~RPC_CTX_FLAG_WAITSYNC;
+        cond_signal(&ctx->we.cv);
+	mutex_unlock(&ctx->we.mtx);
+
         return (TRUE);
     }
     mutex_unlock(&xd->rec->mtx);
@@ -160,6 +172,7 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
         timespecadd(&ts, &ctx->ctx_u.clnt.timeout);
         code = cond_timedwait(&lk->we.cv, &lk->we.mtx, &ts);
     }
+    ctx->flags &= ~RPC_CTX_FLAG_SYNCDONE;
 
     /* switch on direction */
     switch (ctx->msg->rm_direction) {
@@ -194,9 +207,17 @@ free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
     struct x_vc_data *xd = (struct x_vc_data *) ctx->ctx_u.clnt.clnt->cl_p1;
     struct rpc_dplx_rec *rec  = xd->rec;
 
+    /* wait for commit of any xfer (ctx specific) */
+    mutex_lock(&ctx->we.mtx);
+    while (ctx->flags & RPC_CTX_FLAG_WAITSYNC)
+        cond_wait(&ctx->we.cv, &ctx->we.mtx);
+
     mutex_lock(&rec->mtx);
     opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
+    /* interlock */
+    mutex_unlock(&ctx->we.mtx);
     mutex_unlock(&rec->mtx);
+
     if (ctx->msg)
         free_rpc_msg(ctx->msg);
     mem_free(ctx, sizeof(rpc_ctx_t));
