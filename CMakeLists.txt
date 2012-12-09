@@ -86,7 +86,8 @@ endif(_MSPAC_SUPPORT)
 add_definitions(-DHAVE_CONFIG_H)
 
 include_directories(
-  "${PROJECT_SOURCE_DIR}/libtirpc/tirpc/"
+  "${PROJECT_BINARY_DIR}"
+  "${PROJECT_SOURCE_DIR}/tirpc/"
 )
 
 # Find misc system libs
