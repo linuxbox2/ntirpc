@@ -10,7 +10,6 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
 include(${CMAKE_SOURCE_DIR}/cmake/maintainer_mode.cmake)
 
-
 project(NTIRPC C)
 
 set(${PROJECT_NAME}_MAJOR_VERSION 1)
@@ -56,6 +55,13 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
   set(FREEBSD ON)
 endif(${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
 
+if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+  set(WINDOWS ON)
+  if(${CMAKE_CXX_COMPILER_ID} MATCHES "MSVC")
+    set(MSVC ON)
+  endif(${CMAKE_CXX_COMPILER_ID} MATCHES "MSVC")
+endif(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+
 check_include_files(stdbool.h HAVE_STDBOOL_H)
 check_include_files(strings.h HAVE_STRINGS_H)
 check_include_files(string.h HAVE_STRING_H)
@@ -88,6 +94,10 @@ if (FREEBSD)
 endif(FREEBSD)
 
 add_definitions(-DHAVE_CONFIG_H)
+
+if (MSVC)
+   add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+endif(MSVC)
 
 include_directories(
   "${PROJECT_BINARY_DIR}"
