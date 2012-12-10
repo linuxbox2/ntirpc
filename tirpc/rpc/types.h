@@ -38,7 +38,11 @@
 #ifndef _TIRPC_TYPES_H
 #define _TIRPC_TYPES_H
 
+#ifdef _MSC_VER
+#include <misc/stdint.h>
+#else
 #include <stdint.h>
+#endif
 #include <sys/types.h>
 
 #if defined(_WIN32)
@@ -47,7 +51,9 @@
 #define __END_DECLS
 
 /* integral types */
+#ifndef _MSC_VER
 #include <_bsd_types.h> /* XXX mingw (defines u_long) */
+#endif
 typedef uint8_t u_char;
 typedef uint16_t u_int16_t;
 typedef uint16_t u_short_t;
@@ -182,8 +188,10 @@ extern uint32_t __tirpc_dcounter;
 #define mem_alloc_aligned(size, align) aligned_alloc((align), (size))
 #define mem_free(ptr, size) free(ptr)
 
+#ifndef _MSC_VER
 #include <sys/time.h>
 #include <sys/param.h>
+#endif
 #include <stdlib.h>
 #include <netconfig.h>
 

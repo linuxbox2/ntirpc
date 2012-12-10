@@ -37,7 +37,11 @@ struct in_pktinfo {
 #endif
 
 #if defined(_WIN32)
+#ifdef _MSC_VER
+#include <misc/stdint.h>
+#else
 #include <stdint.h>
+#endif
 #include <reentrant.h>
 #include <misc/timespec.h>
 
