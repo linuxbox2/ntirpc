@@ -11,9 +11,7 @@ include_directories(
 
 ########### next target ###############
 
-SET(ntirpc_STAT_SRCS
-  auth_des.c
-  authdes_prot.c
+SET(ntirpc_common_SRCS
   auth_none.c
   auth_time.c
   auth_unix.c
@@ -77,10 +75,15 @@ SET(ntirpc_STAT_SRCS
   xdr_vrec.c
 )
 
-if(USE_GSS)
+if(USE_DES)
+  SET(ntirpc_des_SRCS
+  auth_des.c
+  authdes_prot.c
+  )
+endif(USE_DES)
 
-  SET(ntirpc_STAT_SRCS
-    ${ntirpc_STAT_SRCS}
+if(USE_GSS)
+  SET(ntirpc_gss_SRCS
     auth_gss.c authgss_hash.c
     authgss_prot.c
     svc_auth_gss.c
@@ -94,7 +97,9 @@ endif(USE_GSS)
 
 # declares the library
 add_library(ntirpc STATIC
-  ${ntirpc_STAT_SRCS}
+  ${ntirpc_common_SRCS}
+  ${ntirpc_des_SRCS}
+  ${ntirpc_gss_SRCS}
   )
 
 ########### next target ###############
