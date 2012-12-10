@@ -54,6 +54,7 @@ nobase_include_HEADERS = m4/.dummy \
 			 tirpc/rpc/svc_auth.h \
 			 tirpc/rpc/svc_rqst.h \
 			 tirpc/rpc/tirpc_compat.h \
+			 tirpc/rpc/types.h \
 			 tirpc/rpc/xdr.h \
 			 tirpc/rpc/xdr_inline.h \
 			 tirpc/rpc/xdr_vrec.h
