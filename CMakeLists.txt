@@ -91,6 +91,8 @@ endif(_MSPAC_SUPPORT)
 
 if (FREEBSD)
    set(EXTRA_INCLUDE_DIR "/opt/ganesha/include")
+else (DEFAULT)
+   set(EXTRA_INCLUDE_DIR "${PROJECT_BINARY_DIR}")
 endif(FREEBSD)
 
 add_definitions(-DHAVE_CONFIG_H)
