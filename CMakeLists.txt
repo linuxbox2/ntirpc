@@ -89,6 +89,10 @@ if(_MSPAC_SUPPORT)
   set(SYSTEM_LIBRARIES ${WBclient_LIBRARIES} ${SYSTEM_LIBRARIES})
 endif(_MSPAC_SUPPORT)
 
+if (FREEBSD)
+   set(EXTRA_INCLUDE_DIR "/opt/ganesha/include")
+endif(FREEBSD)
+
 add_definitions(-DHAVE_CONFIG_H)
 
 if (MSVC)
@@ -98,6 +102,7 @@ endif(MSVC)
 include_directories(
   "${PROJECT_BINARY_DIR}"
   "${PROJECT_SOURCE_DIR}/tirpc/"
+  "${EXTRA_INCLUDE_DIR}"
 )
 
 # Find misc system libs
