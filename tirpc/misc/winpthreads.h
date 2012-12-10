@@ -47,6 +47,7 @@
 #define WIN_PTHREADS
 
 #include <windows.h>
+#include <process.h>
 
 #include <setjmp.h>
 #include <errno.h>
