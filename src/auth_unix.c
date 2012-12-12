@@ -27,7 +27,7 @@
  */
 
 #include <config.h>
-#include <sys/cdefs.h>
+#include <misc/cdefs.h>
 
 /*
  * auth_unix.c, Implements UNIX style authentication parameters.
@@ -40,13 +40,15 @@
  * for the credentials.
  *
  */
-#include <sys/param.h>
+#include <misc/param.h>
 
 #include <assert.h>
-#include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
+#ifndef _MSC_VER
+#include <err.h>
 #include <unistd.h>
+#endif
 #include <string.h>
 #include <errno.h>
 

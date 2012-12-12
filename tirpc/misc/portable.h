@@ -41,9 +41,38 @@ struct in_pktinfo {
 
 #if defined(_WIN32)
 #ifdef _MSC_VER
+
+#ifdef _DEBUG
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+#else
+#include <stdlib.h>
+#endif
+
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#include <process.h>
+#include <basetsd.h>
 #include <misc/stdint.h>
+
+#define MAXHOSTNAMELEN  64
+
+#define __static_inline static __inline
+#define __attribute_unused /* unused */
+
+#define snprintf _snprintf
+#define strtok_r strtok_s
+#define strcasecmp _stricmp
+#define getpid _getpid
+
 #else
 #include <stdint.h>
+
+#define __static_inline static inline
+#define __attribute_unused __attribute__((unused))
+
 #endif
 #include <reentrant.h>
 #include <misc/timespec.h>

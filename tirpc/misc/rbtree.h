@@ -3,6 +3,7 @@
 #ifndef _OPR_RBTREE_H
 #define _OPR_RBTREE_H 1
 
+#include <misc/portable.h>
 #include <stdint.h>
 #include <misc/opr.h>
 
@@ -46,7 +47,7 @@ extern void opr_rbtree_replace(struct opr_rbtree *head,
 			       struct opr_rbtree_node *old,
 			       struct opr_rbtree_node *replacement);
 
-static inline unsigned long
+__static_inline unsigned long
 opr_rbtree_size(struct opr_rbtree *head)
 {
     return (head->size);

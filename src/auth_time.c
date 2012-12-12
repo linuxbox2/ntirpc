@@ -25,11 +25,11 @@
  *	needed to deal with TCP connections.
  */
 
-#ifndef __APPLE__
+#if !defined(__APPLE__) && ! defined(_MSC_VER)
 
 #include <config.h>
 
-#include <sys/cdefs.h>
+#include <misc/cdefs.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -101,7 +101,7 @@ uaddr_to_sockaddr(char *uaddr, struct sockaddr_in *sin)
     p_bytes[1] = (unsigned char)a[5] & 0x000000FF;
 
     sin->sin_family = AF_INET; /* always */
-    bcopy((char *)&p_bytes, (char *)&sin->sin_port, 2);
+    memcpy((char *)&p_bytes, (char *)&sin->sin_port, 2);
 
     return (0);
 }
@@ -313,7 +313,7 @@ __rpc_get_time_offset(struct timeval *td, /* Time difference */
     sprintf(ipuaddr, "%d.%d.%d.%d.0.111", a1, a2, a3, a4);
     useua = &ipuaddr[0];
 
-    bzero((char *)&sin, sizeof(sin));
+    memset((char *)&sin, 0, sizeof(sin));
     if (uaddr_to_sockaddr(useua, &sin)) {
         msg("unable to translate uaddr to sockaddr.");
         if (needfree)

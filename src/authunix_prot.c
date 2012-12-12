@@ -27,7 +27,7 @@
  */
 
 #include <config.h>
-#include <sys/cdefs.h>
+#include <misc/cdefs.h>
 
 /*
  * authunix_prot.c

@@ -46,9 +46,9 @@
 #ifndef WIN_PTHREADS
 #define WIN_PTHREADS
 
+#include <misc/portable.h>
 #include <windows.h>
 #include <process.h>
-
 #include <setjmp.h>
 #include <errno.h>
 #include <sys/timeb.h>
@@ -129,7 +129,7 @@ struct _pthread_v
 	uintptr_t h;
 	int cancelled;
 	unsigned p_state;
-	int keymax;
+	unsigned long keymax;
 	void **keyval;
 
 	jmp_buf jb;
@@ -164,7 +164,7 @@ struct pthread_attr_t
 {
 	unsigned p_state;
 	void *stack;
-	size_t s_size;
+	int32_t s_size;
 };
 
 typedef long pthread_once_t;
@@ -188,8 +188,8 @@ DWORD _pthread_tls;
 
 /* Note initializer is zero, so this works */
 pthread_rwlock_t _pthread_key_lock;
-long _pthread_key_max;
-long _pthread_key_sch;
+unsigned long _pthread_key_max;
+unsigned long _pthread_key_sch;
 void (**_pthread_key_dest)(void *);
 
 #define pthread_cleanup_push(F, A)\
@@ -383,7 +383,7 @@ static void pthread_tls_init(void)
 
 static void _pthread_cleanup_dest(pthread_t t)
 {
-	int i, j;
+	unsigned long i, j;
 
 	for (j = 0; j < PTHREAD_DESTRUCTOR_ITERATIONS; j++)
 	{
@@ -731,7 +731,7 @@ static int pthread_attr_getstacksize(pthread_attr_t *attr, size_t *size)
 	return 0;
 }
 
-static int pthread_attr_setstacksize(pthread_attr_t *attr, size_t size)
+static int pthread_attr_setstacksize(pthread_attr_t *attr, int32_t size)
 {
 	attr->s_size = size;
 	return 0;
@@ -772,7 +772,6 @@ static int pthread_setcanceltype(int type, int *oldtype)
 static unsigned int pthread_create_wrapper(void *args)
 {
 	struct _pthread_v *tv = args;
-	int i, j;
 
 	_pthread_once_raw(&_pthread_tls_once, pthread_tls_init);
 
@@ -803,7 +802,7 @@ static unsigned int pthread_create_wrapper(void *args)
 static int pthread_create(pthread_t *th, pthread_attr_t *attr, void *(* func)(void *), void *arg)
 {
 	struct _pthread_v *tv = malloc(sizeof(struct _pthread_v));
-	unsigned ssize = 0;
+	int32_t ssize = 0;
 
 	if (!tv) return 1;
 
@@ -978,7 +977,7 @@ static int pthread_mutex_timedlock(pthread_mutex_t *m, struct timespec *ts)
 		if (ct > t) return ETIMEDOUT;
 
 		/* Wait on semaphore within critical section */
-		WaitForSingleObject(((struct _pthread_crit_t *)m)->sem, t - ct);
+		WaitForSingleObject(((struct _pthread_crit_t *)m)->sem, (DWORD) (t - ct));
 
 		/* Try to grab lock */
 		if (!pthread_mutex_trylock(m)) return 0;
@@ -1093,7 +1092,7 @@ static int pthread_barrierattr_getpshared(void **attr, int *s)
 
 static int pthread_key_create(pthread_key_t *key, void (* dest)(void *))
 {
-	int i;
+	unsigned long i;
 	long nmax;
 	void (**d)(void *);
 
@@ -1314,7 +1313,7 @@ static int pthread_cond_destroy(pthread_cond_t *c)
 
 static int pthread_cond_timedwait(pthread_cond_t *c, pthread_mutex_t *m, struct timespec *t)
 {
-	unsigned long long tm = _pthread_rel_time_in_ms(t);
+	DWORD tm = (DWORD) _pthread_rel_time_in_ms(t);
 
 	pthread_testcancel();
 
@@ -1384,7 +1383,6 @@ static int pthread_rwlockattr_setpshared(pthread_rwlockattr_t *a, int s)
 #define pthread_kill(T, S) 0
 #define pthread_sigmask(H, S1, S2) 0
 
-
 /* Wrap cancellation points -- seems incompatible with decls in stdio.h */
 #define accept(...) (pthread_testcancel(), accept(__VA_ARGS__))
 #define aio_suspend(...) (pthread_testcancel(), aio_suspend(__VA_ARGS__))
@@ -1408,7 +1406,13 @@ static int pthread_rwlockattr_setpshared(pthread_rwlockattr_t *a, int s)
 #define nanosleep(...) (pthread_testcancel(), nanosleep(__VA_ARGS__))
 #define open(...) (pthread_testcancel(), open(__VA_ARGS__))
 #define pause(...) (pthread_testcancel(), pause(__VA_ARGS__))
+#if defined(_MSC_VER)
+#define poll(...) (pthread_testcancel(), WSAOoll(__VA_ARGS__))
+#define ioctl(...) (pthread_testcancel(), ioctlsocket(__VA_ARGS__))
+#else
 #define poll(...) (pthread_testcancel(), poll(__VA_ARGS__))
+#define ioctl(...) (pthread_testcancel(), ioctl(__VA_ARGS__))
+#endif
 #define pread(...) (pthread_testcancel(), pread(__VA_ARGS__))
 #define pselect(...) (pthread_testcancel(), pselect(__VA_ARGS__))
 #define putmsg(...) (pthread_testcancel(), putmsg(__VA_ARGS__))
@@ -1535,7 +1539,6 @@ static int pthread_rwlockattr_setpshared(pthread_rwlockattr_t *a, int s)
 #define glob(...) (pthread_testcancel(), glob(__VA_ARGS__))
 #define iconv_close(...) (pthread_testcancel(), iconv_close(__VA_ARGS__))
 #define iconv_open(...) (pthread_testcancel(), iconv_open(__VA_ARGS__))
-#define ioctl(...) (pthread_testcancel(), ioctl(__VA_ARGS__))
 #define link(...) (pthread_testcancel(), link(__VA_ARGS__))
 #define localtime(...) (pthread_testcancel(), localtime(__VA_ARGS__))
 #define localtime_r(...) (pthread_testcancel(), localtime_r(__VA_ARGS__))

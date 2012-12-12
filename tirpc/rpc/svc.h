@@ -40,7 +40,8 @@
 
 #ifndef _TIRPC_SVC_H
 #define _TIRPC_SVC_H
-#include <sys/cdefs.h>
+
+#include <misc/cdefs.h>
 #include <rpc/types.h>
 #include "reentrant.h"
 

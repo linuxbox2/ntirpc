@@ -43,7 +43,7 @@
 #include <rpc/auth.h>
 #include "reentrant.h"
 
-#include <sys/cdefs.h>
+#include <misc/cdefs.h>
 #include <netconfig.h>
 #if !defined(_WIN32)
 #include <sys/un.h>

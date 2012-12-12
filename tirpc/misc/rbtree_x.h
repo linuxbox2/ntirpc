@@ -47,7 +47,7 @@ struct rbtree_x
 extern int rbtx_init(struct rbtree_x *xt, opr_rbtree_cmpf_t cmpf,
                      uint32_t npart, uint32_t flags);
 
-static inline struct opr_rbtree_node *
+__static_inline struct opr_rbtree_node *
 rbtree_x_cached_lookup(struct rbtree_x *xt, struct rbtree_x_part *t,
                        struct opr_rbtree_node *nk, uint64_t hk)
 {
@@ -81,7 +81,7 @@ out:
     return (nv);
 }
 
-static inline struct opr_rbtree_node *
+__static_inline struct opr_rbtree_node *
 rbtree_x_cached_insert(struct rbtree_x *xt, struct rbtree_x_part *t,
                        struct opr_rbtree_node *nk, uint64_t hk)
 {
@@ -116,7 +116,7 @@ rbtree_x_cached_insert(struct rbtree_x *xt, struct rbtree_x_part *t,
     return (nv);
 }
 
-static inline void
+__static_inline void
 rbtree_x_cached_remove(struct rbtree_x *xt, struct rbtree_x_part *t,
                        struct opr_rbtree_node *nk, uint64_t hk)
 {

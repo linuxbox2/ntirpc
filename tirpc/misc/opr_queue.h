@@ -33,6 +33,7 @@
 #ifndef OPR_QUEUE_H
 #define OPR_QUEUE_H 1
 
+#include <misc/portable.h>
 #include <stdlib.h>
 
 struct opr_queue {
@@ -75,17 +76,17 @@ struct opr_queue {
    cursor != (head); \
    cursor = store, store = store->prev
 
-static inline void
+__static_inline void
 opr_queue_Zero(struct opr_queue *q) {
     q->prev = q->next = NULL;
 }
 
-static inline void
+__static_inline void
 opr_queue_Init(struct opr_queue *q) {
     q->prev = q->next = q;
 }
 
-static inline void
+__static_inline void
 opr_queue_add(struct opr_queue *element,
 	      struct opr_queue *before, struct opr_queue *after) {
    after->prev = element;
@@ -94,17 +95,17 @@ opr_queue_add(struct opr_queue *element,
    before->next = element;
 }
 
-static inline void
+__static_inline void
 opr_queue_Append(struct opr_queue *queue, struct opr_queue *element) {
     opr_queue_add(element, queue->prev, queue);
 }
 
-static inline void
+__static_inline void
 opr_queue_Prepend(struct opr_queue *queue, struct opr_queue *element) {
     opr_queue_add(element, queue, queue->next);
 }
 
-static inline void
+__static_inline void
 opr_queue_InsertBefore(struct opr_queue *exist, struct opr_queue *adding) {
     /* This may seem back to front, but take a list A, B, C where we want
      * to add 1 before B. So, we're adding 1 with A the element before,
@@ -112,12 +113,12 @@ opr_queue_InsertBefore(struct opr_queue *exist, struct opr_queue *adding) {
     opr_queue_add(adding, exist->prev, exist);
 }
 
-static inline void
+__static_inline void
 opr_queue_InsertAfter(struct opr_queue *exist, struct opr_queue *adding) {
     opr_queue_add(adding, exist, exist->next);
 }
 
-static inline void
+__static_inline void
 opr_queue_Remove(struct opr_queue *element) {
     element->next->prev = element->prev;
     element->prev->next = element->next;
@@ -125,22 +126,22 @@ opr_queue_Remove(struct opr_queue *element) {
     element->next = NULL;
 }
 
-static inline int
+__static_inline int
 opr_queue_IsEmpty(struct opr_queue *q) {
     return (q->prev == q);
 }
 
-static inline int
+__static_inline int
 opr_queue_IsOnQueue(struct opr_queue *q) {
     return (q->prev != NULL);
 }
 
-static inline int
+__static_inline int
 opr_queue_IsEnd(struct opr_queue *q, struct opr_queue *cursor) {
     return (cursor->next == q);
 }
 
-static inline int
+__static_inline int
 opr_queue_Count(struct opr_queue *q) {
     struct opr_queue *cursor;
     int n = 0;
@@ -151,7 +152,7 @@ opr_queue_Count(struct opr_queue *q) {
     return n;
 }
 
-static inline void
+__static_inline void
 opr_queue_Swap(struct opr_queue *a, struct opr_queue *b)
 {
     struct opr_queue tq = *b;
@@ -175,7 +176,7 @@ opr_queue_Swap(struct opr_queue *a, struct opr_queue *b)
 
 /* Remove the members before pivot from Q1, and append them to Q2 */
 
-static inline void
+__static_inline void
 opr_queue_SplitBeforeAppend(struct opr_queue *q1, struct opr_queue *q2,
 			    struct opr_queue *pivot) {
 
@@ -193,7 +194,7 @@ opr_queue_SplitBeforeAppend(struct opr_queue *q1, struct opr_queue *q2,
 }
 
 /* Remove the members after the pivot from Q1, and prepend them onto Q2 */
-static inline void
+__static_inline void
 opr_queue_SplitAfterPrepend(struct opr_queue *q1, struct opr_queue *q2,
 			    struct opr_queue *pivot) {
 
@@ -212,7 +213,7 @@ opr_queue_SplitAfterPrepend(struct opr_queue *q1, struct opr_queue *q2,
     q1->prev = pivot;
 }
 
-static inline void
+__static_inline void
 opr_queue_SpliceAppend(struct opr_queue *target, struct opr_queue *source)
 {
 
@@ -229,7 +230,7 @@ opr_queue_SpliceAppend(struct opr_queue *target, struct opr_queue *source)
     source->next = source->prev = source;
 }
 
-static inline void
+__static_inline void
 opr_queue_SplicePrepend(struct opr_queue *target, struct opr_queue *source)
 {
 

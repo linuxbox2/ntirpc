@@ -38,6 +38,7 @@
 #ifndef REENTRANT_H
 #define REENTRANT_H
 
+#include <misc/portable.h>
 #if defined(_WIN32)
 #include <misc/winpthreads.h>
 #else
@@ -59,9 +60,9 @@
 #define RWLOCK_INITIALIZER	PTHREAD_RWLOCK_INITIALIZER
 #define ONCE_INITIALIZER	PTHREAD_ONCE_INIT
 
-static inline int
+__static_inline int
 mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *a
-           __attribute__((unused)))
+           __attribute_unused)
 {
     pthread_mutexattr_t attr;
     int rslt;

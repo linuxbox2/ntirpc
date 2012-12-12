@@ -59,5 +59,7 @@
 #undef fgetws
 #undef fputws
 #endif
+#ifndef _MSC_VER
 #include <stdio.h>
+#endif
 #endif /* NTIRPC_STDIO_H */

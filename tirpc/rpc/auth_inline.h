@@ -44,7 +44,7 @@
  */
 
 #ifndef _TIRPC_AUTH_INLINE_H
-#define _TIRPC_AUTH__INLINE_H
+#define _TIRPC_AUTH_INLINE_H
 
 #include <rpc/xdr_inline.h>
 #include <rpc/auth.h>
@@ -52,7 +52,7 @@
 /*
  * XDR xdr_opaque_auth
  */
-static inline bool
+__static_inline bool
 inline_xdr_opaque_auth(XDR *xdrs, struct opaque_auth *oa)
 {
     if (! (inline_xdr_enum(xdrs, &oa->oa_flavor) &&

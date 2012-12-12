@@ -27,7 +27,7 @@
  */
 
 #include <config.h>
-#include <sys/cdefs.h>
+#include <misc/cdefs.h>
 
 /*
  * Copyright (c) 1987 by Sun Microsystems, Inc.
@@ -36,7 +36,8 @@
  */
 
 #include <sys/types.h>
-#include <sys/socket.h>
+#include <misc/portable.h>
+#include <misc/socket.h>
 
 #include <netinet/in.h>
 

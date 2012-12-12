@@ -44,13 +44,13 @@
  */
 
 #ifndef _TIRPC_AUTH_H
-#define  _TIRPC_AUTH_H
+#define _TIRPC_AUTH_H
 
 #include <rpc/xdr.h>
 #include <rpc/clnt_stat.h>
 #include <misc/abstract_atomic.h>
+#include <misc/cdefs.h>
 
-#include <sys/cdefs.h>
 #if !defined(_WIN32)
 #include <sys/socket.h>
 #endif
@@ -210,13 +210,13 @@ typedef struct __auth {
     int ah_refcnt;
 } AUTH;
 
-static __inline int
+__static_inline int
 auth_get(AUTH *auth)
 {
     return atomic_add_uint32_t(&auth->ah_refcnt, 1);
 }
 
-static __inline int
+__static_inline int
 auth_put(AUTH *auth)
 {
     return atomic_sub_uint32_t(&auth->ah_refcnt, 1);

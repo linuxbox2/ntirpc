@@ -41,9 +41,9 @@
 #ifndef _TIRPC_XDR_H
 #define _TIRPC_XDR_H
 
-#include <sys/cdefs.h>
-#include <misc/stdio.h>
-#include <stdbool.h>
+#include <misc/portable.h>
+#include <misc/cdefs.h>
+#include <misc/stdbool.h>
 #if !defined(_WIN32)
 #include <netinet/in.h>
 #endif
