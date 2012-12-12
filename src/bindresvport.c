@@ -38,13 +38,12 @@
 #include <sys/types.h>
 #include <misc/portable.h>
 #include <misc/socket.h>
-
-#include <netinet/in.h>
-
 #include <errno.h>
 #include <string.h>
+#if !defined(_MSC_VER)
+#include <netinet/in.h
 #include <unistd.h>
-
+#endif
 #include <rpc/rpc.h>
 
 #include <string.h>
@@ -137,6 +136,8 @@ bindresvport_sa(int sd, struct sockaddr *sa)
 	}
         return (res);
 }
+#elif defined(_MSC_VER)
+#pragma message ("implement bindresvport_sa for MSVC")
 #else
 
 #define IP_PORTRANGE 19

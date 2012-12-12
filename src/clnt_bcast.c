@@ -29,7 +29,7 @@
  * Copyright (c) 1986-1991 by Sun Microsystems Inc.
  */
 #include <config.h>
-#include <sys/cdefs.h>
+#include <misc/cdefs.h>
 
 /*
  * clnt_bcast.c
@@ -40,6 +40,9 @@
  * The following is kludged-up support for simple rpc broadcasts.
  * Someday a large, complicated system will replace these routines.
  */
+
+#if !defined(_WIN32)
+
 #include <sys/socket.h>
 #include <sys/types.h>
 
@@ -660,3 +663,5 @@ rpc_broadcast(rpcprog_t prog,  /* program number */
                               INITTIME, WAITTIME, nettype);
     return (dummy);
 }
+
+#endif /* !_WIN32 */
