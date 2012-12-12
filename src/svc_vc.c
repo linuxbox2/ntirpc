@@ -77,6 +77,8 @@ extern struct svc_params __svc_params[1];
 
 static bool_t rendezvous_request(SVCXPRT *, struct rpc_msg *);
 static enum xprt_stat rendezvous_stat(SVCXPRT *);
+static bool_t svc_vc_ref(SVCXPRT *xprt, u_int flags);
+static void svc_vc_release(SVCXPRT *xprt, u_int flags);
 static void svc_vc_destroy(SVCXPRT *);
 static void __svc_vc_dodestroy (SVCXPRT *);
 static int read_vc(void *, void *, int);
@@ -195,6 +197,7 @@ svc_vc_create2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 		goto cleanup_svc_vc_create;
 	}
 	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
+        xprt->xp_refcnt = 1;
 	xprt->xp_tp = NULL;
 	xprt->xp_p1 = r;
 	xprt->xp_p2 = NULL;
@@ -448,6 +451,8 @@ makefd_xprt(int fd, u_int sendsize, u_int recvsize)
 	    xprt, read_vc, write_vc);
 	xdrrec_create(&(cd->xdrs_out), sendsize, recvsize,
 	    xprt, read_vc, write_vc);
+
+        xprt->xp_refcnt = 1;
 	xprt->xp_p1 = cd;
 	xprt->xp_auth = NULL;
 	xprt->xp_verf.oa_base = cd->verf_body;
@@ -577,12 +582,56 @@ rendezvous_stat(SVCXPRT *xprt)
 	return (XPRT_IDLE);
 }
 
+static bool_t
+svc_vc_ref(SVCXPRT *xprt, u_int flags)
+{
+    if (! (flags & SVC_RELEASE_FLAG_LOCKED))
+        mutex_lock(&xprt->xp_lock);
+
+    if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {        
+        mutex_unlock(&xprt->xp_lock);
+        return (false);
+    }
+    ++(xprt->xp_refcnt);
+    mutex_unlock(&xprt->xp_lock);
+    return (true);
+}
+
+static void
+svc_vc_release(SVCXPRT *xprt, u_int flags)
+{
+    uint32_t refcnt;
+
+    if (! (flags & SVC_RELEASE_FLAG_LOCKED))
+        mutex_lock(&xprt->xp_lock);
+
+    refcnt = --(xprt->xp_refcnt);
+    mutex_unlock(&xprt->xp_lock);
+
+    if (refcnt == 0) {
+        /* XXX this is a problem--if registration takes a ref, 
+         * then recfnt 0 is not reached */
+        (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
+	__svc_vc_dodestroy(xprt);
+    }
+}
+
 static void
 svc_vc_destroy(SVCXPRT *xprt)
 {
-	assert(xprt != NULL);
-	(void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
+    uint32_t refcnt;
+
+    mutex_lock(&xprt->xp_lock);
+    refcnt = --(xprt->xp_refcnt);
+    xprt->xp_flags |= SVC_XPRT_FLAG_DESTROYED;
+    mutex_unlock(&xprt->xp_lock);
+
+    if (refcnt == 0) {
+        /* XXX this is a problem--if registration takes a ref, 
+         * then recfnt 0 is not reached */
+        (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
 	__svc_vc_dodestroy(xprt);
+    }
 }
 
 static void
@@ -1077,6 +1126,8 @@ svc_vc_ops(SVCXPRT *xprt)
 		ops.xp_getargs = svc_vc_getargs;
 		ops.xp_reply = svc_vc_reply;
 		ops.xp_freeargs = svc_vc_freeargs;
+                ops.xp_ref = svc_vc_ref;
+                ops.xp_release = svc_vc_release;
 		ops.xp_destroy = svc_vc_destroy;
 		ops2.xp_control = svc_vc_control;
 		ops2.xp_getreq = svc_getreq_default;

@@ -250,14 +250,12 @@ __xprt_unregister_unlocked (SVCXPRT * xprt)
 }
 
 /*
- * De-activate a transport handle.
+ * Unregister a transport handle from the legacy/default event channel.
  */
 static void
 __xprt_do_unregister(SVCXPRT *xprt, bool_t dolock __attribute__((unused)))
 {
     SVCXPRT *xprt2 __attribute__((unused));
-
-    assert (xprt != NULL);
 
     (void) svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id, xprt,
                                  SVC_RQST_FLAG_NONE);

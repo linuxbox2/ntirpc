@@ -144,6 +144,14 @@ typedef struct svc_init_params
 #define SVC_XPRT_FLAG_EVCHAN             0x0004
 #define SVC_XPRT_FLAG_GCHAN              0x0008
 #define SVC_XPRT_FLAG_COPY               0x0010 /* XXX */
+#define SVC_XPRT_FLAG_DESTROYED          0x0020
+
+/*
+ * SVC_RELEASE flags
+ */
+
+#define SVC_RELEASE_FLAG_NONE            0x0000
+#define SVC_RELEASE_FLAG_LOCKED          0x0001
 
 /* XXX Ganesha
  * Don't confuse with (currently incomplete) transport type, nee
@@ -203,8 +211,16 @@ typedef struct __rpc_svcxprt {
 	    /* free mem allocated for args */
 	    bool_t	(*xp_freeargs)(struct __rpc_svcxprt *, xdrproc_t,
 				void *);
-	    /* destroy this struct */
-	    void	(*xp_destroy)(struct __rpc_svcxprt *);
+
+	    /* take lifecycle ref */
+	    bool_t (*xp_ref)(struct __rpc_svcxprt *, u_int flags);
+
+            /* release ref (destroy if no refs) */
+	    void (*xp_release)(struct __rpc_svcxprt *, u_int flags);
+
+	    /* release and mark destroyed */
+	    void (*xp_destroy)(struct __rpc_svcxprt *);
+ 
 	} *xp_ops;
 	int		xp_addrlen;	 /* length of remote address */
 	struct sockaddr_in6 xp_raddr;	 /* remote addr (backward ABI compat) */
@@ -224,7 +240,7 @@ typedef struct __rpc_svcxprt {
                              const u_int, void *);
 
             /* xprt free hook */
-            bool_t  (*xp_free_xprt)(struct __rpc_svcxprt *);
+            bool_t (*xp_free_xprt)(struct __rpc_svcxprt *);
 
 
 	} *xp_ops2;
@@ -245,13 +261,14 @@ typedef struct __rpc_svcxprt {
 	void		*xp_p3;		 /* private: for use by svc lib */
 	void		*xp_p4;		 /* private: for use by svc lib */
 	void            *xp_p5;          /* private: for use by svc lib */
-	void            *xp_u1;           /* client user data */
+	void            *xp_u1;          /* client user data */
 	int             xp_si_type;      /* si type */
 	int             xp_type;         /* xprt type */
 	u_int		xp_flags;	 /* flags */
 	uint64_t        xp_gen;          /* svc_xprt generation number */
 
-	mutex_t xp_lock;
+	mutex_t         xp_lock;
+	uint32_t        xp_refcnt;       /* handle refcnt */
 
 } SVCXPRT;
 
@@ -368,6 +385,16 @@ extern SVCXPRT *svc_shim_copy_xprt(SVCXPRT *xprt_copy, SVCXPRT *xprt_orig);
 	(*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
 #define svc_freeargs(xprt, xargs, argsp)		\
 	(*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
+
+#define SVC_REF(xprt, flags)                    \
+	(*(xprt)->xp_ops->xp_ref)(xprt, flags)
+#define svc_ref(xprt)				\
+    (*(xprt)->xp_ops->xp_ref)(xprt, flags)
+
+#define SVC_RELEASE(xprt, flags)                \
+	(*(xprt)->xp_ops->xp_release)(xprt, flags)
+#define svc_release(xprt, flags)                \
+	(*(xprt)->xp_ops->xp_release)(xprt, flags)
 
 #define SVC_DESTROY(xprt)				\
 	(*(xprt)->xp_ops->xp_destroy)(xprt)
