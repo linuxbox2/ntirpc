@@ -143,7 +143,7 @@ svc_dg_create(int fd, u_int sendsize, u_int recvsize)
 
 	su->su_cache = NULL;
 	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
-        spin_init(&xprt->sp, PTHREAD_PROCESS_PRIVATE);
+        mutex_init(&xprt->xp_lock, NULL);
 	xprt->xp_fd = fd;
 	xprt->xp_p2 = su;
 	xprt->xp_auth = NULL;
