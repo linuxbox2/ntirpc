@@ -585,7 +585,7 @@ rendezvous_stat(SVCXPRT *xprt)
 static bool_t
 svc_vc_ref(SVCXPRT *xprt, u_int flags)
 {
-    if (! (flags & SVC_RELEASE_FLAG_LOCKED))
+    if (! (flags & SVC_REF_FLAG_LOCKED))
         mutex_lock(&xprt->xp_lock);
 
     if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {        

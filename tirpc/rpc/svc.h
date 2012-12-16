@@ -147,6 +147,13 @@ typedef struct svc_init_params
 #define SVC_XPRT_FLAG_DESTROYED          0x0020
 
 /*
+ * SVC_REF flags
+ */
+
+#define SVC_REF_FLAG_NONE            0x0000
+#define SVC_REF_FLAG_LOCKED          0x0001
+
+/*
  * SVC_RELEASE flags
  */
 

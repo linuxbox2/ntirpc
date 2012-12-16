@@ -64,11 +64,6 @@ static struct svc_xprt_set svc_xprt_set_ = {
     { 0, NULL } /* xt */
 };
 
-#define SVC_XPRT_FLAG_NONE       0x0000
-#define SVC_XPRT_FLAG_CLEAR      0x0001
-#define SVC_XPRT_FLAG_WLOCKED    0x0002
-#define SVC_XPRT_FLAG_UNLOCK     0x0004
-
 static inline int
 svc_xprt_fd_cmpf(const struct opr_rbtree_node *lhs,
                  const struct opr_rbtree_node *rhs)
@@ -144,9 +139,11 @@ static inline SVCXPRT *svc_xprt_insert(SVCXPRT *xprt, uint32_t flags)
     struct rbtree_x_part *t;
     struct svc_xprt_rec sk, *srec;
     struct opr_rbtree_node *nv;
-    SVCXPRT *xprt2 = NULL;
 
     cond_init_svc_xprt();
+
+    if (! (flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
+        mutex_lock(&xprt->xp_lock);
 
     sk.fd_k = xprt->xp_fd;
     t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, xprt->xp_fd);
@@ -174,7 +171,10 @@ static inline SVCXPRT *svc_xprt_insert(SVCXPRT *xprt, uint32_t flags)
     if (flags & SVC_XPRT_FLAG_UNLOCK)
         rwlock_unlock(&t->lock);
 
-    return (xprt2);
+    if (! (flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
+        mutex_unlock(&xprt->xp_lock);
+
+    return (NULL);
 }
 
 static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
@@ -197,10 +197,18 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
         mutex_lock(&srec->mtx);
         /* XXX state flags and refcount here? */
         if (! srec->xprt) {
+
+            if (! (flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
+                mutex_lock(&xprt->xp_lock);
+
             if (xprt->xp_gen == 0) {
                 srec->gen++;
                 xprt->xp_gen = srec->gen;
             }
+
+            if (! (flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
+                mutex_lock(&xprt->xp_lock);
+
             srec->xprt = xprt;
         } else {
             xprt2 = srec->xprt;
@@ -233,9 +241,9 @@ SVCXPRT* svc_xprt_set(SVCXPRT *xprt)
     return (svc_xprt_set_impl(xprt, SVC_XPRT_FLAG_NONE));
 }
 
-SVCXPRT *svc_xprt_clear(SVCXPRT *xprt)
+SVCXPRT *svc_xprt_clear(SVCXPRT *xprt, uint32_t flags)
 {
-    return (svc_xprt_set_impl(xprt, SVC_XPRT_FLAG_CLEAR));
+    return (svc_xprt_set_impl(xprt, flags|SVC_XPRT_FLAG_CLEAR));
 }
 
 SVCXPRT* svc_xprt_get(int fd)

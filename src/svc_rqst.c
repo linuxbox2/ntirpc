@@ -152,7 +152,7 @@ void svc_rqst_finalize_xprt(SVCXPRT *xprt)
         goto out;
 
     /* remove xprt from xprt table */
-    svc_xprt_clear(xprt);
+    svc_xprt_clear(xprt, SVC_XPRT_FLAG_NONE);
 
     /* free state */
     if (xprt->xp_ev)
@@ -160,24 +160,6 @@ void svc_rqst_finalize_xprt(SVCXPRT *xprt)
 
 out:
     return;
-}
-
-static inline void
-sr_rec_release(svc_request_rec *sr_rec, uint32_t flags)
-{
-    uint32_t refcnt;
-
-    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
-        mutex_lock(&sr_rec->mtx);
-
-    refcnt = --(sr_rec->refcnt);
-    mutex_unlock(&sr_rec->mtx);
-
-    if (refcnt == 0) {
-        /* assert sr_rec DESTROYED */
-        mutex_destroy(&sr_rec->mtx);
-        mem_free(sr_rec, sizeof(struct svc_rqst_rec));
-    }
 }
 
 static inline struct svc_rqst_rec *
@@ -397,6 +379,24 @@ consume_ev_sig_nb(int fd)
     return (sig);
 }
 
+static inline void
+sr_rec_release(struct svc_rqst_rec *sr_rec, uint32_t flags)
+{
+    uint32_t refcnt;
+
+    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
+        mutex_lock(&sr_rec->mtx);
+
+    refcnt = --(sr_rec->refcnt);
+    mutex_unlock(&sr_rec->mtx);
+
+    if (refcnt == 0) {
+        /* assert sr_rec DESTROYED */
+        mutex_destroy(&sr_rec->mtx);
+        mem_free(sr_rec, sizeof(struct svc_rqst_rec));
+    }
+}
+
 int
 svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
 {
@@ -494,24 +494,14 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     }
 
     mutex_lock(&xprt->xp_lock);
-
-    /* XXXX fix xprt_unregister */
     if (flags & SVC_RQST_FLAG_XPRT_UREG) {
         if (chan_id != __svc_params->ev_u.evchan.id) {
-            struct svc_rqst_rec *sr_rec2 = ;
-
+            /* xprt_unregister */
+            (void) svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id, xprt,
+                                         SVC_RQST_FLAG_MUTEX_LOCKED);
+            (void) svc_xprt_clear(xprt, SVC_XPRT_FLAG_MUTEX_LOCKED);
         }
-
-        (void) svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id, xprt,
-                                 SVC_RQST_FLAG_NONE);
-
-        /* xprt2 holds the address we displaced, it would be of interest
-         * if xprt2 != xprt */
-        xprt2 = svc_xprt_clear(xprt);
-        
     }
-        xprt_unregister(xprt,
-                        SVC_RQST_FLAG_SREC_LOCKED|SVC_RQST_FLAG_MUTEX_LOCKED);
 
     xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
     if (opr_rbtree_insert(&sr_rec->xprt_q, &xp_ev->node_k)) {
@@ -846,11 +836,20 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
                         ix, ev->data.fd, ev->data.ptr);
 
                 if (ev->data.fd != sr_rec->sv[1]) {
-                    /* TODO: need to lookup xprt */
+                    /* TODO: need to lookup xprt */ /* XXX still needed?? */
                     xprt = (SVCXPRT *) ev->data.ptr;
                     xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
                     if (! (xp_ev->flags & XP_EV_FLAG_BLOCKED)) {
-                        code = xprt->xp_ops2->xp_getreq(xprt);
+                        /* check for valid xprt */
+                        mutex_lock(&xprt->xp_lock);
+                        if ((! (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) &&
+                            (xprt->xp_refcnt > 0)) {
+                            /* XXX take extra ref,  callout will release */
+                            SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
+                            /* ! LOCKED */
+                            code = xprt->xp_ops2->xp_getreq(xprt);
+                        } else
+                            mutex_unlock(&xprt->xp_lock);
                     }
                 } else {
                     /* signalled -- there was a wakeup on ctrl_ev (see
