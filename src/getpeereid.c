@@ -41,7 +41,7 @@ getpeereid(int sock, uid_t *uid, gid_t *gid)
 #if defined(SO_PEERCRED)
 	/* Linux: use getsockopt(SO_PEERCRED) */
 	struct ucred peercred;
-	int32_t so_len = sizeof(peercred);
+	socklen_t so_len = sizeof(peercred);
 
 	if (getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &peercred, &so_len) != 0 ||
 		so_len != sizeof(peercred))

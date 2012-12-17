@@ -487,7 +487,7 @@ clnt_dg_freeres(CLIENT *clnt, xdrproc_t xdr_res, void *res_ptr)
     struct cu_data *cu = CU_DATA((struct cx_data *) clnt->cl_p1);
     XDR *xdrs;
     sigset_t mask, newmask;
-    bool dummy;
+    bool dummy = 0;
 
     /* XXX guard against illegal invocation from libc (will fix) */
     if (! xdr_res)
@@ -504,7 +504,6 @@ clnt_dg_freeres(CLIENT *clnt, xdrproc_t xdr_res, void *res_ptr)
     rpc_dplx_rwc(clnt, rpc_flag_clear);
 
     xdrs->x_op = XDR_FREE;
-    dummy = 0;
     if (xdr_res)
         dummy = (*xdr_res)(xdrs, res_ptr);
 
