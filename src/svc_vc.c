@@ -962,11 +962,9 @@ static enum xprt_stat
 svc_vc_stat(SVCXPRT *xprt)
 {
 	struct cf_conn *cd;
-
-	assert(xprt != NULL);
-
+        if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
+            return (XPRT_DESTROYED);
 	cd = (struct cf_conn *)(xprt->xp_p1);
-
 	if (cd->strm_stat == XPRT_DIED)
 		return (XPRT_DIED);
 	if (! xdrrec_eof(&(cd->xdrs_in)))
@@ -1168,6 +1166,8 @@ svc_vc_rendezvous_ops(SVCXPRT *xprt)
 		    (bool_t (*)(SVCXPRT *, struct rpc_msg *))abort;
 		ops.xp_freeargs =
 		    (bool_t (*)(SVCXPRT *, xdrproc_t, void *))abort,
+		ops.xp_ref = svc_vc_ref;
+		ops.xp_release = svc_vc_release;
 		ops.xp_destroy = svc_vc_destroy;
 		ops2.xp_control = svc_vc_rendezvous_control;
 		ops2.xp_getreq = svc_getreq_default;
@@ -1240,8 +1240,22 @@ svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
 
         mutex_lock(&xprt->xp_lock);
 
-        if (xprt == NULL || xprt->xp_ops == NULL ||
-            xprt->xp_ops->xp_recv != svc_vc_recv)
+        /* invalid xprt (error) */
+        if (xprt == NULL || xprt->xp_ops == NULL) {
+            goto unlock;
+        }
+
+        if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
+            rflag = SVC_XPRT_FOREACH_CLEAR;
+            mutex_unlock(&xprt->xp_lock);
+            (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
+            SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+            acc->ncleaned++;
+            goto out;
+        }
+
+        /* timeout svc_vc xprts only */
+        if (xprt->xp_ops->xp_recv != svc_vc_recv)
             goto unlock;
 
         cd = (struct cf_conn *) xprt->xp_p1;
@@ -1256,8 +1270,8 @@ svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
             }
             goto unlock;
         }
+
         if (acc->tv.tv_sec - cd->last_recv_time.tv_sec > acc->timeout) {
-            /* XXX locking */
             rflag = SVC_XPRT_FOREACH_CLEAR;
             mutex_unlock(&xprt->xp_lock);
             (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
@@ -1288,15 +1302,14 @@ __svc_clean_idle2(int timeout, bool_t cleanblock)
         ++active;
         memset(&acc, 0, sizeof(struct svc_clean_idle_arg));
 	gettimeofday(&acc.tv, NULL);
+        acc.cleanblock = cleanblock;
         acc.timeout = timeout;
 
-        /* XXX refcounting, state? */
         svc_xprt_foreach(svc_clean_idle2_func, (void *) &acc);
 
 	if (timeout == 0 && acc.least_active != NULL) {
             (void) svc_rqst_xprt_unregister(
                 acc.least_active, SVC_RQST_FLAG_NONE);
-            /* __xprt_unregister_unlocked(acc.least_active); */
             __svc_vc_dodestroy(acc.least_active);
             acc.ncleaned++;
 	}

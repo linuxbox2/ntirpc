@@ -127,6 +127,7 @@ typedef struct svc_init_params
     u_long flags;
     u_int max_connections; /* xprts */
     u_int max_events;      /* evchan events */
+    int32_t idle_timeout;
     warnx_t warnx;
 } svc_init_params;
 
@@ -177,7 +178,8 @@ typedef enum xprt_type {
 enum xprt_stat {
 	XPRT_DIED,
 	XPRT_MOREREQS,
-	XPRT_IDLE
+	XPRT_IDLE,
+	XPRT_DESTROYED
 };
 
 struct cf_rendezvous { /* kept in xprt->xp_p1 for rendezvouser */

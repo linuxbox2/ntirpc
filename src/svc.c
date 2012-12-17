@@ -141,6 +141,7 @@ svc_init(svc_init_params * params)
     /* XXX formerly select/fd_set case, now placeholder for new
      * event systems, reworked select, etc. */
 #endif
+    __svc_params->idle_timeout = params->idle_timeout;
 
     /* allow consumers to manage all xprt registration */
     if (params->flags & SVC_INIT_NOREG_XPRTS)

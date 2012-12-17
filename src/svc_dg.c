@@ -344,7 +344,7 @@ svc_dg_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 }
 
 static void
-svc_dg_do_destroy(SVCXPRT *xprt)
+svc_dg_dodestroy(SVCXPRT *xprt)
 {
 	struct svc_dg_data *su = su_data(xprt);
 

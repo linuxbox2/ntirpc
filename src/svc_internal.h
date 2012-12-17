@@ -48,6 +48,8 @@ struct svc_params
         } fd;
     } ev_u;
 
+    int32_t idle_timeout;
+
     u_int max_connections;
     union {
         struct {
