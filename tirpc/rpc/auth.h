@@ -213,13 +213,13 @@ typedef struct __auth {
 static __inline int
 auth_get(AUTH *auth)
 {
-    return atomic_add_uint32_t(&auth->ah_refcnt, 1);
+    return atomic_add_int32_t(&auth->ah_refcnt, 1);
 }
 
 static __inline int
 auth_put(AUTH *auth)
 {
-    return atomic_sub_uint32_t(&auth->ah_refcnt, 1);
+    return atomic_sub_int32_t(&auth->ah_refcnt, 1);
 }
 
 
