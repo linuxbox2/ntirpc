@@ -7,7 +7,7 @@
 
 
 INCLUDES = -I$(top_srcdir)/tirpc -DPORTMAP -DINET6 -DVERSION="\"$(VERSION)\"" \
-		-D_GNU_SOURCE -Wall -pipe  
+		-D_GNU_SOURCE -D_REENTRANT -Wall -pipe  
 
 lib_LTLIBRARIES = libntirpc.la
 
