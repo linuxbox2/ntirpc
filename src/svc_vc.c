@@ -626,6 +626,12 @@ svc_vc_destroy(SVCXPRT *xprt)
     /* XXX prefer LOCKED? (would require lock order change) */
     (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
 
+    /* connection tracking--decrement now, he's dead jim */
+    svc_vc_dec_nconns();
+
+    /* clears xprt from the xprt table (eg, idle scans) */
+    svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
+
     if (refcnt == 0) {
 	__svc_vc_dodestroy(xprt);
     }
@@ -671,8 +677,7 @@ __svc_vc_dodestroy(SVCXPRT *xprt)
 	if (xprt->xp_netid)
 		__free(xprt->xp_netid);
 
-        svc_vc_dec_nconns();
-        svc_rqst_finalize_xprt(xprt);
+        /* permits freeing lock record */
         vc_lock_unref_xprt(xprt);
 
         /* assert: caller has unregistered xprt */
@@ -1243,11 +1248,10 @@ svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
         }
 
         if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
-            rflag = SVC_XPRT_FOREACH_CLEAR;
-            mutex_unlock(&xprt->xp_lock);
-            (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
-            SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-            acc->ncleaned++;
+            /* XXX should not happen--but do no harm */
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "%s: destroyed xprt %p seen in clan idle\n",
+                    __func__, xprt);
             goto out;
         }
 
@@ -1501,7 +1505,7 @@ void svc_vc_destroy_xprt(SVCXPRT * xprt)
     if(cd == NULL)
 	return;
 
-    svc_rqst_finalize_xprt(xprt);
+    svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
     
     XDR_DESTROY(&(cd->xdrs_in));
     XDR_DESTROY(&(cd->xdrs_out));

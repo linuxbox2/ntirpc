@@ -146,17 +146,28 @@ void svc_rqst_init_xprt(SVCXPRT *xprt)
     svc_xprt_set(xprt, SVC_XPRT_FLAG_NONE);
 }
 
-void svc_rqst_finalize_xprt(SVCXPRT *xprt)
+void svc_rqst_finalize_xprt(SVCXPRT *xprt, uint32_t flags)
 {
+
+    uint32_t flags2 = SVC_XPRT_FLAG_NONE;
+
     if (! xprt->xp_ev)
         goto out;
 
+    if (! (flags & SVC_RQST_FLAG_MUTEX_LOCKED)) {
+        flags2 |= SVC_XPRT_FLAG_MUTEX_LOCKED;
+        mutex_lock(&xprt->xp_lock);
+    }
+
     /* remove xprt from xprt table */
-    svc_xprt_clear(xprt, SVC_XPRT_FLAG_NONE);
+    svc_xprt_clear(xprt, flags2);
 
     /* free state */
     if (xprt->xp_ev)
         mem_free(xprt->xp_ev, sizeof(struct svc_xprt_ev));
+
+    if (! (flags & SVC_RQST_FLAG_MUTEX_LOCKED))
+        mutex_unlock(&xprt->xp_lock);
 
 out:
     return;

@@ -193,7 +193,7 @@ freedata:
 	if (xprt) {
             if (su)
                 (void) mem_free(su, sizeof (*su));
-            svc_rqst_finalize_xprt(xprt);
+            svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
             (void) mem_free(xprt, sizeof (SVCXPRT));
 	}
 	return (NULL);
@@ -364,7 +364,6 @@ svc_dg_dodestroy(SVCXPRT *xprt)
 		(void) mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
 	if (xprt->xp_tp)
 		(void) free(xprt->xp_tp);
-        svc_rqst_finalize_xprt(xprt);
         /* call free hook */
         if (xprt->xp_ops2->xp_free_xprt)
             xprt->xp_ops2->xp_free_xprt(xprt);
@@ -414,6 +413,9 @@ svc_dg_destroy(SVCXPRT *xprt)
 
     /* XXX prefer LOCKED? (would require lock order change) */
     (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
+
+    /* clears xprt from the xprt table (eg, idle scans) */
+    svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
 
     /* XXX prefer LOCKED? (would require lock order change) */
     if (refcnt == 0) {

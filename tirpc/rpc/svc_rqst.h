@@ -159,7 +159,7 @@ static inline int rqst_xprt_cmpf(const struct opr_rbtree_node *lhs,
  */
 void svc_rqst_init();
 void svc_rqst_init_xprt(SVCXPRT *xprt);
-void svc_rqst_finalize_xprt(SVCXPRT *xprt);
+void svc_rqst_finalize_xprt(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
                         uint32_t flags);
 int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags);
