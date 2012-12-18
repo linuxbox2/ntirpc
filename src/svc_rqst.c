@@ -356,6 +356,7 @@ evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
     /* unlink from xprt */
     xp_ev->sr_rec = NULL;
 
+    /* channel ref */
     SVC_RELEASE(xprt, SVC_RELEASE_FLAG_LOCKED);
 
     if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
@@ -533,6 +534,9 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
         xprt->xp_flags |= SVC_XPRT_FLAG_GCHAN;
     else
         xprt->xp_flags |= SVC_XPRT_FLAG_EVCHAN;
+
+    /* channel ref */
+    SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
 
     mutex_unlock(&xprt->xp_lock);
     sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED);
