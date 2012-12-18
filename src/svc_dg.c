@@ -398,9 +398,6 @@ svc_dg_release(SVCXPRT *xprt, u_int flags)
     mutex_unlock(&xprt->xp_lock);
 
     if (refcnt == 0) {
-        /* XXX this is a problem--if registration takes a ref, 
-         * then recfnt 0 is not reached */
-        (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
 	svc_dg_dodestroy(xprt);
     }
 }
@@ -415,10 +412,11 @@ svc_dg_destroy(SVCXPRT *xprt)
     xprt->xp_flags |= SVC_XPRT_FLAG_DESTROYED;
     mutex_unlock(&xprt->xp_lock);
 
+    /* XXX prefer LOCKED? (would require lock order change) */
+    (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
+
+    /* XXX prefer LOCKED? (would require lock order change) */
     if (refcnt == 0) {
-        /* XXX this is a problem--if registration takes a ref, 
-         * then recfnt 0 is not reached */
-        (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
 	svc_dg_dodestroy(xprt);
     }
 }

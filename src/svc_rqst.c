@@ -319,6 +319,8 @@ evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
     struct svc_xprt_ev *xp_ev;
     struct opr_rbtree_node *nx;
 
+    /* XXX prefer reverse lock order? */
+
     if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
         mutex_lock(&sr_rec->mtx);
 
