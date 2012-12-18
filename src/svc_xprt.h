@@ -47,7 +47,7 @@ struct svc_xprt_set
 #define SVC_XPRT_FLAG_UNLOCK       0x0004
 #define SVC_XPRT_FLAG_MUTEX_LOCKED 0x0008
 
-SVCXPRT* svc_xprt_set(SVCXPRT *xprt);
+SVCXPRT* svc_xprt_set(SVCXPRT *xprt, uint32_t flags);
 SVCXPRT* svc_xprt_get(int fd);
 SVCXPRT *svc_xprt_clear(SVCXPRT *xprt, uint32_t flags);
 

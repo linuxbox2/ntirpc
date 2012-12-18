@@ -143,7 +143,7 @@ void svc_rqst_init_xprt(SVCXPRT *xprt)
     xprt->xp_ev = xp_ev;
 
     /* reachable */
-    svc_xprt_set(xprt);
+    svc_xprt_set(xprt, SVC_XPRT_FLAG_NONE);
 }
 
 void svc_rqst_finalize_xprt(SVCXPRT *xprt)

@@ -189,6 +189,9 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
     sk.fd_k = xprt->xp_fd;
     t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, sk.fd_k);
 
+    if (! (flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
+        mutex_lock(&xprt->xp_lock);
+
     rwlock_wrlock(&t->lock);
     ov = opr_rbtree_lookup(&t->t, &sk.node_k);
 
@@ -197,18 +200,10 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
         mutex_lock(&srec->mtx);
         /* XXX state flags and refcount here? */
         if (! srec->xprt) {
-
-            if (! (flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
-                mutex_lock(&xprt->xp_lock);
-
             if (xprt->xp_gen == 0) {
                 srec->gen++;
                 xprt->xp_gen = srec->gen;
             }
-
-            if (! (flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
-                mutex_lock(&xprt->xp_lock);
-
             srec->xprt = xprt;
         } else {
             xprt2 = srec->xprt;
@@ -227,18 +222,23 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
         mutex_unlock(&srec->mtx);
     } else {
         /* no srec */
-        xprt2 = svc_xprt_insert(xprt, SVC_XPRT_FLAG_WLOCKED);
+        xprt2 = svc_xprt_insert(
+            xprt, SVC_XPRT_FLAG_WLOCKED|SVC_XPRT_FLAG_MUTEX_LOCKED);
     }
 
 unlock:
     rwlock_unlock(&t->lock);
 
+    /* conditional */
+    if (! (flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
+        mutex_unlock(&xprt->xp_lock);
+
     return (xprt2);
 };
 
-SVCXPRT* svc_xprt_set(SVCXPRT *xprt)
+SVCXPRT* svc_xprt_set(SVCXPRT *xprt, uint32_t flags)
 {
-    return (svc_xprt_set_impl(xprt, SVC_XPRT_FLAG_NONE));
+    return (svc_xprt_set_impl(xprt, flags));
 }
 
 SVCXPRT *svc_xprt_clear(SVCXPRT *xprt, uint32_t flags)
