@@ -537,8 +537,8 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 
     /* channel ref */
     SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
+    /* !LOCKED */
 
-    mutex_unlock(&xprt->xp_lock);
     sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED);
 
     /* register on event mux */
