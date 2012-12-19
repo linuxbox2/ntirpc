@@ -141,43 +141,6 @@ static const char clnt_read_vc_str[] = "read_vc";
 static const char __no_mem_str[] = "out of memory";
 
 /*
- * If event processing on the xprt associated with cl is not
- * currently blocked, do so.
- *
- * Returns TRUE if blocking state was changed, FALSE otherwise.
- *
- * Locked on entry.
- */
-bool_t
-cond_block_events_client(CLIENT *cl)
-{
-    struct cx_data *cx = (struct cx_data *) cl->cl_private;
-    if ((cx->cx_duplex.flags & CT_FLAG_DUPLEX) &&
-        (! (cx->cx_duplex.flags & CT_FLAG_EVENTS_BLOCKED))) {
-        SVCXPRT *xprt = cx->cx_duplex.xprt;
-        assert(xprt);
-        cx->cx_duplex.flags |= CT_FLAG_EVENTS_BLOCKED;
-        (void) svc_rqst_block_events(xprt, SVC_RQST_FLAG_NONE);
-        return (TRUE);
-    }
-    return (FALSE);
-}
-
-/* Restore event processing on the xprt associated with cl.
- * Locked. */
-void
-cond_unblock_events_client(CLIENT *cl)
-{
-    struct cx_data *cx = (struct cx_data *) cl->cl_private;
-    if (cx->cx_duplex.flags & CT_FLAG_EVENTS_BLOCKED) {
-        SVCXPRT *xprt = cx->cx_duplex.xprt;
-        assert(xprt);
-        cx->cx_duplex.flags &= ~CT_FLAG_EVENTS_BLOCKED;
-        (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
-    }
-}
-
-/*
  * Create a client handle for a connection.
  * Default options are set, which the user can change using clnt_control()'s.
  * The rpc/vc package does buffering similar to stdio, so the client
@@ -357,8 +320,7 @@ clnt_vc_call(CLIENT *cl,
     struct cx_data *cx = (struct cx_data *) cl->cl_private;
     struct ct_data *ct = CT_DATA(cx);
     enum clnt_stat result = RPC_SUCCESS;
-    bool_t shipnow, ev_blocked, duplex;
-    SVCXPRT *duplex_xprt = NULL;
+    bool_t shipnow;
     XDR *xdrs = &(ct->ct_xdrs);
     rpc_ctx_t *ctx = NULL;
     int refreshes = 2;
@@ -367,11 +329,6 @@ clnt_vc_call(CLIENT *cl,
     assert(cl != NULL);
     thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
     vc_fd_lock_c(cl, &mask, __FILE__, __LINE__);
-
-    /* XXX presently, we take any svcxprt out of EPOLL during calls,
-     * this is harmless, but it may be less efficient than using the
-     * svc event loop for call wakeups. */
-    ev_blocked = cond_block_events_client(cl);
 
     /* Create a call context.  A lot of TI-RPC decisions need to be
      * looked at, including:
@@ -395,19 +352,6 @@ clnt_vc_call(CLIENT *cl,
      */
     ctx = alloc_rpc_call_ctx(cl, proc, xdr_args, args_ptr, xdr_results,
                              results_ptr, timeout);
-
-    /* two basic strategies are possible here--this stage
-     * assumes the cost of updating the epoll (or select)
-     * registration of the connected transport is preferable
-     * to muxing reply events with call events through the/a
-     * request dispatcher (in the common case).
-     *
-     * the CT_FLAG_EPOLL_ACTIVE is intended to indicate the
-     * inverse strategy, which would place the current thread
-     * on a waitq here (in the common case). */
-    duplex = cx->cx_duplex.flags & CT_FLAG_DUPLEX;
-    if (duplex)
-        duplex_xprt = cx->cx_duplex.xprt;
 
     if (!ct->ct_waitset) {
         /* If time is not within limits, we ignore it. */
@@ -486,20 +430,7 @@ call_again:
                 goto replied;
             break;
         case CALL:
-            /* XXX queue or dispatch.  on return from xp_dispatch,
-             * duplex_msg points to a (potentially new, junk) rpc_msg
-             * object owned by this call path */
-            if (duplex) {
-                struct cf_conn *cd;
-                assert(duplex_xprt);
-                cd = (struct cf_conn *) duplex_xprt->xp_p1;
-                /* XXX Ugh.  Here's another mt-unsafe copy of xid. */
-                cd->x_id = ctx->msg->rm_xid;
-                __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
-                        "%s: call intercepted, dispatching (x_id == %d)\n",
-                        __func__, cd->x_id);
-                duplex_xprt->xp_ops2->xp_dispatch(duplex_xprt, &ctx->msg);
-            }
+            /* XXX not implemented on duplex-7 */
             break;
         default:
             break;
@@ -536,9 +467,6 @@ replied:
     vc_call_return(ctx->error.re_status);
 
 out:
-    if (ev_blocked)
-        cond_unblock_events_client(cl);
-
     if (ctx)
         free_rpc_call_ctx(ctx, RPC_CTX_FLAG_LOCKED);
 
@@ -778,12 +706,6 @@ read_vc(void *ctp, void *buf, int len)
          * use of x_public.  However, we'd like to reserve x_public for
          * application layer code. */
         ctx = (rpc_ctx_t *) ct->ct_xdrs.x_lib;
-
-        /* if ct->ct_duplex.ct_flags & CT_FLAG_DUPLEX, in the current
-         * strategy (cf. clnt_vc_call and the duplex-aware getreq
-         * implementation), we assert that the current thread may safely
-         * block in poll (though we are not constrained to blocking
-         * semantics) */
 
         fd.fd = cx->cx_fd;
         fd.events = POLLIN;

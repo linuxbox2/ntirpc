@@ -535,14 +535,15 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     else
         xprt->xp_flags |= SVC_XPRT_FLAG_EVCHAN;
 
-    /* channel ref */
-    SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
-    /* !LOCKED */
-
     sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED);
 
     /* register on event mux */
     (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
+
+    /* channel ref */
+    SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
+    /* !LOCKED */
+
 
 out:
     return (code);
@@ -674,8 +675,7 @@ svc_rqst_rearm_events(SVCXPRT *xprt, uint32_t  __attribute__((unused)) flags)
     return (0);
 }
 
-int svc_rqst_unblock_events(SVCXPRT *xprt,
-                            uint32_t __attribute__((unused))flags)
+int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
 {
     struct svc_rqst_rec *sr_rec;
     struct svc_xprt_ev *xp_ev;
@@ -685,8 +685,6 @@ int svc_rqst_unblock_events(SVCXPRT *xprt,
 
     xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
     sr_rec = xp_ev->sr_rec;
-
-    assert(sr_rec);
 
     mutex_lock(&sr_rec->mtx);
 
