@@ -98,43 +98,6 @@ bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
 
 extern pthread_mutex_t svc_ctr_lock;
 
-/*
- * If event processing on xprt is not currently blocked, set to
- * blocked. Returns TRUE if blocking state was changed, FALSE otherwise.
- *
- * The shared {CLIENT,SVCXPRT} pair is fd-locked on entry.
- */
-bool_t
-cond_block_events_svc(SVCXPRT *xprt)
-{
-    if (xprt->xp_p4) {
-        CLIENT *cl = (CLIENT *) xprt->xp_p4;
-        struct cx_data *cx = (struct cx_data *) cl->cl_private;
-        if ((cx->cx_duplex.flags & CT_FLAG_DUPLEX) &&
-            (! (cx->cx_duplex.flags & CT_FLAG_EVENTS_BLOCKED))) {
-            cx->cx_duplex.flags |= CT_FLAG_EVENTS_BLOCKED;
-            (void) svc_rqst_block_events(xprt, SVC_RQST_FLAG_NONE);
-            return (TRUE);
-        }
-    }
-    return (FALSE);
-}
-
-/* Restore event processing on xprt.  The shared {CLIENT,SVCXPRT}
- * pair is fd-locked on entry.. */
-void
-cond_unblock_events_svc(SVCXPRT *xprt)
-{
-    if (xprt->xp_p4) {
-        CLIENT *cl = (CLIENT *) xprt->xp_p4;
-        struct cx_data *cx = (struct cx_data *) cl->cl_private;
-        if (cx->cx_duplex.flags & CT_FLAG_EVENTS_BLOCKED) {
-            cx->cx_duplex.flags &= ~CT_FLAG_EVENTS_BLOCKED;
-            (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
-        }
-    }
-}
-
 static void map_ipv4_to_ipv6(sin, sin6)
 struct sockaddr_in *sin;
 struct sockaddr_in6 *sin6;
