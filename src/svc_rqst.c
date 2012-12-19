@@ -352,7 +352,7 @@ evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
                 __func__, xprt);
 
     /* clear events */
-    (void) svc_rqst_unhook_events(xprt, SVC_RQST_FLAG_SREC_LOCKED);
+    (void) svc_rqst_unhook_events(xprt, sr_rec);
 
     xprt->xp_flags &= ~SVC_XPRT_FLAG_EVCHAN;
 
