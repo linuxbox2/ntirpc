@@ -324,6 +324,9 @@ out:
     return (code);
 }
 
+static int svc_rqst_unhook_events(SVCXPRT *xprt, struct svc_rqst_rec *sr_rec);
+static int svc_rqst_hook_events(SVCXPRT *xprt, struct svc_rqst_rec *sr_rec);
+
 static inline void
 evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
 {
@@ -349,7 +352,7 @@ evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
                 __func__, xprt);
 
     /* clear events */
-    (void) svc_rqst_block_events(xprt, SVC_RQST_FLAG_SREC_LOCKED);
+    (void) svc_rqst_unhook_events(xprt, SVC_RQST_FLAG_SREC_LOCKED);
 
     xprt->xp_flags &= ~SVC_XPRT_FLAG_EVCHAN;
 
@@ -535,15 +538,14 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     else
         xprt->xp_flags |= SVC_XPRT_FLAG_EVCHAN;
 
-    sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED);
-
     /* register on event mux */
-    (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
+    (void) svc_rqst_hook_events(xprt, SVC_RQST_FLAG_NONE);
+
+    sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED);
 
     /* channel ref */
     SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
     /* !LOCKED */
-
 
 out:
     return (code);
@@ -571,21 +573,16 @@ unlock:
     return (code);
 }
 
-int
-svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
+static int
+svc_rqst_unhook_events(SVCXPRT *xprt /* LOCKED */,
+                       struct svc_rqst_rec *sr_rec /* LOCKED */)
 {
     struct svc_xprt_ev *xp_ev;
-    struct svc_rqst_rec *sr_rec;
     int code = 0;
 
     cond_init_svc_rqst();
 
     xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
-    sr_rec = xp_ev->sr_rec;
-
-    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
-        mutex_lock(&sr_rec->mtx);
-
     xp_ev->flags |= XP_EV_FLAG_BLOCKED;
 
     switch (sr_rec->ev_type) {
@@ -616,9 +613,6 @@ svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
          * event systems, reworked select, etc. */
         break;
     } /* switch */
-
-    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
-        mutex_unlock(&sr_rec->mtx);
 
     return (0);
 }
@@ -675,19 +669,17 @@ svc_rqst_rearm_events(SVCXPRT *xprt, uint32_t  __attribute__((unused)) flags)
     return (0);
 }
 
-int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
+static int
+svc_rqst_hook_events(SVCXPRT *xprt /* LOCKED */,
+                     struct svc_rqst_rec *sr_rec /* LOCKED */)
 {
-    struct svc_rqst_rec *sr_rec;
+    
     struct svc_xprt_ev *xp_ev;
     int code = 0;
 
     cond_init_svc_rqst();
 
     xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
-    sr_rec = xp_ev->sr_rec;
-
-    mutex_lock(&sr_rec->mtx);
-
     xp_ev->flags &= ~XP_EV_FLAG_BLOCKED;
 
     switch (sr_rec->ev_type) {
@@ -725,8 +717,6 @@ int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags)
     } /* switch */
 
     ev_sig(sr_rec->sv[0], 0); /* send wakeup */
-
-    mutex_unlock(&sr_rec->mtx);
 
     return (0);
 }
@@ -949,4 +939,48 @@ svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags)
 
 out:
     return (code);
+}
+
+/*
+ * Activate a transport handle.
+ */
+void
+xprt_register(SVCXPRT * xprt)
+{
+    int code __attribute__((unused));
+
+    /* Use dedicated event channel if xprt is registered on one, otherwise
+     * use the legacy/global mechanism. */
+    if (xprt->xp_flags & SVC_XPRT_FLAG_EVCHAN) {
+        svc_rqst_hook_events(xprt, SVC_RQST_FLAG_NONE);
+        return;
+    }
+
+    /* Create a legacy/global event channel */
+    if (! (__svc_params->ev_u.evchan.id)) {
+        code = svc_rqst_new_evchan(&(__svc_params->ev_u.evchan.id),
+                                   NULL /* u_data */,
+                                   SVC_RQST_FLAG_CHAN_AFFINITY);
+        assert(code == 0);
+    }
+
+    /* and bind xprt to it */
+    code = svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+                               (SVC_RQST_FLAG_XPRT_GCHAN |
+                                SVC_RQST_FLAG_CHAN_AFFINITY));
+    assert(code == 0);
+
+} /* xprt_register */
+
+void
+xprt_unregister (SVCXPRT * xprt)
+{
+    SVCXPRT *xprt2 __attribute__((unused));
+
+    (void) svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id, xprt,
+                                 SVC_RQST_FLAG_NONE);
+
+    /* xprt2 holds the address we displaced, it would be of interest
+     * if xprt2 != xprt */
+    xprt2 = svc_xprt_clear(xprt, SVC_XPRT_FLAG_NONE);
 }

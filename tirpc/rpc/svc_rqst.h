@@ -165,8 +165,6 @@ int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
 int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags);
 int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
-int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags);
-int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_rearm_events(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt);
 int svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t flags);

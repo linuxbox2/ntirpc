@@ -208,50 +208,6 @@ __xprt_set_raddr(SVCXPRT *xprt, const struct sockaddr_storage *ss)
 }
 
 /*
- * Activate a transport handle.
- */
-void
-xprt_register(SVCXPRT * xprt)
-{
-    int code __attribute__((unused));
-
-    /* Use dedicated event channel if xprt is registered on one, otherwise
-     * use the legacy/global mechanism. */
-    if (xprt->xp_flags & SVC_XPRT_FLAG_EVCHAN) {
-        svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
-        return;
-    }
-
-    /* Create a legacy/global event channel */
-    if (! (__svc_params->ev_u.evchan.id)) {
-        code = svc_rqst_new_evchan(&(__svc_params->ev_u.evchan.id),
-                                   NULL /* u_data */,
-                                   SVC_RQST_FLAG_CHAN_AFFINITY);
-        assert(code == 0);
-    }
-
-    /* and bind xprt to it */
-    code = svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
-                               (SVC_RQST_FLAG_XPRT_GCHAN |
-                                SVC_RQST_FLAG_CHAN_AFFINITY));
-    assert(code == 0);
-
-} /* xprt_register */
-
-void
-xprt_unregister (SVCXPRT * xprt)
-{
-    SVCXPRT *xprt2 __attribute__((unused));
-
-    (void) svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id, xprt,
-                                 SVC_RQST_FLAG_NONE);
-
-    /* xprt2 holds the address we displaced, it would be of interest
-     * if xprt2 != xprt */
-    xprt2 = svc_xprt_clear(xprt, SVC_XPRT_FLAG_NONE);
-}
-
-/*
  * Add a service program to the callout list.
  * The dispatch routine will be called when a rpc request for this
  * program number comes in.
