@@ -404,10 +404,13 @@ svc_dg_release(SVCXPRT *xprt, u_int flags)
 static void
 svc_dg_destroy(SVCXPRT *xprt)
 {
-    uint32_t refcnt;
+    uint32_t refcnt = 0;
 
     mutex_lock(&xprt->xp_lock);
-    refcnt = --(xprt->xp_refcnt);
+    if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
+        mutex_unlock(&xprt->xp_lock);
+        goto out;
+    }
     xprt->xp_flags |= SVC_XPRT_FLAG_DESTROYED;
     mutex_unlock(&xprt->xp_lock);
 
@@ -419,8 +422,11 @@ svc_dg_destroy(SVCXPRT *xprt)
 
     /* XXX prefer LOCKED? (would require lock order change) */
     if (refcnt == 0) {
-	svc_dg_dodestroy(xprt);
+        svc_dg_dodestroy(xprt);
     }
+
+out:
+    return;
 }
 
 extern mutex_t ops_lock;

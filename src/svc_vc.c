@@ -572,17 +572,20 @@ svc_vc_release(SVCXPRT *xprt, u_int flags)
     mutex_unlock(&xprt->xp_lock);
 
     if (refcnt == 0) {
-	__svc_vc_dodestroy(xprt);
+        __svc_vc_dodestroy(xprt);
     }
 }
 
 static void
 svc_vc_destroy(SVCXPRT *xprt)
 {
-    uint32_t refcnt;
+    uint32_t refcnt = 0;
 
     mutex_lock(&xprt->xp_lock);
-    refcnt = --(xprt->xp_refcnt);
+    if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
+        mutex_unlock(&xprt->xp_lock);
+        goto out;
+    }
     xprt->xp_flags |= SVC_XPRT_FLAG_DESTROYED;
     mutex_unlock(&xprt->xp_lock);
 
@@ -596,8 +599,11 @@ svc_vc_destroy(SVCXPRT *xprt)
     svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
 
     if (refcnt == 0) {
-	__svc_vc_dodestroy(xprt);
+        __svc_vc_dodestroy(xprt);
     }
+
+out:
+    return;
 }
 
 static void
