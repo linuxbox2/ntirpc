@@ -615,7 +615,8 @@ svc_vc_destroy(SVCXPRT *xprt)
 
     refcnt = xprt->xp_refcnt;
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%s: prefinalize %p %u", __func__, xprt, refcnt);
+            "%d %s: prefinalize %p %u", __tirpc_dcounter, __func__, xprt,
+            refcnt);
 
     /* clears xprt from the xprt table (eg, idle scans) */
     svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
