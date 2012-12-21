@@ -548,6 +548,8 @@ rendezvous_stat(SVCXPRT *xprt)
 static bool_t
 svc_vc_ref(SVCXPRT *xprt, u_int flags)
 {
+    uint32_t refcnt;
+
     if (! (flags & SVC_REF_FLAG_LOCKED))
         mutex_lock(&xprt->xp_lock);
 
@@ -555,8 +557,12 @@ svc_vc_ref(SVCXPRT *xprt, u_int flags)
         mutex_unlock(&xprt->xp_lock);
         return (false);
     }
-    ++(xprt->xp_refcnt);
+    refcnt = ++(xprt->xp_refcnt);
     mutex_unlock(&xprt->xp_lock);
+
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%s: postref %p %u", __func__, xprt, refcnt);
+
     return (true);
 }
 
@@ -564,6 +570,7 @@ static void
 svc_vc_release(SVCXPRT *xprt, u_int flags)
 {
     uint32_t refcnt;
+    bool run_dtor = false;
 
     if (! (flags & SVC_RELEASE_FLAG_LOCKED))
         mutex_lock(&xprt->xp_lock);
@@ -571,7 +578,14 @@ svc_vc_release(SVCXPRT *xprt, u_int flags)
     refcnt = --(xprt->xp_refcnt);
     mutex_unlock(&xprt->xp_lock);
 
-    if (refcnt == 0) {
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%s: postunref %p %u", __func__, xprt, refcnt);
+
+    if ((xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) &&
+        refcnt == 0) {
+        __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                "%s: refcnt on destroyed %p %u calling __svc_vc_dodestroy",
+                __func__, xprt, refcnt);
         __svc_vc_dodestroy(xprt);
     }
 }
@@ -587,7 +601,11 @@ svc_vc_destroy(SVCXPRT *xprt)
         goto out;
     }
     xprt->xp_flags |= SVC_XPRT_FLAG_DESTROYED;
+    refcnt = --(xprt->xp_refcnt);
     mutex_unlock(&xprt->xp_lock);
+
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%s: preunreg %p %u", __func__, xprt, refcnt);
 
     /* XXX prefer LOCKED? (would require lock order change) */
     (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
@@ -595,10 +613,23 @@ svc_vc_destroy(SVCXPRT *xprt)
     /* connection tracking--decrement now, he's dead jim */
     svc_vc_dec_nconns();
 
+    refcnt = xprt->xp_refcnt;
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%s: prefinalize %p %u", __func__, xprt, refcnt);
+
     /* clears xprt from the xprt table (eg, idle scans) */
     svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
 
+    refcnt = xprt->xp_refcnt;
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%s: postfinalize %p %u", __func__, xprt, refcnt);
+
     if (refcnt == 0) {
+        refcnt = xprt->xp_refcnt;
+        __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                "%s: refcnt %p %u calling __svc_vc_dodestroy", __func__,
+                xprt, refcnt);
+
         __svc_vc_dodestroy(xprt);
     }
 
@@ -972,7 +1003,7 @@ svc_vc_recv(SVCXPRT *xprt, struct rpc_msg *msg)
             return (TRUE);
 	}
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                "%s: xdr_dplx_msg failed (will set dead)");
+                "%s: xdr_dplx_msg failed (will set dead)", __func__);
         cfconn_set_dead(cd);
 	return (FALSE);
 }

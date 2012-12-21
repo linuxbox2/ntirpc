@@ -332,6 +332,7 @@ evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
 {
     struct svc_xprt_ev *xp_ev;
     struct opr_rbtree_node *nx;
+    uint32_t refcnt;
 
     /* XXX prefer reverse lock order? */
 
@@ -358,6 +359,10 @@ evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
 
     /* unlink from xprt */
     xp_ev->sr_rec = NULL;
+
+    refcnt = xprt->xp_refcnt;
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%s: before channel release %p %u", __func__, xprt, refcnt);
 
     /* channel ref */
     SVC_RELEASE(xprt, SVC_RELEASE_FLAG_LOCKED);
@@ -495,6 +500,7 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     struct svc_xprt_ev *xp_ev;
     struct rbtree_x_part *t;
     int code = 0;
+    uint32_t refcnt;
 
     if (chan_id == 0) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
@@ -542,6 +548,10 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     (void) svc_rqst_hook_events(xprt, sr_rec);
 
     sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED);
+
+    refcnt = xprt->xp_refcnt;
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%s: pre channel ref %p %u", __func__, xprt, refcnt);
 
     /* channel ref */
     SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
@@ -796,6 +806,7 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
     int ix, code = 0;
     int timeout_ms = 30*1000;
     int n_events;
+    uint32_t refcnt;
 
     for (;;) {
 
@@ -850,6 +861,12 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
                         if ((! (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) &&
                             (xprt->xp_refcnt > 0)) {
                             /* XXX take extra ref,  callout will release */
+
+                            refcnt = xprt->xp_refcnt;
+                            __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                                    "%s: pre getreq ref %p %u", __func__,
+                                    xprt, refcnt);
+
                             SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
                             /* ! LOCKED */
                             code = xprt->xp_ops2->xp_getreq(xprt);

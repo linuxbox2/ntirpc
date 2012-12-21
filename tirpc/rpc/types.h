@@ -110,6 +110,7 @@ typedef int32_t rpc_inline_t;
 #define TIRPC_DEBUG_FLAG_XDRREC         0x0400000
 #define TIRPC_DEBUG_FLAG_RBTREE         0x0800000
 #define TIRPC_DEBUG_FLAG_RPC_CTX        0x1000000
+#define TIRPC_DEBUG_FLAG_REFCNT         0x2000000
 
 typedef void *(*mem_alloc_t)(size_t);
 typedef void (*mem_free_t)(void *, size_t);
