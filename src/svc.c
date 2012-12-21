@@ -105,6 +105,8 @@ static struct svc_callout *svc_find(rpcprog_t, rpcvers_t,
                                     struct svc_callout **, char *);
 static void __xprt_do_unregister(SVCXPRT * xprt, bool_t dolock);
 
+int __tirpc_dcounter;
+
 /* Package init function.
  * It is intended that applications which must make use of global state
  * will call svc_init() before accessing such state and before executing
@@ -148,6 +150,8 @@ svc_init(svc_init_params * params)
         __svc_params->flags |= SVC_FLAG_NOREG_XPRTS;
 
     __svc_params->initialized = TRUE;
+
+    __tirpc_dcounter = 0;
 
     mutex_unlock(&__svc_params->mtx);
 

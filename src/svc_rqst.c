@@ -362,7 +362,8 @@ evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
 
     refcnt = xprt->xp_refcnt;
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%s: before channel release %p %u", __func__, xprt, refcnt);
+            "%d %s: before channel release %p %u", __tirpc_dcounter,
+            __func__, xprt, refcnt);
 
     /* channel ref */
     SVC_RELEASE(xprt, SVC_RELEASE_FLAG_LOCKED);
@@ -551,7 +552,8 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 
     refcnt = xprt->xp_refcnt;
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%s: pre channel ref %p %u", __func__, xprt, refcnt);
+            "%d %s: pre channel ref %p %u", __tirpc_dcounter, __func__, xprt,
+            refcnt);
 
     /* channel ref */
     SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
@@ -864,7 +866,8 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
 
                             refcnt = xprt->xp_refcnt;
                             __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                                    "%s: pre getreq ref %p %u", __func__,
+                                    "%d %s: pre getreq ref %p %u",
+                                    __tirpc_dcounter, __func__,
                                     xprt, refcnt);
 
                             SVC_REF(xprt, SVC_REF_FLAG_LOCKED);

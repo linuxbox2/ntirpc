@@ -131,10 +131,14 @@ typedef struct tirpc_pkg_params {
 
 extern tirpc_pkg_params __pkg_params;
 
+extern int __tirpc_dcounter;
+
 #define __warnx(flags, ...) \
     do { \
-        if (__pkg_params.debug_flags & (flags)) \
+        if (__pkg_params.debug_flags & (flags)) { \
             __pkg_params.warnx(__VA_ARGS__); \
+            __atomic_add_fetch(&__tirpc_dcounter, 1, __ATOMIC_SEQ_CST); \
+        } \
     } while (0)
 
 /* XXX reliance on zeroed memory is fixed on duplex-8 */

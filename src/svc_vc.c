@@ -561,7 +561,7 @@ svc_vc_ref(SVCXPRT *xprt, u_int flags)
     mutex_unlock(&xprt->xp_lock);
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%s: postref %p %u", __func__, xprt, refcnt);
+            "%d %s: postref %p %u", __tirpc_dcounter, __func__, xprt, refcnt);
 
     return (true);
 }
@@ -579,13 +579,13 @@ svc_vc_release(SVCXPRT *xprt, u_int flags)
     mutex_unlock(&xprt->xp_lock);
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%s: postunref %p %u", __func__, xprt, refcnt);
+            "%d %s: postunref %p %u", __tirpc_dcounter, __func__, xprt, refcnt);
 
     if ((xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) &&
         refcnt == 0) {
         __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                "%s: refcnt on destroyed %p %u calling __svc_vc_dodestroy",
-                __func__, xprt, refcnt);
+                "%d %s: refcnt on destroyed %p %u calling __svc_vc_dodestroy",
+                __tirpc_dcounter, __func__, xprt, refcnt);
         __svc_vc_dodestroy(xprt);
     }
 }
@@ -605,7 +605,7 @@ svc_vc_destroy(SVCXPRT *xprt)
     mutex_unlock(&xprt->xp_lock);
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%s: preunreg %p %u", __func__, xprt, refcnt);
+            "%d %s: preunreg %p %u", __tirpc_dcounter, __func__, xprt, refcnt);
 
     /* XXX prefer LOCKED? (would require lock order change) */
     (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
@@ -622,13 +622,14 @@ svc_vc_destroy(SVCXPRT *xprt)
 
     refcnt = xprt->xp_refcnt;
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%s: postfinalize %p %u", __func__, xprt, refcnt);
+            "%d %s: postfinalize %p %u", __tirpc_dcounter, __func__, xprt,
+            refcnt);
 
     if (refcnt == 0) {
         refcnt = xprt->xp_refcnt;
         __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                "%s: refcnt %p %u calling __svc_vc_dodestroy", __func__,
-                xprt, refcnt);
+                "%d %s: refcnt %p %u calling __svc_vc_dodestroy",
+                __tirpc_dcounter, __func__, xprt, refcnt);
 
         __svc_vc_dodestroy(xprt);
     }
@@ -642,6 +643,12 @@ __svc_vc_dodestroy(SVCXPRT *xprt)
 {
 	struct cf_conn *cd;
 	struct cf_rendezvous *r;
+        uint32_t refcnt;
+
+        refcnt = xprt->xp_refcnt;
+        __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                "%d %s: refcnt %p %u in __svc_vc_dodestroy",
+                __tirpc_dcounter, __func__, xprt, refcnt);
 
 	cd = (struct cf_conn *)xprt->xp_p1;
 
