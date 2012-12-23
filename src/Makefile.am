@@ -55,7 +55,7 @@ libntirpc_la_SOURCES = auth_none.c auth_unix.c authunix_prot.c bindresvport.c \
 	svc_auth_unix.c svc_auth_none.c svc_generic.c svc_raw.c svc_run.c \
 	svc_simple.c svc_vc.c getpeereid.c auth_time.c auth_des.c \
 	authdes_prot.c rbtree.c rbtree_x.c rpc_dplx.c svc_xprt.c svc_rqst.c \
-	rpc_ctx.c vc_generic.c bsd_epoll.c strlcpy.c
+	rpc_ctx.c vc_generic.c strlcpy.c
 
 ## XDR
 libntirpc_la_SOURCES += xdr.c xdr_rec.c xdr_array.c xdr_float.c xdr_mem.c \

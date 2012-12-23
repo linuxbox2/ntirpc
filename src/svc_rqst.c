@@ -53,6 +53,11 @@
 #include <rpc/svc_rqst.h>
 #include "svc_xprt.h"
 
+#if defined(__FreeBSD__)
+#include "bsd_epoll.c"
+#endif
+
+
 /*
  * The TI-RPC instance should be able to reach every registered
  * handler, and potentially each SVCXPRT registered on it.
