@@ -191,7 +191,7 @@ static inline int epoll_create_wr(size_t size, int flags)
 #else
 static inline int epoll_create_wr(size_t size, int flags)
 {
-  return (epoll_create(flags));
+  return (epoll_create1(flags));
 }
 #endif
 
