@@ -3,10 +3,9 @@
 #define NTIRPC_PORTABLE_H
 
 #include <misc/timespec.h>
+#include <misc/os_epoll.h> /* before rpc.h */
 
 #if defined(__FreeBSD__)
-/* EPOLL->kevent shim by Boaz Harrosh */
-#include <misc/epoll.h>
 #include <netinet/in.h>
 
 #define SOL_IP    0
@@ -25,8 +24,6 @@ struct in_pktinfo {
 #endif
 
 #if defined(__linux__)
-
-#include <sys/epoll.h> /* before rpc.h */
 
 /* POSIX clocks */
 #define CLOCK_MONOTONIC_FAST CLOCK_MONOTONIC_COARSE

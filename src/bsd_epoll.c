@@ -1,24 +1,23 @@
 /*
  * bsd_epoll.c - Linux epoll.h emulation via kevent API
  *
- */
-
-#if defined(__FreeBSD__)
-
-/*
- * bsd_epoll.c - Linux epoll.h emulation via kevent API
- *
  * Copyright (c) 2009 Boaz Harrosh <bharrosh@panasas.com>
  * All rights reserved.
  *
  * Inspired by code written by Roman Divacky
  * from the freebsd's linux emulation project at linux_epoll.c file
+ * However none of that code ended up here.
  *
  * description:
  *    This file implements a workable set of the <sys/epoll.h> header file
- *    taken from the gcc-on-linux distribution. The implementation translates
- *    back and forth from epoll calls and constants to Kevent calls and
- *    constants.
+ *    on a linux distribution. The implementation translates back and forth from
+ *    epoll calls and constants to Kevent calls and constants.
+ *
+ *   This file is copyrighted under the "New BSD License" (see below) so it can
+ *   be included in the tirpc library project.
+ *   But I fully expect that if you make any fixes/enhancements to bsd_epoll.c
+ *   you shall send these changes to me for inclusion in the next version.
+ *   (Or I'll hunt your dreams, and you will not have peace)
  *
  * License: "New BSD License"
  *
@@ -44,6 +43,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#if defined(__FreeBSD__)
 
 #include <sys/types.h>
 #include <sys/event.h>
@@ -53,7 +53,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <misc/epoll.h>
+#include <misc/bsd_epoll.h>
 
 /* Create a new epoll file descriptor. */
 int epoll_create(int size)
