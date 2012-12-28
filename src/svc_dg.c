@@ -83,6 +83,8 @@ static bool svc_dg_getargs(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
 static void svc_dg_lock(SVCXPRT *, uint32_t, const char *, int);
 static void svc_dg_unlock(SVCXPRT *, uint32_t, const char *, int);
 static bool svc_dg_freeargs(SVCXPRT *, xdrproc_t, void *);
+static bool_t svc_dg_ref(SVCXPRT *xprt, u_int flags);
+static void svc_dg_release(SVCXPRT *xprt, u_int flags);
 static void svc_dg_destroy(SVCXPRT *);
 static bool svc_dg_control(SVCXPRT *, const u_int, void *);
 static int svc_dg_cache_get(SVCXPRT *, struct rpc_msg *, char **, size_t *);
@@ -151,6 +153,7 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 
     su->su_cache = NULL;
     xprt->xp_flags = SVC_XPRT_FLAG_NONE;
+    xprt->xp_refcnt = 1;
     xprt->xp_fd = fd;
     xprt->xp_p2 = su;
     svc_dg_ops(xprt);
@@ -197,7 +200,7 @@ freedata:
     if (xprt) {
         if (su)
             (void) mem_free(su, sizeof (*su));
-        svc_rqst_finalize_xprt(xprt);
+        svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
         (void) mem_free(xprt, sizeof (SVCXPRT));
     }
     return (NULL);
@@ -374,7 +377,7 @@ svc_dg_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 }
 
 static void
-svc_dg_destroy(SVCXPRT *xprt)
+svc_dg_dodestroy(SVCXPRT *xprt)
 {
     struct svc_dg_data *su = su_data(xprt);
 
@@ -391,11 +394,69 @@ svc_dg_destroy(SVCXPRT *xprt)
     if (xprt->xp_tp)
         (void) free(xprt->xp_tp);
     rpc_dplx_unref((struct rpc_dplx_rec *) xprt->xp_p5, RPC_DPLX_FLAG_NONE);
-    svc_rqst_finalize_xprt(xprt);
     /* call free hook */
     if (xprt->xp_ops2->xp_free_xprt)
         xprt->xp_ops2->xp_free_xprt(xprt);
     (void) mem_free(xprt, sizeof (SVCXPRT));
+}
+
+static bool_t
+svc_dg_ref(SVCXPRT *xprt, u_int flags)
+{
+    if (! (flags & SVC_REF_FLAG_LOCKED))
+        mutex_lock(&xprt->xp_lock);
+
+    if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {        
+        mutex_unlock(&xprt->xp_lock);
+        return (false);
+    }
+    ++(xprt->xp_refcnt);
+    mutex_unlock(&xprt->xp_lock);
+    return (true);
+}
+
+static void
+svc_dg_release(SVCXPRT *xprt, u_int flags)
+{
+    uint32_t refcnt;
+
+    if (! (flags & SVC_RELEASE_FLAG_LOCKED))
+        mutex_lock(&xprt->xp_lock);
+
+    refcnt = --(xprt->xp_refcnt);
+    mutex_unlock(&xprt->xp_lock);
+
+    if (refcnt == 0) {
+	svc_dg_dodestroy(xprt);
+    }
+}
+
+static void
+svc_dg_destroy(SVCXPRT *xprt)
+{
+    uint32_t refcnt = 0;
+
+    mutex_lock(&xprt->xp_lock);
+    if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
+        mutex_unlock(&xprt->xp_lock);
+        goto out;
+    }
+    xprt->xp_flags |= SVC_XPRT_FLAG_DESTROYED;
+    mutex_unlock(&xprt->xp_lock);
+
+    /* XXX prefer LOCKED? (would require lock order change) */
+    (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
+
+    /* clears xprt from the xprt table (eg, idle scans) */
+    svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
+
+    /* XXX prefer LOCKED? (would require lock order change) */
+    if (refcnt == 0) {
+        svc_dg_dodestroy(xprt);
+    }
+
+out:
+    return;
 }
 
 extern mutex_t ops_lock;
@@ -478,7 +539,8 @@ svc_dg_ops(SVCXPRT *xprt)
         ops.xp_unlock = svc_dg_unlock;
         ops.xp_reply = svc_dg_reply;
         ops.xp_freeargs = svc_dg_freeargs;
-        ops.xp_release = svc_dg_destroy;
+        ops.xp_ref = svc_dg_ref;
+        ops.xp_release = svc_dg_release;
         ops.xp_destroy = svc_dg_destroy;
         ops2.xp_control = svc_dg_control;
         ops2.xp_getreq = svc_getreq_default;

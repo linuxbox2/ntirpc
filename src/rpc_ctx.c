@@ -171,6 +171,20 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
         (void) clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
         timespecadd(&ts, &ctx->ctx_u.clnt.timeout);
         code = cond_timedwait(&lk->we.cv, &lk->we.mtx, &ts);
+        /* if we timed out, check for xprt destroyed (no more receives) */
+        if (code == ETIMEDOUT) {
+            SVCXPRT *xprt = xd->rec->hdl.xprt;
+            uint32_t xp_flags;
+            mutex_lock(&xprt->xp_lock);
+            xp_flags = xprt->xp_flags;
+            mutex_unlock(&xprt->xp_lock);
+            if (xp_flags & SVC_XPRT_FLAG_DESTROYED) {
+                /* XXX should also set error.re_why, but the facility is not
+                 * well developed. */
+                ctx->error.re_status = RPC_TIMEDOUT;
+            }
+            goto out;
+        }
     }
     ctx->flags &= ~RPC_CTX_FLAG_SYNCDONE;
 
@@ -188,6 +202,7 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
         break;
     }
 
+out:
     return (code);
 }
 

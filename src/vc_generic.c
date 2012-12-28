@@ -474,9 +474,6 @@ void vc_shared_destroy(struct x_vc_data *xd)
         if (xprt->xp_netid)
             mem_free(xprt->xp_netid, 0);
 
-        svc_vc_dec_nconns();
-        svc_rqst_finalize_xprt(xprt);
-
         /* call free hook */
         if (xprt->xp_ops2->xp_free_xprt)
             xprt->xp_ops2->xp_free_xprt(xprt);

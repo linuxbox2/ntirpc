@@ -379,7 +379,7 @@ clnt_vc_call(CLIENT *clnt,
     enum clnt_stat result = RPC_SUCCESS;
     rpc_ctx_t *ctx = NULL;
     XDR *xdrs;
-    int code, ix, refreshes = 2;
+    int code, refreshes = 2;
     bool ctx_needack = false;
     bool shipnow;
 
@@ -462,28 +462,26 @@ call_again:
     xdrs->x_lib[1] = (void *) ctx; /* transiently thread call ctx */
     
     if (rec->hdl.xprt) {
-        /* XXX unless we are talking to an evil interlocutor, the
-         * reply loop will terminate in 1 step */
-        for (ix = 0; ix < 10; ++ix) {
-            code = rpc_ctx_wait_reply(ctx, RPC_DPLX_FLAG_LOCKED); /* RECV! */
-            /* we can't just loop forever */
-            if (code == ETIMEDOUT)
-                break;
-            /* switch on direction */
-            switch (ctx->msg->rm_direction) {
-            case REPLY:
-	        if (ctx->msg->rm_xid == ctx->xid) {
-		    ctx_needack = true;
-                    goto replied;
-		}
-                break;
-            case CALL:
-                /* in this configuration, we do not expect calls */
-                break;
-            default:
-		break;
+        code = rpc_ctx_wait_reply(ctx, RPC_DPLX_FLAG_LOCKED); /* RECV! */
+        if (code == ETIMEDOUT) {
+            /* UL can retry, we dont.  This CAN indicate xprt destroyed
+             * (error status already set). */
+            goto unlock;
+        }
+        /* switch on direction */
+        switch (ctx->msg->rm_direction) {
+        case REPLY:
+            if (ctx->msg->rm_xid == ctx->xid) {
+                ctx_needack = true;
+                goto replied;
             }
-        } /* for (ix) */
+            break;
+        case CALL:
+            /* in this configuration, we do not expect calls */
+            break;
+        default:
+            break;
+        }
     } else {
         /*
          * Keep receiving until we get a valid transaction id.
@@ -523,6 +521,8 @@ call_again:
      * process header
      */
 replied:
+    /* XXX move into routine which can be called from rpc_ctx_xfer_replymsg,
+     * for (maybe) reduced MP overhead */
     _seterr_reply(ctx->msg, &(ctx->error));
     if (ctx->error.re_status == RPC_SUCCESS) {
         if (! AUTH_VALIDATE(auth, &(ctx->msg->acpted_rply.ar_verf))) {
@@ -551,6 +551,8 @@ replied:
             goto call_again;
         }
     }  /* end of unsuccessful completion */
+
+unlock:
     vc_call_return_rlocked(ctx->error.re_status);
 
 out:

@@ -128,6 +128,7 @@ typedef struct svc_init_params
     u_long flags;
     u_int max_connections; /* xprts */
     u_int max_events;      /* evchan events */
+    int32_t idle_timeout;
     u_int gss_ctx_hash_partitions;
     u_int gss_max_idle_gen;
     u_int gss_max_gc;
@@ -148,6 +149,22 @@ typedef struct svc_init_params
 #define SVC_XPRT_FLAG_EVCHAN             0x0004
 #define SVC_XPRT_FLAG_GCHAN              0x0008
 #define SVC_XPRT_FLAG_COPY               0x0010 /* XXX */
+#define SVC_XPRT_FLAG_DESTROYED          0x0020
+
+
+/*
+ * SVC_REF flags
+ */
+
+#define SVC_REF_FLAG_NONE            0x0000
+#define SVC_REF_FLAG_LOCKED          0x0001
+
+/*
+ * SVC_RELEASE flags
+ */
+
+#define SVC_RELEASE_FLAG_NONE            0x0000
+#define SVC_RELEASE_FLAG_LOCKED          0x0001
 
 /* XXX Ganesha
  * Don't confuse with (currently incomplete) transport type, nee
@@ -166,7 +183,8 @@ typedef enum xprt_type {
 enum xprt_stat {
     XPRT_DIED,
     XPRT_MOREREQS,
-    XPRT_IDLE
+    XPRT_IDLE,
+    XPRT_DESTROYED
 };
 
 struct cf_rendezvous { /* kept in xprt->xp_p1 for rendezvouser */
@@ -202,8 +220,11 @@ typedef struct rpc_svcxprt {
         bool (*xp_freeargs)(struct rpc_svcxprt *, xdrproc_t,
                               void *);
 
+        /* take lifecycle ref */
+        bool (*xp_ref)(struct rpc_svcxprt *, u_int flags);
+
         /* release ref (destroy if no refs) */
-        void (*xp_release)(struct rpc_svcxprt *);
+        void (*xp_release)(struct rpc_svcxprt *, u_int flags);
 
         /* release and mark destroyed */
         void (*xp_destroy)(struct rpc_svcxprt *);
@@ -231,7 +252,7 @@ typedef struct rpc_svcxprt {
         u_int (*xp_rdvs)(struct rpc_svcxprt *, struct rpc_svcxprt *,
                          const u_int, void *);
         /* xprt free hook */
-        bool  (*xp_free_xprt)(struct rpc_svcxprt *);
+        bool (*xp_free_xprt)(struct rpc_svcxprt *);
     } *xp_ops2;
 
     char  *xp_tp; /* transport provider device name */
@@ -240,10 +261,11 @@ typedef struct rpc_svcxprt {
     struct netbuf xp_rtaddr;  /* remote transport address */
 
     /* auth */
-    mutex_t  xp_auth_lock; /* lock owned by installed authenticator */
+    mutex_t xp_auth_lock; /* lock owned by installed authenticator */
 
     /* serialize private data */
     mutex_t xp_lock;
+    uint32_t xp_refcnt;       /* handle refcnt */
 
     void            *xp_ev;          /* event handle */
     void  *xp_p1;   /* private: for use by svc ops */
@@ -251,7 +273,7 @@ typedef struct rpc_svcxprt {
     void  *xp_p3;   /* private: for use by svc lib */
     void  *xp_p4;   /* private: for use by svc lib */
     void            *xp_p5;          /* private: for use by svc lib */
-    void            *xp_u1;           /* client user data */
+    void            *xp_u1;          /* client user data */
     int             xp_si_type;      /* si type */
     int             xp_type;         /* xprt type */
     u_int  xp_flags;  /* flags */
@@ -369,10 +391,15 @@ struct svc_req {
 #define svc_freeargs(xprt, xargs, argsp) \
     (*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
 
-#define SVC_RELEASE(xprt) \
-    (*(xprt)->xp_ops->xp_release)(xprt)
-#define svc_release(xprt) \
-    (*(xprt)->xp_ops->xp_release)(xprt)
+#define SVC_REF(xprt, flags)                    \
+	(*(xprt)->xp_ops->xp_ref)(xprt, flags)
+#define svc_ref(xprt)				\
+    (*(xprt)->xp_ops->xp_ref)(xprt, flags)
+
+#define SVC_RELEASE(xprt, flags)                \
+	(*(xprt)->xp_ops->xp_release)(xprt, flags)
+#define svc_release(xprt, flags)                \
+	(*(xprt)->xp_ops->xp_release)(xprt, flags)
 
 #define SVC_DESTROY(xprt) \
     (*(xprt)->xp_ops->xp_destroy)(xprt)

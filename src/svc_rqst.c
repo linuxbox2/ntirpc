@@ -84,13 +84,15 @@ do { \
     } while (0); \
 }
 
-static inline void SetNonBlock(int fd)
+static inline void
+SetNonBlock(int fd)
 {
     int s_flags = fcntl(fd, F_GETFL, 0);
     (void) fcntl(fd, F_SETFL, (s_flags|O_NONBLOCK));
 }
 
-void svc_rqst_init()
+void
+svc_rqst_init()
 {
     int ix, code = 0;
 
@@ -125,7 +127,8 @@ unlock:
     mutex_unlock(&svc_rqst_set.mtx);
 }
 
-void svc_rqst_init_xprt(SVCXPRT *xprt)
+void
+svc_rqst_init_xprt(SVCXPRT *xprt)
 {
     struct svc_xprt_ev *xp_ev = mem_alloc(sizeof(struct svc_xprt_ev));
 
@@ -139,20 +142,32 @@ void svc_rqst_init_xprt(SVCXPRT *xprt)
     xprt->xp_ev = xp_ev;
 
     /* reachable */
-    svc_xprt_set(xprt);
+    svc_xprt_set(xprt, SVC_XPRT_FLAG_NONE);
 }
 
-void svc_rqst_finalize_xprt(SVCXPRT *xprt)
+void
+svc_rqst_finalize_xprt(SVCXPRT *xprt, uint32_t flags)
 {
+
+    uint32_t flags2 = SVC_XPRT_FLAG_NONE;
+
     if (! xprt->xp_ev)
         goto out;
 
+    if (! (flags & SVC_RQST_FLAG_MUTEX_LOCKED)) {
+        flags2 |= SVC_XPRT_FLAG_MUTEX_LOCKED;
+        mutex_lock(&xprt->xp_lock);
+    }
+
     /* remove xprt from xprt table */
-    svc_xprt_clear(xprt);
+    svc_xprt_clear(xprt, flags2);
 
     /* free state */
     if (xprt->xp_ev)
         mem_free(xprt->xp_ev, sizeof(struct svc_xprt_ev));
+
+    if (! (flags & SVC_RQST_FLAG_MUTEX_LOCKED))
+        mutex_unlock(&xprt->xp_lock);
 
 out:
     return;
@@ -176,8 +191,13 @@ svc_rqst_lookup_chan(uint32_t chan_id, struct rbtree_x_part **ref_t,
         mutex_lock(&t->mtx);
 
     ns = rbtree_x_cached_lookup(&svc_rqst_set.xt, t, &trec.node_k, trec.id_k);
-    if (ns) 
-        sr_rec = opr_containerof(ns, struct svc_rqst_rec, node_k);
+    if (ns) {
+         sr_rec = opr_containerof(ns, struct svc_rqst_rec, node_k);
+        mutex_lock(&sr_rec->mtx);
+        ++(sr_rec->refcnt);
+        if (! (flags & SVC_RQST_FLAG_REC_LOCK))
+            mutex_unlock(&sr_rec->mtx);
+    }
 
     if (flags & SVC_RQST_FLAG_UNLOCK)
         mutex_unlock(&t->mtx);
@@ -235,6 +255,11 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
         sr_rec->ev_u.epoll.events = (struct epoll_event *)
             mem_alloc(
                 sr_rec->ev_u.epoll.max_events*sizeof(struct epoll_event));
+        if (! sr_rec->ev_u.epoll.events) {
+            mem_free(sr_rec, sizeof(struct svc_rqst_rec));
+            code = ENOMEM;
+            goto out;
+        }
 
         /* create epoll fd */
         sr_rec->ev_u.epoll.epoll_fd =
@@ -244,6 +269,9 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
             __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
                     "%s: epoll_create failed (%d)",
                     __func__, errno);
+            mem_free(sr_rec->ev_u.epoll.events,
+                     sr_rec->ev_u.epoll.max_events*sizeof(struct epoll_event));
+            mem_free(sr_rec, sizeof(struct svc_rqst_rec));
             code = EINVAL;
             goto out;
         }
@@ -275,6 +303,7 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
     sr_rec->id_k = n_id;
     sr_rec->states = SVC_RQST_STATE_NONE;
     sr_rec->u_data = u_data;
+    sr_rec->refcnt = 1; /* svc_rqst_set ref */
     sr_rec->gen = 0;
     mutex_init(&sr_rec->mtx, NULL);
     opr_rbtree_init(&sr_rec->xprt_q, rqst_xprt_cmpf /* may be NULL */);
@@ -295,17 +324,22 @@ out:
     return (code);
 }
 
+static int svc_rqst_unhook_events(SVCXPRT *xprt, struct svc_rqst_rec *sr_rec);
+static int svc_rqst_hook_events(SVCXPRT *xprt, struct svc_rqst_rec *sr_rec);
+
 static inline void
-evchan_unreg_impl(struct svc_rqst_rec *sr_rec,
-                                     SVCXPRT *xprt, uint32_t flags)
+evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
 {
     struct svc_xprt_ev *xp_ev;
     struct opr_rbtree_node *nx;
+    uint32_t refcnt;
 
-    if (! (flags & SVC_RQST_FLAG_SREC_LOCK))
-        mutex_lock(&sr_rec->mtx);
+    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
+         mutex_lock(&sr_rec->mtx);
+ 
+    if (! (flags & SVC_RQST_FLAG_MUTEX_LOCKED))
+        mutex_lock(&xprt->xp_lock);
 
-    assert(xprt->xp_ev); /* cf. svc_rqst_init_xprt */
     xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
 
     nx = opr_rbtree_lookup(&sr_rec->xprt_q, &xp_ev->node_k);
@@ -316,16 +350,23 @@ evchan_unreg_impl(struct svc_rqst_rec *sr_rec,
                 "%s: SVCXPRT %p found but cant be removed",
                 __func__, xprt);
 
-    /* clear from event mux */
-    (void) svc_rqst_block_events(xprt, SVC_RQST_FLAG_SREC_LOCKED);
+    /* clear events */
+    (void) svc_rqst_unhook_events(xprt, sr_rec);
 
-    /* XXX lock xprt? */
     xprt->xp_flags &= ~SVC_XPRT_FLAG_EVCHAN;
 
     /* unlink from xprt */
     xp_ev->sr_rec = NULL;
 
-    if (! (flags & SVC_RQST_FLAG_SREC_LOCK))
+    refcnt = xprt->xp_refcnt;
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%d %s: before channel release %p %u", __tirpc_dcounter,
+            __func__, xprt, refcnt);
+
+    /* channel ref */
+    SVC_RELEASE(xprt, SVC_RELEASE_FLAG_LOCKED);
+
+    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
         mutex_unlock(&sr_rec->mtx);
 }
 
@@ -359,6 +400,24 @@ consume_ev_sig_nb(int fd)
     return (sig);
 }
 
+static inline void
+sr_rec_release(struct svc_rqst_rec *sr_rec, uint32_t flags)
+{
+    uint32_t refcnt;
+
+    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
+        mutex_lock(&sr_rec->mtx);
+
+    refcnt = --(sr_rec->refcnt);
+    mutex_unlock(&sr_rec->mtx);
+
+    if (refcnt == 0) {
+        /* assert sr_rec DESTROYED */
+        mutex_destroy(&sr_rec->mtx);
+        mem_free(sr_rec, sizeof(struct svc_rqst_rec));
+    }
+}
+
 int
 svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
 {
@@ -368,7 +427,8 @@ svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
     SVCXPRT *xprt = NULL;
     int code = 0;
 
-    sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_RQST_FLAG_LOCK);
+    sr_rec = svc_rqst_lookup_chan(chan_id, &t,
+                                  SVC_RQST_FLAG_LOCK|SVC_RQST_FLAG_REC_LOCK);
     if (! sr_rec) {
         mutex_unlock(&t->mtx);
         code = ENOENT;
@@ -376,15 +436,14 @@ svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
     }
 
     /* traverse sr_req->xprt_q inorder */
-    mutex_lock(&sr_rec->mtx);
-
+    /* sr_rec LOCKED */
     n = opr_rbtree_first(&sr_rec->xprt_q);
     while (n != NULL) {
         /* indirect on xp_ev */
         xprt = opr_containerof(n, struct svc_xprt_ev, node_k)->xprt;
         /* stop processing events */
         evchan_unreg_impl(sr_rec, xprt,
-                          (SVC_RQST_FLAG_LOCK | SVC_RQST_FLAG_SREC_LOCK));
+                          (SVC_RQST_FLAG_LOCK|SVC_RQST_FLAG_SREC_LOCKED));
 
         /* wake up*/
         ev_sig(sr_rec->sv[0], 0);
@@ -426,9 +485,7 @@ svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
     }
     sr_rec->states = SVC_RQST_STATE_DESTROYED;
     sr_rec->id_k = 0; /* no chan */
-    mutex_unlock(&sr_rec->mtx);
-    mutex_destroy(&sr_rec->mtx);
-    mem_free(sr_rec, sizeof(struct svc_rqst_rec));
+    sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED);
 
 out:
     return (code);
@@ -440,6 +497,7 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     struct svc_rqst_rec *sr_rec;
     struct svc_xprt_ev *xp_ev;
     struct rbtree_x_part *t;
+    uint32_t refcnt;
     int code = 0;
 
     if (chan_id == 0) {
@@ -448,19 +506,24 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
         goto out;
     }
 
-    sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_RQST_FLAG_LOCK);
+    sr_rec = svc_rqst_lookup_chan(chan_id, &t,
+                                  SVC_RQST_FLAG_LOCK|SVC_RQST_FLAG_REC_LOCK);
     if (! sr_rec) {
         mutex_unlock(&t->mtx);
         code = ENOENT;
         goto out;
     }
 
-    mutex_lock(&sr_rec->mtx);
-
-    if (flags & SVC_RQST_FLAG_XPRT_UREG)
-        xprt_unregister(xprt);
-
-    assert(xprt->xp_ev); /* cf. svc_rqst_init_xprt */
+    mutex_lock(&xprt->xp_lock);
+    if (flags & SVC_RQST_FLAG_XPRT_UREG) {
+        if (chan_id != __svc_params->ev_u.evchan.id) {
+            /* xprt_unregister */
+            (void) svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id, xprt,
+                                         SVC_RQST_FLAG_MUTEX_LOCKED);
+            (void) svc_xprt_clear(xprt, SVC_XPRT_FLAG_MUTEX_LOCKED);
+        }
+    }
+ 
     xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
     if (opr_rbtree_insert(&sr_rec->xprt_q, &xp_ev->node_k)) {
         /* shouldn't happen */
@@ -468,24 +531,30 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
                 "%s: SVCXPRT %p already registered",
                 __func__, xprt);
     }
+    mutex_unlock(&t->mtx);
 
     /* link from xprt */
     xp_ev->sr_rec = sr_rec;
 
-    /* XXXX check that we don't accidentally require EVCHAN to be
-     * discretionary EVCHAN */
     /* mark xprt */
     if (xprt->xp_flags & SVC_RQST_FLAG_XPRT_GCHAN)
         xprt->xp_flags |= SVC_XPRT_FLAG_GCHAN;
     else
         xprt->xp_flags |= SVC_XPRT_FLAG_EVCHAN;
 
-    mutex_unlock(&sr_rec->mtx);
+    /* register on event channel */
+    (void) svc_rqst_hook_events(xprt, sr_rec);
 
-    /* register on event mux */
-    (void) svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
+    sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED);
 
-    mutex_unlock(&t->mtx);
+    refcnt = xprt->xp_refcnt;
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%d %s: pre channel ref %p %u", __tirpc_dcounter, __func__, xprt,
+            refcnt);
+
+    /* channel ref */
+    SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
+    /* !LOCKED */
 
 out:
     return (code);
@@ -508,24 +577,21 @@ svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
     
 unlock:
     mutex_unlock(&t->mtx);
+    if (sr_rec)
+        sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED);
     return (code);
 }
 
-int
-svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
+static int
+svc_rqst_unhook_events(SVCXPRT *xprt /* LOCKED */,
+                       struct svc_rqst_rec *sr_rec /* LOCKED */)
 {
     struct svc_xprt_ev *xp_ev;
-    struct svc_rqst_rec *sr_rec;
     int code = 0;
 
     cond_init_svc_rqst();
 
     xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
-    sr_rec = xp_ev->sr_rec;
-
-    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
-        mutex_lock(&sr_rec->mtx);
-
     xp_ev->flags |= XP_EV_FLAG_BLOCKED;
 
     switch (sr_rec->ev_type) {
@@ -556,9 +622,6 @@ svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags)
          * event systems, reworked select, etc. */
         break;
     } /* switch */
-
-    if (! (flags & SVC_RQST_FLAG_SREC_LOCKED))
-        mutex_unlock(&sr_rec->mtx);
 
     return (0);
 }
@@ -615,22 +678,17 @@ svc_rqst_rearm_events(SVCXPRT *xprt, uint32_t  __attribute__((unused)) flags)
     return (0);
 }
 
-int svc_rqst_unblock_events(SVCXPRT *xprt,
-                            uint32_t __attribute__((unused))flags)
+static int
+svc_rqst_hook_events(SVCXPRT *xprt /* LOCKED */,
+                     struct svc_rqst_rec *sr_rec /* LOCKED */)
 {
-    struct svc_rqst_rec *sr_rec;
+
     struct svc_xprt_ev *xp_ev;
     int code = 0;
 
     cond_init_svc_rqst();
 
     xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
-    sr_rec = xp_ev->sr_rec;
-
-    assert(sr_rec);
-
-    mutex_lock(&sr_rec->mtx);
-
     xp_ev->flags &= ~XP_EV_FLAG_BLOCKED;
 
     switch (sr_rec->ev_type) {
@@ -668,8 +726,6 @@ int svc_rqst_unblock_events(SVCXPRT *xprt,
     } /* switch */
 
     ev_sig(sr_rec->sv[0], 0); /* send wakeup */
-
-    mutex_unlock(&sr_rec->mtx);
 
     return (0);
 }
@@ -750,6 +806,7 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
     int ix, code = 0;
     int timeout_ms = 30*1000;
     int n_events;
+    uint32_t refcnt;
 
     for (;;) {
 
@@ -795,11 +852,25 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
                         ix, ev->data.fd, ev->data.ptr);
 
                 if (ev->data.fd != sr_rec->sv[1]) {
-                    /* TODO: need to lookup xprt */
                     xprt = (SVCXPRT *) ev->data.ptr;
                     xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
                     if (! (xp_ev->flags & XP_EV_FLAG_BLOCKED)) {
-                        code = xprt->xp_ops2->xp_getreq(xprt);
+                        /* check for valid xprt */
+                        mutex_lock(&xprt->xp_lock);
+                        if ((! (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) &&
+                            (xprt->xp_refcnt > 0)) {
+                            /* XXX take extra ref,  callout will release */
+                            refcnt = xprt->xp_refcnt;
+                            __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                                    "%d %s: pre getreq ref %p %u",
+                                    __tirpc_dcounter, __func__,
+                                    xprt, refcnt);
+
+                            SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
+                            /* ! LOCKED */
+                            code = xprt->xp_ops2->xp_getreq(xprt);
+                        } else
+                            mutex_unlock(&xprt->xp_lock);
                     }
                 } else {
                     /* signalled -- there was a wakeup on ctrl_ev (see
@@ -886,4 +957,38 @@ svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags)
 
 out:
     return (code);
+}
+
+/*
+ * Activate a transport handle.
+ */
+void
+xprt_register(SVCXPRT *xprt)
+{
+    int code = 0;
+
+    /* Create a legacy/global event channel */
+    if (! (__svc_params->ev_u.evchan.id)) {
+        code = svc_rqst_new_evchan(&(__svc_params->ev_u.evchan.id),
+                                   NULL /* u_data */,
+                                   SVC_RQST_FLAG_CHAN_AFFINITY);
+    }
+
+    /* and bind xprt to it */
+    code = svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+                               (SVC_RQST_FLAG_XPRT_GCHAN |
+                                SVC_RQST_FLAG_CHAN_AFFINITY));
+} /* xprt_register */
+
+void
+xprt_unregister (SVCXPRT *xprt)
+{
+    SVCXPRT *xprt2 __attribute__((unused));
+
+    (void) svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id, xprt,
+                                 SVC_RQST_FLAG_NONE);
+
+    /* xprt2 holds the address we displaced, it would be of interest
+     * if xprt2 != xprt */
+    xprt2 = svc_xprt_clear(xprt, SVC_XPRT_FLAG_NONE);
 }

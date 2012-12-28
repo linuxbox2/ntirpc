@@ -106,6 +106,8 @@ static struct svc_callout *svc_find(rpcprog_t, rpcvers_t,
                                     struct svc_callout **, char *);
 static void __xprt_do_unregister(SVCXPRT * xprt, bool dolock);
 
+uint32_t __tirpc_dcounter;
+
 /* Package init function.
  * It is intended that applications which must make use of global state
  * will call svc_init() before accessing such state and before executing
@@ -142,6 +144,7 @@ svc_init(svc_init_params * params)
     /* XXX formerly select/fd_set case, now placeholder for new
      * event systems, reworked select, etc. */
 #endif
+    __svc_params->idle_timeout = params->idle_timeout;
 
     /* allow consumers to manage all xprt registration */
     if (params->flags & SVC_INIT_NOREG_XPRTS)
@@ -161,6 +164,8 @@ svc_init(svc_init_params * params)
         __svc_params->gss.max_gc = params->gss_max_gc;
     else
         __svc_params->gss.max_gc = 200;
+
+    __tirpc_dcounter = 0;
 
     __svc_params->initialized = TRUE;
 
@@ -229,67 +234,6 @@ __xprt_set_raddr(SVCXPRT *xprt, const struct sockaddr_storage *ss)
         xprt->xp_addrlen = sizeof (struct sockaddr);
         break;
     }
-}
-
-/*
- * Activate a transport handle.
- */
-void
-xprt_register(SVCXPRT * xprt)
-{
-    int code __attribute__((unused));
-
-    /* Use dedicated event channel if xprt is registered on one, otherwise
-     * use the legacy/global mechanism. */
-    if (xprt->xp_flags & SVC_XPRT_FLAG_EVCHAN) {
-        svc_rqst_unblock_events(xprt, SVC_RQST_FLAG_NONE);
-        return;
-    }
-
-    /* Create a legacy/global event channel */
-    if (! (__svc_params->ev_u.evchan.id)) {
-        code = svc_rqst_new_evchan(&(__svc_params->ev_u.evchan.id),
-                                   NULL /* u_data */,
-                                   SVC_RQST_FLAG_CHAN_AFFINITY);
-        assert(code == 0);
-    }
-
-    /* and bind xprt to it */
-    code = svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
-                               (SVC_RQST_FLAG_XPRT_GCHAN |
-                                SVC_RQST_FLAG_CHAN_AFFINITY));
-    assert(code == 0);
-
-} /* xprt_register */
-
-void
-xprt_unregister (SVCXPRT * xprt)
-{
-    __xprt_do_unregister(xprt, TRUE);
-}
-
-void
-__xprt_unregister_unlocked (SVCXPRT * xprt)
-{
-    __xprt_do_unregister (xprt, FALSE);
-}
-
-/*
- * De-activate a transport handle.
- */
-static void
-__xprt_do_unregister(SVCXPRT *xprt, bool dolock __attribute__((unused)))
-{
-    SVCXPRT *xprt2 __attribute__((unused));
-
-    assert (xprt != NULL);
-
-    (void) svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id, xprt,
-                                 SVC_RQST_FLAG_NONE);
-
-    /* xprt2 holds the address we displaced, it would be of interest
-     * if xprt2 != xprt */
-    xprt2 = svc_xprt_clear(xprt);
 }
 
 /*

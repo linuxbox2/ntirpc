@@ -86,6 +86,7 @@ struct svc_rqst_rec
     void *u_data; /* user-installable opaque data */
     struct opr_rbtree xprt_q; /* sorted list of xprt handles */
     struct opr_rbtree_node node_k;
+    uint32_t refcnt;
     uint64_t gen; /* generation number */
     mutex_t mtx;
 };
@@ -157,20 +158,17 @@ static inline int rqst_xprt_cmpf(const struct opr_rbtree_node *lhs,
  */
 void svc_rqst_init();
 void svc_rqst_init_xprt(SVCXPRT *xprt);
-void svc_rqst_finalize_xprt(SVCXPRT *xprt);
+void svc_rqst_finalize_xprt(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
                         uint32_t flags);
 int svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags);
 int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
-int svc_rqst_block_events(SVCXPRT *xprt, uint32_t flags);
-int svc_rqst_unblock_events(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_rearm_events(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt);
 int svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags);
 int svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags);
-void svc_rqst_finalize_xprt(SVCXPRT *xprt);
 
 /* xprt/connection rendezvous callout */
 typedef int (*svc_rqst_rendezvous_t)
@@ -192,8 +190,9 @@ int svc_rqst_foreach_xprt(uint32_t chan_id, svc_rqst_xprt_each_func_t each_f,
 #define SVC_RQST_FLAG_UNLOCK          0x00004
 #define SVC_RQST_FLAG_EPOLL           0x00008
 #define SVC_RQST_FLAG_FDSET           0x00010
-#define SVC_RQST_FLAG_SREC_LOCK       0x00020
-#define SVC_RQST_FLAG_SREC_LOCKED     0x00040
+#define SVC_RQST_FLAG_SREC_LOCKED     0x00020
+#define SVC_RQST_FLAG_MUTEX_LOCKED    0x00040
+#define SVC_RQST_FLAG_REC_LOCK        0x00080
 
 #define SVC_RQST_FLAG_CHAN_AFFINITY   0x01000 /* bind new conn to parent chan */
 #define SVC_RQST_FLAG_CHAN_ACCEPT_CB  0x02000 /* make rendezvous callout? */

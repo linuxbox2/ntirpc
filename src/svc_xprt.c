@@ -58,11 +58,6 @@ static struct svc_xprt_set svc_xprt_set_ = {
     } /* xt */
 };
 
-#define SVC_XPRT_FLAG_NONE       0x0000
-#define SVC_XPRT_FLAG_CLEAR      0x0001
-#define SVC_XPRT_FLAG_WLOCKED    0x0002
-#define SVC_XPRT_FLAG_UNLOCK     0x0004
-
 static inline int
 svc_xprt_fd_cmpf(const struct opr_rbtree_node *lhs,
                  const struct opr_rbtree_node *rhs)
@@ -141,9 +136,11 @@ svc_xprt_insert(SVCXPRT *xprt, uint32_t flags)
     struct rbtree_x_part *t;
     struct svc_xprt_rec sk, *srec;
     struct opr_rbtree_node *nv;
-    SVCXPRT *xprt2 = NULL;
 
     cond_init_svc_xprt();
+
+    if (! (flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
+        mutex_lock(&xprt->xp_lock);
 
     sk.fd_k = xprt->xp_fd;
     t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, xprt->xp_fd);
@@ -171,18 +168,24 @@ svc_xprt_insert(SVCXPRT *xprt, uint32_t flags)
     if (flags & SVC_XPRT_FLAG_UNLOCK)
         rwlock_unlock(&t->lock);
 
-    return (xprt2);
+    if (! (flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
+        mutex_unlock(&xprt->xp_lock);
+
+    return (NULL);
 }
 
 static inline SVCXPRT *
 svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
 {
-    SVCXPRT *xprt2 = NULL;
     struct rbtree_x_part *t;
     struct svc_xprt_rec sk, *srec;
     struct opr_rbtree_node *ov;
+    SVCXPRT *xprt2 = NULL;
 
     cond_init_svc_xprt();
+
+    if (! (flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
+        mutex_lock(&xprt->xp_lock);
 
     sk.fd_k = xprt->xp_fd;
     t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, sk.fd_k);
@@ -217,25 +220,31 @@ svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
         mutex_unlock(&srec->mtx);
     } else {
         /* no srec */
-        xprt2 = svc_xprt_insert(xprt, SVC_XPRT_FLAG_WLOCKED);
+        xprt2 =
+            svc_xprt_insert(xprt,
+                            SVC_XPRT_FLAG_WLOCKED|SVC_XPRT_FLAG_MUTEX_LOCKED);
     }
 
 unlock:
     rwlock_unlock(&t->lock);
 
+    /* conditional */
+    if (! (flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
+        mutex_unlock(&xprt->xp_lock);
+
     return (xprt2);
 };
 
 SVCXPRT *
-svc_xprt_set(SVCXPRT *xprt)
+svc_xprt_set(SVCXPRT *xprt, uint32_t flags)
 {
-    return (svc_xprt_set_impl(xprt, SVC_XPRT_FLAG_NONE));
+    return (svc_xprt_set_impl(xprt, flags));
 }
 
 SVCXPRT *
-svc_xprt_clear(SVCXPRT *xprt)
+svc_xprt_clear(SVCXPRT *xprt, uint32_t flags)
 {
-    return (svc_xprt_set_impl(xprt, SVC_XPRT_FLAG_CLEAR));
+    return (svc_xprt_set_impl(xprt, flags|SVC_XPRT_FLAG_CLEAR));
 }
 
 SVCXPRT *
