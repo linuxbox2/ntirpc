@@ -448,21 +448,10 @@ void vc_shared_destroy(struct x_vc_data *xd)
                 (void)close(xprt->xp_fd);
         }
 
-        switch (xprt->xp_type) {
-        case XPRT_TCP_RENDEZVOUS:
-            /* rendezvous socket */
-        {
-            struct cf_rendezvous *rdvs = (struct cf_rendezvous *)xprt->xp_p1;
-            mem_free(rdvs, sizeof (struct cf_rendezvous));
-        }
-            break;
-        default:
-            /* request socket */
-            if (! xdrs_destroyed) {
-                XDR_DESTROY(&(xd->shared.xdrs_in));
-                XDR_DESTROY(&(xd->shared.xdrs_out));
-            }
-            break;
+        /* request socket */
+        if (! xdrs_destroyed) {
+            XDR_DESTROY(&(xd->shared.xdrs_in));
+            XDR_DESTROY(&(xd->shared.xdrs_out));
         }
 
         if (xprt->xp_rtaddr.buf)
