@@ -186,11 +186,11 @@ static inline SVCXPRT* svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
 
     cond_init_svc_xprt();
 
-    sk.fd_k = xprt->xp_fd;
-    t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, sk.fd_k);
-
     if (! (flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
         mutex_lock(&xprt->xp_lock);
+
+    sk.fd_k = xprt->xp_fd;
+    t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, sk.fd_k);
 
     rwlock_wrlock(&t->lock);
     ov = opr_rbtree_lookup(&t->t, &sk.node_k);

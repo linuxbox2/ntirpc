@@ -1246,52 +1246,52 @@ svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
     struct svc_clean_idle_arg *acc = (struct svc_clean_idle_arg *) arg;
     uint32_t rflag = SVC_XPRT_FOREACH_NONE;
 
-    if (TRUE) { /* flag in __svc_params->ev_u.epoll? */
+    if (!acc->cleanblock)
+        goto out;
 
-        mutex_lock(&xprt->xp_lock);
+    mutex_lock(&xprt->xp_lock);
 
-        /* invalid xprt (error) */
-        if (xprt == NULL || xprt->xp_ops == NULL) {
-            goto unlock;
+    /* XXX can this happen? */
+    if (xprt->xp_ops == NULL) {
+        goto unlock;
+    }
+
+    if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
+        /* XXX should not happen--but do no harm */
+        __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                "%s: destroyed xprt %p seen in clan idle\n",
+                __func__, xprt);
+        goto unlock;
+    }
+
+    /* timeout svc_vc xprts only */
+    if (xprt->xp_ops->xp_recv != svc_vc_recv)
+        goto unlock;
+
+    cd = (struct cf_conn *) xprt->xp_p1;
+    if (!acc->cleanblock && !cd->nonblock)
+        goto unlock;
+
+    if (acc->timeout == 0) {
+        timersub(&acc->tv, &cd->last_recv_time, &tdiff);
+        if (timercmp(&tdiff, &acc->tmax, >)) {
+            acc->tmax = tdiff;
+            acc->least_active = xprt;
         }
+        goto unlock;
+    }
 
-        if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
-            /* XXX should not happen--but do no harm */
-            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                    "%s: destroyed xprt %p seen in clan idle\n",
-                    __func__, xprt);
-            goto out;
-        }
-
-        /* timeout svc_vc xprts only */
-        if (xprt->xp_ops->xp_recv != svc_vc_recv)
-            goto unlock;
-
-        cd = (struct cf_conn *) xprt->xp_p1;
-        if (!acc->cleanblock && !cd->nonblock)
-            goto unlock;
-
-        if (acc->timeout == 0) {
-            timersub(&acc->tv, &cd->last_recv_time, &tdiff);
-            if (timercmp(&tdiff, &acc->tmax, >)) {
-                acc->tmax = tdiff;
-                acc->least_active = xprt;
-            }
-            goto unlock;
-        }
-
-        if (acc->tv.tv_sec - cd->last_recv_time.tv_sec > acc->timeout) {
-            rflag = SVC_XPRT_FOREACH_CLEAR;
-            mutex_unlock(&xprt->xp_lock);
-            (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
-            SVC_DESTROY(xprt);
-            acc->ncleaned++;
-            goto out;
-        }
-
-    unlock:
+    if (acc->tv.tv_sec - cd->last_recv_time.tv_sec > acc->timeout) {
+        rflag = SVC_XPRT_FOREACH_CLEAR;
         mutex_unlock(&xprt->xp_lock);
-    } /* TRUE */
+        SVC_DESTROY(xprt);
+        acc->ncleaned++;
+        goto out;
+    }
+
+unlock:
+    mutex_unlock(&xprt->xp_lock);
+
 out:
     return (rflag);
 }
