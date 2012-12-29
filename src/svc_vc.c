@@ -867,6 +867,7 @@ svc_vc_release(SVCXPRT *xprt, u_int flags)
                     "%d %s: xd_refcnt on destroyed %p %u omit "
                     "vc_shared_destroy",
                     __tirpc_dcounter, __func__, xprt, xd_refcnt);
+            mutex_unlock(&rec->mtx);
         }
     }
     else
@@ -930,10 +931,8 @@ svc_vc_destroy(SVCXPRT *xprt)
                 "%d %s: %p xp_refcnt %u xd_refcnt %u calling vc_shared_destroy",
                 __tirpc_dcounter, __func__, xprt, xp_refcnt, xd_refcnt);
         vc_shared_destroy(xd); /* RECLOCKED */
-    } else {
-        if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
-            mutex_unlock(&rec->mtx);
-    }
+    } else
+        mutex_lock(&rec->mtx);
 
 out:
     return;
