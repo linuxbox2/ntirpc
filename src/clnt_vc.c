@@ -86,7 +86,8 @@ static void clnt_vc_geterr(CLIENT *, struct rpc_err *);
 static bool clnt_vc_freeres(CLIENT *, xdrproc_t, void *);
 static void clnt_vc_abort(CLIENT *);
 static bool clnt_vc_control(CLIENT *, u_int, void *);
-static void clnt_vc_release(CLIENT *);
+static bool clnt_vc_ref(CLIENT *, u_int);
+static void clnt_vc_release(CLIENT *, u_int);
 static void clnt_vc_destroy(CLIENT *);
 static struct clnt_ops *clnt_vc_ops(void);
 static bool time_not_ok(struct timeval *);
@@ -197,13 +198,14 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
         goto err;
     }
 
-    /* if a clnt handle exists, return it ref'd (rec is ref'd) */
+    /* if a clnt handle exists, return it ref'd */
     if (! (oflags & RPC_DPLX_LKP_OFLAG_ALLOC)) {
         if (rec->hdl.clnt) {
             xd = (struct x_vc_data *) rec->hdl.clnt->cl_p1;
             /* dont return destroyed clients */
             if (! (xd->flags & X_VC_DATA_FLAG_CLNT_DESTROYED)) {
                 clnt = rec->hdl.clnt;
+                CLNT_REF(clnt, CLNT_REF_FLAG_NONE);
             }
             /* return extra ref */
             if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
@@ -220,6 +222,10 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
         rpc_createerr.cf_error.re_errno = errno;
         goto err;
     }
+
+    mutex_init(&clnt->cl_lock, NULL);
+    clnt->cl_flags = CLNT_FLAG_NONE;
+    clnt->cl_refcnt = 1;
 
     /* other-direction shared state? */
     if (rec->hdl.xprt) {
@@ -320,9 +326,6 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
 
     /* make reachable from rec */
     rec->hdl.clnt = clnt;
-
-    /* inc shared refcnt */
-    ++(xd->refcnt);
 
     /* release rec */
     mutex_unlock(&rec->mtx);
@@ -744,42 +747,114 @@ unlock:
     return (rslt);
 }
 
-static void
-clnt_vc_release(CLIENT *clnt)
+static bool
+clnt_vc_ref(CLIENT *clnt, u_int flags)
 {
-    struct x_vc_data *xd = (struct x_vc_data *) clnt->cl_p1;
-    struct rpc_dplx_rec *rec = xd->rec;
+    uint32_t refcnt;
 
-    mutex_lock(&rec->mtx);
+    if (! (flags & CLNT_REF_FLAG_LOCKED))
+        mutex_lock(&clnt->cl_lock);
 
-    /* if shared refcnt drops to 0, do shared destroy */
-    --xd->refcnt;
-    if (xd->refcnt == 0) {
-        vc_shared_destroy(xd); /* RECLOCKED */
-    } else {
-        if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
-            mutex_unlock(&rec->mtx);
+    if (clnt->cl_flags & CLNT_FLAG_DESTROYED) {        
+        mutex_unlock(&clnt->cl_lock);
+        return (false);
     }
+    refcnt = ++(clnt->cl_refcnt);
+    mutex_unlock(&clnt->cl_lock);
+
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%d %s: postref %p %u", __tirpc_dcounter, __func__, clnt, refcnt);
+
+    return (true);
+}
+
+static void
+clnt_vc_release(CLIENT *clnt, u_int flags)
+{
+    uint32_t cl_refcnt;
+
+    if (! (flags & CLNT_RELEASE_FLAG_LOCKED))
+        mutex_lock(&clnt->cl_lock);
+
+    cl_refcnt = --(clnt->cl_refcnt);
+
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%d %s: postunref %p cl_refcnt %u",
+            __tirpc_dcounter, __func__, clnt, cl_refcnt);
+
+    /* conditional destroy */
+    if ((clnt->cl_flags & CLNT_FLAG_DESTROYED) &&
+        (cl_refcnt == 0)) {
+ 
+        struct x_vc_data *xd = (struct x_vc_data *) clnt->cl_p1;
+        struct rpc_dplx_rec *rec = xd->rec;
+        uint32_t xd_refcnt;
+
+        mutex_unlock(&clnt->cl_lock);
+
+        mutex_lock(&rec->mtx);
+        xd_refcnt = --(xd->refcnt);
+
+        if (xd_refcnt == 0) {
+            __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                    "%d %s: xd_refcnt %u on destroyed %p %u calling "
+                    "vc_shared_destroy",
+                    __tirpc_dcounter, __func__, clnt, cl_refcnt);
+            vc_shared_destroy(xd); /* RECLOCKED */
+        } else {
+            __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                    "%d %s: xd_refcnt on destroyed %p %u omit "
+                    "vc_shared_destroy",
+                    __tirpc_dcounter, __func__, clnt, cl_refcnt);
+            mutex_unlock(&rec->mtx);
+        }
+    }
+    else
+        mutex_unlock(&clnt->cl_lock);
 }
 
 static void
 clnt_vc_destroy(CLIENT *clnt)
 {
-    struct x_vc_data *xd = (struct x_vc_data *) clnt->cl_p1;
-    struct rpc_dplx_rec *rec = xd->rec;
+    struct rpc_dplx_rec *rec;
+    struct x_vc_data *xd;
+    uint32_t cl_refcnt = 0;
+    uint32_t xd_refcnt = 0;
 
+    mutex_lock(&clnt->cl_lock);
+    if (clnt->cl_flags & CLNT_FLAG_DESTROYED) {
+        mutex_unlock(&clnt->cl_lock);
+        goto out;
+    }
+
+    xd = (struct x_vc_data *) clnt->cl_p1;
+    rec = xd->rec;
+
+    clnt->cl_flags |= CLNT_FLAG_DESTROYED;
+    cl_refcnt = --(clnt->cl_refcnt);
+    mutex_unlock(&clnt->cl_lock);
+
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%d %s: cl_destroy %p cl_refcnt %u",
+            __tirpc_dcounter, __func__, clnt, cl_refcnt);
+
+    /* bidirectional */
     mutex_lock(&rec->mtx);
     xd->flags |= X_VC_DATA_FLAG_CLNT_DESTROYED; /* destroyed handle is dead */
+    xd_refcnt = --(xd->refcnt);
 
-    /* if shared refcnt drops to 0, do shared destroy */
-    --xd->refcnt;
-    if (xd->refcnt == 0) {
+    /* conditional destroy */
+    if (xd_refcnt == 0) {
+        __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                "%d %s: %p cl_refcnt %u xd_refcnt %u calling vc_shared_destroy",
+                __tirpc_dcounter, __func__, clnt, cl_refcnt, xd_refcnt);
         vc_shared_destroy(xd); /* RECLOCKED */
-    } else {
-        if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
-            mutex_unlock(&rec->mtx);
-    }
-}
+    } else
+        mutex_lock(&rec->mtx);
+
+out:
+    return;
+ }
 
 static struct clnt_ops *
 clnt_vc_ops(void)
@@ -798,6 +873,7 @@ clnt_vc_ops(void)
         ops.cl_abort = clnt_vc_abort;
         ops.cl_geterr = clnt_vc_geterr;
         ops.cl_freeres = clnt_vc_freeres;
+        ops.cl_ref = clnt_vc_ref;
         ops.cl_release = clnt_vc_release;
         ops.cl_destroy = clnt_vc_destroy;
         ops.cl_control = clnt_vc_control;

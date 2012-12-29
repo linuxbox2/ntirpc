@@ -116,7 +116,10 @@ typedef struct rpc_client {
         /* frees results */
         bool  (*cl_freeres)(struct rpc_client *, xdrproc_t, void *);
 
-        /* release (destroys if no refs) */
+        /* take lifecycle ref */
+        bool (*cl_ref)(struct rpc_client *, u_int flags);
+
+        /* release */
         void  (*cl_release)(struct rpc_client *);
 
         /* release and mark destroyed */
@@ -125,6 +128,10 @@ typedef struct rpc_client {
         /* the ioctl() of rpc */
         bool  (*cl_control)(struct rpc_client *, u_int,  void *);
     } *cl_ops;
+
+    mutex_t cl_lock; /* serialize private data */
+    uint32_t cl_refcnt; /* handle refcnt */
+    uint32_t cl_flags;  /* state flags */
 
     void *cl_p1; /* private data */
     void *cl_p2;
@@ -155,6 +162,27 @@ struct rpc_timers {
 #define CLCR_GET_LOWVERS 4
 
 #define RPCSMALLMSGSIZE 400 /* a more reasonable packet size */
+
+/*
+ * CLNT flags
+ */
+
+#define CLNT_FLAG_NONE               0x0000
+#define CLNT_FLAG_DESTROYED          0x0001
+
+/*
+ * CLNT_REF flags
+ */
+
+#define CLNT_REF_FLAG_NONE            0x0000
+#define CLNT_REF_FLAG_LOCKED          0x0001
+
+/*
+ * CLNT_RELEASE flags
+ */
+
+#define CLNT_RELEASE_FLAG_NONE            0x0000
+#define CLNT_RELEASE_FLAG_LOCKED          0x0001
 
 /*
  * client side rpc interface ops
@@ -197,6 +225,21 @@ struct rpc_timers {
 #define CLNT_GETERR(rh,errp) ((*(rh)->cl_ops->cl_geterr)(rh, errp))
 #define clnt_geterr(rh,errp) ((*(rh)->cl_ops->cl_geterr)(rh, errp))
 
+/*
+ * uint32_t flags
+ * CLNT_REF(rh);
+ *  CLIENT *rh;
+ */
+#define CLNT_REF(rh,flags) ((*(rh)->cl_ops->cl_ref)(rh, flags))
+#define clnt_ref(rh,flags) ((*(rh)->cl_ops->cl_ref)(rh, flags))
+
+/*
+ * uint32_t flags
+ * CLNT_RELEASE(rh);
+ *  CLIENT *rh;
+ */
+#define CLNT_RELEASE(rh,flags) ((*(rh)->cl_ops->cl_release)(rh, flags))
+#define clnt_release(rh,flags) ((*(rh)->cl_ops->cl_release)(rh, flags))
 
 /*
  * bool

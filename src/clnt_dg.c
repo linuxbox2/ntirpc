@@ -72,6 +72,8 @@ static enum clnt_stat clnt_dg_call(CLIENT *, AUTH *, rpcproc_t, xdrproc_t,
                                    void *, xdrproc_t, void *, struct timeval);
 static void clnt_dg_geterr(CLIENT *, struct rpc_err *);
 static bool clnt_dg_freeres(CLIENT *, xdrproc_t, void *);
+static bool clnt_dg_ref(CLIENT *, u_int);
+static void clnt_dg_release(CLIENT *);
 static void clnt_dg_abort(CLIENT *);
 static bool clnt_dg_control(CLIENT *, u_int, void *);
 static void clnt_dg_destroy(CLIENT *);
@@ -130,6 +132,10 @@ clnt_dg_ncreate(int fd,           /* open file descriptor */
 
     if ((clnt = mem_alloc(sizeof (CLIENT))) == NULL)
         goto err1;
+
+    mutex_init(&clnt->cl_lock, NULL);
+    clnt->cl_flags = CLNT_FLAG_NONE;
+
     /*
      * Should be multiple of 4 for XDR.
      */
@@ -516,6 +522,16 @@ out:
     return (dummy);
 }
 
+static bool
+clnt_dg_ref(CLIENT *clnt, u_int flags)
+{
+}
+
+static void
+clnt_dg_release(CLIENT *clnt)
+{
+}
+
 /*ARGSUSED*/
 static void
 clnt_dg_abort(CLIENT *h)
@@ -715,7 +731,8 @@ clnt_dg_ops(void)
         ops.cl_abort = clnt_dg_abort;
         ops.cl_geterr = clnt_dg_geterr;
         ops.cl_freeres = clnt_dg_freeres;
-        ops.cl_release = clnt_dg_destroy;
+        ops.cl_ref = clnt_dg_ref;
+        ops.cl_release = clnt_dg_release;
         ops.cl_destroy = clnt_dg_destroy;
         ops.cl_control = clnt_dg_control;
     }
