@@ -480,12 +480,6 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
                 xprt = rec->hdl.xprt;
                 /* inc xprt refcnt */
                 SVC_REF(xprt, SVC_REF_FLAG_NONE); /* XXX check lock state */
-
-                /* XXXX there may be no need to increment shared, past
-                 * actual cardinality of sharing (max currently 2) */
-
-                /* inc shared refcnt */
-                ++(xd->refcnt);
             }
             /* return extra ref */
             if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
@@ -524,6 +518,8 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
     if (rec->hdl.clnt) {
         /* XXX check subtype of clnt handle? */
         xd = (struct x_vc_data *) rec->hdl.clnt->cl_p1;
+        /* inc shared refcnt */
+        ++(xd->refcnt);
     } else {
         xd = alloc_x_vc_data();
         if (xd == NULL) {
@@ -539,6 +535,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
         /* XXX tracks outstanding calls */
         opr_rbtree_init(&xd->cx.calls.t, call_xid_cmpf);
         xd->cx.calls.xid = 0; /* next call xid is 1 */
+        xd->refcnt = 1;
     }
 
     /* the SVCXPRT created in svc_vc_create accepts new connections
@@ -578,9 +575,6 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 
     /* make reachable from rec */
     rec->hdl.xprt = xprt;
-
-    /* inc shared refcnt */
-    ++(xd->refcnt);
 
     /* release */
     mutex_unlock(&rec->mtx);

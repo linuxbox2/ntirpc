@@ -204,8 +204,6 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
             /* dont return destroyed clients */
             if (! (xd->flags & X_VC_DATA_FLAG_CLNT_DESTROYED)) {
                 clnt = rec->hdl.clnt;
-                /* inc shared refcnt */
-                ++(xd->refcnt);
             }
             /* return extra ref */
             if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
@@ -227,6 +225,8 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
     if (rec->hdl.xprt) {
         /* XXX check subtype of xprt handle? */
         xd = (struct x_vc_data *) rec->hdl.xprt->xp_p1;
+        /* inc shared refcnt */
+        ++(xd->refcnt);
     } else {
         xd = alloc_x_vc_data();
         if (! xd) {
@@ -240,6 +240,7 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
         /* XXX tracks outstanding calls */
         opr_rbtree_init(&xd->cx.calls.t, call_xid_cmpf);
         xd->cx.calls.xid = 0; /* next call xid is 1 */
+        xd->refcnt = 1;
     }
 
     /* private data struct */
