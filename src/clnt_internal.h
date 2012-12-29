@@ -76,7 +76,7 @@ typedef struct rpc_call_ctx {
     struct rpc_err error;
     union {
         struct {
-            struct __rpc_client *clnt;
+            struct rpc_client *clnt;
             struct x_vc_data *xd;
             struct timespec timeout;
         } clnt;

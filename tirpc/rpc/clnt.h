@@ -100,30 +100,30 @@ struct rpc_err {
  * Created by individual implementations
  * Client is responsible for initializing auth, see e.g. auth_none.c.
  */
-typedef struct __rpc_client {
+typedef struct rpc_client {
 
     struct clnt_ops {
         /* call remote procedure */
-        enum clnt_stat (*cl_call)(struct __rpc_client *, AUTH *,
+        enum clnt_stat (*cl_call)(struct rpc_client *, AUTH *,
                                   rpcproc_t, xdrproc_t, void *, xdrproc_t,
                                   void *, struct timeval);
         /* abort a call */
-        void  (*cl_abort)(struct __rpc_client *);
+        void  (*cl_abort)(struct rpc_client *);
 
         /* get specific error code */
-        void  (*cl_geterr)(struct __rpc_client *, struct rpc_err *);
+        void  (*cl_geterr)(struct rpc_client *, struct rpc_err *);
 
         /* frees results */
-        bool  (*cl_freeres)(struct __rpc_client *, xdrproc_t, void *);
+        bool  (*cl_freeres)(struct rpc_client *, xdrproc_t, void *);
 
         /* release (destroys if no refs) */
-        void  (*cl_release)(struct __rpc_client *);
+        void  (*cl_release)(struct rpc_client *);
 
         /* release and mark destroyed */
-        void  (*cl_destroy)(struct __rpc_client *);
+        void  (*cl_destroy)(struct rpc_client *);
 
         /* the ioctl() of rpc */
-        bool  (*cl_control)(struct __rpc_client *, u_int,  void *);
+        bool  (*cl_control)(struct rpc_client *, u_int,  void *);
     } *cl_ops;
 
     void *cl_p1; /* private data */
