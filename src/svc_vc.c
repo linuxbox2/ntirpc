@@ -939,7 +939,7 @@ svc_vc_destroy(SVCXPRT *xprt)
                 __tirpc_dcounter, __func__, xprt, xp_refcnt, xd_refcnt);
         vc_shared_destroy(xd); /* RECLOCKED */
     } else
-        mutex_lock(&rec->mtx);
+        mutex_unlock(&rec->mtx);
 
 out:
     return;

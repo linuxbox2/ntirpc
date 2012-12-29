@@ -851,7 +851,7 @@ clnt_vc_destroy(CLIENT *clnt)
                 __tirpc_dcounter, __func__, clnt, cl_refcnt, xd_refcnt);
         vc_shared_destroy(xd); /* RECLOCKED */
     } else
-        mutex_lock(&rec->mtx);
+        mutex_unlock(&rec->mtx);
 
 out:
     return;
