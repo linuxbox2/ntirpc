@@ -870,7 +870,7 @@ svc_vc_release(SVCXPRT *xprt, u_int flags)
             vc_shared_destroy(xd); /* RECLOCKED */
         } else {
             __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                    "%d %s: xd_refcnt on destroyed %p %u omit "
+                    "%d %s: xd_refcnt %u on destroyed %p omit "
                     "vc_shared_destroy",
                     __tirpc_dcounter, __func__, xprt, xd_refcnt);
             mutex_unlock(&rec->mtx);
@@ -932,7 +932,8 @@ svc_vc_destroy(SVCXPRT *xprt)
     xd_refcnt = --(xd->refcnt);
 
     /* conditional destroy */
-    if (xd_refcnt == 0) {
+    if ((xp_refcnt == 0) &&
+        (xd_refcnt == 0)) {
         __warnx(TIRPC_DEBUG_FLAG_REFCNT,
                 "%d %s: %p xp_refcnt %u xd_refcnt %u calling vc_shared_destroy",
                 __tirpc_dcounter, __func__, xprt, xp_refcnt, xd_refcnt);
