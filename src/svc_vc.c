@@ -194,10 +194,16 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
         goto err;
     }
 
-    /* if a svcxprt handle exists, return it ref'd (rec is ref'd) */
+    /* if a svcxprt handle exists, return it ref'd */
     if (! (oflags & RPC_DPLX_LKP_OFLAG_ALLOC)) {
         if (rec->hdl.xprt) {
-            xprt = rec->hdl.xprt;
+            struct x_vc_data *xd = (struct x_vc_data *) rec->hdl.xprt->xp_p1;
+            /* dont return destroyed xprts */
+            if (! (xd->flags & X_VC_DATA_FLAG_SVC_DESTROYED)) {
+                xprt = rec->hdl.xprt;
+                /* inc xprt refcnt */
+                SVC_REF(xprt, SVC_REF_FLAG_NONE);
+            }
             /* return extra ref */
             if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
                 mutex_unlock(&rec->mtx);
@@ -479,7 +485,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
             if (! (xd->flags & X_VC_DATA_FLAG_SVC_DESTROYED)) {
                 xprt = rec->hdl.xprt;
                 /* inc xprt refcnt */
-                SVC_REF(xprt, SVC_REF_FLAG_NONE); /* XXX check lock state */
+                SVC_REF(xprt, SVC_REF_FLAG_NONE);
             }
             /* return extra ref */
             if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
