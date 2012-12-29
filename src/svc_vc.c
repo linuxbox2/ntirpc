@@ -716,8 +716,18 @@ svc_vc_ref(SVCXPRT *xprt, u_int flags)
     refcnt = ++(xprt->xp_refcnt);
     mutex_unlock(&xprt->xp_lock);
 
+    { /* debug check xd refcnt */
+        struct x_vc_data *xd = (struct x_vc_data *) xprt->xp_p1;
+        struct rpc_dplx_rec *rec = xd->rec;
+
+        __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                "%d %s: postref %p xd->refcnt %u",
+                __tirpc_dcounter, __func__, xprt, xd->refcnt);
+    }
+
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: postref %p %u", __tirpc_dcounter, __func__, xprt, refcnt);
+            "%d %s: postref %p xp_refcnt %u",
+            __tirpc_dcounter, __func__, xprt, refcnt);
 
     return (true);
 }
@@ -858,9 +868,7 @@ svc_vc_release(SVCXPRT *xprt, u_int flags)
         uint32_t xd_refcnt;
 
         mutex_unlock(&xprt->xp_lock);
-
         mutex_lock(&rec->mtx);
-        xd_refcnt = --(xd->refcnt);
 
         if (xd_refcnt == 0) {
             __warnx(TIRPC_DEBUG_FLAG_REFCNT,
@@ -922,14 +930,15 @@ svc_vc_destroy(SVCXPRT *xprt)
     svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
 
     drefcnt = xprt->xp_refcnt;
-    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: postfinalize %p xp_refcnt %u",
-            __tirpc_dcounter, __func__, xprt, drefcnt);
 
     /* bidirectional */
     mutex_lock(&rec->mtx);
     xd->flags |= X_VC_DATA_FLAG_SVC_DESTROYED; /* destroyed handle is dead */
     xd_refcnt = --(xd->refcnt);
+
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%d %s: postfinalize %p xp_refcnt %u xd_refcnt %u",
+            __tirpc_dcounter, __func__, xprt, drefcnt, xd_refcnt);
 
     /* conditional destroy */
     if ((xp_refcnt == 0) &&
