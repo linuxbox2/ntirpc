@@ -80,7 +80,7 @@ extern struct svc_params __svc_params[1];
 
 static bool rendezvous_request(SVCXPRT *, struct svc_req *);
 static enum xprt_stat rendezvous_stat(SVCXPRT *);
-static bool_t svc_vc_ref(SVCXPRT *xprt, u_int flags);
+static bool svc_vc_ref(SVCXPRT *xprt, u_int flags);
 static void svc_vc_release(SVCXPRT *xprt, u_int flags);
 static void svc_vc_destroy(SVCXPRT *);
 int generic_read_vc(XDR *, void *, void *, int);
@@ -701,7 +701,7 @@ rendezvous_stat(SVCXPRT *xprt)
     return (XPRT_IDLE);
 }
 
-static bool_t
+static bool
 svc_vc_ref(SVCXPRT *xprt, u_int flags)
 {
     uint32_t refcnt;
@@ -896,6 +896,7 @@ svc_vc_destroy(SVCXPRT *xprt)
     }
 
     xd = (struct x_vc_data *) xprt->xp_p1;
+    rec = xd->rec;
 
     xprt->xp_flags |= SVC_XPRT_FLAG_DESTROYED;
     xp_refcnt = --(xprt->xp_refcnt);
@@ -929,7 +930,6 @@ svc_vc_destroy(SVCXPRT *xprt)
     mutex_lock(&rec->mtx);
     xd->flags |= X_VC_DATA_FLAG_SVC_DESTROYED; /* destroyed handle is dead */
     xd_refcnt = --(xd->refcnt);
-    rec = xd->rec;
 
     /* conditional destroy */
     if (xd_refcnt == 0) {
