@@ -164,8 +164,7 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
     struct timespec ts;
     int code = 0;
 
-    assert (flags & RPC_CTX_FLAG_LOCKED);
-
+    /* we hold recv channel lock */
     ctx->flags |= RPC_CTX_FLAG_WAITSYNC;
     while (! (ctx->flags & RPC_CTX_FLAG_SYNCDONE)) {
         (void) clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
@@ -183,6 +182,7 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
                  * well developed. */
                 ctx->error.re_status = RPC_TIMEDOUT;
             }
+            ctx->flags &= ~RPC_CTX_FLAG_WAITSYNC;
             goto out;
         }
     }
@@ -221,11 +221,17 @@ free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
 {
     struct x_vc_data *xd = (struct x_vc_data *) ctx->ctx_u.clnt.clnt->cl_p1;
     struct rpc_dplx_rec *rec  = xd->rec;
+    struct timespec ts;
 
     /* wait for commit of any xfer (ctx specific) */
     mutex_lock(&ctx->we.mtx);
-    while (ctx->flags & RPC_CTX_FLAG_WAITSYNC)
-        cond_wait(&ctx->we.cv, &ctx->we.mtx);
+    if (ctx->flags & RPC_CTX_FLAG_WAITSYNC) {
+        /* WAITSYNC is already cleared if the call timed out, but it is
+         * incorrect to wait forever */
+        (void) clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
+        timespecadd(&ts, &ctx->ctx_u.clnt.timeout);
+        (void) cond_timedwait(&ctx->we.cv, &ctx->we.mtx, &ts);
+    }
 
     mutex_lock(&rec->mtx);
     opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
