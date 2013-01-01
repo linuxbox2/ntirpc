@@ -403,9 +403,13 @@ void vc_shared_destroy(struct x_vc_data *xd)
     bool xdrs_destroyed = FALSE;
     sigset_t mask, newmask;
 
+    /* RECLOCKED */
+
     /* clnt_vc */
     clnt = rec->hdl.clnt;
     if (clnt) {
+
+        rec->hdl.clnt = NULL; /* unreachable */
 
         sigfillset(&newmask);
         thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
@@ -443,6 +447,8 @@ void vc_shared_destroy(struct x_vc_data *xd)
     xprt = rec->hdl.xprt;
     if (xprt) {
 
+        rec->hdl.xprt = NULL; /* unreachable */
+
         if (! closed) {
             if (xprt->xp_fd != RPC_ANYFD)
                 (void)close(xprt->xp_fd);
@@ -471,6 +477,10 @@ void vc_shared_destroy(struct x_vc_data *xd)
     }
 
     /* unref shared */
-    if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
-        mutex_unlock(&rec->mtx);
+    if (clnt)
+        rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED);
+
+    if (xprt)
+        rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED);
+
 }

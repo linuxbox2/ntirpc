@@ -349,6 +349,10 @@ rpc_dplx_unref(struct rpc_dplx_rec *rec, u_int flags)
 
     refcnt = --(rec->refcnt);
 
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%d %s: postunref %p rec->refcnt %u",
+            __tirpc_dcounter, __func__, rec, refcnt);
+
     if (rec->refcnt == 0) {
         t = rbtx_partition_of_scalar(&rpc_dplx_rec_set.xt, rec->fd_k);
         mutex_unlock(&rec->mtx);
@@ -360,6 +364,10 @@ rpc_dplx_unref(struct rpc_dplx_rec *rec, u_int flags)
             if (rec->refcnt == 0) {
                 (void) opr_rbtree_remove(&t->t, &rec->node_k);
                 mutex_unlock(&rec->mtx);
+                __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                        "%d %s: free rec %p rec->refcnt %u",
+                        __tirpc_dcounter, __func__, rec, refcnt);
+
                 free_dplx_rec(rec);
                 rec = NULL;
             } else
