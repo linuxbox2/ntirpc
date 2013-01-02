@@ -39,6 +39,8 @@
 #define _TIRPC_TYPES_H
 
 #include <sys/types.h>
+#include <stddef.h>
+#include <stdint.h>
 
 typedef int32_t bool_t;
 typedef int32_t enum_t;
@@ -133,11 +135,47 @@ extern tirpc_pkg_params __pkg_params;
 
 extern int __tirpc_dcounter;
 
+#define ATOMIC_GCC_VERSION (__GNUC__ * 10000                           \
+                            + __GNUC_MINOR__ * 100                     \
+                            + __GNUC_PATCHLEVEL__)
+
+#ifndef __GNUC__
+#error Please edit abstract_atomic.h and implement support for  \
+       non-GNU compilers.
+#else /* __GNUC__ */
+#define ATOMIC_GCC_VERSION (__GNUC__ * 10000                           \
+                            + __GNUC_MINOR__ * 100                     \
+                            + __GNUC_PATCHLEVEL__)
+
+#if ((ATOMIC_GCC_VERSION) >= 40700)
+#define GCC_ATOMIC_FUNCTIONS 1
+#elif ((ATOMIC_GCC_VERSION) >= 40100)
+#define GCC_SYNC_FUNCTIONS 1
+#else
+#error This verison of GCC does not support atomics.
+#endif /* Version check */
+#endif /* __GNUC__ */
+
+
+#ifdef GCC_ATOMIC_FUNCTIONS
+static inline int32_t
+atomic_add_it(int32_t *augend, uint32_t addend)
+{
+     return __atomic_add_fetch(augend, addend, __ATOMIC_SEQ_CST);
+}
+#elif defined(GCC_SYNC_FUNCTIONS)
+static inline int32_t
+atomic_add_it(int32_t *augend, uint32_t addend)
+{
+     return __sync_add_and_fetch(augend, addend);
+}
+#endif
+
 #define __warnx(flags, ...) \
     do { \
         if (__pkg_params.debug_flags & (flags)) { \
             __pkg_params.warnx(__VA_ARGS__); \
-            __atomic_add_fetch(&__tirpc_dcounter, 1, __ATOMIC_SEQ_CST); \
+            atomic_add_it(&__tirpc_dcounter, 1); \
         } \
     } while (0)
 
