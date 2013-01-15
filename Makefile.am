@@ -11,6 +11,7 @@ nobase_include_HEADERS = m4/.dummy \
 			 tirpc/un-namespace.h \
 			 tirpc/misc/abstract_atomic.h \
 			 tirpc/misc/epoll.h \
+			 tirpc/misc/os_epoll.h \
 			 tirpc/misc/event.h \
 			 tirpc/misc/portable.h \
 			 tirpc/misc/socket.h \
