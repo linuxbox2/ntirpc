@@ -62,24 +62,15 @@ typedef struct gss_union_ctx_id_t
     gss_ctx_id_t internal_ctx_id;
 } gss_union_ctx_id_desc, *gss_union_ctx_id_t;
 
-
-#ifdef _MSPAC_SUPPORT
-
-#define URN_MSPAC "urn:mspac:"
-
-struct mspac_buf
-{
-    size_t length;
-    uint8_t *data; /* krb5_octet */
-};
-
-#endif /* _MSPAC_SUPPORT */
+#define SVC_RPC_GSS_FLAG_NONE    0x0000
+#define SVC_RPC_GSS_FLAG_MSPAC   0x0001
 
 struct svc_rpc_gss_data
 {
     struct opr_rbtree_node node_k;
     TAILQ_ENTRY(svc_rpc_gss_data) lru_q;
     mutex_t lock;
+    uint32_t flags;
     uint32_t refcnt;
     uint32_t gen;
     struct {
@@ -95,9 +86,10 @@ struct svc_rpc_gss_data
     uint32_t seqmask;
     gss_name_t client_name;
     gss_buffer_desc checksum;
-#ifdef _MSPAC_SUPPORT
-    struct mspac_buf pac;
-#endif
+    struct {
+        /* extended krb5 ticket ("pac") data */
+        gss_buffer_desc ms_pac;
+    } pac;
     SVCAUTH *auth;
 };
 

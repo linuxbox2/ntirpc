@@ -501,8 +501,33 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg, bool *no_dispatch)
 
       if (gr.gr_major == GSS_S_COMPLETE) {
           gd->established = TRUE;
-          if (! gd_hashed)
+          if (! gd_hashed) {
+#if defined(HAVE_GSS_GET_NAME_ATTRIBUTE)
+              /* krb5 pac -- try all that apply */ 
+              gss_buffer_desc attr, display_buffer;
+
+              /* completely generic */
+              int auth = 0, comp = 0, more = 0;
+
+              memset(&gd->pac.ms_pac, 0, sizeof(gss_buffer_desc));
+              memset(&display_buffer, 0, sizeof(gss_buffer_desc));
+
+              /* MS AD */
+              attr.value = "urn:mspac:";
+              attr.length = 10;
+
+              gr.gr_major = gss_get_name_attribute(
+                  &gr.gr_minor, gd->client_name, &attr, &auth, &comp,
+                  &gd->pac.ms_pac, &display_buffer, &more);
+
+              if (gr.gr_major == GSS_S_COMPLETE) {
+                  /* dont need it */
+                  gss_release_buffer(&gr.gr_minor, &display_buffer);
+                  gd->flags |= SVC_RPC_GSS_FLAG_MSPAC;
+              }
+#endif
               (void) authgss_ctx_hash_set(gd);
+          }
       }
       break;
 
@@ -557,12 +582,10 @@ svcauth_gss_destroy(SVCAUTH *auth)
     if (gd->client_name)
         gss_release_name(&min_stat, &gd->client_name);
 
-#ifdef _MSPAC_SUPPORT
-      if (gd->pac.data)
-          mem_free(gd->pac.data, 0);
-#endif
-    gss_release_buffer(&min_stat, &gd->checksum);
+    if (gd->flags & SVC_RPC_GSS_FLAG_MSPAC)
+        gss_release_buffer(&min_stat, &gd->pac.ms_pac);
 
+    gss_release_buffer(&min_stat, &gd->checksum);
     mutex_destroy(&gd->lock);
 
     mem_free(gd, sizeof(struct svc_rpc_gss_data));
