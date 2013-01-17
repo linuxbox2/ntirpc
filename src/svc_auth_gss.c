@@ -44,10 +44,10 @@
 #include "rpc_com.h"
 #include <rpc/gss_internal.h>
 
-static bool svcauth_gss_wrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func,
-                               caddr_t xdr_ptr);
-static bool svcauth_gss_unwrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func,
-                                 caddr_t xdr_ptr);
+static bool svcauth_gss_wrap(SVCAUTH *, struct svc_req *, XDR *, xdrproc_t,
+                             caddr_t);
+static bool svcauth_gss_unwrap(SVCAUTH *, struct svc_req *, XDR *, xdrproc_t,
+                               caddr_t);
 
 struct svc_auth_ops svc_auth_gss_ops = {
     svcauth_gss_wrap,
@@ -208,7 +208,6 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
     gd->sec.mech = mech;
     gd->sec.qop = GSS_C_QOP_DEFAULT;
     gd->sec.svc = gc->gc_svc;
-    gd->seq = gc->gc_seq;
     gd->win = gr->gr_win;
 
     if (gr->gr_major == GSS_S_COMPLETE) {
@@ -438,9 +437,11 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg, bool *no_dispatch)
 
     /* Check sequence number. */
     if (gd->established) {
+
         if (gc->gc_seq > MAXSEQ)
             svcauth_gss_return(RPCSEC_GSS_CTXPROBLEM);
 
+        /* XXX implied serialization?  or just fudging?  advance if greater? */
         if ((offset = gd->seqlast - gc->gc_seq) < 0) {
             gd->seqlast = gc->gc_seq;
             offset = 0 - offset;
@@ -451,8 +452,9 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg, bool *no_dispatch)
             *no_dispatch = TRUE;
             svcauth_gss_return(RPCSEC_GSS_CTXPROBLEM);
         }
-        gd->seq = gc->gc_seq;
-        gd->seqmask |= (1 << offset);
+        gd->seqmask |= (1 << offset); /* XXX harmless */
+
+        req->rq_ap1 = (void *)(uintptr_t)gc->gc_seq; /* XXX gcc req. 2 casts */
 
         req->rq_clntname = (char *)gd->client_name;
         req->rq_svcname = (char *)gd->ctx;
@@ -570,34 +572,35 @@ svcauth_gss_destroy(SVCAUTH *auth)
 }
 
 bool
-svcauth_gss_wrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr)
+svcauth_gss_wrap(SVCAUTH *auth, struct svc_req *req,
+                 XDR *xdrs, xdrproc_t xdr_func,
+                 caddr_t xdr_ptr)
 {
-    struct svc_rpc_gss_data *gd;
-
-    gd = SVCAUTH_PRIVATE(auth);
+    struct svc_rpc_gss_data *gd = SVCAUTH_PRIVATE(req->rq_auth);
+    u_int gc_seq = (u_int)(uintptr_t)req->rq_ap1;
 
     if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE) {
         return ((*xdr_func)(xdrs, xdr_ptr));
     }
     return (xdr_rpc_gss_data(xdrs, xdr_func, xdr_ptr,
                              gd->ctx, gd->sec.qop,
-                             gd->sec.svc, gd->seq));
+                             gd->sec.svc, gc_seq));
 }
 
 bool
-svcauth_gss_unwrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func,
+svcauth_gss_unwrap(SVCAUTH *auth, struct svc_req *req,
+                   XDR *xdrs, xdrproc_t xdr_func,
                    caddr_t xdr_ptr)
 {
-    struct svc_rpc_gss_data *gd;
-
-    gd = SVCAUTH_PRIVATE(auth);
+    struct svc_rpc_gss_data *gd = SVCAUTH_PRIVATE(req->rq_auth);
+    u_int gc_seq = (u_int)(uintptr_t)req->rq_ap1;
 
     if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE) {
         return ((*xdr_func)(xdrs, xdr_ptr));
     }
     return (xdr_rpc_gss_data(xdrs, xdr_func, xdr_ptr,
                              gd->ctx, gd->sec.qop,
-                             gd->sec.svc, gd->seq));
+                             gd->sec.svc, gc_seq));
 }
 
 char *

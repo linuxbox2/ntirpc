@@ -311,7 +311,7 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
     XDR_SETPOS(xdrs, 0);
 
     if (xdr_replymsg(xdrs, msg) &&
-        (!has_args || (SVCAUTH_WRAP(req->rq_auth, xdrs, xdr_results,
+        (!has_args || (SVCAUTH_WRAP(req->rq_auth, req, xdrs, xdr_results,
                                     xdr_location)))) {
         struct msghdr *msg = &su->su_msghdr;
         struct iovec iov;
@@ -343,7 +343,7 @@ svc_dg_getargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
     /* threads u_data for advanced decoders */
     xdrs->x_public = u_data;
 
-    if (! SVCAUTH_UNWRAP(req->rq_auth, &(su_data(xprt)->su_xdrs),
+    if (! SVCAUTH_UNWRAP(req->rq_auth, req, &(su_data(xprt)->su_xdrs),
                          xdr_args, args_ptr)) {
         (void)svc_freeargs(xprt, xdr_args, args_ptr);
         return FALSE;

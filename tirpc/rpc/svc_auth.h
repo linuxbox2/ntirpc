@@ -48,19 +48,19 @@
  */
 typedef struct SVCAUTH {
     struct svc_auth_ops {
-        bool     (*svc_ah_wrap)(struct SVCAUTH *, XDR *, xdrproc_t,
-                               caddr_t);
-        bool     (*svc_ah_unwrap)(struct SVCAUTH *, XDR *, xdrproc_t,
-                                 caddr_t);
+        bool     (*svc_ah_wrap)(struct SVCAUTH *, struct svc_req *, XDR *,
+                                xdrproc_t, caddr_t);
+        bool     (*svc_ah_unwrap)(struct SVCAUTH *, struct svc_req * , XDR *,
+                                  xdrproc_t, caddr_t);
         bool     (*svc_ah_destroy)(struct SVCAUTH *);
     } *svc_ah_ops;
     caddr_t svc_ah_private;
 } SVCAUTH;
 
-#define SVCAUTH_WRAP(auth, xdrs, xfunc, xwhere) \
-    ((*((auth)->svc_ah_ops->svc_ah_wrap))(auth, xdrs, xfunc, xwhere))
-#define SVCAUTH_UNWRAP(auth, xdrs, xfunc, xwhere) \
-    ((*((auth)->svc_ah_ops->svc_ah_unwrap))(auth, xdrs, xfunc, xwhere))
+#define SVCAUTH_WRAP(auth, req, xdrs, xfunc, xwhere) \
+    ((*((auth)->svc_ah_ops->svc_ah_wrap))(auth, req, xdrs, xfunc, xwhere))
+#define SVCAUTH_UNWRAP(auth, req, xdrs, xfunc, xwhere) \
+    ((*((auth)->svc_ah_ops->svc_ah_unwrap))(auth, req, xdrs, xfunc, xwhere))
 #define SVCAUTH_DESTROY(auth) \
     ((*((auth)->svc_ah_ops->svc_ah_destroy))(auth))
 

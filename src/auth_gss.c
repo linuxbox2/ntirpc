@@ -139,6 +139,7 @@ print_rpc_gss_sec(struct rpc_gss_sec *ptr)
 #endif /*DEBUG*/
 
 struct rpc_gss_data {
+    mutex_t lock;
     bool    established; /* context established */
     gss_buffer_desc   gc_wire_verf; /* save GSS_S_COMPLETE NULL RPC verfier
                                      * to process at end of context
@@ -171,12 +172,14 @@ authgss_ncreate(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
         rpc_createerr.cf_error.re_errno = ENOMEM;
         return (NULL);
     }
+    /* XXX move to ctor */
     if ((gd = mem_alloc(sizeof(*gd))) == NULL) {
         rpc_createerr.cf_stat = RPC_SYSTEMERROR;
         rpc_createerr.cf_error.re_errno = ENOMEM;
         mem_free(auth, 0);
         return (NULL);
     }
+    mutex_init(&gd->lock, NULL);
 #ifdef DEBUG
     __warnx(TIRPC_DEBUG_FLAG_AUTH,
             "authgss_ncreate: name is %p\n", name);
@@ -297,8 +300,12 @@ authgss_marshal(AUTH *auth, XDR *xdrs)
 
     gd = AUTH_PRIVATE(auth);
 
-    if (gd->established)
+    if (gd->established) {
+        /* XXX */
+        mutex_lock(&gd->lock);
         gd->gc.gc_seq++;
+        mutex_unlock(&gd->lock);
+    }
 
     xdrmem_create(&tmpxdrs, tmp, sizeof(tmp), XDR_ENCODE);
 

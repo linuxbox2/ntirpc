@@ -151,7 +151,6 @@ typedef struct svc_init_params
 #define SVC_XPRT_FLAG_COPY               0x0010 /* XXX */
 #define SVC_XPRT_FLAG_DESTROYED          0x0020
 
-
 /*
  * SVC_REF flags
  */
@@ -318,10 +317,10 @@ typedef bool  (*xp_free_xprt_t)(struct rpc_svcxprt *);
  * Service request
  */
 struct svc_req {
-    /* ORDER: compatibility with legacy RPC */
     u_int32_t rq_prog; /* service program number */
     u_int32_t rq_vers; /* service protocol version */
     u_int32_t rq_proc; /* the desired procedure */
+
     struct opaque_auth rq_cred; /* raw creds from the wire */
     void  *rq_clntcred; /* read only cooked cred */
     SVCXPRT  *rq_xprt; /* associated transport */
@@ -337,8 +336,10 @@ struct svc_req {
     void            *rq_u2;          /* user data */
 
     /* Moved in N TI-RPC */
-    struct opaque_auth rq_verf; /* raw response verifier */
-    struct SVCAUTH  *rq_auth; /* auth handle */
+    struct opaque_auth rq_verf;      /* raw response verifier */
+    struct SVCAUTH  *rq_auth;        /* auth handle */
+    void            *rq_ap1;         /* auth private */
+    void            *rq_ap2;         /* auth private */
 };
 
 /*

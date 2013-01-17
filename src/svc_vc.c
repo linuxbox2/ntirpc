@@ -1191,7 +1191,7 @@ svc_vc_getargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
     /* threads u_data for advanced decoders*/
     xdrs->x_public = u_data;
 
-    if (! SVCAUTH_UNWRAP(req->rq_auth, xdrs, xdr_args, args_ptr))
+    if (! SVCAUTH_UNWRAP(req->rq_auth, req, xdrs, xdr_args, args_ptr))
         rslt = FALSE;
 
     /* XXX Upstream TI-RPC lacks this call, but -does- call svc_dg_freeargs
@@ -1245,7 +1245,7 @@ svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
     rstat = FALSE;
     if (xdr_replymsg(xdrs, msg) &&
         (!has_args || (req->rq_auth &&
-                       SVCAUTH_WRAP(req->rq_auth, xdrs, xdr_results,
+                       SVCAUTH_WRAP(req->rq_auth, req, xdrs, xdr_results,
                                     xdr_location)))) {
         rstat = TRUE;
     }
