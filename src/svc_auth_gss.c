@@ -502,7 +502,7 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg, bool *no_dispatch)
       if (gr.gr_major == GSS_S_COMPLETE) {
           gd->established = TRUE;
           if (! gd_hashed) {
-#if defined(HAVE_GSS_GET_NAME_ATTRIBUTE)
+
               /* krb5 pac -- try all that apply */ 
               gss_buffer_desc attr, display_buffer;
 
@@ -525,7 +525,7 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg, bool *no_dispatch)
                   gss_release_buffer(&gr.gr_minor, &display_buffer);
                   gd->flags |= SVC_RPC_GSS_FLAG_MSPAC;
               }
-#endif
+
               (void) authgss_ctx_hash_set(gd);
           }
       }
