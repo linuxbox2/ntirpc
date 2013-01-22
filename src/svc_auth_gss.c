@@ -507,7 +507,7 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg, bool *no_dispatch)
               gss_buffer_desc attr, display_buffer;
 
               /* completely generic */
-              int auth = 0, comp = 0, more = 0;
+              int auth = 1, comp = 0, more = -1;
 
               memset(&gd->pac.ms_pac, 0, sizeof(gss_buffer_desc));
               memset(&display_buffer, 0, sizeof(gss_buffer_desc));
