@@ -104,8 +104,6 @@ extern rwlock_t svc_fd_lock;
 
 static struct svc_callout *svc_find(rpcprog_t, rpcvers_t,
                                     struct svc_callout **, char *);
-static void __xprt_do_unregister(SVCXPRT * xprt, bool dolock);
-
 uint32_t __tirpc_dcounter;
 
 /* Package init function.

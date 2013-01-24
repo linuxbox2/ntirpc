@@ -68,6 +68,7 @@ static bool svc_raw_getargs(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
 			    void *);
 static bool svc_raw_freeargs(SVCXPRT *, xdrproc_t, void *);
 static void svc_raw_destroy(SVCXPRT *);
+static void svc_raw_release(SVCXPRT *, u_int flags);
 static void svc_raw_ops(SVCXPRT *);
 static bool svc_raw_control(SVCXPRT *, const u_int, void *);
 
@@ -202,6 +203,12 @@ svc_raw_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 
 /*ARGSUSED*/
 static void
+svc_raw_release(SVCXPRT *xprt, u_int flags)
+{
+}
+
+/*ARGSUSED*/
+static void
 svc_raw_destroy(SVCXPRT *xprt)
 {
 }
@@ -229,7 +236,7 @@ svc_raw_ops(SVCXPRT *xprt)
         ops.xp_getargs = svc_raw_getargs;
         ops.xp_reply = svc_raw_reply;
         ops.xp_freeargs = svc_raw_freeargs;
-        ops.xp_release = svc_raw_destroy;
+        ops.xp_release = svc_raw_release;
         ops.xp_destroy = svc_raw_destroy;
         ops2.xp_control = svc_raw_control;
         ops2.xp_getreq = svc_getreq_default;

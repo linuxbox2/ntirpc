@@ -53,7 +53,6 @@
 #include <signal.h>
 #include <unistd.h>
 #include <err.h>
-#include "rpc_com.h"
 
 #ifdef IP_RECVERR
 #include <asm/types.h>
@@ -61,8 +60,15 @@
 #include <sys/uio.h>
 #endif
 
+#include <rpc/types.h>
+#include <misc/portable.h>
+#include <reentrant.h>
+#include <rpc/rpc.h>
+#include "rpc_com.h"
 #include "clnt_internal.h"
 #include "rpc_dplx_internal.h"
+#include "rpc_ctx.h"
+#include <rpc/svc_rqst.h>
 
 #define MAX_DEFAULT_FDS                 20000
 
@@ -73,7 +79,7 @@ static enum clnt_stat clnt_dg_call(CLIENT *, AUTH *, rpcproc_t, xdrproc_t,
 static void clnt_dg_geterr(CLIENT *, struct rpc_err *);
 static bool clnt_dg_freeres(CLIENT *, xdrproc_t, void *);
 static bool clnt_dg_ref(CLIENT *, u_int);
-static void clnt_dg_release(CLIENT *);
+static void clnt_dg_release(CLIENT *, u_int flags);
 static void clnt_dg_abort(CLIENT *);
 static bool clnt_dg_control(CLIENT *, u_int, void *);
 static void clnt_dg_destroy(CLIENT *);
@@ -525,10 +531,11 @@ out:
 static bool
 clnt_dg_ref(CLIENT *clnt, u_int flags)
 {
+    return (TRUE);
 }
 
 static void
-clnt_dg_release(CLIENT *clnt)
+clnt_dg_release(CLIENT *clnt, u_int flags)
 {
 }
 

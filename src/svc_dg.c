@@ -83,7 +83,7 @@ static bool svc_dg_getargs(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
 static void svc_dg_lock(SVCXPRT *, uint32_t, const char *, int);
 static void svc_dg_unlock(SVCXPRT *, uint32_t, const char *, int);
 static bool svc_dg_freeargs(SVCXPRT *, xdrproc_t, void *);
-static bool_t svc_dg_ref(SVCXPRT *xprt, u_int flags);
+static bool svc_dg_ref(SVCXPRT *xprt, u_int flags);
 static void svc_dg_release(SVCXPRT *xprt, u_int flags);
 static void svc_dg_destroy(SVCXPRT *);
 static bool svc_dg_control(SVCXPRT *, const u_int, void *);
@@ -400,7 +400,7 @@ svc_dg_dodestroy(SVCXPRT *xprt)
     (void) mem_free(xprt, sizeof (SVCXPRT));
 }
 
-static bool_t
+static bool
 svc_dg_ref(SVCXPRT *xprt, u_int flags)
 {
     if (! (flags & SVC_REF_FLAG_LOCKED))

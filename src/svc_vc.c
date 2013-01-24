@@ -718,8 +718,6 @@ svc_vc_ref(SVCXPRT *xprt, u_int flags)
 
     { /* debug check xd refcnt */
         struct x_vc_data *xd = (struct x_vc_data *) xprt->xp_p1;
-        struct rpc_dplx_rec *rec = xd->rec;
-
         __warnx(TIRPC_DEBUG_FLAG_REFCNT,
                 "%d %s: postref %p xd->refcnt %u",
                 __tirpc_dcounter, __func__, xprt, xd->refcnt);
@@ -870,6 +868,7 @@ svc_vc_release(SVCXPRT *xprt, u_int flags)
         mutex_unlock(&xprt->xp_lock);
         mutex_lock(&rec->mtx);
 
+        xd_refcnt = xd->refcnt;
         if (xd_refcnt == 0) {
             __warnx(TIRPC_DEBUG_FLAG_REFCNT,
                     "%d %s: xd_refcnt %u on destroyed %p %u calling "

@@ -965,7 +965,7 @@ out:
 void
 xprt_register(SVCXPRT *xprt)
 {
-    int code = 0;
+    int code __attribute__((unused)) = 0;
 
     /* Create a legacy/global event channel */
     if (! (__svc_params->ev_u.evchan.id)) {

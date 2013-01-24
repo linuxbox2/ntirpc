@@ -120,7 +120,7 @@ typedef struct rpc_client {
         bool (*cl_ref)(struct rpc_client *, u_int flags);
 
         /* release */
-        void  (*cl_release)(struct rpc_client *);
+        void  (*cl_release)(struct rpc_client *, u_int flags);
 
         /* release and mark destroyed */
         void  (*cl_destroy)(struct rpc_client *);
