@@ -42,7 +42,10 @@ struct rbtree_x
 #define RBT_X_FLAG_CACHE_RT   0x0002
 #define RBT_X_FLAG_CACHE_WT   0x0004
 
-#define rbtx_partition_of_scalar(xt, k) (((xt)->tree)+((k)%(xt)->npart))
+#define rbtx_idx_of_scalar(xt,k) ((k)%((xt)->npart))
+#define rbtx_partition_of_ix(xt,ix) ((xt)->tree+(ix))
+#define rbtx_partition_of_scalar(xt,k) \
+    (rbtx_partition_of_ix((xt),rbtx_idx_of_scalar((xt),(k))))
 
 extern int rbtx_init(struct rbtree_x *xt, opr_rbtree_cmpf_t cmpf,
                      uint32_t npart, uint32_t flags);
@@ -71,7 +74,7 @@ rbtree_x_cached_lookup(struct rbtree_x *xt, struct rbtree_x_part *t,
         t->cache[offset] = nv;
     }
 
-    __warnx(TIRPC_DEBUG_FLAG_LOCK,
+    __warnx(TIRPC_DEBUG_FLAG_RBTREE,
             "rbtree_x_cached_lookup: t %p nk %p nv %p"
             "(%s hk %"PRIx64" slot/offset %d)",
             t, nk, nv, (nv_cached) ? "CACHED" : "",
@@ -88,14 +91,25 @@ rbtree_x_cached_insert(struct rbtree_x *xt, struct rbtree_x_part *t,
     struct opr_rbtree_node *v_cached, *nv = NULL;
     uint32_t offset;
 
+    int cix = rbtx_idx_of_scalar(xt, hk);
+    struct rbtree_x_part *ct = rbtx_partition_of_ix(xt, cix);
+
     if (! t)
-        t = rbtx_partition_of_scalar(xt, hk);
+        t = ct;
 
     offset= hk % xt->cachesz;
     v_cached = t->cache[offset];
+
+    __warnx(TIRPC_DEBUG_FLAG_RBTREE,
+            "rbtree_x_cached_insert: cix %d ct %p t %p inserting %p "
+            "(%s hk %"PRIx64" slot/offset %d) flags %d",
+            cix, ct, t, nk, (v_cached) ? "rbt" : "cache",
+            hk, offset, xt->flags);
+
     if (xt->flags & RBT_X_FLAG_CACHE_WT) {
-        if (! v_cached)
+        if (! v_cached) {
             nv = t->cache[offset] = nk;
+        }
         else {
             nv = opr_rbtree_insert(&t->t, nk);
 	    if (! nv)
@@ -107,12 +121,6 @@ rbtree_x_cached_insert(struct rbtree_x *xt, struct rbtree_x_part *t,
         (void) opr_rbtree_insert(&t->t, nk);
     }
 
-    __warnx(TIRPC_DEBUG_FLAG_LOCK,
-            "rbtree_x_cached_insert_wt: t %p inserting %p "
-            "(%s hk %"PRIx64" slot/offset %d)",
-            t, nk, (v_cached) ? "chaining" : "caching",
-            hk, offset);
-
     return (nv);
 }
 
@@ -123,21 +131,25 @@ rbtree_x_cached_remove(struct rbtree_x *xt, struct rbtree_x_part *t,
     struct opr_rbtree_node *v_cached;
     uint32_t offset;
 
+    int cix = rbtx_idx_of_scalar(xt, hk);
+    struct rbtree_x_part *ct = rbtx_partition_of_ix(xt, cix);
+
     if (! t)
-        t = rbtx_partition_of_scalar(xt, hk);
+        t = ct;
 
     offset = hk % xt->cachesz;
     v_cached = t->cache[offset];
 
-    __warnx(TIRPC_DEBUG_FLAG_LOCK,
-            "rbtree_x_cached_remove_wt: t %p removing %p "
-        "(%s hk %"PRIx64" slot/offset %d)",
-        t, nk, (v_cached) ? "caching" : "chaining",
-        hk, offset);
+    __warnx(TIRPC_DEBUG_FLAG_RBTREE,
+            "rbtree_x_cached_remove: cix %d ct %p t %p removing %p "
+            "(%s hk %"PRIx64" slot/offset %d) flags %d",
+            cix, ct, t, nk, (v_cached) ? "cache" : "rbt",
+            hk, offset, xt->flags);
 
     if (xt->flags & RBT_X_FLAG_CACHE_WT) {
-        if (v_cached && (t->t.cmpf(nk, v_cached) == 0))
+        if (v_cached && (t->t.cmpf(nk, v_cached) == 0)) {
             t->cache[offset] = NULL;
+        }
         else {
             return (opr_rbtree_remove(&t->t, nk));
         }
