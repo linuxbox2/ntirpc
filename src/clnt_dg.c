@@ -309,7 +309,7 @@ clnt_dg_call(cl, proc, xargs, argsp, xresults, resultsp, utimeout)
 	struct sockaddr *sa;
 	sigset_t mask;
 	sigset_t newmask;
-	socklen_t inlen, salen;
+	socklen_t salen;
 	ssize_t recvlen = 0;
 	int rpc_lock_value;
 	u_int32_t xid, inval, outval;
@@ -481,16 +481,13 @@ get_reply:
 		goto send_again;
 	}
 
-	if (cu->cu_async == TRUE)
-		inlen = (socklen_t)recvlen;
-	else {
+	if (cu->cu_async == FALSE) {
 		memcpy(&inval, cu->cu_inbuf, sizeof(u_int32_t));
 		memcpy(&outval, cu->cu_outbuf, sizeof(u_int32_t));
 		if (inval != outval) {
 			total_time -= tv;
 			goto send_again;
 		}
-		inlen = (socklen_t)recvlen;
 	}
 
 	/*
