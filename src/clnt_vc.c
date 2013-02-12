@@ -504,6 +504,8 @@ clnt_vc_control(cl, request, info)
 	sigset_t mask;
 	sigset_t newmask;
 	int rpc_lock_value;
+	u_int32_t tmp;
+	u_long ltmp;
 
 	assert(cl != NULL);
 
@@ -583,15 +585,15 @@ clnt_vc_control(cl, request, info)
 		 * begining of the RPC header. MUST be changed if the
 		 * call_struct is changed
 		 */
-		*(u_int32_t *)info =
-		    ntohl(*(u_int32_t *)(void *)(ct->ct_u.ct_mcallc +
-		    4 * BYTES_PER_XDR_UNIT));
+		memcpy(&tmp, ct->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT, sizeof (tmp));
+		ltmp = ntohl(tmp);
+		memcpy(info, &ltmp, sizeof (ltmp));
 		break;
 
 	case CLSET_VERS:
-		*(u_int32_t *)(void *)(ct->ct_u.ct_mcallc +
-		    4 * BYTES_PER_XDR_UNIT) =
-		    htonl(*(u_int32_t *)info);
+		memcpy(&ltmp, info, sizeof (ltmp));
+		tmp = htonl(ltmp);
+		memcpy(ct->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT, &tmp, sizeof(tmp));
 		break;
 
 	case CLGET_PROG:
@@ -601,15 +603,15 @@ clnt_vc_control(cl, request, info)
 		 * begining of the RPC header. MUST be changed if the
 		 * call_struct is changed
 		 */
-		*(u_int32_t *)info =
-		    ntohl(*(u_int32_t *)(void *)(ct->ct_u.ct_mcallc +
-		    3 * BYTES_PER_XDR_UNIT));
+		memcpy(&tmp, ct->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT, sizeof (tmp));
+		ltmp = ntohl (tmp);
+		memcpy(info, &ltmp, sizeof (ltmp));
 		break;
 
 	case CLSET_PROG:
-		*(u_int32_t *)(void *)(ct->ct_u.ct_mcallc +
-		    3 * BYTES_PER_XDR_UNIT) =
-		    htonl(*(u_int32_t *)info);
+		memcpy(&ltmp, info, sizeof (ltmp));
+		tmp = htonl(ltmp);
+		memcpy(ct->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT, &tmp, sizeof(tmp));
 		break;
 
 	default:
