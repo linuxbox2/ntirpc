@@ -262,6 +262,32 @@ authgss_get_private_data(AUTH *auth, struct authgss_private_data *pd)
 	pd->pd_ctx = gd->ctx;
 	pd->pd_ctx_hndl = gd->gc.gc_ctx;
 	pd->pd_seq_win = gd->win;
+	/*
+	 * We've given this away -- don't try to use it ourself any more
+	 * Caller should call authgss_free_private_data to free data.
+	 * This also ensures that authgss_destroy_context() won't try to
+	 * send an RPCSEC_GSS_DESTROY request which might inappropriately
+	 * destroy the context.
+	 */
+	gd->gc.gc_ctx.length = 0;
+	gd->gc.gc_ctx.value = NULL;
+
+	return (TRUE);
+}
+
+bool_t
+authgss_free_private_data(struct authgss_private_data *pd)
+{
+	OM_uint32	min_stat;
+	gss_log_debug("in authgss_free_private_data()");
+
+	if (!pd)
+		return (FALSE);
+
+	pd->pd_ctx = NULL;
+	gss_release_buffer(&min_stat, &pd->pd_ctx_hndl);
+	memset(&pd->pd_ctx_hndl, 0, sizeof(pd->pd_ctx_hndl));
+	pd->pd_seq_win = 0;
 
 	return (TRUE);
 }

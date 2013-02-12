@@ -119,6 +119,7 @@ AUTH   *authgss_create_default	__P((CLIENT *, char *, struct rpc_gss_sec *));
 bool_t authgss_service		__P((AUTH *auth, int svc));
 bool_t authgss_get_private_data	__P((AUTH *auth,
 	    			     struct authgss_private_data *));
+bool_t authgss_free_private_data __P((struct authgss_private_data *));
 
 void	gss_log_debug		__P((const char *fmt, ...));
 void	gss_log_status		__P((char *m, OM_uint32 major,
