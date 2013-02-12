@@ -138,7 +138,7 @@ no_yp:
 
 struct rpcent *
 getrpcbyname(name)
-	char *name;
+	const char *name;
 {
 	struct rpcent *rpc = NULL;
 	char **rp;

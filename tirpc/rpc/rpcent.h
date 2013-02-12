@@ -55,7 +55,7 @@ struct rpcent {
 };
 
 /* Old interfaces that return a pointer to a static area;  MT-unsafe */
-extern struct rpcent *getrpcbyname(char *);
+extern struct rpcent *getrpcbyname(const char *);
 extern struct rpcent *getrpcbynumber(int);
 extern struct rpcent *getrpcent(void);
 #endif
