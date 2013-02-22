@@ -638,6 +638,11 @@ svc_rqst_rearm_events(SVCXPRT *xprt, uint32_t  __attribute__((unused)) flags)
     xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
     sr_rec = xp_ev->sr_rec;
 
+    /* Don't rearm a destroyed (but not yet collected) xprx */
+    if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
+        goto out;
+
+    /* MUST follow the destroyed check above */
     assert(sr_rec);
 
     mutex_lock(&sr_rec->mtx);
@@ -675,6 +680,7 @@ svc_rqst_rearm_events(SVCXPRT *xprt, uint32_t  __attribute__((unused)) flags)
 
     mutex_unlock(&sr_rec->mtx);
 
+out:
     return (0);
 }
 
