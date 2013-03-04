@@ -852,14 +852,10 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
             /* new events */
             for (ix = 0; ix < n_events; ++ix) {
                 ev = &(sr_rec->ev_u.epoll.events[ix]);
-
-                __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-                        "%s: event ix %d fd or ptr (%d:%p)", __func__,
-                        ix, ev->data.fd, ev->data.ptr);
-
                 if (ev->data.fd != sr_rec->sv[1]) {
                     xprt = (SVCXPRT *) ev->data.ptr;
                     xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
+
                     if (! (xp_ev->flags & XP_EV_FLAG_BLOCKED)) {
                         /* check for valid xprt */
                         mutex_lock(&xprt->xp_lock);
@@ -872,7 +868,14 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
                                     __tirpc_dcounter, __func__,
                                     xprt, refcnt);
 
+                            __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+                                    "%s: event ix %d fd or ptr (%d:%p) "
+                                    "EPOLL event %d (refs %d)",
+                                    __func__, ix, ev->data.fd, ev->data.ptr,
+                                    ev->events, xprt->xp_refcnt);
+
                             SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
+
                             /* ! LOCKED */
                             code = xprt->xp_ops2->xp_getreq(xprt);
                         } else
