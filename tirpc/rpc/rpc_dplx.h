@@ -30,7 +30,7 @@
 
 /* slx: send lock xprt */
 #define rpc_dplx_slx(xprt) \
-    rpc_dplx_slxi(xprt, __FILE__, __LINE__)
+    rpc_dplx_slxi(xprt, __func__, __LINE__)
 
 /* slxi: send lock xprt impl */
 void rpc_dplx_slxi(SVCXPRT *xprt, const char *file, int line);
@@ -40,7 +40,7 @@ void rpc_dplx_sux(SVCXPRT *xprt);
 
 /* rlx: recv lock xprt */
 #define rpc_dplx_rlx(xprt) \
-    rpc_dplx_rlxi(xprt, __FILE__, __LINE__)
+    rpc_dplx_rlxi(xprt, __func__, __LINE__)
 
 /* rlxi: recv lock xprt impl */
 void rpc_dplx_rlxi(SVCXPRT *xprt, const char *file, int line);
@@ -52,7 +52,7 @@ void rpc_dplx_rux(SVCXPRT *xprt);
 
 /* slc: send lock clnt */
 #define rpc_dplx_slc(clnt) \
-    rpc_dplx_slci(clnt, __FILE__, __LINE__)
+    rpc_dplx_slci(clnt, __func__, __LINE__)
 
 /* slci: send lock clnt impl */
 void rpc_dplx_slci(CLIENT *clnt, const char *file, int line);
@@ -62,7 +62,7 @@ void rpc_dplx_suc(CLIENT *clnt);
 
 /* rlc: recv lock clnt */
 #define rpc_dplx_rlc(clnt) \
-    rpc_dplx_rlci(clnt, __FILE__, __LINE__)
+    rpc_dplx_rlci(clnt, __func__, __LINE__)
 
 /* rlci: recv lock clnt impl */
 void rpc_dplx_rlci(CLIENT *clnt, const char *file, int line);
@@ -75,7 +75,7 @@ void rpc_dplx_ruc(CLIENT *client);
 
 /* slf: send lock fd */
 #define rpc_dplx_slf(fd) \
-    rpc_dplx_slfi(fd, __FILE__, __LINE__)
+    rpc_dplx_slfi(fd, __func__, __LINE__)
 
 /* slfi: send lock fd impl */
 void rpc_dplx_slfi(int fd, const char *file, int line);
@@ -85,7 +85,7 @@ void rpc_dplx_suf(int fd);
 
 /* rlf: recv lock fd */
 #define rpc_dplx_rlf(fd) \
-    rpc_dplx_rlfi(fd, __FILE__, __LINE__)
+    rpc_dplx_rlfi(fd, __func__, __LINE__)
 
 /* rlfi: recv lock fd impl */
 void rpc_dplx_rlfi(int fd, const char *file, int line);
