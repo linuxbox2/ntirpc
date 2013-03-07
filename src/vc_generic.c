@@ -483,4 +483,6 @@ void vc_shared_destroy(struct x_vc_data *xd)
     if (xprt)
         rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED);
 
+    /* free xd itself */
+    mem_free(xd, sizeof(struct x_vc_data));
 }
