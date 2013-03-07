@@ -59,7 +59,7 @@ libntirpc_la_SOURCES = auth_none.c auth_unix.c authunix_prot.c bindresvport.c \
 
 ## XDR
 libntirpc_la_SOURCES += xdr.c xdr_rec.c xdr_array.c xdr_float.c xdr_mem.c \
-	xdr_reference.c xdr_stdio.c xdr_vrec.c
+	xdr_reference.c xdr_stdio.c xdr_vrec.c xdr_vout.c
 
 ## Secure-RPC
 if GSS
