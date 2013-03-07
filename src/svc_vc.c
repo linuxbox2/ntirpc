@@ -1314,6 +1314,8 @@ svc_vc_override_ops(SVCXPRT *xprt, SVCXPRT *newxprt)
         newxprt->xp_ops2->xp_dispatch = xprt->xp_ops2->xp_dispatch;
     if (xprt->xp_ops2->xp_rdvs)
         newxprt->xp_ops2->xp_rdvs = xprt->xp_ops2->xp_rdvs;
+    if (xprt->xp_ops2->xp_free_xprt)
+        newxprt->xp_ops2->xp_free_xprt = xprt->xp_ops2->xp_free_xprt;
 }
 
 static void
