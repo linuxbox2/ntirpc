@@ -278,7 +278,7 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data,
 
         /* permit wakeup of threads blocked in epoll_wait, with a
          * couple of possible semantics */
-        sr_rec->ev_u.epoll.ctrl_ev.events = EPOLLIN|EPOLLONESHOT;
+        sr_rec->ev_u.epoll.ctrl_ev.events = EPOLLIN|EPOLLRDHUP|EPOLLONESHOT;
         sr_rec->ev_u.epoll.ctrl_ev.data.fd = sr_rec->sv[1];
         code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
                          EPOLL_CTL_ADD,
