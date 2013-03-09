@@ -253,6 +253,8 @@ xdr_dplx_msg(XDR *xdrs, struct rpc_msg *dmsg)
                 break;
             default:
                 /* unlikely */
+                __warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+                        "%s: dmsg->rm_xid %u", __func__, dmsg->rm_xid);
                 return (FALSE);
             }
         } else {

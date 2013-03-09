@@ -1144,19 +1144,20 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
     xdrs->x_lib[0] = (void *) RPC_DPLX_SVC;
     xdrs->x_lib[1] = (void *) xprt; /* transiently thread xprt */
 
-    /*
-     * No need skip records with nonblocking connections
-     */
-    if (xd->shared.nonblock == FALSE)
+    /* Consumes any remaining -fragment- bytes, and clears last_frag */
 #if XDR_VREC
-        (void) xdr_vrec_skiprecord(xdrs);
+    (void) xdr_vrec_skiprecord(xdrs);
 #else
-        (void) xdr_inrec_skiprecord(xdrs);
+    (void) xdr_inrec_skiprecord(xdrs);
 #endif
 
     req->rq_msg = alloc_rpc_msg();
     req->rq_clntcred = req->rq_msg->rm_call.cb_cred.oa_base +
         (2 * MAX_AUTH_BYTES);
+
+    /* Advances to next record, will read up to 1024 bytes
+     * into the stream. */
+    (void) xdr_inrec_readahead(xdrs, 1024);
 
     if (xdr_dplx_msg(xdrs, req->rq_msg)) {
         switch (req->rq_msg->rm_direction) {
