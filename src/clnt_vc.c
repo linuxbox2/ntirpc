@@ -72,6 +72,7 @@
 #include "rpc_dplx_internal.h"
 #include "rpc_ctx.h"
 #include <rpc/svc_rqst.h>
+#include <rpc/xdr_inrec.h>
 
 #ifndef __APPLE__
 struct cmessage {
@@ -312,9 +313,8 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
                     VREC_FLAG_NONE);
 #else
     /* duplex streams */
-    xdrrec_create(&(xd->shared.xdrs_in), sendsz, xd->shared.recvsz, xd,
-                  generic_read_vc,
-                  generic_write_vc);
+    xdr_inrec_create(&(xd->shared.xdrs_in), xd->shared.recvsz, xd,
+                     generic_read_vc);
     xd->shared.xdrs_in.x_op = XDR_DECODE;
 
     xdrrec_create(&(xd->shared.xdrs_out), sendsz, xd->shared.recvsz, xd,
@@ -493,7 +493,7 @@ call_again:
         while (TRUE) {
 
             /* skiprecord */
-            if (! xdrrec_skiprecord(xdrs)) {
+            if (! xdr_inrec_skiprecord(xdrs)) {
                 __warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
                         "%s: error at skiprecord", __func__);
                 vc_call_return_rlocked(ctx->error.re_status);

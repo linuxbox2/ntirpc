@@ -71,6 +71,7 @@
 #include "rpc_dplx_internal.h"
 #include "rpc_ctx.h"
 #include <rpc/svc_rqst.h>
+#include <rpc/xdr_inrec.h>
 #include <rpc/xdr_vrec.h>
 #include <getpeereid.h>
 
@@ -563,9 +564,8 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
                     VREC_FLAG_NONE);
 #else
     /* duplex streams */
-    xdrrec_create(&(xd->shared.xdrs_in), sendsz, recvsz, xd,
-                  generic_read_vc,
-                  generic_write_vc);
+    xdr_inrec_create(&(xd->shared.xdrs_in), recvsz, xd,
+                     generic_read_vc);
     xd->shared.xdrs_in.x_op = XDR_DECODE;
 
     xdrrec_create(&(xd->shared.xdrs_out), sendsz, recvsz, xd,
@@ -1112,7 +1112,7 @@ svc_vc_stat(SVCXPRT *xprt)
     /* SVC_STAT() only cares about the recv queue */
     if (! xdr_vrec_eof(&(xd->shared.xdrs_in)))
 #else
-    if (! xdrrec_eof(&(xd->shared.xdrs_in)))
+    if (! xdr_inrec_eof(&(xd->shared.xdrs_in)))
 #endif
         return (XPRT_MOREREQS);
 
@@ -1151,7 +1151,7 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
 #if XDR_VREC
         (void) xdr_vrec_skiprecord(xdrs);
 #else
-        (void) xdrrec_skiprecord(xdrs);
+        (void) xdr_inrec_skiprecord(xdrs);
 #endif
 
     req->rq_msg = alloc_rpc_msg();
