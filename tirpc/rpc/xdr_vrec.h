@@ -23,6 +23,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef XDR_VREC_H
+#define XDR_VREC_H
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <misc/queue.h>
@@ -158,3 +161,5 @@ extern bool xdr_vrec_skiprecord(XDR *);
 
 /* true if no more input */
 extern bool xdr_vrec_eof(XDR *);
+
+#endif /* XDR_VREC_H */
