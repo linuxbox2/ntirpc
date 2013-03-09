@@ -68,6 +68,7 @@
 #include <rpc/clnt.h>
 #include <stddef.h>
 #include "rpc_com.h"
+
 static bool xdr_inrec_getlong(XDR *, long *);
 static bool xdr_inrec_putlong(XDR *, const long *);
 static bool xdr_inrec_getbytes(XDR *, char *, u_int);
@@ -78,6 +79,8 @@ static bool xdr_inrec_setpos(XDR *, u_int);
 static int32_t *xdr_inrec_inline(XDR *, u_int);
 static void xdr_inrec_destroy(XDR *);
 static bool xdr_inrec_noop(void);
+
+extern bool xdr_inrec_readahead(XDR *, u_int);
 
 typedef bool (* dummyfunc3)(XDR *, int, void *);
 typedef bool (* dummy_getbufs)(XDR *, xdr_uio *, u_int, u_int);
@@ -128,7 +131,6 @@ typedef struct rec_strm {
     bool last_frag;
     u_int recvsize;
 
-    bool nonblock;
     bool in_haveheader;
     u_int32_t in_header;
     char *in_hdrp;
@@ -199,7 +201,6 @@ xdr_inrec_create(XDR *xdrs,
     rstrm->in_haveheader = FALSE;
     rstrm->in_hdrlen = 0;
     rstrm->in_hdrp = (char *)(void *)&rstrm->in_header;
-    rstrm->nonblock = FALSE;
     rstrm->in_reclen = 0;
     rstrm->in_received = 0;
 }
@@ -319,6 +320,30 @@ xdr_inrec_setpos(XDR *xdrs, u_int pos)
     return (FALSE);
 }
 
+bool xdr_inrec_readahead(XDR *xdrs, u_int maxfraglen)
+{
+    RECSTREAM *rstrm;
+    int current;
+
+    rstrm = (RECSTREAM *)xdrs->x_private;
+
+    current = (int)rstrm->fbtbc;
+    if (current == 0) {
+        if (rstrm->last_frag) {
+            return (FALSE);
+        }
+        if (! set_input_fragment(rstrm))
+            return (FALSE);
+        current = (int)rstrm->fbtbc;
+        uint32_t n = ((int32_t)ntohl((u_int32_t)*(rstrm->in_finger)));
+        __warnx(TIRPC_DEBUG_FLAG_XDRREC,
+                "%s: 1 nextint %u fbtbc %u",
+                __func__, n, rstrm->fbtbc);
+    }
+    return (TRUE);
+}
+
+
 static int32_t *
 xdr_inrec_inline(XDR *xdrs, u_int len)
 {
@@ -358,14 +383,13 @@ xdr_inrec_destroy(XDR *xdrs)
  */
 
 /*
- * Before reading (deserializing from the stream, one should always call
+ * Before reading (deserializing from the stream), one should always call
  * this procedure to guarantee proper record alignment.
  */
 bool
 xdr_inrec_skiprecord(XDR *xdrs)
 {
     RECSTREAM *rstrm = (RECSTREAM *)(xdrs->x_private);
-    enum xprt_stat xstat;
 
     while (rstrm->fbtbc > 0 || (! rstrm->last_frag)) {
         if (! skip_input_bytes(rstrm, rstrm->fbtbc))
@@ -407,9 +431,6 @@ fill_input_buf(RECSTREAM *rstrm)
     u_int32_t i;
     int len;
 
-    if (rstrm->nonblock)
-        return FALSE;
-
     where = rstrm->in_base;
     i = (u_int32_t)(PtrToUlong(rstrm->in_boundry) % BYTES_PER_XDR_UNIT);
     where += i;
@@ -426,19 +447,11 @@ fill_input_buf(RECSTREAM *rstrm)
 static bool  /* knows nothing about records!  Only about input buffers */
 get_input_bytes(RECSTREAM *rstrm, char *addr, int len)
 {
-    size_t current;
-
-    if (rstrm->nonblock) {
-        if (len > (int)(rstrm->in_boundry - rstrm->in_finger))
-            return FALSE;
-        memcpy(addr, rstrm->in_finger, (size_t)len);
-        rstrm->in_finger += len;
-        return TRUE;
-    }
+    int32_t current;
 
     while (len > 0) {
-      current = (size_t)(PtrToUlong(rstrm->in_boundry) -
-			 PtrToUlong(rstrm->in_finger));
+      current = (PtrToUlong(rstrm->in_boundry) -
+                 PtrToUlong(rstrm->in_finger));
         if (current == 0) {
             if (! fill_input_buf(rstrm))
                 return (FALSE);
@@ -456,12 +469,34 @@ get_input_bytes(RECSTREAM *rstrm, char *addr, int len)
 static bool  /* next two bytes of the input stream are treated as a header */
 set_input_fragment(RECSTREAM *rstrm)
 {
+    int32_t *buflp;
     u_int32_t header;
+    int current;
 
-    if (rstrm->nonblock)
-        return FALSE;
-    if (! get_input_bytes(rstrm, (char *)(void *)&header, sizeof(header)))
-        return (FALSE);
+    /* next 4? */
+    current = (PtrToUlong(rstrm->in_boundry) - PtrToUlong(rstrm->in_finger));
+    if (current > 0) {
+        /* we should be here */
+        if (current >= sizeof(header)) {
+            buflp = (int32_t *)(void *)(rstrm->in_finger);
+            header = (u_int32_t)(*buflp);
+            rstrm->in_finger += sizeof(int32_t);
+        } else {
+            /* ugh */
+            abort();
+            char *thdr = (char*)(&header);
+            memcpy(thdr, rstrm->in_finger, current);
+            rstrm->in_finger += current;
+            thdr += current;
+            if (! get_input_bytes(rstrm, thdr, sizeof(header) - current))
+                return (FALSE);
+        }
+    } else {
+        /* or here */
+        if (! get_input_bytes(rstrm, (char *)(void *)&header, sizeof(header)))
+            return (FALSE);
+    }
+
     header = ntohl(header);
     rstrm->last_frag = ((header & LAST_FRAG) == 0) ? FALSE : TRUE;
     /*
