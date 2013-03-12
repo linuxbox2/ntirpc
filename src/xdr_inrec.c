@@ -68,6 +68,7 @@
 #include <rpc/clnt.h>
 #include <stddef.h>
 #include "rpc_com.h"
+#include <intrinsic.h>
 
 static bool xdr_inrec_getlong(XDR *, long *);
 static bool xdr_inrec_putlong(XDR *, const long *);
@@ -320,7 +321,8 @@ xdr_inrec_setpos(XDR *xdrs, u_int pos)
     return (FALSE);
 }
 
-bool xdr_inrec_readahead(XDR *xdrs, u_int maxfraglen)
+bool
+xdr_inrec_readahead(XDR *xdrs, u_int maxfraglen)
 {
     RECSTREAM *rstrm;
     int current;
@@ -337,7 +339,6 @@ bool xdr_inrec_readahead(XDR *xdrs, u_int maxfraglen)
     }
     return (TRUE);
 }
-
 
 static int32_t *
 xdr_inrec_inline(XDR *xdrs, u_int len)
@@ -467,9 +468,30 @@ set_input_fragment(RECSTREAM *rstrm, int32_t maxreadahead)
     u_int32_t header;
     int current, next;
 
-    next = MIN(sizeof(header), maxreadahead);
-    if (! get_input_bytes(rstrm, (char *)(void *)&header, next))
-        return (FALSE);
+    /* next 4? */
+    current = (PtrToUlong(rstrm->in_boundry) - PtrToUlong(rstrm->in_finger));
+    if (current > 0) {
+        /* next fragment header already read */
+        int32_t *buflp;
+        __warnx(TIRPC_DEBUG_FLAG_XDRREC,
+                "%s: next fragment header already read", __func__);
+        if (unlikely(current <= sizeof(header))) {
+             /* XXX impossible? */
+            __warnx(TIRPC_DEBUG_FLAG_XDRREC,
+                    "%s: yikes, trailing frag bytes not multiple of UNIT");
+            if (! get_input_bytes(rstrm, (char *)(void *)&header, maxreadahead))
+                return (FALSE);
+        }
+        buflp = (int32_t *)(void *)(rstrm->in_finger);
+        header = (u_int32_t)(*buflp);
+        rstrm->in_finger += sizeof(int32_t);
+    } else {
+        /* readahead */
+        next = MIN((sizeof(header) - current), maxreadahead);
+        /* assert(next >= 4) */
+        if (! get_input_bytes(rstrm, (char *)(void *)&header, next))
+            return (FALSE);
+    }
 
     header = ntohl(header);
     rstrm->last_frag = ((header & LAST_FRAG) == 0) ? FALSE : TRUE;
