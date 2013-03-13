@@ -72,6 +72,7 @@ SET(ntirpc_common_SRCS
   xdr_rec.c
   xdr_reference.c
   xdr_stdio.c
+  xdr_inrec.c
   xdr_vrec.c
 )
 
