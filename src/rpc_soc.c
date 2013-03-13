@@ -485,7 +485,8 @@ clnt_broadcast(u_long  prog,  /* program number */
                          (resultproc_t) rpc_wrap_bcast, "udp");
 }
 
-#ifndef __APPLE__
+#if !defined(__APPLE__)
+#if USE_DES
 
 /*
  * Create the client des authentication object. Obsoleted by
@@ -518,7 +519,8 @@ fallback:
     return (dummy);
 }
 
-#endif
+#endif /* USE_DES */
+#endif /* !APPLE */
 
 /*
  * Create a client handle for a unix connection. Obsoleted by clnt_vc_create()

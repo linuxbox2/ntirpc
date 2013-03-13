@@ -817,6 +817,10 @@ svc_validate_xprt_list(SVCXPRT *xprt)
     return (code);
 }
 
+extern enum auth_stat
+svc_auth_authenticate(struct svc_req *, struct rpc_msg *,
+                      bool *);
+
 void
 svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg)
 {

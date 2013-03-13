@@ -587,7 +587,6 @@ svc_rqst_unhook_events(SVCXPRT *xprt /* LOCKED */,
                        struct svc_rqst_rec *sr_rec /* LOCKED */)
 {
     struct svc_xprt_ev *xp_ev;
-    int code = 0;
 
     cond_init_svc_rqst();
 
@@ -631,7 +630,6 @@ svc_rqst_rearm_events(SVCXPRT *xprt, uint32_t  __attribute__((unused)) flags)
 {
     struct svc_rqst_rec *sr_rec;
     struct svc_xprt_ev *xp_ev;
-    int code = 0;
 
     cond_init_svc_rqst();
 
@@ -690,7 +688,6 @@ svc_rqst_hook_events(SVCXPRT *xprt /* LOCKED */,
 {
 
     struct svc_xprt_ev *xp_ev;
-    int code = 0;
 
     cond_init_svc_rqst();
 

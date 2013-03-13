@@ -50,7 +50,7 @@ typedef struct rpc_dplx_lock
     struct ct_wait_entry we;
     int32_t lock_flag_value; /* XXX killme */
     struct {
-        char file[32];
+        char *func;
         int line;
     } locktrace;
 } rpc_dplx_lock_t;

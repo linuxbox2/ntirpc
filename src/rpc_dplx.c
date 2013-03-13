@@ -56,7 +56,7 @@ rpc_dplx_slxi(SVCXPRT *xprt, const char *func, int line)
     rpc_dplx_lock_t *lk = &rec->send.lock;
     mutex_lock(&lk->we.mtx);
     if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_LOCK) {
-        lk->locktrace.line = (char*) func;
+        lk->locktrace.func = (char*) func;
         lk->locktrace.line = line;
     }
 }
@@ -75,7 +75,7 @@ rpc_dplx_rlxi(SVCXPRT *xprt, const char *func, int line)
     rpc_dplx_lock_t *lk = &rec->recv.lock;
     mutex_lock(&lk->we.mtx);
     if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_LOCK) {
-        lk->locktrace.line = (char*) func;
+        lk->locktrace.func = (char*) func;
         lk->locktrace.line = line;
     }
 }
@@ -95,7 +95,7 @@ rpc_dplx_slci(CLIENT *clnt, const char *func, int line)
 
     mutex_lock(&lk->we.mtx);
     if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_LOCK) {
-        lk->locktrace.line = (char*) func;
+        lk->locktrace.func = (char*) func;
         lk->locktrace.line = line;
     }
 }
@@ -115,7 +115,7 @@ rpc_dplx_rlci(CLIENT *clnt, const char *func, int line)
 
     mutex_lock(&lk->we.mtx);
     if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_LOCK) {
-        lk->locktrace.line = (char*) func;
+        lk->locktrace.func = (char*) func;
         lk->locktrace.line = line;
     }
 }
@@ -295,7 +295,7 @@ rpc_dplx_slfi(int fd, const char *func, int line)
 
     mutex_lock(&lk->we.mtx);
     if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_LOCK) {
-        lk->locktrace.line = (char*) func;
+        lk->locktrace.func = (char*) func;
         lk->locktrace.line = line;
     }
 
@@ -321,7 +321,7 @@ rpc_dplx_rlfi(int fd, const char *func, int line)
 
     mutex_lock(&lk->we.mtx);
     if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_LOCK) {
-        lk->locktrace.line = (char*) func;
+        lk->locktrace.func = (char*) func;
         lk->locktrace.line = line;
     }
 
