@@ -1119,14 +1119,6 @@ svc_vc_stat(SVCXPRT *xprt)
     return (XPRT_IDLE);
 }
 
-static inline void
-cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
-{
-    mutex_lock(&xprt->xp_lock);
-    xd->sx.strm_stat = XPRT_DIED;
-    mutex_unlock(&xprt->xp_lock);
-}
-
 static bool
 svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
 {
@@ -1186,7 +1178,6 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
     }
     __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
             "%s: xdr_dplx_msg failed (will set dead)", __func__);
-    cfconn_set_dead(xprt, xd);
     return (FALSE);
 }
 
