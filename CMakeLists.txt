@@ -1,7 +1,9 @@
 
 # Ganesha CMake integration
 
-add_subdirectory(src)
+if(TIRPC_EPOLL)
+  add_definitions(-DTIRPC_EPOLL)
+endif(TIRPC_EPOLL)
 
 include_directories(
   "${PROJECT_BINARY_DIR}/include"
@@ -11,4 +13,4 @@ include_directories(
   "${PROJECT_SOURCE_DIR}/libntirpc/src/"
 )
 
-
+add_subdirectory(src)
