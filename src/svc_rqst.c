@@ -360,8 +360,7 @@ evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
 
     refcnt = xprt->xp_refcnt;
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: before channel release %p %u", __tirpc_dcounter,
-            __func__, xprt, refcnt);
+            "%s: before channel release %p %u", __func__, xprt, refcnt);
 
     /* channel ref */
     SVC_RELEASE(xprt, SVC_RELEASE_FLAG_LOCKED);
@@ -549,8 +548,7 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 
     refcnt = xprt->xp_refcnt;
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: pre channel ref %p %u", __tirpc_dcounter, __func__, xprt,
-            refcnt);
+            "%s: pre channel ref %p %u", __func__, xprt, refcnt);
 
     /* channel ref */
     SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
@@ -859,20 +857,21 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
                     if (! (xp_ev->flags & XP_EV_FLAG_BLOCKED)) {
                         /* check for valid xprt */
                         mutex_lock(&xprt->xp_lock);
+
                         if ((! (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) &&
                             (xprt->xp_refcnt > 0)) {
                             /* XXX take extra ref,  callout will release */
                             refcnt = xprt->xp_refcnt;
+
                             __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                                    "%d %s: pre getreq ref %p %u",
-                                    __tirpc_dcounter, __func__,
-                                    xprt, refcnt);
+                                    "%s: pre getreq ref %p %u",
+                                    __func__, xprt, refcnt);
 
                             __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
                                     "%s: event ix %d fd or ptr (%d:%p) "
                                     "EPOLL event %d (refs %d)",
                                     __func__, ix, ev->data.fd, ev->data.ptr,
-                                    ev->events, xprt->xp_refcnt);
+                                    ev->events, refcnt);
 
                             SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
 

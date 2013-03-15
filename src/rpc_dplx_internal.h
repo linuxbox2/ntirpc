@@ -96,8 +96,7 @@ rpc_dplx_ref(struct rpc_dplx_rec *rec, u_int flags)
         mutex_unlock(&rec->mtx);
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: rec %p rec->refcnt %u",
-            __tirpc_dcounter, __func__, rec, refcnt);
+            "%s: rec %p rec->refcnt %u", __func__, rec, refcnt);
 
     return(refcnt);
 }

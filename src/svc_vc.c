@@ -719,13 +719,13 @@ svc_vc_ref(SVCXPRT *xprt, u_int flags)
     { /* debug check xd refcnt */
         struct x_vc_data *xd = (struct x_vc_data *) xprt->xp_p1;
         __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                "%d %s: postref %p xd->refcnt %u",
-                __tirpc_dcounter, __func__, xprt, xd->refcnt);
+                "%s: postref %p xd->refcnt %u",
+                __func__, xprt, xd->refcnt);
     }
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: postref %p xp_refcnt %u",
-            __tirpc_dcounter, __func__, xprt, refcnt);
+            "%s: postref %p xp_refcnt %u",
+            __func__, xprt, refcnt);
 
     return (true);
 }
@@ -782,15 +782,14 @@ svc_rdvs_release(SVCXPRT *xprt, u_int flags)
     mutex_unlock(&xprt->xp_lock);
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: postunref %p xp_refcnt %u",
-            __tirpc_dcounter, __func__, xprt, xp_refcnt);
+            "%s: postunref %p xp_refcnt %u", __func__, xprt, xp_refcnt);
 
     /* conditional destroy */
     if ((xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) &&
         (xp_refcnt == 0)) {
         __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                "%d %s: %p xp_refcnt %u calling rdvs_dodestroy",
-                __tirpc_dcounter, __func__, xprt, xp_refcnt);
+                "%s: %p xp_refcnt %u calling rdvs_dodestroy",
+                __func__, xprt, xp_refcnt);
         rdvs_dodestroy(xprt);
     } 
 }
@@ -813,29 +812,26 @@ svc_rdvs_destroy(SVCXPRT *xprt)
 
     drefcnt = xprt->xp_refcnt;
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: preunreg %p xp_refcnt %u",
-            __tirpc_dcounter, __func__, xprt, drefcnt);
+            "%s: preunreg %p xp_refcnt %u", __func__, xprt, drefcnt);
 
     /* XXX prefer LOCKED? (would require lock order change) */
     (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
 
     drefcnt = xprt->xp_refcnt;
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: prefinalize %p xp_refcnt %u",
-            __tirpc_dcounter, __func__, xprt, drefcnt);
+            "%s: prefinalize %p xp_refcnt %u", __func__, xprt, drefcnt);
 
     /* clears xprt from the xprt table (eg, idle scans) */
     svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
 
     drefcnt = xprt->xp_refcnt;
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: postfinalize %p xp_refcnt %u",
-            __tirpc_dcounter, __func__, xprt, drefcnt);
+            "%s: postfinalize %p xp_refcnt %u", __func__, xprt, drefcnt);
 
     if (xp_refcnt == 0) {
         __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                "%d %s: %p xp_refcnt %u calling rdvs_dodestroy",
-                __tirpc_dcounter, __func__, xprt, xp_refcnt);
+                "%s: %p xp_refcnt %u calling rdvs_dodestroy",
+                __func__, xprt, xp_refcnt);
         rdvs_dodestroy(xprt);
     }
 
@@ -854,8 +850,7 @@ svc_vc_release(SVCXPRT *xprt, u_int flags)
     xp_refcnt = --(xprt->xp_refcnt);
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: postunref %p xp_refcnt %u",
-            __tirpc_dcounter, __func__, xprt, xp_refcnt);
+            "%s: postunref %p xp_refcnt %u", __func__, xprt, xp_refcnt);
 
     /* conditional destroy */
     if ((xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) &&
@@ -871,15 +866,15 @@ svc_vc_release(SVCXPRT *xprt, u_int flags)
         xd_refcnt = xd->refcnt;
         if (xd_refcnt == 0) {
             __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                    "%d %s: xd_refcnt %u on destroyed %p %u calling "
+                    "%s: xd_refcnt %u on destroyed %p %u calling "
                     "vc_shared_destroy",
-                    __tirpc_dcounter, __func__, xprt, xd_refcnt);
+                    __func__, xprt, xd_refcnt);
             vc_shared_destroy(xd); /* RECLOCKED */
         } else {
             __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                    "%d %s: xd_refcnt %u on destroyed %p omit "
+                    "%s: xd_refcnt %u on destroyed %p omit "
                     "vc_shared_destroy",
-                    __tirpc_dcounter, __func__, xprt, xd_refcnt);
+                    __func__, xprt, xd_refcnt);
             mutex_unlock(&rec->mtx);
         }
     }
@@ -911,8 +906,7 @@ svc_vc_destroy(SVCXPRT *xprt)
 
     drefcnt = xprt->xp_refcnt;
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: preunreg %p xp_refcnt %u",
-            __tirpc_dcounter, __func__, xprt, drefcnt);
+            "%s: preunreg %p xp_refcnt %u", __func__, xprt, drefcnt);
 
     /* XXX prefer LOCKED? (would require lock order change) */
     (void) svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
@@ -922,8 +916,7 @@ svc_vc_destroy(SVCXPRT *xprt)
 
     drefcnt = xprt->xp_refcnt;
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: prefinalize %p xp_refcnt %u",
-            __tirpc_dcounter, __func__, xprt, drefcnt);
+            "%s: prefinalize %p xp_refcnt %u", __func__, xprt, drefcnt);
 
     /* clears xprt from the xprt table (eg, idle scans) */
     svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
@@ -936,15 +929,15 @@ svc_vc_destroy(SVCXPRT *xprt)
     xd_refcnt = --(xd->refcnt);
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: postfinalize %p xp_refcnt %u xd_refcnt %u",
-            __tirpc_dcounter, __func__, xprt, drefcnt, xd_refcnt);
+            "%s: postfinalize %p xp_refcnt %u xd_refcnt %u",
+            __func__, xprt, drefcnt, xd_refcnt);
 
     /* conditional destroy */
     if ((xp_refcnt == 0) &&
         (xd_refcnt == 0)) {
         __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                "%d %s: %p xp_refcnt %u xd_refcnt %u calling vc_shared_destroy",
-                __tirpc_dcounter, __func__, xprt, xp_refcnt, xd_refcnt);
+                "%s: %p xp_refcnt %u xd_refcnt %u calling vc_shared_destroy",
+                __func__, xprt, xp_refcnt, xd_refcnt);
         vc_shared_destroy(xd); /* RECLOCKED */
     } else
         mutex_unlock(&rec->mtx);

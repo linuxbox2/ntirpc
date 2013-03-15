@@ -169,7 +169,6 @@ typedef struct tirpc_pkg_params {
 } tirpc_pkg_params;
 
 extern tirpc_pkg_params __pkg_params;
-extern uint32_t __tirpc_dcounter;
 
 #include <misc/abstract_atomic.h>
 
@@ -177,7 +176,6 @@ extern uint32_t __tirpc_dcounter;
     do { \
         if (__pkg_params.debug_flags & (flags)) {  \
             __pkg_params.warnx(__VA_ARGS__); \
-            atomic_add_uint32_t(&__tirpc_dcounter, 1); \
         } \
     } while (0)
 

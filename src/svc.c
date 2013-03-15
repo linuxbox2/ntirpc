@@ -104,7 +104,6 @@ extern rwlock_t svc_fd_lock;
 
 static struct svc_callout *svc_find(rpcprog_t, rpcvers_t,
                                     struct svc_callout **, char *);
-uint32_t __tirpc_dcounter;
 
 /* Package init function.
  * It is intended that applications which must make use of global state
@@ -162,8 +161,6 @@ svc_init(svc_init_params * params)
         __svc_params->gss.max_gc = params->gss_max_gc;
     else
         __svc_params->gss.max_gc = 200;
-
-    __tirpc_dcounter = 0;
 
     __svc_params->initialized = TRUE;
 

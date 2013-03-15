@@ -763,7 +763,7 @@ clnt_vc_ref(CLIENT *clnt, u_int flags)
     mutex_unlock(&clnt->cl_lock);
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: postref %p %u", __tirpc_dcounter, __func__, clnt, refcnt);
+            "%s: postref %p %u", __func__, clnt, refcnt);
 
     return (true);
 }
@@ -779,8 +779,7 @@ clnt_vc_release(CLIENT *clnt, u_int flags)
     cl_refcnt = --(clnt->cl_refcnt);
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: postunref %p cl_refcnt %u",
-            __tirpc_dcounter, __func__, clnt, cl_refcnt);
+            "%s: postunref %p cl_refcnt %u", __func__, clnt, cl_refcnt);
 
     /* conditional destroy */
     if ((clnt->cl_flags & CLNT_FLAG_DESTROYED) &&
@@ -797,15 +796,13 @@ clnt_vc_release(CLIENT *clnt, u_int flags)
 
         if (xd_refcnt == 0) {
             __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                    "%d %s: xd_refcnt %u on destroyed %p %u calling "
-                    "vc_shared_destroy",
-                    __tirpc_dcounter, __func__, clnt, cl_refcnt);
+                    "%s: xd_refcnt %u on destroyed %p %u calling "
+                    "vc_shared_destroy", __func__, clnt, cl_refcnt);
             vc_shared_destroy(xd); /* RECLOCKED */
         } else {
             __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                    "%d %s: xd_refcnt %u on destroyed %p omit "
-                    "vc_shared_destroy",
-                    __tirpc_dcounter, __func__, clnt, cl_refcnt);
+                    "%s: xd_refcnt %u on destroyed %p omit "
+                    "vc_shared_destroy", __func__, clnt, cl_refcnt);
             mutex_unlock(&rec->mtx);
         }
     }
@@ -835,8 +832,7 @@ clnt_vc_destroy(CLIENT *clnt)
     mutex_unlock(&clnt->cl_lock);
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: cl_destroy %p cl_refcnt %u",
-            __tirpc_dcounter, __func__, clnt, cl_refcnt);
+            "%s: cl_destroy %p cl_refcnt %u", __func__, clnt, cl_refcnt);
 
     /* bidirectional */
     mutex_lock(&rec->mtx);
@@ -847,8 +843,8 @@ clnt_vc_destroy(CLIENT *clnt)
     if ((cl_refcnt == 0) &&
         (xd_refcnt == 0)) {
         __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                "%d %s: %p cl_refcnt %u xd_refcnt %u calling vc_shared_destroy",
-                __tirpc_dcounter, __func__, clnt, cl_refcnt, xd_refcnt);
+                "%s: %p cl_refcnt %u xd_refcnt %u calling vc_shared_destroy",
+                __func__, clnt, cl_refcnt, xd_refcnt);
         vc_shared_destroy(xd); /* RECLOCKED */
     } else
         mutex_unlock(&rec->mtx);
