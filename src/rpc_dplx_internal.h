@@ -92,7 +92,10 @@ rpc_dplx_ref(struct rpc_dplx_rec *rec, u_int flags)
 
     refcnt = ++(rec->refcnt);
 
-    if (! (flags & RPC_DPLX_FLAG_LOCKED))
+    /* release rec lock only if a) we took it and b) caller doesn't
+     * want it returned locked */
+    if ((! (flags & RPC_DPLX_FLAG_LOCKED)) &&
+        (! (flags & RPC_DPLX_FLAG_LOCK)))
         mutex_unlock(&rec->mtx);
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,

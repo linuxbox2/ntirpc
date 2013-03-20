@@ -276,7 +276,7 @@ rpc_dplx_lookup_rec(int fd, uint32_t iflags, uint32_t *oflags)
     }
 
     rpc_dplx_ref(rec, (iflags & RPC_DPLX_LKP_IFLAG_LOCKREC) ?
-                 RPC_DPLX_FLAG_LOCKED :
+                 RPC_DPLX_FLAG_LOCK :
                  RPC_DPLX_FLAG_NONE);
 
 unlock:
