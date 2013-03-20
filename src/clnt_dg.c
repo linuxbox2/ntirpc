@@ -197,7 +197,7 @@ clnt_dg_ncreate(int fd,           /* open file descriptor */
     clnt->cl_ops = clnt_dg_ops();
     clnt->cl_p1 = cx;
     clnt->cl_p2 = rpc_dplx_lookup_rec(
-        fd, RPC_DPLX_LKP_FLAG_NONE, &oflags); /* ref+1 */
+        fd, RPC_DPLX_LKP_FLAG_NONE, &oflags, __func__, __LINE__); /* ref+1 */
     clnt->cl_tp = NULL;
     clnt->cl_netid = NULL;
 

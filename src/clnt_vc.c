@@ -192,7 +192,8 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
         goto err;
 
     /* atomically find or create shared fd state */
-    rec = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_IFLAG_LOCKREC, &oflags);
+    rec = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_IFLAG_LOCKREC, &oflags,
+                              __func__, __LINE__);
     if (! rec) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
                 "clnt_vc_ncreate2: rpc_dplx_lookup_rec failed");
@@ -792,6 +793,9 @@ clnt_vc_release(CLIENT *clnt, u_int flags)
         mutex_unlock(&clnt->cl_lock);
 
         mutex_lock(&rec->mtx);
+        rec->locktrace.func = (char *) __func__;
+        rec->locktrace.line = __LINE__;
+
         xd_refcnt = --(xd->refcnt);
 
         if (xd_refcnt == 0) {
@@ -836,6 +840,9 @@ clnt_vc_destroy(CLIENT *clnt)
 
     /* bidirectional */
     mutex_lock(&rec->mtx);
+    rec->locktrace.func = (char *) __func__;
+    rec->locktrace.line = __LINE__;
+
     xd->flags |= X_VC_DATA_FLAG_CLNT_DESTROYED; /* destroyed handle is dead */
     xd_refcnt = --(xd->refcnt);
 

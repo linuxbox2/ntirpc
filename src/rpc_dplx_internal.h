@@ -65,7 +65,8 @@ extern size_t strlcpy(char *dst, const char *src, size_t siz);
 #define RPC_DPLX_LKP_OFLAG_ALLOC      0x0002
 
 struct rpc_dplx_rec *rpc_dplx_lookup_rec(int fd, uint32_t iflags,
-                                         uint32_t *oflags);
+                                         uint32_t *oflags, const char *func,
+                                         int line);
 
 static inline void
 rpc_dplx_lock_init(struct rpc_dplx_lock *lock)
@@ -83,12 +84,15 @@ rpc_dplx_lock_destroy(struct rpc_dplx_lock *lock)
 }
 
 static inline int32_t
-rpc_dplx_ref(struct rpc_dplx_rec *rec, u_int flags)
+rpc_dplx_ref(struct rpc_dplx_rec *rec, u_int flags, const char *func, int line)
 {
     int32_t refcnt;
 
-    if (! (flags & RPC_DPLX_FLAG_LOCKED))
+    if (! (flags & RPC_DPLX_FLAG_LOCKED)) {        
         mutex_lock(&rec->mtx);
+        rec->locktrace.func = (char *) func;
+        rec->locktrace.line = line;
+    }
 
     refcnt = ++(rec->refcnt);
 

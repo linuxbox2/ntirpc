@@ -156,6 +156,10 @@ struct rpc_dplx_rec
 {
     int fd_k;
     mutex_t mtx;
+    struct {
+        char *func;
+        int line;
+    } locktrace;
     struct opr_rbtree_node node_k;
     uint32_t refcnt;
     struct {

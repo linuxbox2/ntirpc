@@ -186,7 +186,8 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 
     /* Make reachable */
     xprt->xp_p5 = rpc_dplx_lookup_rec(xprt->xp_fd,
-                                      RPC_DPLX_FLAG_NONE, &oflags); /* ref+1 */
+                                      RPC_DPLX_FLAG_NONE, &oflags,
+                                      __func__, __LINE__); /* ref+1 */
     svc_rqst_init_xprt(xprt);
 
     /* Conditional xprt_register */

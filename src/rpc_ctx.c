@@ -66,6 +66,8 @@ alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
 
     /* rec->calls and rbtree protected by (adaptive) mtx */
     mutex_lock(&rec->mtx);
+    rec->locktrace.func = (char *) __func__;
+    rec->locktrace.line = __LINE__;
 
     /* XXX we hold the client-fd lock */
     ctx->xid = ++(xd->cx.calls.xid);
@@ -105,6 +107,9 @@ void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
     assert (flags & RPC_CTX_FLAG_LOCKED);
 
     mutex_lock(&rec->mtx);
+    rec->locktrace.func = (char *) __func__;
+    rec->locktrace.line = __LINE__;
+
     opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
     ctx->xid = ++(xd->cx.calls.xid);
     if (opr_rbtree_insert(&xd->cx.calls.t, &ctx->node_k)) {
@@ -130,6 +135,9 @@ rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg)
     
     ctx_k.xid = msg->rm_xid;
     mutex_lock(&xd->rec->mtx);
+    xd->rec->locktrace.func = (char *) __func__;
+    xd->rec->locktrace.line = __LINE__;
+
     nv = opr_rbtree_lookup(&xd->cx.calls.t, &ctx_k.node_k);
     if (nv) {
         ctx = opr_containerof(nv, rpc_ctx_t, node_k);
@@ -234,6 +242,9 @@ free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
     }
 
     mutex_lock(&rec->mtx);
+    rec->locktrace.func = (char *) __func__;
+    rec->locktrace.line = __LINE__;
+
     opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
     /* interlock */
     mutex_unlock(&ctx->we.mtx);

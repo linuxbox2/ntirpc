@@ -188,7 +188,8 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
     rdvs->maxrec = __svc_maxrec;
 
     /* atomically find or create shared fd state */
-    rec = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_IFLAG_LOCKREC, &oflags);
+    rec = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_IFLAG_LOCKREC, &oflags,
+                              __func__, __LINE__);
     if (! rec) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
                 "svc_vc: makefd_xprt: rpc_dplx_lookup_rec failed");
@@ -471,7 +472,8 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
     }
 
     /* atomically find or create shared fd state */
-    rec = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_IFLAG_LOCKREC, &oflags);
+    rec = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_IFLAG_LOCKREC, &oflags,
+                              __func__, __LINE__);
     if (! rec) {
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
                 "svc_vc: makefd_xprt: rpc_dplx_lookup_rec failed");
@@ -744,6 +746,8 @@ rdvs_dodestroy(SVCXPRT *xprt)
         xprt->xp_ops2->xp_free_xprt(xprt);
 
     mutex_lock(&rec->mtx);
+    rec->locktrace.func = (char *) __func__;
+    rec->locktrace.line = __LINE__;
 
     mutex_destroy(&xprt->xp_lock);
 
@@ -855,6 +859,8 @@ svc_vc_release(SVCXPRT *xprt, u_int flags)
 
         mutex_unlock(&xprt->xp_lock);
         mutex_lock(&rec->mtx);
+        rec->locktrace.func = (char *) __func__;
+        rec->locktrace.line = __LINE__;
 
         xd_refcnt = xd->refcnt;
         if (xd_refcnt == 0) {
@@ -918,6 +924,9 @@ svc_vc_destroy(SVCXPRT *xprt)
 
     /* bidirectional */
     mutex_lock(&rec->mtx);
+    rec->locktrace.func = (char *) __func__;
+    rec->locktrace.line = __LINE__;
+
     xd->flags |= X_VC_DATA_FLAG_SVC_DESTROYED; /* destroyed handle is dead */
     xd_refcnt = --(xd->refcnt);
 
