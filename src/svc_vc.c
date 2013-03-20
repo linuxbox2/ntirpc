@@ -716,13 +716,6 @@ svc_vc_ref(SVCXPRT *xprt, u_int flags)
     refcnt = ++(xprt->xp_refcnt);
     mutex_unlock(&xprt->xp_lock);
 
-    { /* debug check xd refcnt */
-        struct x_vc_data *xd = (struct x_vc_data *) xprt->xp_p1;
-        __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                "%d %s: postref %p xd->refcnt %u",
-                __tirpc_dcounter, __func__, xprt, xd->refcnt);
-    }
-
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
             "%d %s: postref %p xp_refcnt %u",
             __tirpc_dcounter, __func__, xprt, refcnt);
