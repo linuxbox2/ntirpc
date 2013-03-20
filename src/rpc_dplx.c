@@ -256,9 +256,6 @@ rpc_dplx_lookup_rec(int fd, uint32_t iflags, uint32_t *oflags)
             /* tell the caller */
             *oflags = RPC_DPLX_LKP_OFLAG_ALLOC;
 
-            if (iflags & RPC_DPLX_LKP_IFLAG_LOCKREC)
-                mutex_lock(&rec->mtx);
-
             rec->fd_k = fd;
 
             if (opr_rbtree_insert(&t->t, &rec->node_k)) {
@@ -276,7 +273,7 @@ rpc_dplx_lookup_rec(int fd, uint32_t iflags, uint32_t *oflags)
     }
 
     rpc_dplx_ref(rec, (iflags & RPC_DPLX_LKP_IFLAG_LOCKREC) ?
-                 RPC_DPLX_FLAG_LOCKED :
+                 RPC_DPLX_FLAG_LOCK :
                  RPC_DPLX_FLAG_NONE);
 
 unlock:
