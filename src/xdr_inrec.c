@@ -128,7 +128,6 @@ typedef struct rec_strm {
     char *in_finger; /* location of next byte to be had */
     char *in_boundry; /* can read up to this location */
     long fbtbc;  /* fragment bytes to be consumed */
-    long rbtbc;  /* readahead bytes to be consumed */
     bool last_frag;
     u_int recvsize;
 
@@ -142,8 +141,8 @@ typedef struct rec_strm {
 } RECSTREAM;
 
 static u_int fix_buf_size(u_int);
-static bool fill_input_buf(RECSTREAM *);
-static bool get_input_bytes(RECSTREAM *, char *, int);
+static bool fill_input_buf(RECSTREAM *, int32_t);
+static bool get_input_bytes(RECSTREAM *, char *, int32_t, int32_t);
 static bool set_input_fragment(RECSTREAM *, int32_t);
 static bool skip_input_bytes(RECSTREAM *, long);
 
@@ -197,7 +196,6 @@ xdr_inrec_create(XDR *xdrs,
     rstrm->in_boundry = rstrm->in_base;
     rstrm->in_finger = (rstrm->in_boundry += recvsize);
     rstrm->fbtbc = 0;
-    rstrm->rbtbc = 0;
     rstrm->last_frag = TRUE;
     rstrm->in_haveheader = FALSE;
     rstrm->in_hdrlen = 0;
@@ -257,7 +255,7 @@ xdr_inrec_getbytes(XDR *xdrs, char *addr, u_int len)
             continue;
         }
         current = (len < current) ? len : current;
-        if (! get_input_bytes(rstrm, addr, current))
+        if (! get_input_bytes(rstrm, addr, current, INT_MAX))
             return (FALSE);
         addr += current;
         rstrm->fbtbc -= current;
@@ -421,7 +419,7 @@ xdr_inrec_eof(XDR *xdrs)
 }
 
 static bool  /* knows nothing about records!  Only about input buffers */
-fill_input_buf(RECSTREAM *rstrm)
+fill_input_buf(RECSTREAM *rstrm, int32_t maxreadahead)
 {
     char *where;
     u_int32_t i;
@@ -430,7 +428,7 @@ fill_input_buf(RECSTREAM *rstrm)
     where = rstrm->in_base;
     i = (u_int32_t)(PtrToUlong(rstrm->in_boundry) % BYTES_PER_XDR_UNIT);
     where += i;
-    len = (u_int32_t)(rstrm->in_size - i);
+    len = MIN(((u_int32_t)(rstrm->in_size - i)), maxreadahead);
     if ((len = (*(rstrm->readit))(rstrm->xdrs, rstrm->tcp_handle, where,
                                   len)) == -1)
         return (FALSE);
@@ -441,7 +439,7 @@ fill_input_buf(RECSTREAM *rstrm)
 }
 
 static bool  /* knows nothing about records!  Only about input buffers */
-get_input_bytes(RECSTREAM *rstrm, char *addr, int len)
+get_input_bytes(RECSTREAM *rstrm, char *addr, int32_t len, int32_t maxreadahead)
 {
     int32_t current;
 
@@ -449,7 +447,7 @@ get_input_bytes(RECSTREAM *rstrm, char *addr, int len)
       current = (PtrToUlong(rstrm->in_boundry) -
                  PtrToUlong(rstrm->in_finger));
         if (current == 0) {
-            if (! fill_input_buf(rstrm))
+            if (! fill_input_buf(rstrm, maxreadahead))
                 return (FALSE);
             continue;
         }
@@ -466,33 +464,10 @@ static bool  /* next two bytes of the input stream are treated as a header */
 set_input_fragment(RECSTREAM *rstrm, int32_t maxreadahead)
 {
     u_int32_t header;
-    int current, next;
 
-    /* next 4? */
-    current = (PtrToUlong(rstrm->in_boundry) - PtrToUlong(rstrm->in_finger));
-    if (current > 0) {
-        /* next fragment header already read */
-        int32_t *buflp;
-        __warnx(TIRPC_DEBUG_FLAG_XDRREC,
-                "%s: next fragment header already read", __func__);
-        if (unlikely(current <= sizeof(header))) {
-             /* XXX impossible? */
-            __warnx(TIRPC_DEBUG_FLAG_XDRREC,
-                    "%s: yikes, trailing frag bytes not multiple of UNIT");
-            if (! get_input_bytes(rstrm, (char *)(void *)&header, maxreadahead))
-                return (FALSE);
-        }
-        buflp = (int32_t *)(void *)(rstrm->in_finger);
-        header = (u_int32_t)(*buflp);
-        rstrm->in_finger += sizeof(int32_t);
-    } else {
-        /* readahead */
-        next = MIN((sizeof(header) - current), maxreadahead);
-        /* assert(next >= 4) */
-        if (! get_input_bytes(rstrm, (char *)(void *)&header, next))
-            return (FALSE);
-    }
-
+    if (! get_input_bytes(rstrm, (char *)(void *)&header, sizeof(header),
+            maxreadahead))
+        return (FALSE);
     header = ntohl(header);
     rstrm->last_frag = ((header & LAST_FRAG) == 0) ? FALSE : TRUE;
     /*
@@ -518,7 +493,7 @@ skip_input_bytes(RECSTREAM *rstrm, long cnt)
       current = (size_t)(PtrToUlong(rstrm->in_boundry) -
 			 PtrToUlong(rstrm->in_finger));
         if (current == 0) {
-            if (! fill_input_buf(rstrm))
+            if (! fill_input_buf(rstrm, INT_MAX))
                 return (FALSE);
             continue;
         }
