@@ -44,4 +44,7 @@ extern bool xdr_inrec_skiprecord(XDR *);
 /* true if no more input */
 extern bool xdr_inrec_eof(XDR *);
 
+/* intrinsic checksum (be careful) */
+extern uint64_t xdr_inrec_cksum(XDR *);
+
 #endif /* XDR_INREC_H */

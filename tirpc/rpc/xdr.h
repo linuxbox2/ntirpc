@@ -406,6 +406,9 @@ __BEGIN_DECLS
 /* XDR using memory buffers */
 extern void xdrmem_create(XDR *, char *, u_int, enum xdr_op);
 
+/* intrinsic checksum (be careful) */
+extern uint64_t xdrmem_cksum(XDR *, u_int);
+
 /* XDR using stdio library */
 extern void xdrstdio_create(XDR *, FILE *, enum xdr_op);
 

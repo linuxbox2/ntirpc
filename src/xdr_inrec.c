@@ -68,6 +68,7 @@
 #include <rpc/clnt.h>
 #include <stddef.h>
 #include "rpc_com.h"
+#include <misc/city.h>
 #include <intrinsic.h>
 
 static bool xdr_inrec_getlong(XDR *, long *);
@@ -123,20 +124,18 @@ typedef struct rec_strm {
      * in-coming bits
      */
     int (*readit)(XDR *, void *, void *, int);
-    u_long in_size; /* fixed size of the input buffer */
+    u_int32_t in_size; /* fixed size of the input buffer */
     char *in_base;
     char *in_finger; /* location of next byte to be had */
     char *in_boundry; /* can read up to this location */
-    long fbtbc;  /* fragment bytes to be consumed */
+    int32_t fbtbc;  /* fragment bytes to be consumed */
+    int32_t offset;
     bool last_frag;
     u_int recvsize;
-
+    uint64_t cksum;
+    uint32_t cklen;
     bool in_haveheader;
     u_int32_t in_header;
-    char *in_hdrp;
-    int in_hdrlen;
-    int in_reclen;
-    int in_received;
     int in_maxrec;
 } RECSTREAM;
 
@@ -145,6 +144,7 @@ static bool fill_input_buf(RECSTREAM *, int32_t);
 static bool get_input_bytes(RECSTREAM *, char *, int32_t, int32_t);
 static bool set_input_fragment(RECSTREAM *, int32_t);
 static bool skip_input_bytes(RECSTREAM *, long);
+static void compute_buffer_cksum(RECSTREAM *rstrm);
 
 /*
  * Create an xdr handle for xdrrec
@@ -198,18 +198,25 @@ xdr_inrec_create(XDR *xdrs,
     rstrm->fbtbc = 0;
     rstrm->last_frag = TRUE;
     rstrm->in_haveheader = FALSE;
-    rstrm->in_hdrlen = 0;
-    rstrm->in_hdrp = (char *)(void *)&rstrm->in_header;
-    rstrm->in_reclen = 0;
-    rstrm->in_received = 0;
+    rstrm->offset = 0;
+    rstrm->cksum = 0;
+    rstrm->cklen = 256;
 }
 
+/* Compute 64-bit checksum of the first cnt bytes (or offset, whichever is
+ * less) in the receive buffer.  Use only as directed.
+ */
+uint64_t
+xdr_inrec_cksum(XDR *xdrs)
+{
+    RECSTREAM *rstrm = (RECSTREAM *)(xdrs->x_private);
+    return (rstrm->cksum);
+}
 
 /*
  * The routines defined below are the xdr ops which will go into the
  * xdr handle filled in by xdr_inrec_create.
  */
-
 static bool
 xdr_inrec_getlong(XDR *xdrs,  long *lp)
 {
@@ -258,6 +265,15 @@ xdr_inrec_getbytes(XDR *xdrs, char *addr, u_int len)
         if (! get_input_bytes(rstrm, addr, current, INT_MAX))
             return (FALSE);
         addr += current;
+        rstrm->offset += current;
+        /* handle checksumming if requested */
+        if (rstrm->cklen) {
+            if (! (rstrm->cksum)) {
+                if (rstrm->offset >= rstrm->cklen) {
+                    compute_buffer_cksum(rstrm);
+                }
+            }
+        }
         rstrm->fbtbc -= current;
         len -= current;
     }
@@ -393,6 +409,7 @@ xdr_inrec_skiprecord(XDR *xdrs)
             return (FALSE);
     }
     rstrm->last_frag = FALSE;
+    rstrm->offset = 0;
     return (TRUE);
 }
 
@@ -511,6 +528,16 @@ fix_buf_size(u_int s)
     if (s < 100)
         s = 4000;
     return (RNDUP(s));
+}
+
+static void
+compute_buffer_cksum(RECSTREAM *rstrm)
+{
+    /* XXX high-strength hash now, crc32c later */
+    rstrm->cksum =
+        CityHash64WithSeed(rstrm->in_base,
+                           MIN(rstrm->cklen, rstrm->offset),
+                           103);
 }
 
 static bool

@@ -62,6 +62,7 @@
 #include "svc_xprt.h"
 #include "rpc_dplx_internal.h"
 #include <rpc/svc_rqst.h>
+#include <misc/city.h>
 
 extern tirpc_pkg_params __pkg_params;
 extern struct svc_params __svc_params[1];
@@ -255,6 +256,7 @@ again:
     }
 
     __xprt_set_raddr(xprt, &ss);
+
     xdrs->x_op = XDR_DECODE;
     XDR_SETPOS(xdrs, 0);
     if (! xdr_callmsg(xdrs, req->rq_msg)) {
@@ -268,6 +270,10 @@ again:
     req->rq_xid = req->rq_msg->rm_xid;
     req->rq_clntcred = req->rq_msg->rm_call.cb_cred.oa_base +
 	    (2 * MAX_AUTH_BYTES);
+
+    /* the checksum */
+    req->rq_cksum =
+        CityHash64WithSeed(iov.iov_base, MIN(256, iov.iov_len), 103);
 
     /* XXX su->su_xid !MT-SAFE */
     su->su_xid = req->rq_msg->rm_xid;

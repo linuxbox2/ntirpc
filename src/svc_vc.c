@@ -1185,7 +1185,9 @@ svc_vc_getargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
      * in svc_dg_getargs if SVCAUTH_UNWRAP fails. */
     if (! rslt)
         svc_vc_freeargs(xprt, xdr_args, args_ptr);
-
+    else
+        req->rq_cksum = xdr_inrec_cksum(xdrs);
+            
     return (rslt);
 }
 

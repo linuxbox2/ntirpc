@@ -332,6 +332,7 @@ struct svc_req {
     /* New with N TI-RPC */
     u_int32_t        rq_xid;         /* xid */
     struct rpc_msg  *rq_msg;         /* decoded rpc_msg */
+    uint64_t         rq_cksum;
     void            *rq_u1;          /* user data */
     void            *rq_u2;          /* user data */
 
