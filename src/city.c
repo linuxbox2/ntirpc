@@ -34,7 +34,7 @@
  */
 
 #include <string.h>
-#include "city.h"
+#include <misc/city.h>
 
 static uint64 UNALIGNED_LOAD64(const char *p) {
   uint64 result;
