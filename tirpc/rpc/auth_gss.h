@@ -105,25 +105,22 @@ struct rpc_gss_init_res {
 
 /* Prototypes. */
 __BEGIN_DECLS
-bool xdr_rpc_gss_cred __P((XDR *xdrs, struct rpc_gss_cred *p));
-bool xdr_rpc_gss_init_args __P((XDR *xdrs, gss_buffer_desc *p));
-bool xdr_rpc_gss_init_res __P((XDR *xdrs, struct rpc_gss_init_res *p));
-bool xdr_rpc_gss_data __P((XDR *xdrs, xdrproc_t xdr_func,
-                           caddr_t xdr_ptr, gss_ctx_id_t ctx,
-                           gss_qop_t qop, rpc_gss_svc_t svc,
-                           u_int seq));
+bool xdr_rpc_gss_cred(XDR *xdrs, struct rpc_gss_cred *p);
+bool xdr_rpc_gss_init_args(XDR *xdrs, gss_buffer_desc *p);
+bool xdr_rpc_gss_init_res(XDR *xdrs, struct rpc_gss_init_res *p);
+bool xdr_rpc_gss_data(XDR *xdrs, xdrproc_t xdr_func,
+                      caddr_t xdr_ptr, gss_ctx_id_t ctx,
+                      gss_qop_t qop, rpc_gss_svc_t svc,
+                      u_int seq);
 
-AUTH   *authgss_ncreate  __P((CLIENT *, gss_name_t,
-                              struct rpc_gss_sec *));
-AUTH   *authgss_ncreate_default __P((CLIENT *, char *, struct rpc_gss_sec *));
-bool authgss_service  __P((AUTH *auth, int svc));
-bool authgss_get_private_data __P((AUTH *auth,
-                                   struct authgss_private_data *));
+AUTH *authgss_ncreate(CLIENT *, gss_name_t, struct rpc_gss_sec *);
+AUTH *authgss_ncreate_default(CLIENT *, char *, struct rpc_gss_sec *);
+bool authgss_service(AUTH *auth, int svc);
+bool authgss_get_private_data(AUTH *auth, struct authgss_private_data *);
 
-void log_debug  __P((const char *fmt, ...));
-void log_status  __P((char *m, OM_uint32 major,
-                      OM_uint32 minor));
-void gss_log_hexdump  __P((const u_char *buf, int len, int offset));
+void log_debug(const char *fmt, ...);
+void log_status(char *m, OM_uint32 major, OM_uint32 minor);
+void gss_log_hexdump(const u_char *buf, int len, int offset);
 
 __END_DECLS
 
