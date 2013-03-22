@@ -18,6 +18,7 @@ SET(ntirpc_common_SRCS
   authunix_prot.c
   bindresvport.c
   bsd_epoll.c
+  city.c
   clnt_bcast.c
   clnt_dg.c
   clnt_generic.c
