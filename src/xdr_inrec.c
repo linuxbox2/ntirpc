@@ -69,6 +69,7 @@
 #include <stddef.h>
 #include "rpc_com.h"
 #include <misc/city.h>
+#include <rpc/rpc_cksum.h>
 #include <intrinsic.h>
 
 static bool xdr_inrec_getlong(XDR *, long *);
@@ -210,6 +211,11 @@ uint64_t
 xdr_inrec_cksum(XDR *xdrs)
 {
     RECSTREAM *rstrm = (RECSTREAM *)(xdrs->x_private);
+    /* handle checksumming if requested (short request case) */
+    if (rstrm->cklen) {
+        if (! (rstrm->cksum))
+            compute_buffer_cksum(rstrm);
+    }
     return (rstrm->cksum);
 }
 
@@ -265,7 +271,8 @@ xdr_inrec_getbytes(XDR *xdrs, char *addr, u_int len)
         if (! get_input_bytes(rstrm, addr, current, INT_MAX))
             return (FALSE);
         addr += current;
-        rstrm->offset += current;
+        rstrm->fbtbc -= current;
+        len -= current;
         /* handle checksumming if requested */
         if (rstrm->cklen) {
             if (! (rstrm->cksum)) {
@@ -274,8 +281,6 @@ xdr_inrec_getbytes(XDR *xdrs, char *addr, u_int len)
                 }
             }
         }
-        rstrm->fbtbc -= current;
-        len -= current;
     }
     return (TRUE);
 }
@@ -410,6 +415,7 @@ xdr_inrec_skiprecord(XDR *xdrs)
     }
     rstrm->last_frag = FALSE;
     rstrm->offset = 0;
+    rstrm->cksum = 0;
     return (TRUE);
 }
 
@@ -452,6 +458,8 @@ fill_input_buf(RECSTREAM *rstrm, int32_t maxreadahead)
     rstrm->in_finger = where;
     where += len;
     rstrm->in_boundry = where;
+    /* cksum lookahead */
+    rstrm->offset += len;
     return (TRUE);
 }
 
@@ -533,11 +541,16 @@ fix_buf_size(u_int s)
 static void
 compute_buffer_cksum(RECSTREAM *rstrm)
 {
+#if 0
     /* XXX high-strength hash now, crc32c later */
     rstrm->cksum =
         CityHash64WithSeed(rstrm->in_base,
                            MIN(rstrm->cklen, rstrm->offset),
                            103);
+#else
+    rstrm->cksum = calculate_crc32c(0, rstrm->in_base,
+                                    MIN(rstrm->cklen, rstrm->offset));
+#endif
 }
 
 static bool

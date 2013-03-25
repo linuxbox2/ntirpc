@@ -44,6 +44,7 @@ SET(ntirpc_common_SRCS
   rpc_prot.c
   rpc_callmsg.c
   rpc_commondata.c
+  rpc_crc32.c
   rpc_ctx.c
   rpc_dplx_msg.c
   rpc_dtablesize.c
