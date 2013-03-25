@@ -63,6 +63,7 @@
 #include "rpc_dplx_internal.h"
 #include <rpc/svc_rqst.h>
 #include <misc/city.h>
+#include <rpc/rpc_cksum.h>
 
 extern tirpc_pkg_params __pkg_params;
 extern struct svc_params __svc_params[1];
@@ -273,7 +274,11 @@ again:
 
     /* the checksum */
     req->rq_cksum =
+#if 1
         CityHash64WithSeed(iov.iov_base, MIN(256, iov.iov_len), 103);
+#else
+        calculate_crc32c(0, iov.iov_base, MIN(256, iov.iov_len));
+#endif
 
     /* XXX su->su_xid !MT-SAFE */
     su->su_xid = req->rq_msg->rm_xid;

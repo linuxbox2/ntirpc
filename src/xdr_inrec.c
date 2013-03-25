@@ -1,4 +1,3 @@
-
 /*
  * Copyright (c) 2009,s Sun Microsystems, Inc.
  * All rights reserved.
@@ -541,8 +540,9 @@ fix_buf_size(u_int s)
 static void
 compute_buffer_cksum(RECSTREAM *rstrm)
 {
-#if 0
-    /* XXX high-strength hash now, crc32c later */
+#if 1
+    /* CithHash64 is -substantially- faster than crc32c from FreeBSD
+     * SCTP, so prefer it until fast crc32c bests it */
     rstrm->cksum =
         CityHash64WithSeed(rstrm->in_base,
                            MIN(rstrm->cklen, rstrm->offset),
