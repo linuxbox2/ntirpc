@@ -210,11 +210,14 @@ uint64_t
 xdr_inrec_cksum(XDR *xdrs)
 {
     RECSTREAM *rstrm = (RECSTREAM *)(xdrs->x_private);
+
     /* handle checksumming if requested (short request case) */
-    if (rstrm->cklen) {
-        if (! (rstrm->cksum))
+    if (! (rstrm->cksum)) {
+        if (rstrm->cklen) {
             compute_buffer_cksum(rstrm);
+        }
     }
+
     return (rstrm->cksum);
 }
 
