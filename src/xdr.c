@@ -642,7 +642,7 @@ bool
 xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 {
     char *sp = *cpp;  /* sp is the actual string pointer */
-    u_int size;
+    u_int size = 0;
     u_int nodesize;
 
     /*

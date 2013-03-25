@@ -395,7 +395,9 @@ static inline uint32_t
 consume_ev_sig_nb(int fd)
 {
     uint32_t sig = 0;
-    (void) read(fd, &sig, sizeof(uint32_t));
+    int code __attribute__((unused));
+
+    code = read(fd, &sig, sizeof(uint32_t));
     return (sig);
 }
 
