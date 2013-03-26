@@ -5,15 +5,30 @@ AC_CONFIG_SRCDIR([src/auth_des.c])
 AC_CONFIG_MACRO_DIR([m4])
 
 AC_ARG_ENABLE(gss,[  --enable-gss            Turn on gss api], [case "${enableval}" in
-        yes) gss=true ; AC_CHECK_LIB([gssapi],[gss_init_sec_context]) ;;
+        yes) gss=true ;;
         no)  gss=false ;;
         *) AC_MSG_ERROR(bad value ${enableval} for --enable-gss) ;;
       esac],[gss=false])
 AM_CONDITIONAL(GSS, test x$gss = xtrue)
+AC_ARG_WITH(gssglue,
+		[  --with-gssglue        Use libgssglue],
+		 [case "${enableval}" in
+		  yes) gssglue=true ;;
+		  no)  gssglue=false ;;
+		  *) AC_MSG_ERROR(bad value ${enableval} for --with-gssglue) ;;
+		  esac],
+		[gssglue=false])
+AM_CONDITIONAL(USEGSSGLUE, test x$gssglue = xtrue)
 if test x$gss = xtrue; then
-	AC_DEFINE(HAVE_LIBGSSAPI, 1, [])
-	PKG_CHECK_MODULES(GSSGLUE, libgssglue, [],
-	AC_MSG_ERROR([Unable to locate information required to use libgssglue.]))
+	if test x$gssglue = xtrue; then
+		PKG_CHECK_MODULES(GSSAPI, libgssglue, [],
+		AC_MSG_ERROR([Unable to locate information required to use libgssglue.]))
+	else
+		GSSAPI_CFLAGS=`krb5-config --cflags gssapi`
+		GSSAPI_LIBS=`krb5-config --libs gssapi`
+		AC_SUBST([GSSAPI_CFLAGS])
+		AC_SUBST([GSSAPI_LIBS])
+	fi
 fi
 AC_ARG_ENABLE(ipv6,
 	[AC_HELP_STRING([--disable-ipv6], [Disable IPv6 support @<:@default=no@:>@])],
