@@ -842,11 +842,7 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
             break;
         case 0:
             /* timed out (idle) */
-            __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-                    "%s: before __svc_clean_idle2", __func__);
-            __svc_clean_idle2(30, FALSE);
-            __warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-                    "%s: after __svc_clean_idle2", __func__);
+            __svc_clean_idle2(__svc_params->idle_timeout, TRUE);
             continue;
         default:
             /* new events */
