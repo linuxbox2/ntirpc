@@ -228,6 +228,10 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
     size_t replylen;
     ssize_t rlen;
 
+    memset(&ss, 0xff, sizeof(struct sockaddr_storage));
+
+    /* Magic marker value to see if we didn't get the header. */
+
     req->rq_msg = alloc_rpc_msg();
 
 again:
@@ -247,6 +251,7 @@ again:
         goto again;
     if (rlen == -1 || (rlen < (ssize_t)(4 * sizeof (u_int32_t))))
         return (FALSE);
+
     __rpc_set_netbuf(&xprt->xp_rtaddr, &ss, mesgp->msg_namelen);
 
     /* Check whether there's an IP_PKTINFO or IP6_PKTINFO control message.
