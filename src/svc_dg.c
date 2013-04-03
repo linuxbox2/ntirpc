@@ -221,6 +221,7 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
     XDR *xdrs = &(su->su_xdrs);
     char *reply;
     struct sockaddr_storage ss;
+    struct sockaddr *sp = (struct sockaddr *) &ss;
     struct msghdr *mesgp;
     struct iovec iov;
     size_t replylen;
@@ -240,11 +241,17 @@ again:
     mesgp->msg_iov = &iov;
     mesgp->msg_iovlen = 1;
     mesgp->msg_name = (struct sockaddr *)(void *) &ss;
+    sp->sa_family = 0xffff;
     mesgp->msg_namelen = sizeof (struct sockaddr_storage);
     mesgp->msg_control = su->su_cmsg;
     mesgp->msg_controllen = sizeof(su->su_cmsg);
 
     rlen = recvmsg(xprt->xp_fd, mesgp, 0);
+
+    if (sp->sa_family == 0xffff) {
+	return FALSE;
+    }
+
     if (rlen == -1 && errno == EINTR)
         goto again;
     if (rlen == -1 || (rlen < (ssize_t)(4 * sizeof (u_int32_t))))
