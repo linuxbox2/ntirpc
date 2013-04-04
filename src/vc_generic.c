@@ -27,6 +27,7 @@
 
 #include <sys/types.h>
 #include <sys/poll.h>
+#include <sys/uio.h>
 #include <stdint.h>
 #include <assert.h>
 #include <err.h>
