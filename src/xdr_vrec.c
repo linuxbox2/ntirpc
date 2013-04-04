@@ -64,7 +64,6 @@ static bool xdr_vrec_setpos(XDR *, u_int);
 static int32_t *xdr_vrec_inline(XDR *, u_int);
 static void xdr_vrec_destroy(XDR *);
 static bool xdr_vrec_control(XDR *, /* const */ int, void *);
-static bool xdr_vrec_noop(void);
 
 typedef bool (* dummyfunc3)(XDR *, int, void *);
 typedef bool (* dummyfunc4)(XDR *, const char *, u_int, u_int);
