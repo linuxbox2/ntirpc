@@ -269,6 +269,7 @@ authgss_get_private_data(AUTH *auth, struct authgss_private_data *pd)
 	 * send an RPCSEC_GSS_DESTROY request which might inappropriately
 	 * destroy the context.
 	 */
+        gd->ctx = GSS_C_NO_CONTEXT;
 	gd->gc.gc_ctx.length = 0;
 	gd->gc.gc_ctx.value = NULL;
 
@@ -284,7 +285,8 @@ authgss_free_private_data(struct authgss_private_data *pd)
 	if (!pd)
 		return (FALSE);
 
-	pd->pd_ctx = NULL;
+	if (pd->pd_ctx != GSS_C_NO_CONTEXT)
+		gss_delete_sec_context(&min_stat, &pd->pd_ctx, NULL);
 	gss_release_buffer(&min_stat, &pd->pd_ctx_hndl);
 	memset(&pd->pd_ctx_hndl, 0, sizeof(pd->pd_ctx_hndl));
 	pd->pd_seq_win = 0;
