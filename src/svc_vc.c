@@ -1247,19 +1247,21 @@ svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 }
 
 static void
-svc_vc_lock(SVCXPRT *xprt, uint32_t flags, const char *file, int line)
+svc_vc_lock(SVCXPRT *xprt, uint32_t flags, const char *func, int line)
 {
     if (flags & XP_LOCK_RECV)
-        rpc_dplx_rlxi(xprt, file, line);
+        rpc_dplx_rlxi(xprt, func, line);
+
     if (flags & XP_LOCK_SEND)
-        rpc_dplx_slxi(xprt, file, line);
+        rpc_dplx_slxi(xprt, func, line);
 }
 
 static void
-svc_vc_unlock(SVCXPRT *xprt, uint32_t flags, const char *file, int line)
+svc_vc_unlock(SVCXPRT *xprt, uint32_t flags, const char *func, int line)
 {
     if (flags & XP_LOCK_RECV)
         rpc_dplx_rux(xprt);
+
     if (flags & XP_LOCK_SEND)
         rpc_dplx_sux(xprt);
 }
@@ -1320,6 +1322,8 @@ svc_vc_rendezvous_ops(SVCXPRT *xprt)
     if (ops.xp_recv == NULL) {
         ops.xp_recv = rendezvous_request;
         ops.xp_stat = rendezvous_stat;
+        ops.xp_lock = svc_vc_lock;
+        ops.xp_unlock = svc_vc_unlock;
         /* XXX wow */
         ops.xp_getargs =
 		(bool (*)(SVCXPRT *, struct svc_req *,  xdrproc_t,
