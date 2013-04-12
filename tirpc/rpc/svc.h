@@ -230,9 +230,9 @@ typedef struct rpc_svcxprt {
 
         /* xprt locking (may be duplex-aware, etc) */
         void (*xp_lock)(struct rpc_svcxprt *, uint32_t flags,
-                        const char *file, int line);
+                        const char *func, int line);
         void (*xp_unlock)(struct rpc_svcxprt *, uint32_t flags,
-                          const char *file, int line);
+                          const char *func, int line);
 
     } *xp_ops;
 
@@ -414,17 +414,17 @@ struct svc_req {
 #define XP_LOCK_SEND    0x0001
 #define XP_LOCK_RECV    0x0002
 
-#define SVC_LOCK(xprt, flags) \
-    (*(xprt)->xp_ops2->xp_lock)((xprt), (flags))
+#define SVC_LOCK(xprt, flags, func, line) \
+    (*(xprt)->xp_ops->xp_lock)((xprt), (flags), (func), (line))
 
-#define svc_lock(xprt, flags) \
-    (*(xprt)->xp_ops2->xp_lock)((xprt), (flags))
+#define svc_lock(xprt, flags, func, line) \
+    (*(xprt)->xp_ops->xp_lock)((xprt), (flags), (func), (line))
 
-#define SVC_UNLOCK(xprt, flags) \
-    (*(xprt)->xp_ops2->xp_unlock)((xprt), (flags))
+#define SVC_UNLOCK(xprt, flags, func, line) \
+    (*(xprt)->xp_ops->xp_unlock)((xprt), (flags), (func), (line))
 
-#define svc_unlock(xprt, flags) \
-    (*(xprt)->xp_ops2->xp_unlock)((xprt), (flags))
+#define svc_unlock(xprt, flags, func, line) \
+    (*(xprt)->xp_ops->xp_unlock)((xprt), (flags), (func), (line))
 
 /*
  * Service init (optional).
