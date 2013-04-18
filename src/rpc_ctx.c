@@ -160,7 +160,8 @@ int
 rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 {
     struct x_vc_data *xd = (struct x_vc_data *) ctx->ctx_u.clnt.clnt->cl_p1;
-    rpc_dplx_lock_t *lk = &xd->rec->recv.lock;
+    struct rpc_dplx_rec *rec = xd->rec;
+    rpc_dplx_lock_t *lk = &rec->recv.lock;
     struct timespec ts;
     int code = 0;
 
@@ -172,11 +173,18 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
         code = cond_timedwait(&lk->we.cv, &lk->we.mtx, &ts);
         /* if we timed out, check for xprt destroyed (no more receives) */
         if (code == ETIMEDOUT) {
-            SVCXPRT *xprt = xd->rec->hdl.xprt;
+            SVCXPRT *xprt = rec->hdl.xprt;
             uint32_t xp_flags;
+
+            /* dequeue the call */
+            mutex_lock(&rec->mtx);
+            opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
+            mutex_unlock(&rec->mtx);
+
             mutex_lock(&xprt->xp_lock);
             xp_flags = xprt->xp_flags;
             mutex_unlock(&xprt->xp_lock);
+
             if (xp_flags & SVC_XPRT_FLAG_DESTROYED) {
                 /* XXX should also set error.re_why, but the facility is not
                  * well developed. */
