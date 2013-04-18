@@ -103,10 +103,10 @@ static const struct xdr_ops xdrmem_ops_unaligned = {
  * memory buffer.
  */
 void
-xdrmem_create(XDR *xdrs,
-              char *addr,
-              u_int size,
-              enum xdr_op op)
+xdrmem_ncreate(XDR *xdrs,
+               char *addr,
+               u_int size,
+               enum xdr_op op)
 {
     xdrs->x_op = op;
     xdrs->x_ops = (PtrToUlong(addr) & (sizeof(int32_t) - 1))

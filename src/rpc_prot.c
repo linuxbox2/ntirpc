@@ -92,7 +92,7 @@ xdr_des_block(XDR *xdrs, des_block *blkp)
  * XDR the MSG_ACCEPTED part of a reply message union
  */
 bool
-xdr_accepted_reply(XDR *xdrs, struct accepted_reply *ar)
+xdr_naccepted_reply(XDR *xdrs, struct accepted_reply *ar)
 {
 
     assert(xdrs != NULL);
@@ -126,7 +126,7 @@ xdr_accepted_reply(XDR *xdrs, struct accepted_reply *ar)
  * XDR the MSG_DENIED part of a reply message union
  */
 bool
-xdr_rejected_reply(XDR *xdrs, struct rejected_reply *rr)
+xdr_nrejected_reply(XDR *xdrs, struct rejected_reply *rr)
 {
 
     assert(xdrs != NULL);
@@ -151,15 +151,15 @@ xdr_rejected_reply(XDR *xdrs, struct rejected_reply *rr)
 }
 
 static const struct xdr_discrim reply_dscrm[3] = {
-    { (int)MSG_ACCEPTED, (xdrproc_t)xdr_accepted_reply },
-    { (int)MSG_DENIED, (xdrproc_t)xdr_rejected_reply },
+    { (int)MSG_ACCEPTED, (xdrproc_t)xdr_naccepted_reply },
+    { (int)MSG_DENIED, (xdrproc_t)xdr_nrejected_reply },
     { __dontcare__, NULL_xdrproc_t } };
 
 /*
  * XDR a reply message
  */
 bool
-xdr_replymsg(XDR *xdrs, struct rpc_msg *rmsg)
+xdr_nreplymsg(XDR *xdrs, struct rpc_msg *rmsg)
 {
     assert(xdrs != NULL);
     assert(rmsg != NULL);
@@ -181,7 +181,7 @@ xdr_replymsg(XDR *xdrs, struct rpc_msg *rmsg)
  * The rm_xid is not really static, but the user can easily munge on the fly.
  */
 bool
-xdr_callhdr(XDR *xdrs, struct rpc_msg *cmsg)
+xdr_ncallhdr(XDR *xdrs, struct rpc_msg *cmsg)
 {
 
     assert(xdrs != NULL);

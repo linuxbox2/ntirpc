@@ -173,11 +173,11 @@ struct rpc_msg {
 __BEGIN_DECLS
 /*
  * XDR routine to handle a rpc message.
- * xdr_callmsg(xdrs, cmsg)
+ * xdr_ncallmsg(xdrs, cmsg)
  *  XDR *xdrs;
  *  struct rpc_msg *cmsg;
  */
-extern bool xdr_callmsg(XDR *, struct rpc_msg *);
+extern bool xdr_ncallmsg(XDR *, struct rpc_msg *);
 
 /*
  * XDR routine to handle a duplex rpc message.
@@ -191,19 +191,19 @@ extern bool xdr_dplx_msg_decode_continue(XDR *, struct rpc_msg *);
 
 /*
  * XDR routine to pre-serialize the static part of a rpc message.
- * xdr_callhdr(xdrs, cmsg)
+ * xdr_ncallhdr(xdrs, cmsg)
  *  XDR *xdrs;
  *  struct rpc_msg *cmsg;
  */
-extern bool xdr_callhdr(XDR *, struct rpc_msg *);
+extern bool xdr_ncallhdr(XDR *, struct rpc_msg *);
 
 /*
  * XDR routine to handle a rpc reply.
- * xdr_replymsg(xdrs, rmsg)
+ * xdr_nreplymsg(xdrs, rmsg)
  *  XDR *xdrs;
  *  struct rpc_msg *rmsg;
  */
-extern bool xdr_replymsg(XDR *, struct rpc_msg *);
+extern bool xdr_nreplymsg(XDR *, struct rpc_msg *);
 
 
 /*
@@ -212,7 +212,7 @@ extern bool xdr_replymsg(XDR *, struct rpc_msg *);
  *  XDR *xdrs;
  *  struct accepted_reply *rej;
  */
-extern bool xdr_accepted_reply(XDR *, struct accepted_reply *);
+extern bool xdr_naccepted_reply(XDR *, struct accepted_reply *);
 
 /*
  * XDR routine to handle a rejected rpc reply.
@@ -220,7 +220,7 @@ extern bool xdr_accepted_reply(XDR *, struct accepted_reply *);
  *  XDR *xdrs;
  *  struct rejected_reply *rej;
  */
-extern bool xdr_rejected_reply(XDR *, struct rejected_reply *);
+extern bool xdr_nrejected_reply(XDR *, struct rejected_reply *);
 
 /*
  * Fills in the error part of a reply message.
@@ -230,5 +230,8 @@ extern bool xdr_rejected_reply(XDR *, struct rejected_reply *);
  */
 extern void _seterr_reply(struct rpc_msg *, struct rpc_err *);
 __END_DECLS
+
+/* For backward compatibility */
+#include <rpc/tirpc_compat.h>
 
 #endif /* !_TIRPC_RPC_MSG_H */

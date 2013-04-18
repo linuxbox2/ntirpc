@@ -91,5 +91,16 @@
 #define authgss_create(a, b, c) authgss_ncreate(a, b, c)
 #define authgss_create_default(a, b, c) authgss_ncreate_default(a, b, c)
 
+/* rpc_msg */
+#define xdr_callmsg xdr_ncallmsg
+#define xdr_callhdr xdr_ncallhdr
+#define xdr_replymsg xdr_nreplymsg
+#define xdr_accepted_reply xdr_naccepted_reply
+#define xdr_rejected_reply xdr_nrejected_reply
+
+/* xdr */
+#define xdr_netobj xdr_nnetobj
+#define xdrmem_create(a, b, c, d) xdrmem_ncreate(a, b, c, d)
+#define xdr_free xdr_nfree
 
 #endif /* !TIRPC_COMPAT_H */

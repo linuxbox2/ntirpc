@@ -68,7 +68,7 @@ static const char xdr_zero[BYTES_PER_XDR_UNIT] = { 0, 0, 0, 0 };
  * Not a filter, but a convenient utility nonetheless
  */
 void
-xdr_free(xdrproc_t proc, void *objp)
+xdr_nfree(xdrproc_t proc, void *objp)
 {
     XDR x;
 

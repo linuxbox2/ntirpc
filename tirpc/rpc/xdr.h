@@ -375,7 +375,7 @@ extern bool xdr_quadruple(XDR *, long double *);
 extern bool xdr_reference(XDR *, char **, u_int, xdrproc_t);
 extern bool xdr_pointer(XDR *, char **, u_int, xdrproc_t);
 extern bool xdr_wrapstring(XDR *, char **);
-extern void xdr_free(xdrproc_t, void *);
+extern void xdr_nfree(xdrproc_t, void *);
 extern bool xdr_hyper(XDR *, quad_t *);
 extern bool xdr_u_hyper(XDR *, u_quad_t *);
 extern bool xdr_longlong_t(XDR *, quad_t *);
@@ -396,7 +396,7 @@ struct netobj {
     char *n_bytes;
 };
 typedef struct netobj netobj;
-extern bool   xdr_netobj(XDR *, struct netobj *);
+extern bool xdr_nnetobj(XDR *, struct netobj *);
 
 /*
  * These are the public routines for the various implementations of
@@ -404,7 +404,7 @@ extern bool   xdr_netobj(XDR *, struct netobj *);
  */
 __BEGIN_DECLS
 /* XDR using memory buffers */
-extern void xdrmem_create(XDR *, char *, u_int, enum xdr_op);
+extern void xdrmem_ncreate(XDR *, char *, u_int, enum xdr_op);
 
 /* intrinsic checksum (be careful) */
 extern uint64_t xdrmem_cksum(XDR *, u_int);
@@ -427,5 +427,8 @@ extern bool xdrrec_skiprecord(XDR *);
 extern bool xdrrec_eof(XDR *);
 
 __END_DECLS
+
+/* For backward compatibility */
+#include <rpc/tirpc_compat.h>
 
 #endif /* !_TIRPC_XDR_H */
