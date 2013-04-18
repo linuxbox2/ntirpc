@@ -284,7 +284,6 @@ svc_dg_getargs(xprt, xdr_args, args_ptr)
 {
 	if (! SVCAUTH_UNWRAP(xprt->xp_auth, &(su_data(xprt)->su_xdrs),
 			     xdr_args, args_ptr)) {
-		(void)svc_freeargs(xprt, xdr_args, args_ptr);
 		return FALSE;
 	}
 	return TRUE;
