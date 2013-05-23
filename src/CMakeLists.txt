@@ -5,6 +5,9 @@ add_definitions(
   -D_GNU_SOURCE
 )
 
+# XXX FreeBSD?
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+
 include_directories(
   ${PROJECT_SOURCE_DIR}/tirpc
 )
