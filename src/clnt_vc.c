@@ -505,7 +505,7 @@ clnt_vc_control(cl, request, info)
 	sigset_t newmask;
 	int rpc_lock_value;
 	u_int32_t tmp;
-	u_long ltmp;
+	u_int32_t ltmp;
 
 	assert(cl != NULL);
 
