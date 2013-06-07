@@ -80,8 +80,10 @@ extern struct svc_params __svc_params[1];
 
 static bool rendezvous_request(SVCXPRT *, struct svc_req *);
 static enum xprt_stat rendezvous_stat(SVCXPRT *);
-static bool svc_vc_ref(SVCXPRT *xprt, u_int flags);
-static void svc_vc_release(SVCXPRT *xprt, u_int flags);
+static bool svc_vc_ref(SVCXPRT *xprt, u_int flags, const char *tag,
+                       const int line);
+static void svc_vc_release(SVCXPRT *xprt, u_int flags, const char *tag,
+                           const int line);
 static void svc_vc_destroy(SVCXPRT *);
 int generic_read_vc(XDR *, void *, void *, int);
 int generic_write_vc(XDR *, void *, void *, int);
@@ -205,8 +207,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
                 SVC_REF(xprt, SVC_REF_FLAG_NONE);
             }
             /* return extra ref */
-            if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
-                mutex_unlock(&rec->mtx);
+            rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED|RPC_DPLX_FLAG_UNLOCK);
             goto done;
         }
     }
@@ -258,7 +259,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
     rec->hdl.xprt = xprt;
 
     /* release rec */
-    mutex_unlock(&rec->mtx);
+    REC_UNLOCK(rec);
 
     /* make reachable from xprt list */
     svc_rqst_init_xprt(xprt);
@@ -279,8 +280,7 @@ err:
         mem_free(xprt, sizeof(SVCXPRT));
 
     if (rec) {
-        if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
-            mutex_unlock(&rec->mtx);
+        rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED|RPC_DPLX_FLAG_UNLOCK);
     }
 
     return (NULL);
@@ -488,8 +488,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
                 SVC_REF(xprt, SVC_REF_FLAG_NONE);
             }
             /* return extra ref */
-            if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
-                mutex_unlock(&rec->mtx);
+            rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED|RPC_DPLX_FLAG_UNLOCK);
             *allocated = FALSE;
             goto done;
         }
@@ -507,8 +506,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
         __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
                 "svc_vc: makefd_xprt: out of memory");
         /* return extra ref */
-        if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
-            mutex_unlock(&rec->mtx);
+        rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED|RPC_DPLX_FLAG_UNLOCK);
         goto done;
     }
 
@@ -532,8 +530,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
             __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
                     "svc_vc: makefd_xprt: out of memory");
             /* return extra ref */
-            if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
-                mutex_unlock(&rec->mtx);
+            rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED|RPC_DPLX_FLAG_UNLOCK);
         mem_free(xprt, sizeof(SVCXPRT));
         goto done;
         }
@@ -583,7 +580,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
     rec->hdl.xprt = xprt;
 
     /* release */
-    mutex_unlock(&rec->mtx);
+    REC_UNLOCK(rec);
 
     /* Make reachable from xprt list.  Registration deferred. */
     svc_rqst_init_xprt(xprt);
@@ -604,6 +601,7 @@ rendezvous_request(SVCXPRT *xprt, struct svc_req *req)
     struct __rpc_sockinfo si;
     SVCXPRT *newxprt;
     bool xprt_allocd;
+    static int n = 1;
 
     rdvs = (struct cf_rendezvous *)xprt->xp_p1;
 again:
@@ -634,6 +632,9 @@ again:
         }
         return (FALSE);
     }
+
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &n, sizeof(n));
+
     /*
      * make a new transport (re-uses xprt)
      */
@@ -656,6 +657,8 @@ again:
     }
 
     __xprt_set_raddr(newxprt, &addr);
+
+    XPRT_TRACE_RADDR(newxprt, __func__, __func__, __LINE__);
 
     /* XXX fvdl - is this useful? (Yes.  Matt) */
     if (__rpc_fd2sockinfo(fd, &si) && si.si_proto == IPPROTO_TCP) {
@@ -702,7 +705,7 @@ rendezvous_stat(SVCXPRT *xprt)
 }
 
 static bool
-svc_vc_ref(SVCXPRT *xprt, u_int flags)
+svc_vc_ref(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
     uint32_t refcnt;
 
@@ -713,12 +716,16 @@ svc_vc_ref(SVCXPRT *xprt, u_int flags)
         mutex_unlock(&xprt->xp_lock);
         return (false);
     }
+
     refcnt = ++(xprt->xp_refcnt);
+
+    XPRT_TRACE_RADDR(xprt, __func__, tag, line);
+
     mutex_unlock(&xprt->xp_lock);
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: postref %p xp_refcnt %u",
-            __tirpc_dcounter, __func__, xprt, refcnt);
+            "%d %s: tag %s line %d postref %p xp_refcnt %u",
+            __tirpc_dcounter, __func__, tag, line, xprt, refcnt);
 
     return (true);
 }
@@ -743,7 +750,7 @@ rdvs_dodestroy(SVCXPRT *xprt)
     if (xprt->xp_ops2->xp_free_xprt)
         xprt->xp_ops2->xp_free_xprt(xprt);
 
-    mutex_lock(&rec->mtx);
+    REC_LOCK(rec);
 
     mutex_destroy(&xprt->xp_lock);
 
@@ -759,12 +766,11 @@ rdvs_dodestroy(SVCXPRT *xprt)
     mem_free(rdvs, sizeof (struct cf_rendezvous));
     mem_free(xprt, sizeof(SVCXPRT));
 
-    if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
-        mutex_unlock(&rec->mtx);
+    rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED|RPC_DPLX_FLAG_UNLOCK);
 }
 
 static void
-svc_rdvs_release(SVCXPRT *xprt, u_int flags)
+svc_rdvs_release(SVCXPRT *xprt, u_int flags, const char *tag)
 {
     uint32_t xp_refcnt;
 
@@ -822,7 +828,7 @@ svc_rdvs_destroy(SVCXPRT *xprt)
 
     drefcnt = xprt->xp_refcnt;
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: postfinalize %p xp_refcnt %u",
+            "%d %s: postfinalize %p unserialized xp_refcnt %u",
             __tirpc_dcounter, __func__, xprt, drefcnt);
 
     if (xp_refcnt == 0) {
@@ -836,8 +842,32 @@ out:
     return;
 }
 
+void xprt_trace_raddr(SVCXPRT *xprt, const char *func, const char *tag,
+                      const int line)
+{
+    struct sockaddr_storage *ss = (struct sockaddr_storage *)
+        & (xprt->xp_raddr);
+    int port;
+
+    switch(ss->ss_family) {
+    case AF_INET6:
+        port = ntohs(((struct sockaddr_in6 *) ss)->sin6_port);
+        break;
+    case AF_INET:
+        port = ntohs(((struct sockaddr_in *) ss)->sin_port);
+        break;
+    default:
+        port = -1;
+        break;
+    }
+    __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+            "%d %s: %s: %s %d %p fd %d port %d xp_refcnt %u",
+            __tirpc_dcounter, __func__, func, tag, line, xprt, xprt->xp_fd,
+            port, xprt->xp_refcnt);
+}
+
 static void
-svc_vc_release(SVCXPRT *xprt, u_int flags)
+svc_vc_release(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
     uint32_t xp_refcnt;
 
@@ -847,8 +877,10 @@ svc_vc_release(SVCXPRT *xprt, u_int flags)
     xp_refcnt = --(xprt->xp_refcnt);
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-            "%d %s: postunref %p xp_refcnt %u",
-            __tirpc_dcounter, __func__, xprt, xp_refcnt);
+            "%d %s: tag %s line %d postunref %p xp_refcnt %u",
+            __tirpc_dcounter, __func__, tag, line, xprt, xp_refcnt);
+
+    XPRT_TRACE_RADDR(xprt, __func__, tag, line);
 
     /* conditional destroy */
     if ((xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) &&
@@ -859,21 +891,21 @@ svc_vc_release(SVCXPRT *xprt, u_int flags)
         uint32_t xd_refcnt;
 
         mutex_unlock(&xprt->xp_lock);
-        mutex_lock(&rec->mtx);
+        REC_LOCK(rec);
 
         xd_refcnt = xd->refcnt;
         if (xd_refcnt == 0) {
             __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                    "%d %s: xd_refcnt %u on destroyed %p %u calling "
-                    "vc_shared_destroy",
-                    __tirpc_dcounter, __func__, xprt, xd_refcnt);
+                    "%d %s: tag %s line %d xd_refcnt %u on destroyed %p "
+                    "calling vc_shared_destroy",
+                    __tirpc_dcounter, __func__, tag, line, xd_refcnt, xprt);
             vc_shared_destroy(xd); /* RECLOCKED */
         } else {
             __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                    "%d %s: xd_refcnt %u on destroyed %p omit "
+                    "%d %s: tag %s line %d xd_refcnt %u on destroyed %p omit "
                     "vc_shared_destroy",
-                    __tirpc_dcounter, __func__, xprt, xd_refcnt);
-            mutex_unlock(&rec->mtx);
+                    __tirpc_dcounter, __func__, tag, line, xprt, xd_refcnt);
+            REC_UNLOCK(rec);
         }
     }
     else
@@ -894,6 +926,8 @@ svc_vc_destroy(SVCXPRT *xprt)
         mutex_unlock(&xprt->xp_lock);
         goto out;
     }
+
+    XPRT_TRACE_RADDR(xprt, __func__, __func__, __LINE__);
 
     xd = (struct x_vc_data *) xprt->xp_p1;
     rec = xd->rec;
@@ -924,7 +958,7 @@ svc_vc_destroy(SVCXPRT *xprt)
     drefcnt = xprt->xp_refcnt;
 
     /* bidirectional */
-    mutex_lock(&rec->mtx);
+    REC_LOCK(rec);
     xd->flags |= X_VC_DATA_FLAG_SVC_DESTROYED; /* destroyed handle is dead */
     xd_refcnt = --(xd->refcnt);
 
@@ -940,7 +974,7 @@ svc_vc_destroy(SVCXPRT *xprt)
                 __tirpc_dcounter, __func__, xprt, xp_refcnt, xd_refcnt);
         vc_shared_destroy(xd); /* RECLOCKED */
     } else
-        mutex_unlock(&rec->mtx);
+        REC_UNLOCK(rec);
 
 out:
     return;

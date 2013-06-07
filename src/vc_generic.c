@@ -447,6 +447,8 @@ void vc_shared_destroy(struct x_vc_data *xd)
     xprt = rec->hdl.xprt;
     if (xprt) {
 
+        XPRT_TRACE_RADDR(xprt, __func__, __func__, __LINE__);
+
         rec->hdl.xprt = NULL; /* unreachable */
 
         if (! closed) {
@@ -477,11 +479,13 @@ void vc_shared_destroy(struct x_vc_data *xd)
     }
 
     /* unref shared */
+    REC_UNLOCK(rec);
+
     if (clnt)
-        rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED);
+        rpc_dplx_unref(rec, RPC_DPLX_FLAG_NONE);
 
     if (xprt)
-        rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED);
+        rpc_dplx_unref(rec, RPC_DPLX_FLAG_NONE);
 
     /* free xd itself */
     mem_free(xd, sizeof(struct x_vc_data));

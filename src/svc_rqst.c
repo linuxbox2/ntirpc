@@ -351,7 +351,7 @@ evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
                 __func__, xprt);
 
     /* clear events */
-    (void) svc_rqst_unhook_events(xprt, sr_rec);
+    (void) svc_rqst_unhook_events(xprt, sr_rec); /* XP LOCKED */
 
     xprt->xp_flags &= ~SVC_XPRT_FLAG_EVCHAN;
 
@@ -782,17 +782,33 @@ svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t __attribute__((unused)) flags)
     struct svc_xprt_ev *xp_ev = (struct svc_xprt_ev *) xprt->xp_ev;
     struct svc_rqst_rec *sr_rec = xp_ev->sr_rec;
     int code = 0;
+    uint32_t drefcnt = xprt->xp_refcnt;
 
     if (! sr_rec) {
+        __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                "%d %s: xprt_unregister_1 %p unserialized xp_refcnt %u",
+                __tirpc_dcounter, __func__, xprt, drefcnt);
         xprt_unregister(xprt);
         goto out;
     }
 
     /* if xprt is is on a dedicated channel? */
-    if (sr_rec->id_k)
+    if (sr_rec->id_k) {
+        __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                "%d %s: before evchan_unreg_impl %p unserialized xp_refcnt %u",
+                __tirpc_dcounter, __func__, xprt, drefcnt);
         evchan_unreg_impl(sr_rec, xprt, SVC_RQST_FLAG_NONE);
-    else
+        drefcnt = xprt->xp_refcnt;
+        __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                "%d %s: after evchan_unreg_impl %p unserialized xp_refcnt %u",
+                __tirpc_dcounter, __func__, xprt, drefcnt);
+    }
+    else {
+        __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                "%d %s: xprt_unregister_2 %p unserialized xp_refcnt %u",
+                __tirpc_dcounter, __func__, xprt, drefcnt);
         xprt_unregister(xprt);
+    }
 
 out:
     return (code);
@@ -878,6 +894,13 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
 
                             /* ! LOCKED */
                             code = xprt->xp_ops2->xp_getreq(xprt);
+
+                            refcnt = xprt->xp_refcnt;
+                            __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                                    "%d %s: post getreq ref %p %u",
+                                    __tirpc_dcounter, __func__,
+                                    xprt, refcnt);
+
                         } else
                             mutex_unlock(&xprt->xp_lock);
                     }

@@ -51,6 +51,7 @@ enum rpc_duplex_callpath
 #define RPC_DPLX_FLAG_LOCK          0x0002 /* take chan lock before signal */
 #define RPC_DPLX_FLAG_LOCKREC       0x0004
 #define RPC_DPLX_FLAG_RECLOCKED     0x0008
+#define RPC_DPLX_FLAG_UNLOCK        0x0010
 
 #ifndef HAVE_STRLCAT
 extern size_t strlcat(char *dst, const char *src, size_t siz);
@@ -88,7 +89,7 @@ rpc_dplx_ref(struct rpc_dplx_rec *rec, u_int flags)
     int32_t refcnt;
 
     if (! (flags & RPC_DPLX_FLAG_LOCKED))
-        mutex_lock(&rec->mtx);
+        REC_LOCK(rec);
 
     refcnt = ++(rec->refcnt);
 
@@ -96,7 +97,7 @@ rpc_dplx_ref(struct rpc_dplx_rec *rec, u_int flags)
      * want it returned locked */
     if ((! (flags & RPC_DPLX_FLAG_LOCKED)) &&
         (! (flags & RPC_DPLX_FLAG_LOCK)))
-        mutex_unlock(&rec->mtx);
+        REC_UNLOCK(rec);
 
     __warnx(TIRPC_DEBUG_FLAG_REFCNT,
             "%d %s: rec %p rec->refcnt %u",
