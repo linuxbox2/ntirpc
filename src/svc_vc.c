@@ -604,6 +604,7 @@ rendezvous_request(SVCXPRT *xprt, struct svc_req *req)
     struct __rpc_sockinfo si;
     SVCXPRT *newxprt;
     bool xprt_allocd;
+    static int n = 1;
 
     rdvs = (struct cf_rendezvous *)xprt->xp_p1;
 again:
@@ -634,6 +635,9 @@ again:
         }
         return (FALSE);
     }
+
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &n, sizeof(n));
+
     /*
      * make a new transport (re-uses xprt)
      */
