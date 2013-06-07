@@ -209,7 +209,7 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
             }
             /* return extra ref */
             if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
-                mutex_unlock(&rec->mtx);
+                REC_LOCK(rec);
             goto done;
         }
     }
@@ -328,7 +328,7 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
     rec->hdl.clnt = clnt;
 
     /* release rec */
-    mutex_unlock(&rec->mtx);
+    REC_UNLOCK(rec);
 
 done:
     thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
@@ -347,7 +347,7 @@ err:
     }
     if (rec) {
         if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
-            mutex_unlock(&rec->mtx);
+            REC_UNLOCK(rec);
     }
     thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
     return (NULL);
@@ -792,7 +792,7 @@ clnt_vc_release(CLIENT *clnt, u_int flags)
 
         mutex_unlock(&clnt->cl_lock);
 
-        mutex_lock(&rec->mtx);
+        REC_LOCK(rec);
         xd_refcnt = --(xd->refcnt);
 
         if (xd_refcnt == 0) {
@@ -806,7 +806,7 @@ clnt_vc_release(CLIENT *clnt, u_int flags)
                     "%d %s: xd_refcnt %u on destroyed %p omit "
                     "vc_shared_destroy",
                     __tirpc_dcounter, __func__, clnt, cl_refcnt);
-            mutex_unlock(&rec->mtx);
+            REC_UNLOCK(rec);
         }
     }
     else
@@ -839,7 +839,7 @@ clnt_vc_destroy(CLIENT *clnt)
             __tirpc_dcounter, __func__, clnt, cl_refcnt);
 
     /* bidirectional */
-    mutex_lock(&rec->mtx);
+    REC_LOCK(rec);
     xd->flags |= X_VC_DATA_FLAG_CLNT_DESTROYED; /* destroyed handle is dead */
     xd_refcnt = --(xd->refcnt);
 
@@ -851,7 +851,7 @@ clnt_vc_destroy(CLIENT *clnt)
                 __tirpc_dcounter, __func__, clnt, cl_refcnt, xd_refcnt);
         vc_shared_destroy(xd); /* RECLOCKED */
     } else
-        mutex_unlock(&rec->mtx);
+        REC_UNLOCK(rec);
 
 out:
     return;

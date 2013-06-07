@@ -220,10 +220,12 @@ typedef struct rpc_svcxprt {
                               void *);
 
         /* take lifecycle ref */
-        bool (*xp_ref)(struct rpc_svcxprt *, u_int flags);
+        bool (*xp_ref)(struct rpc_svcxprt *, u_int flags, const char *tag,
+                       const int line);
 
         /* release ref (destroy if no refs) */
-        void (*xp_release)(struct rpc_svcxprt *, u_int flags);
+        void (*xp_release)(struct rpc_svcxprt *, u_int flags, const char *tag,
+            const int line);
 
         /* release and mark destroyed */
         void (*xp_destroy)(struct rpc_svcxprt *);
@@ -384,7 +386,7 @@ struct svc_req {
 
 #define SVC_REPLY(xprt, req, msg) \
     (*(xprt)->xp_ops->xp_reply) ((xprt), (req), (msg))
-#define svc_reply(xprt, req) \
+#define svc_reply(xprt, req, msg) \
     (*(xprt)->xp_ops->xp_reply) ((xprt), (req), (msg))
 
 #define SVC_FREEARGS(xprt, xargs, argsp) \
@@ -392,15 +394,15 @@ struct svc_req {
 #define svc_freeargs(xprt, xargs, argsp) \
     (*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
 
-#define SVC_REF(xprt, flags)                    \
-	(*(xprt)->xp_ops->xp_ref)(xprt, flags)
-#define svc_ref(xprt)				\
-    (*(xprt)->xp_ops->xp_ref)(xprt, flags)
+#define SVC_REF(xprt, flags, tag, line) \
+    (*(xprt)->xp_ops->xp_ref)(xprt, flags, tag, line)
+#define svc_ref(xprt, flags, tag) \
+    (*(xprt)->xp_ops->xp_ref)(xprt, flags, tag, line)
 
-#define SVC_RELEASE(xprt, flags)                \
-	(*(xprt)->xp_ops->xp_release)(xprt, flags)
-#define svc_release(xprt, flags)                \
-	(*(xprt)->xp_ops->xp_release)(xprt, flags)
+#define SVC_RELEASE(xprt, flags, tag, line) \
+    (*(xprt)->xp_ops->xp_release)(xprt, flags, tag, line)
+#define svc_release(xprt, flags, tag) \
+    (*(xprt)->xp_ops->xp_release)(xprt, flags, tag, line)
 
 #define SVC_DESTROY(xprt) \
     (*(xprt)->xp_ops->xp_destroy)(xprt)

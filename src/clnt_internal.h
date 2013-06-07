@@ -50,7 +50,7 @@ typedef struct rpc_dplx_lock
     struct ct_wait_entry we;
     int32_t lock_flag_value; /* XXX killme */
     struct {
-        char file[32];
+        const char *func;
         int line;
     } locktrace;
 } rpc_dplx_lock_t;
@@ -155,7 +155,15 @@ enum CX_TYPE
 struct rpc_dplx_rec
 {
     int fd_k;
+#if 0
     mutex_t mtx;
+#else
+    struct {
+        mutex_t mtx;
+        const char *func;
+        int line;
+    } locktrace;
+#endif
     struct opr_rbtree_node node_k;
     uint32_t refcnt;
     struct {
@@ -169,6 +177,15 @@ struct rpc_dplx_rec
         SVCXPRT *xprt;
     } hdl;
 };
+
+#define REC_LOCK(rec) \
+    do { \
+        mutex_lock(&((rec)->locktrace.mtx)); \
+        (rec)->locktrace.func = __func__; \
+        (rec)->locktrace.line = __LINE__; \
+    } while (0)
+
+#define REC_UNLOCK(rec) mutex_unlock(&((rec)->locktrace.mtx))
 
 struct cx_data
 {
