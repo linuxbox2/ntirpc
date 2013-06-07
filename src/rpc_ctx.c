@@ -65,7 +65,7 @@ alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
     cond_init(&ctx->we.cv, 0, NULL);
 
     /* rec->calls and rbtree protected by (adaptive) mtx */
-    mutex_lock(&rec->mtx);
+    REC_LOCK(rec);
 
     /* XXX we hold the client-fd lock */
     ctx->xid = ++(xd->cx.calls.xid);
@@ -85,13 +85,13 @@ alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
                 "%s: call ctx insert failed (xid %d client %p)",
                 __func__,
                 ctx->xid, clnt);
-        mutex_unlock(&rec->mtx);
+        REC_UNLOCK(rec);
         mem_free(ctx, sizeof(rpc_ctx_t));
         ctx = NULL;
         goto out;
     }
 
-    mutex_unlock(&rec->mtx);
+    REC_UNLOCK(rec);
 
 out:
     return (ctx);
@@ -104,11 +104,11 @@ void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
 
     assert (flags & RPC_CTX_FLAG_LOCKED);
 
-    mutex_lock(&rec->mtx);
+    REC_LOCK(rec);
     opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
     ctx->xid = ++(xd->cx.calls.xid);
     if (opr_rbtree_insert(&xd->cx.calls.t, &ctx->node_k)) {
-        mutex_unlock(&rec->mtx);
+        REC_UNLOCK(rec);
         __warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
                 "%s: call ctx insert failed (xid %d client %p)",
                 __func__,
@@ -116,7 +116,7 @@ void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
                 ctx->ctx_u.clnt.clnt);
         goto out;
     }
-    mutex_unlock(&rec->mtx);
+    REC_UNLOCK(rec);
 out:
     return;
 }
@@ -129,7 +129,7 @@ rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg)
     rpc_dplx_lock_t *lk = &xd->rec->recv.lock;
     
     ctx_k.xid = msg->rm_xid;
-    mutex_lock(&xd->rec->mtx);
+    REC_LOCK(xd->rec);
     nv = opr_rbtree_lookup(&xd->cx.calls.t, &ctx_k.node_k);
     if (nv) {
         ctx = opr_containerof(nv, rpc_ctx_t, node_k);
@@ -137,7 +137,7 @@ rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg)
         free_rpc_msg(ctx->msg); /* free call header */
         ctx->msg = msg; /* and stash reply header */
         ctx->flags |= RPC_CTX_FLAG_SYNCDONE;
-        mutex_unlock(&xd->rec->mtx);
+        REC_UNLOCK(xd->rec);
         cond_signal(&lk->we.cv); /* XXX we hold lk->we.mtx */
 	/* now, we must ourselves wait for the other side to run */
 	while (! (ctx->flags & RPC_CTX_FLAG_ACKSYNC))
@@ -152,7 +152,7 @@ rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg)
 
         return (TRUE);
     }
-    mutex_unlock(&xd->rec->mtx);
+    REC_UNLOCK(xd->rec);
     return (FALSE);
 }
 
@@ -177,9 +177,9 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
             uint32_t xp_flags;
 
             /* dequeue the call */
-            mutex_lock(&rec->mtx);
+            REC_LOCK(rec);
             opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
-            mutex_unlock(&rec->mtx);
+            REC_UNLOCK(rec);
 
             mutex_lock(&xprt->xp_lock);
             xp_flags = xprt->xp_flags;
@@ -241,11 +241,11 @@ free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
         (void) cond_timedwait(&ctx->we.cv, &ctx->we.mtx, &ts);
     }
 
-    mutex_lock(&rec->mtx);
+    REC_LOCK(rec);
     opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
     /* interlock */
     mutex_unlock(&ctx->we.mtx);
-    mutex_unlock(&rec->mtx);
+    REC_UNLOCK(rec);
 
     if (ctx->msg)
         free_rpc_msg(ctx->msg);

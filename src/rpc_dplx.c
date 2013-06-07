@@ -205,7 +205,7 @@ alloc_dplx_rec(void)
         rec->refcnt = 0;
         rec->hdl.clnt = NULL;
         rec->hdl.xprt = NULL;
-        mutex_init(&rec->mtx, NULL);
+        mutex_init(&rec->locktrace.mtx, NULL);
         /* send channel */
         rpc_dplx_lock_init(&rec->send.lock);
         /* recv channel */
@@ -217,7 +217,7 @@ alloc_dplx_rec(void)
 static inline void
 free_dplx_rec(struct rpc_dplx_rec *rec)
 {
-    mutex_destroy(&rec->mtx);
+    mutex_destroy(&rec->locktrace.mtx);
     rpc_dplx_lock_destroy(&rec->send.lock);
     rpc_dplx_lock_destroy(&rec->recv.lock);
     mem_free(rec, sizeof(struct rpc_dplx_rec));
@@ -342,7 +342,7 @@ rpc_dplx_unref(struct rpc_dplx_rec *rec, u_int flags)
     int32_t refcnt;
 
     if (! (flags & RPC_DPLX_FLAG_LOCKED))
-        mutex_lock(&rec->mtx);
+        REC_LOCK(rec);
 
     refcnt = --(rec->refcnt);
 
@@ -352,29 +352,34 @@ rpc_dplx_unref(struct rpc_dplx_rec *rec, u_int flags)
 
     if (rec->refcnt == 0) {
         t = rbtx_partition_of_scalar(&rpc_dplx_rec_set.xt, rec->fd_k);
-        mutex_unlock(&rec->mtx);
+        REC_UNLOCK(rec);
         rwlock_wrlock(&t->lock);
         nv = opr_rbtree_lookup(&t->t, &rec->node_k);
+        rec = NULL;
         if (nv) {
             rec = opr_containerof(nv, struct rpc_dplx_rec, node_k);
-            mutex_lock(&rec->mtx);
+            REC_LOCK(rec);
             if (rec->refcnt == 0) {
                 (void) opr_rbtree_remove(&t->t, &rec->node_k);
-                mutex_unlock(&rec->mtx);
+                REC_UNLOCK(rec);
                 __warnx(TIRPC_DEBUG_FLAG_REFCNT,
                         "%s: free rec %p rec->refcnt %u",
                         __func__, rec, refcnt);
 
                 free_dplx_rec(rec);
                 rec = NULL;
-            } else
+            } else {
                 refcnt = rec->refcnt;
+            }
         }
         rwlock_unlock(&t->lock);
     }
 
-    if (rec && (! (flags & RPC_DPLX_FLAG_LOCKED)))
-        mutex_unlock(&rec->mtx);
+    if (rec) {
+        if ((! (flags & RPC_DPLX_FLAG_LOCKED)) ||
+            (flags & RPC_DPLX_FLAG_UNLOCK))
+            REC_UNLOCK(rec);
+    }
 
     return (refcnt);
 }
