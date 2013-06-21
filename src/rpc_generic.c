@@ -283,9 +283,7 @@ __rpc_getconfip(const char *nettype)
         }
         while ((nconf = getnetconfig(confighandle)) != NULL) {
             if (strcmp(nconf->nc_protofmly, NC_INET) == 0
-#ifdef _USE_TIRPC_IPV6
                 || strcmp(nconf->nc_protofmly, NC_INET6) == 0
-#endif
                 ) {
                 if (strcmp(nconf->nc_proto, NC_TCP) == 0 &&
                     netid_tcp == NULL) {
