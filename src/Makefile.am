@@ -6,8 +6,9 @@
 ## anything like that.
 
 
-INCLUDES = -I$(top_srcdir)/tirpc -DPORTMAP -DINET6 -DVERSION="\"$(VERSION)\"" \
-		-D_GNU_SOURCE -D_REENTRANT -Wall -pipe  
+INCLUDES = -I$(top_srcdir)/tirpc -I/usr/include -DPORTMAP -DINET6 \
+	-DVERSION="\"$(VERSION)\"" -D_GNU_SOURCE -D_REENTRANT \
+	-Wall -pipe  
 
 lib_LTLIBRARIES = libntirpc.la
 
@@ -66,7 +67,7 @@ if GSS
     libntirpc_la_SOURCES += auth_gss.c authgss_hash.c authgss_prot.c \
 	svc_auth_gss.c
     libntirpc_la_LDFLAGS += $(GSSGLUE_LIBS)
-    libntirpc_la_CFLAGS = -DHAVE_RPCSEC_GSS $(GSSGLUE_CFLAGS)
+    libntirpc_la_CFLAGS = -DHAVE_RPCSEC_GSS $(CFLAGS) $(GSSGLUE_CFLAGS)
 endif
 
 ## libntirpc_a_SOURCES += key_call.c key_prot_xdr.c getpublickey.c
