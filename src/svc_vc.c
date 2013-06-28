@@ -599,6 +599,7 @@ rendezvous_request(SVCXPRT *xprt, struct svc_req *req)
     struct x_vc_data *xd;
     struct sockaddr_storage addr;
     struct __rpc_sockinfo si;
+    socklen_t slen;
     SVCXPRT *newxprt;
     bool xprt_allocd;
     static int n = 1;
@@ -664,6 +665,17 @@ again:
     if (__rpc_fd2sockinfo(fd, &si) && si.si_proto == IPPROTO_TCP) {
         len = 1;
         setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &len, sizeof (len));
+    }
+
+    slen = sizeof(struct sockaddr_storage);
+    if (getsockname(fd, (struct sockaddr *)(void *)&addr, &slen) < 0) {
+        __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                "%s: could not retrieve local addr", __func__);
+    } else {
+        if (!__rpc_set_netbuf(&newxprt->xp_ltaddr, &addr, sizeof(addr))) {
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "%s: no mem for local addr", __func__);
+        }
     }
 
     xd = (struct x_vc_data *) newxprt->xp_p1;
