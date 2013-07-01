@@ -6,7 +6,7 @@
 ## anything like that.
 
 
-INCLUDES = -I$(top_srcdir)/tirpc -DPORTMAP -DINET6 -DVERSION="\"$(VERSION)\"" \
+AM_CPPFLAGS = -I$(top_srcdir)/tirpc -DPORTMAP -DINET6 \
 		-D_GNU_SOURCE -Wall -pipe  
 
 lib_LTLIBRARIES = libtirpc.la

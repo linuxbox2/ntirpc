@@ -37,6 +37,6 @@ fi
 
 aclocal
 libtoolize --force --copy
-autoheader
+#autoheader
 automake --add-missing --copy --gnu # -Wall
 autoconf # -Wall

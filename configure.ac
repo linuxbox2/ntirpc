@@ -1,5 +1,5 @@
 AC_INIT(libtirpc, 0.2.3)
-AM_INIT_AUTOMAKE(libtirpc, 0.2.3)
+AM_INIT_AUTOMAKE
 AM_MAINTAINER_MODE
 AC_CONFIG_SRCDIR([src/auth_des.c])
 AC_CONFIG_MACRO_DIR([m4])
@@ -39,7 +39,7 @@ if test "x$enable_ipv6" != xno; then
 fi
 
 AC_PROG_CC
-AM_CONFIG_HEADER(config.h)
+m4_pattern_allow(AM_CONFIG_HEADERS(config.h))
 AC_PROG_LIBTOOL
 AC_HEADER_DIRENT
 AC_PREFIX_DEFAULT(/usr)
