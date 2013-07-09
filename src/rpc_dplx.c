@@ -203,7 +203,6 @@ alloc_dplx_rec(void)
     struct rpc_dplx_rec *rec = mem_alloc(sizeof(struct rpc_dplx_rec));
     if (rec) {
         rec->refcnt = 0;
-        rec->hdl.clnt = NULL;
         rec->hdl.xprt = NULL;
         mutex_init(&rec->locktrace.mtx, NULL);
         /* send channel */

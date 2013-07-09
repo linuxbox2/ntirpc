@@ -478,7 +478,8 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
         goto done;
     }
 
-    /* if a svcxprt handle exists, return it ref'd (rec is ref'd) */
+    /* attach shared state;  if a svcxprt handle exists, return it ref'd
+     * (rec is ref'd) */
     if (! (oflags & RPC_DPLX_LKP_OFLAG_ALLOC)) {
         if (rec->hdl.xprt) {
             xd = (struct x_vc_data *) rec->hdl.xprt->xp_p1;
@@ -493,6 +494,49 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
             *allocated = FALSE;
             goto done;
         }
+        xd = rec->hdl.xd;
+        ++(xd->refcnt);
+    } else {
+        xd = alloc_x_vc_data();
+        if (xd == NULL) {
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_vc: makefd_xprt: out of memory");
+            /* return extra ref */
+            rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED|RPC_DPLX_FLAG_UNLOCK);
+            mem_free(xprt, sizeof(SVCXPRT));
+            goto done;
+        }
+        xd->rec = rec;
+        /* XXX tracks outstanding calls */
+        opr_rbtree_init(&xd->cx.calls.t, call_xid_cmpf);
+        xd->cx.calls.xid = 0; /* next call xid is 1 */
+        xd->refcnt = 1;
+
+        xd->shared.sendsz =
+            __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
+        xd->shared.recvsz =
+            __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
+
+#if XDR_VREC
+        /* duplex streams, plus buffer sharing, readv/writev */
+        xdr_vrec_create(&(cd->xdrs_in),
+                        XDR_VREC_IN, xprt, readv_vc, NULL, recvsz,
+                        VREC_FLAG_NONE);
+
+        xdr_vrec_create(&(cd->xdrs_out),
+                        XDR_VREC_OUT, xprt, NULL, writev_vc, sendsz,
+                        VREC_FLAG_NONE);
+#else
+        /* duplex streams */
+        xdr_inrec_create(&(xd->shared.xdrs_in), recvsz, xd,
+                         generic_read_vc);
+        xd->shared.xdrs_in.x_op = XDR_DECODE;
+
+        xdrrec_create(&(xd->shared.xdrs_out), sendsz, recvsz, xd,
+                      generic_read_vc,
+                      generic_write_vc);
+        xd->shared.xdrs_out.x_op = XDR_ENCODE;
+#endif
     }
 
     /* XXX bi-directional?  initially I had assumed that explicit
@@ -519,58 +563,12 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
     xprt->xp_refcnt = 1;
     xprt->xp_fd = fd;
 
-    /* other-direction shared state? */
-    if (rec->hdl.clnt) {
-        /* XXX check subtype of clnt handle? */
-        xd = (struct x_vc_data *) rec->hdl.clnt->cl_p1;
-        /* inc shared refcnt */
-        ++(xd->refcnt);
-    } else {
-        xd = alloc_x_vc_data();
-        if (xd == NULL) {
-            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                    "svc_vc: makefd_xprt: out of memory");
-            /* return extra ref */
-            rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED|RPC_DPLX_FLAG_UNLOCK);
-        mem_free(xprt, sizeof(SVCXPRT));
-        goto done;
-        }
-        xd->rec = rec;
-        /* XXX tracks outstanding calls */
-        opr_rbtree_init(&xd->cx.calls.t, call_xid_cmpf);
-        xd->cx.calls.xid = 0; /* next call xid is 1 */
-        xd->refcnt = 1;
-    }
-
     /* the SVCXPRT created in svc_vc_create accepts new connections
      * in its xp_recv op, the rendezvous_request method, but xprt is
      * a call channel */
     svc_vc_ops(xprt);
 
     xd->sx.strm_stat = XPRT_IDLE;
-
-    if (! xd->rec->hdl.clnt) {
-#if XDR_VREC
-    /* duplex streams, plus buffer sharing, readv/writev */
-    xdr_vrec_create(&(cd->xdrs_in),
-                    XDR_VREC_IN, xprt, readv_vc, NULL, recvsz,
-                    VREC_FLAG_NONE);
-
-    xdr_vrec_create(&(cd->xdrs_out),
-                    XDR_VREC_OUT, xprt, NULL, writev_vc, sendsz,
-                    VREC_FLAG_NONE);
-#else
-    /* duplex streams */
-    xdr_inrec_create(&(xd->shared.xdrs_in), recvsz, xd,
-                     generic_read_vc);
-    xd->shared.xdrs_in.x_op = XDR_DECODE;
-
-    xdrrec_create(&(xd->shared.xdrs_out), sendsz, recvsz, xd,
-                  generic_read_vc,
-                  generic_write_vc);
-    xd->shared.xdrs_out.x_op = XDR_ENCODE;
-#endif
-    } /* CLNT */
 
     xprt->xp_p1 = xd;
     if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
@@ -1198,10 +1196,8 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
             break;
         case REPLY:
             /* reply header (xprt OK) */
-            if (xd->rec->hdl.clnt) {
-                rpc_ctx_xfer_replymsg(xd, req->rq_msg);
-		req->rq_msg = NULL;
-            }
+            rpc_ctx_xfer_replymsg(xd, req->rq_msg);
+            req->rq_msg = NULL;
             break;
         default:
             /* not good (but xprt OK) */

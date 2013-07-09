@@ -135,6 +135,7 @@ typedef struct rpc_client {
 
     void *cl_p1; /* private data */
     void *cl_p2;
+    void *cl_p3;
     char *cl_netid; /* network token */
     char *cl_tp; /* device name */
 

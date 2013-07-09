@@ -126,18 +126,20 @@ struct cu_data {
     char *cu_outbuf;
 };
 
+struct ct_serialized {
+    union {
+        char ct_mcallc[MCALL_MSG_SIZE]; /* marshalled callmsg */
+        u_int32_t ct_mcalli;
+    } ct_u;
+    u_int ct_mpos;      /* pos after marshal */
+};
+
 struct ct_data {
     int ct_fd;
     bool ct_closeit; /* close it on destroy */
     struct timeval ct_wait; /* wait interval in milliseconds */
     bool ct_waitset; /* wait set by clnt_control? */
     struct netbuf ct_addr; /* remote addr */
-    union {
-        char ct_mcallc[MCALL_MSG_SIZE]; /* marshalled callmsg */
-        u_int32_t ct_mcalli;
-    } ct_u;
-    u_int ct_mpos;      /* pos after marshal */
-    struct rpc_msg ct_reply; /* async reply */
     struct ct_wait_entry ct_sync; /* wait for completion */
 };
 
@@ -148,7 +150,6 @@ enum CX_TYPE
 };
 
 #define X_VC_DATA_FLAG_NONE             0x0000
-#define X_VC_DATA_FLAG_CLNT_DESTROYED   0x0001
 #define X_VC_DATA_FLAG_SVC_DESTROYED    0x0001
 
 /* new unified state */
@@ -173,7 +174,7 @@ struct rpc_dplx_rec
         rpc_dplx_lock_t lock;
     } recv;
     struct {
-        CLIENT *clnt;
+        struct x_vc_data *xd;
         SVCXPRT *xprt;
     } hdl;
 };

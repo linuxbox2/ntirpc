@@ -398,51 +398,24 @@ void vc_shared_destroy(struct x_vc_data *xd)
 {
     struct rpc_dplx_rec *rec = xd->rec;
     struct ct_data *ct = &xd->cx.data;
-    CLIENT *clnt;
     SVCXPRT *xprt;
     bool closed = FALSE;
     bool xdrs_destroyed = FALSE;
-    sigset_t mask, newmask;
 
     /* RECLOCKED */
 
-    /* clnt_vc */
-    clnt = rec->hdl.clnt;
-    if (clnt) {
-
-        rec->hdl.clnt = NULL; /* unreachable */
-
-        sigfillset(&newmask);
-        thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-
-        /* barrier both channels */
-        rpc_dplx_swc(clnt, rpc_flag_clear);
-        rpc_dplx_rwc(clnt, rpc_flag_clear);
-
-        if (ct->ct_closeit && ct->ct_fd != RPC_ANYFD) {
-            (void)close(ct->ct_fd);
-            closed = TRUE;
-        }
-
-        /* destroy shared XDR record streams (once) */
-        XDR_DESTROY(&xd->shared.xdrs_in);
-        XDR_DESTROY(&xd->shared.xdrs_out);
-        xdrs_destroyed = TRUE;
-
-        if (ct->ct_addr.buf)
-            mem_free(ct->ct_addr.buf, 0); /* XXX */
-
-        /* signal both channels */
-        rpc_dplx_ssc(clnt, RPC_DPLX_FLAG_NONE);
-        rpc_dplx_rsc(clnt, RPC_DPLX_FLAG_NONE);
-
-        if (clnt->cl_netid && clnt->cl_netid[0])
-            mem_free(clnt->cl_netid, strlen(clnt->cl_netid) +1);
-        if (clnt->cl_tp && clnt->cl_tp[0])
-            mem_free(clnt->cl_tp, strlen(clnt->cl_tp) +1);
-        mem_free(clnt, sizeof(CLIENT));
-        thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
+    if (ct->ct_closeit && ct->ct_fd != RPC_ANYFD) {
+        (void)close(ct->ct_fd);
+        closed = TRUE;
     }
+
+    /* destroy shared XDR record streams (once) */
+    XDR_DESTROY(&xd->shared.xdrs_in);
+    XDR_DESTROY(&xd->shared.xdrs_out);
+    xdrs_destroyed = TRUE;
+
+    if (ct->ct_addr.buf)
+        mem_free(ct->ct_addr.buf, 0); /* XXX */
 
     /* svc_vc */
     xprt = rec->hdl.xprt;
@@ -479,11 +452,10 @@ void vc_shared_destroy(struct x_vc_data *xd)
         mem_free(xprt, sizeof(SVCXPRT));
     }
 
+    rec->hdl.xd = NULL;
+
     /* unref shared */
     REC_UNLOCK(rec);
-
-    if (clnt)
-        rpc_dplx_unref(rec, RPC_DPLX_FLAG_NONE);
 
     if (xprt)
         rpc_dplx_unref(rec, RPC_DPLX_FLAG_NONE);

@@ -161,6 +161,7 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
     struct rpc_dplx_rec *rec = NULL;
     struct x_vc_data *xd = NULL;
     struct ct_data *ct = NULL;
+    struct ct_serialized *cs = NULL;
     struct rpc_msg call_msg;
     sigset_t mask, newmask;
     struct __rpc_sockinfo si;
@@ -199,20 +200,50 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
         goto err;
     }
 
-    /* if a clnt handle exists, return it ref'd */
+    /* attach shared state */
     if (! (oflags & RPC_DPLX_LKP_OFLAG_ALLOC)) {
-        if (rec->hdl.clnt) {
-            xd = (struct x_vc_data *) rec->hdl.clnt->cl_p1;
-            /* dont return destroyed clients */
-            if (! (xd->flags & X_VC_DATA_FLAG_CLNT_DESTROYED)) {
-                clnt = rec->hdl.clnt;
-                CLNT_REF(clnt, CLNT_REF_FLAG_NONE);
-            }
-            /* return extra ref */
-            if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
-                REC_LOCK(rec);
-            goto done;
+        xd = rec->hdl.xd;
+        ++(xd->refcnt);
+    } else {
+        xd = rec->hdl.xd = alloc_x_vc_data();
+        if (! xd) {
+            (void) syslog(LOG_ERR, clnt_vc_errstr,
+                          clnt_vc_str, __no_mem_str);
+            rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+            rpc_createerr.cf_error.re_errno = errno;
+            goto err;
         }
+        xd->rec = rec;
+        /* XXX tracks outstanding calls */
+        opr_rbtree_init(&xd->cx.calls.t, call_xid_cmpf);
+        xd->cx.calls.xid = 0; /* next call xid is 1 */
+        xd->refcnt = 1;
+
+        xd->shared.sendsz =
+            __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
+        xd->shared.recvsz =
+            __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
+
+#if XDR_VREC
+        /* duplex streams, plus buffer sharing, readv/writev */
+        xdr_vrec_create(&(cd->xdrs_in),
+                        XDR_VREC_IN, xprt, readv_vc, NULL, xd->shared.recvsz,
+                        VREC_FLAG_NONE);
+
+        xdr_vrec_create(&(cd->xdrs_out),
+                        XDR_VREC_OUT, xprt, NULL, writev_vc, xd->shared.sendsz,
+                        VREC_FLAG_NONE);
+#else
+        /* duplex streams */
+        xdr_inrec_create(&(xd->shared.xdrs_in), xd->shared.recvsz, xd,
+                         generic_read_vc);
+        xd->shared.xdrs_in.x_op = XDR_DECODE;
+
+        xdrrec_create(&(xd->shared.xdrs_out), sendsz, xd->shared.recvsz, xd,
+                      generic_read_vc,
+                      generic_write_vc);
+        xd->shared.xdrs_out.x_op = XDR_ENCODE;
+#endif
     }
 
     clnt = (CLIENT *) mem_alloc(sizeof(CLIENT));
@@ -228,30 +259,9 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
     clnt->cl_flags = CLNT_FLAG_NONE;
     clnt->cl_refcnt = 1;
 
-    /* other-direction shared state? */
-    if (rec->hdl.xprt) {
-        /* XXX check subtype of xprt handle? */
-        xd = (struct x_vc_data *) rec->hdl.xprt->xp_p1;
-        /* inc shared refcnt */
-        ++(xd->refcnt);
-    } else {
-        xd = alloc_x_vc_data();
-        if (! xd) {
-            (void) syslog(LOG_ERR, clnt_vc_errstr,
-                          clnt_vc_str, __no_mem_str);
-            rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-            rpc_createerr.cf_error.re_errno = errno;
-            goto err;
-        }
-        xd->rec = rec;
-        /* XXX tracks outstanding calls */
-        opr_rbtree_init(&xd->cx.calls.t, call_xid_cmpf);
-        xd->cx.calls.xid = 0; /* next call xid is 1 */
-        xd->refcnt = 1;
-    }
-
     /* private data struct */
     xd->cx.data.ct_fd = fd;
+    cs = mem_alloc(sizeof(struct ct_serialized));
     ct = &xd->cx.data;
     ct->ct_closeit = FALSE;
     ct->ct_wait.tv_usec = 0;
@@ -277,14 +287,14 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
     /*
      * pre-serialize the static part of the call msg and stash it away
      */
-    xdrmem_create(ct_xdrs, ct->ct_u.ct_mcallc, MCALL_MSG_SIZE, XDR_ENCODE);
+    xdrmem_create(ct_xdrs, cs->ct_u.ct_mcallc, MCALL_MSG_SIZE, XDR_ENCODE);
     if (! xdr_callhdr(ct_xdrs, &call_msg)) {
         if (ct->ct_closeit) {
             (void)close(fd);
         }
         goto err;
     }
-    ct->ct_mpos = XDR_GETPOS(ct_xdrs);
+    cs->ct_mpos = XDR_GETPOS(ct_xdrs);
     XDR_DESTROY(ct_xdrs);
 
     /*
@@ -294,43 +304,11 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
     clnt->cl_ops = clnt_vc_ops();
     clnt->cl_p1 = xd;
     clnt->cl_p2 = rec;
-
-    if (! rec->hdl.xprt) {
-
-        xd->shared.sendsz =
-            __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
-        xd->shared.recvsz =
-            __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
-
-#if XDR_VREC
-    /* duplex streams, plus buffer sharing, readv/writev */
-    xdr_vrec_create(&(cd->xdrs_in),
-                    XDR_VREC_IN, xprt, readv_vc, NULL, xd->shared.recvsz,
-                    VREC_FLAG_NONE);
-
-    xdr_vrec_create(&(cd->xdrs_out),
-                    XDR_VREC_OUT, xprt, NULL, writev_vc, xd->shared.sendsz,
-                    VREC_FLAG_NONE);
-#else
-    /* duplex streams */
-    xdr_inrec_create(&(xd->shared.xdrs_in), xd->shared.recvsz, xd,
-                     generic_read_vc);
-    xd->shared.xdrs_in.x_op = XDR_DECODE;
-
-    xdrrec_create(&(xd->shared.xdrs_out), sendsz, xd->shared.recvsz, xd,
-                  generic_read_vc,
-                  generic_write_vc);
-    xd->shared.xdrs_out.x_op = XDR_ENCODE;
-#endif
-    } /* XPRT */
-
-    /* make reachable from rec */
-    rec->hdl.clnt = clnt;
+    clnt->cl_p3 = cs;
 
     /* release rec */
     REC_UNLOCK(rec);
 
-done:
     thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
     return (clnt);
 
@@ -379,6 +357,7 @@ clnt_vc_call(CLIENT *clnt,
 {
     struct x_vc_data *xd = (struct x_vc_data *) clnt->cl_p1;
     struct ct_data *ct = &(xd->cx.data);
+    struct ct_serialized *cs = (struct ct_serialized *) clnt->cl_p3;
     struct rpc_dplx_rec *rec = xd->rec;
     enum clnt_stat result = RPC_SUCCESS;
     rpc_ctx_t *ctx = NULL;
@@ -429,9 +408,9 @@ call_again:
     xdrs->x_lib[1] = (void *) ctx; /* transiently thread call ctx */
 
     ctx->error.re_status = RPC_SUCCESS;
-    ct->ct_u.ct_mcalli = ntohl(ctx->xid);
+    cs->ct_u.ct_mcalli = ntohl(ctx->xid);
 
-    if ((! XDR_PUTBYTES(xdrs, ct->ct_u.ct_mcallc, ct->ct_mpos)) ||
+    if ((! XDR_PUTBYTES(xdrs, cs->ct_u.ct_mcallc, cs->ct_mpos)) ||
         (! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
         (! AUTH_MARSHALL(auth, xdrs)) ||
         (! AUTH_WRAP(auth, xdrs, xdr_args, args_ptr))) {
@@ -627,6 +606,7 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 {
     struct x_vc_data *xd = (struct x_vc_data *) clnt->cl_p1;
     struct ct_data *ct = &(xd->cx.data);
+    struct ct_serialized *cs = (struct ct_serialized *) clnt->cl_p3;
     void *infop = info;
     bool rslt = TRUE;
 
@@ -684,11 +664,11 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
          * This will get the xid of the PREVIOUS call
          */
         *(u_int32_t *)info =
-            ntohl(*(u_int32_t *)(void *)&ct->ct_u.ct_mcalli);
+            ntohl(*(u_int32_t *)(void *)&cs->ct_u.ct_mcalli);
         break;
     case CLSET_XID:
         /* This will set the xid of the NEXT call */
-        *(u_int32_t *)(void *)&ct->ct_u.ct_mcalli =
+        *(u_int32_t *)(void *)&cs->ct_u.ct_mcalli =
             htonl(*((u_int32_t *)info) + 1);
         /* increment by 1 as clnt_vc_call() decrements once */
         break;
@@ -701,7 +681,7 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
          */
     {
         u_int32_t *tmp =
-            (u_int32_t *)(ct->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT);
+            (u_int32_t *)(cs->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT);
         *(u_int32_t *)info = ntohl(*tmp);
     }
     break;
@@ -709,7 +689,7 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
     case CLSET_VERS:
     {
         u_int32_t tmp = htonl(*(u_int32_t *)info);
-        *(ct->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT) = tmp;
+        *(cs->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT) = tmp;
     }
     break;
 
@@ -722,7 +702,7 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
          */
     {
         u_int32_t *tmp =
-            (u_int32_t *)(ct->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT);
+            (u_int32_t *)(cs->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT);
         *(u_int32_t *)info = ntohl(*tmp);
     }
     break;
@@ -730,7 +710,7 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
     case CLSET_PROG:
     {
         u_int32_t tmp = htonl(*(u_int32_t *)info);
-        *(ct->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT) = tmp;
+        *(cs->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT) = tmp;
     }
     break;
 
@@ -787,9 +767,18 @@ clnt_vc_release(CLIENT *clnt, u_int flags)
  
         struct x_vc_data *xd = (struct x_vc_data *) clnt->cl_p1;
         struct rpc_dplx_rec *rec = xd->rec;
+        struct ct_serialized *cs = (struct ct_serialized *) clnt->cl_p3;
         uint32_t xd_refcnt;
 
         mutex_unlock(&clnt->cl_lock);
+
+        /* client handles are now freed directly */
+        mem_free(cs, sizeof(struct ct_serialized));
+        if (clnt->cl_netid && clnt->cl_netid[0])
+            mem_free(clnt->cl_netid, strlen(clnt->cl_netid) +1);
+        if (clnt->cl_tp && clnt->cl_tp[0])
+            mem_free(clnt->cl_tp, strlen(clnt->cl_tp) +1);
+        mem_free(clnt, sizeof(CLIENT));
 
         REC_LOCK(rec);
         xd_refcnt = --(xd->refcnt);
@@ -799,12 +788,13 @@ clnt_vc_release(CLIENT *clnt, u_int flags)
                     "%s: xd_refcnt %u on destroyed %p %u calling "
                     "vc_shared_destroy", __func__, clnt, cl_refcnt);
             vc_shared_destroy(xd); /* RECLOCKED */
+            rpc_dplx_unref(rec, RPC_DPLX_FLAG_NONE);
         } else {
             __warnx(TIRPC_DEBUG_FLAG_REFCNT,
                     "%s: xd_refcnt %u on destroyed %p omit "
                     "vc_shared_destroy",
                     __func__, clnt, cl_refcnt);
-            REC_UNLOCK(rec);
+            rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED);
         }
     }
     else
@@ -837,18 +827,34 @@ clnt_vc_destroy(CLIENT *clnt)
 
     /* bidirectional */
     REC_LOCK(rec);
-    xd->flags |= X_VC_DATA_FLAG_CLNT_DESTROYED; /* destroyed handle is dead */
+
     xd_refcnt = --(xd->refcnt);
 
     /* conditional destroy */
-    if ((cl_refcnt == 0) &&
-        (xd_refcnt == 0)) {
-        __warnx(TIRPC_DEBUG_FLAG_REFCNT,
-                "%s: %p cl_refcnt %u xd_refcnt %u calling vc_shared_destroy",
-                __func__, clnt, cl_refcnt, xd_refcnt);
-        vc_shared_destroy(xd); /* RECLOCKED */
-    } else
-        REC_UNLOCK(rec);
+    if (cl_refcnt == 0) {
+
+        struct ct_serialized *cs = (struct ct_serialized *) clnt->cl_p3;
+
+        /* client handles are now freed directly */
+        mem_free(cs, sizeof(struct ct_serialized));
+        if (clnt->cl_netid && clnt->cl_netid[0])
+            mem_free(clnt->cl_netid, strlen(clnt->cl_netid) +1);
+        if (clnt->cl_tp && clnt->cl_tp[0])
+            mem_free(clnt->cl_tp, strlen(clnt->cl_tp) +1);
+        mem_free(clnt, sizeof(CLIENT));
+
+        if (xd_refcnt == 0) {
+            __warnx(TIRPC_DEBUG_FLAG_REFCNT,
+                    "%s: %p cl_refcnt %u xd_refcnt %u calling "
+                    "vc_shared_destroy",
+                    __func__, clnt, cl_refcnt, xd_refcnt);
+            vc_shared_destroy(xd); /* RECLOCKED */
+            rpc_dplx_unref(rec, RPC_DPLX_FLAG_NONE);
+            goto out;
+        }
+    }
+
+    REC_UNLOCK(rec);
 
 out:
     return;
