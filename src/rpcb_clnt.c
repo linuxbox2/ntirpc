@@ -836,6 +836,21 @@ done:
     return (address);
 }
 
+/*
+ * Helper routine to find mapped address (for NLM).
+ */
+extern struct netbuf *
+rpcb_find_mapped_addr(char *nettype, rpcprog_t prog, rpcvers_t vers,
+                      char *local_addr)
+{
+    struct netbuf *nbuf;
+    void *handle = __rpc_setconf(nettype);
+    struct netconfig *nconf = __rpc_getconf(handle);
+    nbuf = __rpcb_findaddr_timed(prog, vers, nconf, local_addr,
+                                 NULL, NULL);
+    __rpc_endconf(handle);
+    return (nbuf);
+}
 
 /*
  * Find the mapped address for program, version.

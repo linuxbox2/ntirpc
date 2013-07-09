@@ -58,6 +58,10 @@ extern void *__rpc_setconf(const char *);
 extern void __rpc_endconf(void *);
 extern struct netconfig *__rpc_getconf(void *);
 extern struct netconfig *__rpc_getconfip(const char *);
+extern struct netbuf * rpcb_find_mapped_addr(char *nettype, rpcprog_t prog,
+                                             rpcvers_t vers,
+                                             char *local_addr);
 __END_DECLS
+
 
 #endif	/* !_TIRPC_NETTYPE_H */
