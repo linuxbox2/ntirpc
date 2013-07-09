@@ -48,7 +48,7 @@ struct v_rec_pos_t
     struct v_rec *vrec;
     int32_t loff; /* logical byte offset (convenience?) */
     int32_t bpos; /* buffer index (offset) in the current stream */
-    int32_t boff; /* byte offset in buffer bix */
+    int32_t boff; /* byte offset in buffer */
 };
 
 #define VREC_QFLAG_NONE      0x0000

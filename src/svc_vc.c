@@ -72,10 +72,9 @@
 #include "rpc_ctx.h"
 #include <rpc/svc_rqst.h>
 #include <rpc/xdr_inrec.h>
-#include <rpc/xdr_vrec.h>
+#include <rpc/xdr_ioq.h>
 #include <getpeereid.h>
-
-#define XDR_VREC 0
+#include "svc_ioq.h"
 
 extern struct svc_params __svc_params[1];
 
@@ -546,16 +545,6 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
         xd->shared.recvsz =
             __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
 
-#if XDR_VREC
-        /* duplex streams, plus buffer sharing, readv/writev */
-        xdr_vrec_create(&(cd->xdrs_in),
-                        XDR_VREC_IN, xprt, readv_vc, NULL, recvsz,
-                        VREC_FLAG_NONE);
-
-        xdr_vrec_create(&(cd->xdrs_out),
-                        XDR_VREC_OUT, xprt, NULL, writev_vc, sendsz,
-                        VREC_FLAG_NONE);
-#else
         /* duplex streams */
         xdr_inrec_create(&(xd->shared.xdrs_in), recvsz, xd,
                          generic_read_vc);
@@ -565,7 +554,6 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
                       generic_read_vc,
                       generic_write_vc);
         xd->shared.xdrs_out.x_op = XDR_ENCODE;
-#endif
     } else {
         xd = (struct x_vc_data *) rec->hdl.xd;
         /* dont return destroyed xprts */
@@ -1183,12 +1171,7 @@ svc_vc_stat(SVCXPRT *xprt)
     if (xd->sx.strm_stat == XPRT_DIED)
         return (XPRT_DIED);
 
-#if XDR_VREC
-    /* SVC_STAT() only cares about the recv queue */
-    if (! xdr_vrec_eof(&(xd->shared.xdrs_in)))
-#else
     if (! xdr_inrec_eof(&(xd->shared.xdrs_in)))
-#endif
         return (XPRT_MOREREQS);
 
     return (XPRT_IDLE);
@@ -1212,11 +1195,7 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
     xdrs->x_lib[1] = (void *) xprt; /* transiently thread xprt */
 
     /* Consumes any remaining -fragment- bytes, and clears last_frag */
-#if XDR_VREC
-    (void) xdr_vrec_skiprecord(xdrs);
-#else
     (void) xdr_inrec_skiprecord(xdrs);
-#endif
 
     req->rq_msg = alloc_rpc_msg();
     req->rq_clntcred = req->rq_msg->rm_call.cb_cred.oa_base +
@@ -1293,7 +1272,7 @@ static bool
 svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 {
     struct x_vc_data *xd = (struct x_vc_data *) xprt->xp_p1;
-    XDR *xdrs = &xd->shared.xdrs_out; /* send queue */
+    XDR *xdrs_2;
     xdrproc_t xdr_results;
     caddr_t xdr_location;
     bool rstat;
@@ -1313,23 +1292,15 @@ svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
         xdr_location = NULL;
     }
 
-    xdrs->x_op = XDR_ENCODE;
-
-    xdrs->x_lib[0] = (void *) RPC_DPLX_SVC;
-    xdrs->x_lib[1] = (void *) xprt; /* transiently thread xprt */
-
-    rstat = FALSE;
-    if (xdr_replymsg(xdrs, msg) &&
+    /* XXX */
+    xdrs_2 = xdr_ioq_create();
+    if (xdr_replymsg(xdrs_2, msg) &&
         (!has_args || (req->rq_auth &&
-                       SVCAUTH_WRAP(req->rq_auth, req, xdrs, xdr_results,
+                       SVCAUTH_WRAP(req->rq_auth, req, xdrs_2, xdr_results,
                                     xdr_location)))) {
         rstat = TRUE;
     }
-#if XDR_VREC
-    (void)xdr_vrec_endofrecord(xdrs, TRUE);
-#else
-    (void)xdrrec_endofrecord(xdrs, TRUE);
-#endif
+    svc_ioq_append(xprt, xd, xdrs_2);
     return (rstat);
 }
 
