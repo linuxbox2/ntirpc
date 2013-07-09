@@ -222,16 +222,6 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
         xd->shared.recvsz =
             __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
 
-#if XDR_VREC
-        /* duplex streams, plus buffer sharing, readv/writev */
-        xdr_vrec_create(&(cd->xdrs_in),
-                        XDR_VREC_IN, xprt, readv_vc, NULL, xd->shared.recvsz,
-                        VREC_FLAG_NONE);
-
-        xdr_vrec_create(&(cd->xdrs_out),
-                        XDR_VREC_OUT, xprt, NULL, writev_vc, xd->shared.sendsz,
-                        VREC_FLAG_NONE);
-#else
         /* duplex streams */
         xdr_inrec_create(&(xd->shared.xdrs_in), xd->shared.recvsz, xd,
                          generic_read_vc);
@@ -241,12 +231,10 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
                       generic_read_vc,
                       generic_write_vc);
         xd->shared.xdrs_out.x_op = XDR_ENCODE;
-#endif
     } else {
         xd = rec->hdl.xd;
         ++(xd->refcnt);
     }
-
 
     clnt = (CLIENT *) mem_alloc(sizeof(CLIENT));
     if (! clnt) {

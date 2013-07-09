@@ -68,6 +68,7 @@
 #include "svc_xprt.h"
 #include "rpc_dplx_internal.h"
 #include <rpc/svc_rqst.h>
+#include "svc_ioq.h"
 
 #define RQCRED_SIZE 400 /* this size is excessive */
 
@@ -142,6 +143,8 @@ svc_init(svc_init_params * params)
      * event systems, reworked select, etc. */
 #endif
     __svc_params->idle_timeout = params->idle_timeout;
+
+    svc_ioq_init();
 
     /* allow consumers to manage all xprt registration */
     if (params->flags & SVC_INIT_NOREG_XPRTS)

@@ -78,7 +78,9 @@ SET(ntirpc_common_SRCS
   xdr_reference.c
   xdr_stdio.c
   xdr_inrec.c
-  xdr_vrec.c
+  xdr_ioq.c
+  svc_ioq.c
+  thrdpool.c
 )
 
 if(USE_DES)

@@ -37,17 +37,13 @@
 #ifndef _CLNT_INTERNAL_H
 #define _CLNT_INTERNAL_H
 
-struct ct_wait_entry
-{
-    mutex_t mtx;
-    cond_t  cv;
-};
-
 #include <misc/rbtree_x.h>
+#include <rpc/xdr_ioq.h>
+#include <misc/wait_queue.h>
 
 typedef struct rpc_dplx_lock
 {
-    struct ct_wait_entry we;
+    struct wait_entry we;
     int32_t lock_flag_value; /* XXX killme */
     struct {
         const char *func;
@@ -69,7 +65,7 @@ typedef struct rpc_dplx_lock
  */
 typedef struct rpc_call_ctx {
     struct opr_rbtree_node node_k;
-    struct ct_wait_entry we;
+    struct wait_entry we;
     uint32_t xid;
     uint32_t flags;
     struct rpc_msg *msg;
@@ -140,7 +136,7 @@ struct ct_data {
     struct timeval ct_wait; /* wait interval in milliseconds */
     bool ct_waitset; /* wait set by clnt_control? */
     struct netbuf ct_addr; /* remote addr */
-    struct ct_wait_entry ct_sync; /* wait for completion */
+    struct wait_entry ct_sync; /* wait for completion */
 };
 
 enum CX_TYPE
@@ -217,6 +213,11 @@ struct x_vc_data
         int32_t maxrec;
     } sx;
     struct {
+        struct {
+            TAILQ_HEAD(xdr_tailq, xdr_ioq) q;
+            int32_t size;
+            bool active;
+        } ioq;
         bool nonblock;
         u_int sendsz;
         u_int recvsz;
@@ -233,6 +234,7 @@ static inline struct x_vc_data *
 alloc_x_vc_data(void)
 {
     struct x_vc_data *xd = mem_zalloc(sizeof(struct x_vc_data));
+    TAILQ_INIT(&xd->shared.ioq.q);
     return (xd);
 }
 
