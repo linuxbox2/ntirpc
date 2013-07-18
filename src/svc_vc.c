@@ -146,13 +146,10 @@ static void map_ipv4_to_ipv6(sin, sin6)
  * Usage:
  * xprt = svc_vc_ncreate(sock, send_buf_size, recv_buf_size);
  *
- * Creates, registers, and returns a (rpc) tcp based transporter.
- * Once *xprt is initialized, it is registered as a transporter
+ * Creates, registers, and returns a (rpc) tcp based transport.
+ * Once *xprt is initialized, it is registered as a transport
  * see (svc.h, xprt_register).  This routine returns
  * a NULL if a problem occurred.
- *
- * The filedescriptor passed in is expected to refer to a bound, but
- * not yet connected socket.
  *
  * Since streams do buffered io similar to stdio, the caller can specify
  * how big the send and receive buffers are via the second and third parms;
@@ -173,6 +170,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
     struct sockaddr_in *salocal_in;
     struct sockaddr_in6 *salocal_in6;
     struct rpc_dplx_rec *rec = NULL;
+    struct x_vc_data *xd = NULL;
     uint32_t oflags;
     socklen_t slen;
 
@@ -197,20 +195,65 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
         goto err;
     }
 
-    /* if a svcxprt handle exists, return it ref'd */
-    if (! (oflags & RPC_DPLX_LKP_OFLAG_ALLOC)) {
-        if (rec->hdl.xprt) {
-            struct x_vc_data *xd = (struct x_vc_data *) rec->hdl.xprt->xp_p1;
-            /* dont return destroyed xprts */
-            if (! (xd->flags & X_VC_DATA_FLAG_SVC_DESTROYED)) {
+    /* attach shared state */
+    if ((oflags & RPC_DPLX_LKP_OFLAG_ALLOC) ||
+        (! rec->hdl.xd)) {
+        xd = rec->hdl.xd = alloc_x_vc_data();
+        if (xd == NULL) {
+            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+                    "svc_vc: makefd_xprt: out of memory");
+            /* return extra ref */
+            rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED|RPC_DPLX_FLAG_UNLOCK);
+            mem_free(xprt, sizeof(SVCXPRT));
+            goto done;
+        }
+
+        xd->rec = rec;
+
+        /* XXX tracks outstanding calls */
+        opr_rbtree_init(&xd->cx.calls.t, call_xid_cmpf);
+        xd->cx.calls.xid = 0; /* next call xid is 1 */
+        xd->refcnt = 1;
+
+        xd->shared.sendsz =
+            __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsize);
+        xd->shared.recvsz =
+            __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsize);
+
+#if XDR_VREC
+        /* duplex streams, plus buffer sharing, readv/writev */
+        xdr_vrec_create(&(cd->xdrs_in),
+                        XDR_VREC_IN, xprt, readv_vc, NULL, recvsize,
+                        VREC_FLAG_NONE);
+
+        xdr_vrec_create(&(cd->xdrs_out),
+                        XDR_VREC_OUT, xprt, NULL, writev_vc, sendsize,
+                        VREC_FLAG_NONE);
+#else
+        /* duplex streams */
+        xdr_inrec_create(&(xd->shared.xdrs_in), recvsize, xd,
+                         generic_read_vc);
+        xd->shared.xdrs_in.x_op = XDR_DECODE;
+
+        xdrrec_create(&(xd->shared.xdrs_out), sendsize, recvsize, xd,
+                      generic_read_vc,
+                      generic_write_vc);
+        xd->shared.xdrs_out.x_op = XDR_ENCODE;
+#endif
+    } else {
+        xd = (struct x_vc_data *) rec->hdl.xd;
+        /* dont return destroyed xprts */
+        if (! (xd->flags & X_VC_DATA_FLAG_SVC_DESTROYED)) {
+            if (rec->hdl.xprt) {
                 xprt = rec->hdl.xprt;
                 /* inc xprt refcnt */
                 SVC_REF(xprt, SVC_REF_FLAG_NONE);
-            }
-            /* return extra ref */
-            rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED|RPC_DPLX_FLAG_UNLOCK);
-            goto done;
+                goto done;
+            } else
+                ++(xd->refcnt);
         }
+        /* return extra ref */
+        rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED|RPC_DPLX_FLAG_UNLOCK);
     }
 
     xprt = mem_zalloc(sizeof(SVCXPRT));
@@ -478,26 +521,10 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
         goto done;
     }
 
-    /* attach shared state;  if a svcxprt handle exists, return it ref'd
-     * (rec is ref'd) */
-    if (! (oflags & RPC_DPLX_LKP_OFLAG_ALLOC)) {
-        if (rec->hdl.xprt) {
-            xd = (struct x_vc_data *) rec->hdl.xprt->xp_p1;
-            /* dont return destroyed xprts */
-            if (! (xd->flags & X_VC_DATA_FLAG_SVC_DESTROYED)) {
-                xprt = rec->hdl.xprt;
-                /* inc xprt refcnt */
-                SVC_REF(xprt, SVC_REF_FLAG_NONE);
-            }
-            /* return extra ref */
-            rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED|RPC_DPLX_FLAG_UNLOCK);
-            *allocated = FALSE;
-            goto done;
-        }
-        xd = rec->hdl.xd;
-        ++(xd->refcnt);
-    } else {
-        xd = alloc_x_vc_data();
+    /* attach shared state */
+    if ((oflags & RPC_DPLX_LKP_OFLAG_ALLOC) ||
+        (! rec->hdl.xd)) {
+        xd = rec->hdl.xd = alloc_x_vc_data();
         if (xd == NULL) {
             __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
                     "svc_vc: makefd_xprt: out of memory");
@@ -506,7 +533,9 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
             mem_free(xprt, sizeof(SVCXPRT));
             goto done;
         }
+
         xd->rec = rec;
+
         /* XXX tracks outstanding calls */
         opr_rbtree_init(&xd->cx.calls.t, call_xid_cmpf);
         xd->cx.calls.xid = 0; /* next call xid is 1 */
@@ -537,6 +566,20 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
                       generic_write_vc);
         xd->shared.xdrs_out.x_op = XDR_ENCODE;
 #endif
+    } else {
+        xd = (struct x_vc_data *) rec->hdl.xd;
+        /* dont return destroyed xprts */
+        if (! (xd->flags & X_VC_DATA_FLAG_SVC_DESTROYED)) {
+            if (rec->hdl.xprt) {
+                xprt = rec->hdl.xprt;
+                /* inc xprt refcnt */
+                SVC_REF(xprt, SVC_REF_FLAG_NONE);
+            } else
+                ++(xd->refcnt);
+        }
+        /* return extra ref */
+        rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED|RPC_DPLX_FLAG_UNLOCK);
+        *allocated = FALSE;
     }
 
     /* XXX bi-directional?  initially I had assumed that explicit

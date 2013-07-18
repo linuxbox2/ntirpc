@@ -201,10 +201,8 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
     }
 
     /* attach shared state */
-    if (! (oflags & RPC_DPLX_LKP_OFLAG_ALLOC)) {
-        xd = rec->hdl.xd;
-        ++(xd->refcnt);
-    } else {
+    if ((oflags & RPC_DPLX_LKP_OFLAG_ALLOC) ||
+        (! rec->hdl.xd)) {
         xd = rec->hdl.xd = alloc_x_vc_data();
         if (! xd) {
             (void) syslog(LOG_ERR, clnt_vc_errstr,
@@ -244,7 +242,11 @@ clnt_vc_ncreate2(int fd,       /* open file descriptor */
                       generic_write_vc);
         xd->shared.xdrs_out.x_op = XDR_ENCODE;
 #endif
+    } else {
+        xd = rec->hdl.xd;
+        ++(xd->refcnt);
     }
+
 
     clnt = (CLIENT *) mem_alloc(sizeof(CLIENT));
     if (! clnt) {
