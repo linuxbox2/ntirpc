@@ -434,6 +434,10 @@ extern bool xdrrec_skiprecord(XDR *);
 /* true if no more input */
 extern bool xdrrec_eof(XDR *);
 
+/* XDR using msk */
+extern int xdrmsk_create(XDR *, msk_trans_t *, char **, u_int, u_int, u_int);
+extern int xdrmsk_setbuf(XDR *, u_int32_t, enum xdr_op);
+
 __END_DECLS
 /* For backward compatibility */
 #include <rpc/tirpc_compat.h>

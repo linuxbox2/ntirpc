@@ -29,6 +29,7 @@ SET(ntirpc_common_SRCS
   clnt_raw.c
   clnt_simple.c
   clnt_vc.c
+  clnt_msk.c
   getnetconfig.c
   getnetpath.c
   getpeereid.c
@@ -81,6 +82,7 @@ SET(ntirpc_common_SRCS
   xdr_ioq.c
   svc_ioq.c
   thrdpool.c
+  xdr_msk.c
 )
 
 if(USE_DES)

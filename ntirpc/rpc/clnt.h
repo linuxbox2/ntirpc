@@ -55,6 +55,13 @@
 #define RPCB_MULTICAST_ADDR "ff02::202"
 
 /*
+ * Mooshika clnt create routine
+ */
+extern CLIENT *clnt_msk_create(msk_trans_t *,
+                               const rpcprog_t, const rpcvers_t,
+                               u_int);
+
+/*
  * the following errors are in general unrecoverable.  The caller
  * should give up rather than retry.
  */
