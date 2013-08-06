@@ -245,14 +245,14 @@ again:
     mesgp->msg_iov = &iov;
     mesgp->msg_iovlen = 1;
     mesgp->msg_name = (struct sockaddr *)(void *) &ss;
-    sp->sa_family = 0xffff;
+    sp->sa_family = (sa_family_t)0xffff;
     mesgp->msg_namelen = sizeof (struct sockaddr_storage);
     mesgp->msg_control = su->su_cmsg;
     mesgp->msg_controllen = sizeof(su->su_cmsg);
 
     rlen = recvmsg(xprt->xp_fd, mesgp, 0);
 
-    if (sp->sa_family == 0xffff) {
+    if (sp->sa_family == (sa_family_t)0xffff) {
 	return FALSE;
     }
 
