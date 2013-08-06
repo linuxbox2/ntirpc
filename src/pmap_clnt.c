@@ -66,8 +66,13 @@ pmap_set(u_long program, u_long version, int protocol, int port)
     if (nconf == NULL) {
         return (FALSE);
     }
-    snprintf(buf, sizeof buf, "0.0.0.0.%d.%d",
+    if (strcmp(nconf->nc_protofmly, NC_INET) == 0) {
+       snprintf(buf, sizeof buf, "0.0.0.0.%d.%d",
+               (((u_int32_t)port) >> 8) & 0xff, port & 0xff);
+    } else if (strcmp(nconf->nc_protofmly, NC_INET6) == 0) {
+       snprintf(buf, sizeof buf, "::.%d.%d",
              (((u_int32_t)port) >> 8) & 0xff, port & 0xff);
+    }
     na = uaddr2taddr(nconf, buf);
     if (na == NULL) {
         freenetconfigent(nconf);
