@@ -540,6 +540,8 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
         xd->cx.calls.xid = 0; /* next call xid is 1 */
         xd->refcnt = 1;
 
+        __rpc_fd2sockinfo(fd, &si);
+
         xd->shared.sendsz =
             __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
         xd->shared.recvsz =
@@ -602,7 +604,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
     xd->sx.strm_stat = XPRT_IDLE;
 
     xprt->xp_p1 = xd;
-    if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
+    if (__rpc_sockinfo2netid(&si, &netid))
         xprt->xp_netid = rpc_strdup(netid);
 
     /* make reachable from rec */
