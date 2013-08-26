@@ -60,8 +60,17 @@ struct xdr_ioq
         uint32_t frag_len;
     } ioq;
     u_int def_bsize;
+    u_int max_bsize;
+    u_int flags;
 };
 
-extern XDR *xdr_ioq_create(void);
+#define IOQ_FLAG_NONE          0x0000
+#define IOQ_FLAG_RECLAIM       0x0001
+#define IOQ_FLAG_BUFQ          0x0002
+#define IOQ_FLAG_XTENDQ        0x0004
+#define IOQ_FLAG_BALLOC        0x0008
+#define IOQ_FLAG_REALLOC       0x0010
+
+extern XDR *xdr_ioq_create(u_int def_bsize, u_int max_bsize, u_int flags);
 
 #endif /* XDR_IOQ_H */

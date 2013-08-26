@@ -1277,6 +1277,7 @@ svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
     caddr_t xdr_location;
     bool rstat;
     bool has_args;
+    bool gss;
 
     if (msg->rm_reply.rp_stat == MSG_ACCEPTED &&
         msg->rm_reply.rp_acpt.ar_stat == SUCCESS) {
@@ -1293,7 +1294,9 @@ svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
     }
 
     /* XXX */
-    xdrs_2 = xdr_ioq_create();
+    gss = (req->rq_cred.oa_flavor == RPCSEC_GSS);
+    xdrs_2 = xdr_ioq_create(8192, 65536,
+			    gss ? IOQ_FLAG_REALLOC : IOQ_FLAG_NONE);
     if (xdr_replymsg(xdrs_2, msg) &&
         (!has_args || (req->rq_auth &&
                        SVCAUTH_WRAP(req->rq_auth, req, xdrs_2, xdr_results,
