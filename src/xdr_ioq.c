@@ -176,6 +176,7 @@ init_ioq(struct xdr_ioq *xioq)
 {
     struct v_rec *vrec;
 
+    TAILQ_INIT_ENTRY(xioq, ioq_s);
     TAILQ_INIT(&xioq->ioq.q);
     xioq->ioq.size = 0;
     xioq->ioq.frag_len = 0;
