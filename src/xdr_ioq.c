@@ -53,12 +53,6 @@
 
 #include <rpc/xdr_ioq.h>
 
-#define IOQ_FLAG_NONE          0x0000
-#define IOQ_FLAG_RECLAIM       0x0001
-#define IOQ_FLAG_BUFQ          0x0002
-#define IOQ_FLAG_XTENDQ        0x0004
-#define IOQ_FLAG_BALLOC        0x0008
-
 static bool xdr_ioq_getlong(XDR *xdrs, long *lp);
 static bool xdr_ioq_putlong(XDR *xdrs, const long *lp);
 static bool xdr_ioq_getbytes(XDR *xdrs, char *addr, u_int len);
@@ -155,7 +149,7 @@ static inline struct v_rec *
 get_vrec(struct xdr_ioq *xioq)
 {
     struct v_rec *vrec;
-    vrec = mem_zalloc(sizeof(struct v_rec));
+    vrec = mem_alloc(sizeof(struct v_rec));
     return (vrec);
 }
 
@@ -197,7 +191,7 @@ init_ioq(struct xdr_ioq *xioq)
 
 }
 
-XDR *xdr_ioq_create()
+XDR *xdr_ioq_create(u_int def_bsize, u_int max_bsize, u_int flags)
 {
     struct xdr_ioq *xioq = mem_alloc(sizeof(struct xdr_ioq));
 
@@ -209,7 +203,9 @@ XDR *xdr_ioq_create()
     xdrs->x_public = NULL;
     xdrs->x_private = xioq;
 
-    xioq->def_bsize = 8192;
+    xioq->def_bsize = def_bsize; /* XXX small multiple of pagesize */
+    xioq->def_bsize = max_bsize;
+    xioq->flags = flags;
     init_ioq(xioq);
 
     return (xdrs);
@@ -225,6 +221,22 @@ vrec_next(struct xdr_ioq *xioq, u_int flags)
     struct v_rec *vrec;
 
     pos = vrec_fpos(xioq);
+
+    /* XXX workaround for lack of segmented buffer interfaces
+     * in some callers (e.g, GSS_WRAP) */
+    if (xioq->flags & IOQ_FLAG_REALLOC) {
+      if (flags & IOQ_FLAG_XTENDQ) {
+	void *base;
+	vrec  = pos->vrec;
+	base = mem_alloc(xioq->max_bsize);
+	memcpy(base, vrec->base, vrec->len);
+	mem_free(vrec->base, 0);
+	vrec->base = base;
+	vrec->size = xioq->max_bsize;
+	return (TRUE);
+      }
+    }
+
     /* re-use following buffers */
     vrec = TAILQ_NEXT(pos->vrec, ioq);
     /* append new segments, iif requested */
