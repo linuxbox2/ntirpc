@@ -92,15 +92,16 @@ cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
 static inline void
 ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd, struct xdr_ioq *xioq)
 {
-    struct iovec *tiov, iov[VREC_NIOVS];
+    struct iovec *iov, *tiov;
     ssize_t nbytes = 0, resid = xioq->ioq.frag_len + sizeof(u_int32_t);
+    struct v_rec *vrec = NULL;
     u_int32_t frag_header;
-    struct v_rec *vrec;
     int iovcnt, ix;
 
     frag_header =
         htonl((u_int32_t)(xioq->ioq.frag_len | LAST_FRAG));
 
+    iov = alloca(xioq->ioq.size * sizeof(struct iovec));
     iov[0].iov_base = &(frag_header);
     iov[0].iov_len = sizeof(u_int32_t);
 
