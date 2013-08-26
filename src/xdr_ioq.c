@@ -181,7 +181,7 @@ init_ioq(struct xdr_ioq *xioq)
     xioq->ioq.frag_len = 0;
     vrec = get_vrec(xioq);
     vrec->size = xioq->def_bsize;
-    vrec->refcnt = 0;
+    vrec->refcnt = 1;
     vrec->base = alloc_buffer(vrec->size);
     vrec->off = 0;
     vrec->len = 0;
@@ -247,7 +247,12 @@ vrec_next(struct xdr_ioq *xioq, u_int flags)
 	vrec->size = xioq->def_bsize;
 	vrec->base = alloc_buffer(vrec->size);
 	vrec->flags = IOQ_FLAG_RECLAIM;
+      } else {
+          vrec->size = 0;
+          vrec->base = NULL;
+          vrec->flags = IOQ_FLAG_NONE;
       }
+      vrec->refcnt = 1;
       ioq_append_rec(xioq, vrec);
     }
     vrec->off = 0;
