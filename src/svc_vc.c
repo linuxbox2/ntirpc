@@ -520,6 +520,8 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
         goto done;
     }
 
+    __rpc_fd2sockinfo(fd, &si);
+
     /* attach shared state */
     if ((oflags & RPC_DPLX_LKP_OFLAG_ALLOC) ||
         (! rec->hdl.xd)) {
@@ -602,7 +604,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
     xd->sx.strm_stat = XPRT_IDLE;
 
     xprt->xp_p1 = xd;
-    if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
+    if (__rpc_sockinfo2netid(&si, &netid))
         xprt->xp_netid = rpc_strdup(netid);
 
     /* make reachable from rec */
