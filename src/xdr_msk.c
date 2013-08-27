@@ -59,15 +59,15 @@
 #include "rpc_rdma.h"
 
 static void xdrmsk_destroy(XDR *);
-static bool_t xdrmsk_getlong_aligned(XDR *, long *);
-static bool_t xdrmsk_putlong_aligned(XDR *, const long *);
-static bool_t xdrmsk_getlong_unaligned(XDR *, long *);
-static bool_t xdrmsk_putlong_unaligned(XDR *, const long *);
-static bool_t xdrmsk_getbytes(XDR *, char *, u_int);
-static bool_t xdrmsk_putbytes(XDR *, const char *, u_int);
+static bool xdrmsk_getlong_aligned(XDR *, long *);
+static bool xdrmsk_putlong_aligned(XDR *, const long *);
+static bool xdrmsk_getlong_unaligned(XDR *, long *);
+static bool xdrmsk_putlong_unaligned(XDR *, const long *);
+static bool xdrmsk_getbytes(XDR *, char *, u_int);
+static bool xdrmsk_putbytes(XDR *, const char *, u_int);
 /* XXX: w/64-bit pointers, u_int not enough! */
 static u_int xdrmsk_getpos(XDR *);
-static bool_t xdrmsk_setpos(XDR *, u_int);
+static bool xdrmsk_setpos(XDR *, u_int);
 static int32_t *xdrmsk_inline_aligned(XDR *, u_int);
 static int32_t *xdrmsk_inline_unaligned(XDR *, u_int);
 
@@ -466,7 +466,7 @@ xdrmsk_create(XDR *xdrs,
 	return 0;
 
 err:
-	__warnx("xdrmsk_create: out of memory");
+	__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: out of memory", __func__);
 	xdrmsk_destroy(xdrs);
 	return ENOMEM;
 }
@@ -480,7 +480,7 @@ rpcrdma_clnt_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 	msk_data_t *prev_buf, *tmp_buf;
 
 	if (!xdrs) {
-		__warnx("xdrmsk_setbuf: no xdrs?");
+		__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: no xdrs?", __func__);
 		return 0;
 	}
 
@@ -538,7 +538,7 @@ rpcrdma_clnt_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 		//handy = length, base = address
 		reply_array = rpcrdma_get_reply_array((struct rpcrdma_msg*)mi->curbuf->data);
 		if (reply_array->wc_discrim == 0) {
-			__warnx("No reply/read array, failing miserably till writes/inlines are handled");
+		        __warnx(TIRPC_DEBUG_FLAG_XDR, "No reply/read array, failing miserably till writes/inlines are handled");
 			return 0;
 		} else {
 			prev_buf = NULL;
@@ -575,7 +575,7 @@ rpcrdma_clnt_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 
 	// XDR_FREE
 	default:
-		__warnx("xdrmsk_setbuf: unknown op");
+		__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: unknown op", __func__);
 	}
 
 	return xdrs->x_handy;
@@ -593,7 +593,7 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 
 
 	if (!xdrs) {
-		__warnx("xdrmsk_setbuf: no xdrs?");
+		__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: no xdrs?", __func__);
 		return 0;
 	}
 
@@ -652,7 +652,7 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 			read_chunk++;
 		}
 
-		i = rpcrdma_get_call((struct rpcrdma_msg *)mi->curbuf->data, &xdrs->x_base);
+		i = rpcrdma_get_call((struct rpcrdma_msg *)mi->curbuf->data, (char **)&xdrs->x_base);
 		if (i != 0) {
 			mi->pos = xdrs->x_base;
 			xdrs->x_handy = mi->curbuf->size - i; //FIXME: check this matches read_chunk position
@@ -715,13 +715,13 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 		break;
 
 	default:
-		__warnx("xdrmsk_setbuf: unknown op");
+		__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: unknown op", __func__);
 	}
 	return 0;
 }
 
 /* true is message sent, false otherwise */
-bool_t
+bool
 rpcrdma_clnt_flushout(XDR * xdrs) {
 /* FIXME: decide how many buffers we use in argument!!!!!! */
 #define num_chunks (mi->credits-1)
@@ -734,7 +734,7 @@ rpcrdma_clnt_flushout(XDR * xdrs) {
 	struct rpcrdma_write_array *w_array;
 
 	if (!xdrs) {
-		__warnx("xdrmsk_flushout: no xdrs?");
+		__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: no xdrs?", __func__);
 		return 0;
 	}
 
@@ -802,7 +802,7 @@ rpcrdma_clnt_flushout(XDR * xdrs) {
 	return TRUE;
 }
 
-bool_t
+bool
 rpcrdma_svc_flushout(XDR * xdrs) {
 	struct rpc_msg *msg;
 	int i;
@@ -814,7 +814,7 @@ rpcrdma_svc_flushout(XDR * xdrs) {
 	msk_rloc_t rloc;
 
 	if (!xdrs) {
-		__warnx("xdrmsk_flushout: no xdrs?");
+		__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: no xdrs?", __func__);
 		return 0;
 	}
 
@@ -974,7 +974,7 @@ xdrmsk_destroy(XDR *xdrs)
 	}
 }
 
-static bool_t
+static bool
 xdrmsk_getnextbuf(XDR *xdrs)
 {
 	msk_data_t *data;
@@ -1013,7 +1013,7 @@ xdrmsk_getsizeleft(XDR *xdrs)
 }
 	
 
-static bool_t
+static bool
 xdrmsk_getlong_aligned(XDR *xdrs, long *lp)
 {
 
@@ -1029,7 +1029,7 @@ xdrmsk_getlong_aligned(XDR *xdrs, long *lp)
 	return (TRUE);
 }
 
-static bool_t
+static bool
 xdrmsk_putlong_aligned(XDR *xdrs, const long *lp)
 {
 
@@ -1045,7 +1045,7 @@ xdrmsk_putlong_aligned(XDR *xdrs, const long *lp)
 	return (TRUE);
 }
 
-static bool_t
+static bool
 xdrmsk_getlong_unaligned(XDR *xdrs, long *lp)
 {
 	u_int32_t l;
@@ -1063,7 +1063,7 @@ xdrmsk_getlong_unaligned(XDR *xdrs, long *lp)
 	return (TRUE);
 }
 
-static bool_t
+static bool
 xdrmsk_putlong_unaligned(XDR *xdrs, const long *lp)
 {
 	u_int32_t l;
@@ -1081,7 +1081,7 @@ xdrmsk_putlong_unaligned(XDR *xdrs, const long *lp)
 	return (TRUE);
 }
 
-static bool_t
+static bool
 xdrmsk_getbytes(XDR *xdrs, char *addr, u_int len)
 {
 	u_int size;
@@ -1103,7 +1103,7 @@ xdrmsk_getbytes(XDR *xdrs, char *addr, u_int len)
 	return (TRUE);
 }
 
-static bool_t
+static bool
 xdrmsk_putbytes(XDR *xdrs, const char *addr, u_int len)
 {
 	u_int size;
@@ -1134,7 +1134,7 @@ xdrmsk_getpos(XDR *xdrs)
 
 
 /* FIXME: Completely broken with buffer cut in parts... */
-static bool_t
+static bool
 xdrmsk_setpos(XDR *xdrs, u_int pos)
 {
 	char *newaddr = xdrs->x_base + pos;

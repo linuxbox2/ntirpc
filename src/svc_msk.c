@@ -85,12 +85,12 @@ extern struct svc_params __svc_params[1];
 
 static void svc_msk_ops(SVCXPRT *);
 static enum xprt_stat svc_msk_stat(SVCXPRT *);
-static bool_t svc_msk_recv(SVCXPRT *, struct rpc_msg *);
-static bool_t svc_msk_reply(SVCXPRT *, struct rpc_msg *);
-static bool_t svc_msk_getargs(SVCXPRT *, xdrproc_t, void *);
-static bool_t svc_msk_freeargs(SVCXPRT *, xdrproc_t, void *);
+static bool svc_msk_recv(SVCXPRT *, struct rpc_msg *);
+static bool svc_msk_reply(SVCXPRT *, struct rpc_msg *);
+static bool svc_msk_getargs(SVCXPRT *, xdrproc_t, void *);
+static bool svc_msk_freeargs(SVCXPRT *, xdrproc_t, void *);
 static void svc_msk_destroy(SVCXPRT *);
-static bool_t svc_msk_control(SVCXPRT *, const u_int, void *);
+static bool svc_msk_control(SVCXPRT *, const u_int, void *);
 
 /*
  * svc_msk_create
@@ -170,7 +170,7 @@ svc_msk_stat(xprt)
 	}
 }
 
-static bool_t
+static bool
 svc_msk_recv(SVCXPRT *xprt, struct rpc_msg *msg)
 {
 	struct svc_msk_data *sm = sm_data(xprt);
@@ -190,7 +190,7 @@ svc_msk_recv(SVCXPRT *xprt, struct rpc_msg *msg)
 	return (TRUE);
 }
 
-static bool_t
+static bool
 svc_msk_reply(SVCXPRT *xprt, struct rpc_msg *msg)
 {
 	struct svc_msk_data *sm = sm_data(xprt);
@@ -198,7 +198,7 @@ svc_msk_reply(SVCXPRT *xprt, struct rpc_msg *msg)
 
 	xdrproc_t xdr_results;
 	caddr_t xdr_location;
-	bool_t has_args;
+	bool has_args;
 
 	if (msg->rm_reply.rp_stat == MSG_ACCEPTED &&
 	    msg->rm_reply.rp_acpt.ar_stat == SUCCESS) {
@@ -230,7 +230,7 @@ svc_msk_reply(SVCXPRT *xprt, struct rpc_msg *msg)
 	return (FALSE);
 }
 
-static bool_t
+static bool
 svc_msk_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
 	if (! SVCAUTH_UNWRAP(xprt->xp_auth, &(sm_data(xprt)->sm_xdrs),
@@ -241,7 +241,7 @@ svc_msk_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 	return TRUE;
 }
 
-static bool_t
+static bool
 svc_msk_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
 	XDR *xdrs = &(sm_data(xprt)->sm_xdrs);
@@ -271,7 +271,7 @@ svc_msk_destroy(SVCXPRT *xprt)
 
 extern mutex_t ops_lock;
 
-static bool_t
+static bool
 /*ARGSUSED*/
 svc_msk_control(SVCXPRT *xprt, const u_int rq, void *in)
 {

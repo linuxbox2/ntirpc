@@ -52,7 +52,7 @@ typedef struct rec_rdma_strm {
 	char *out_finger;	/* next output position */
 	char *out_boundry;	/* data cannot up to this address */
 	u_int32_t *frag_header;	/* beginning of curren fragment */
-	bool_t frag_sent;	/* true if buffer sent in middle of record */
+	bool frag_sent;	/* true if buffer sent in middle of record */
 	/*
 	 * in-coming bits
 	 */
@@ -62,11 +62,11 @@ typedef struct rec_rdma_strm {
 	char *in_finger;	/* location of next byte to be had */
 	char *in_boundry;	/* can read up to this location */
 	long fbtbc;		/* fragment bytes to be consumed */
-	bool_t last_frag;
+	bool last_frag;
 	u_int sendsize;
 	u_int recvsize;
 
-	bool_t nonblock;
+	bool nonblock;
 	u_int32_t in_header;
 	char *in_hdrp;
 	int in_hdrlen;
@@ -171,10 +171,10 @@ int    xdrmsk_create(XDR *, msk_trans_t *,
 			    void (*)(void*), void*);
 
 int    rpcrdma_svc_setbuf(XDR *, u_int32_t, enum xdr_op);
-bool_t rpcrdma_svc_flushout(XDR *);
+bool rpcrdma_svc_flushout(XDR *);
 
 int    rpcrdma_clnt_setbuf(XDR *, u_int32_t, enum xdr_op);
-bool_t rpcrdma_clnt_flushout(XDR *);
+bool rpcrdma_clnt_flushout(XDR *);
 
 
 #endif /* !_TIRPC_RPC_RDMA_H */
