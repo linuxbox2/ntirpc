@@ -70,6 +70,7 @@ SET(ntirpc_common_SRCS
   svc_simple.c
   svc_vc.c
   svc_xprt.c
+  svc_msk.c
   vc_generic.c
   xdr.c
   xdr_array.c

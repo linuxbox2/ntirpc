@@ -60,6 +60,7 @@
 #include "svc_xprt.h"
 #include "rpc_rdma.h"
 #include <rpc/svc_rqst.h>
+#include <rpc/svc_auth.h>
 
 /*
  * kept in xprt->xp_p2 (sm_data(xprt))
@@ -85,9 +86,9 @@ extern struct svc_params __svc_params[1];
 
 static void svc_msk_ops(SVCXPRT *);
 static enum xprt_stat svc_msk_stat(SVCXPRT *);
-static bool svc_msk_recv(SVCXPRT *, struct rpc_msg *);
-static bool svc_msk_reply(SVCXPRT *, struct rpc_msg *);
-static bool svc_msk_getargs(SVCXPRT *, xdrproc_t, void *);
+static bool svc_msk_recv(SVCXPRT *, struct svc_req *);
+static bool svc_msk_reply(SVCXPRT *, struct svc_req *, struct rpc_msg *);
+static bool svc_msk_getargs(SVCXPRT *, struct svc_req *, xdrproc_t, void *, void *);
 static bool svc_msk_freeargs(SVCXPRT *, xdrproc_t, void *);
 static void svc_msk_destroy(SVCXPRT *);
 static bool svc_msk_control(SVCXPRT *, const u_int, void *);
@@ -104,7 +105,7 @@ svc_msk_create(msk_trans_t *trans, u_int credits, void (*callback)(void*), void*
 	struct svc_msk_data *sm = NULL;
 
 	if (!trans || trans->state != MSK_CONNECT_REQUEST) {
-		__warnx("svc_msk_create: could not get transport information");
+		__warnx(TIRPC_DEBUG_FLAG_SVC_RDMA, "%s: could not get transport information", __func__);
 		return (NULL);
 	}
 
@@ -122,8 +123,6 @@ svc_msk_create(msk_trans_t *trans, u_int credits, void (*callback)(void*), void*
 
 	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
 	xprt->xp_p2 = sm;
-	xprt->xp_auth = NULL;
-	xprt->xp_verf.oa_base = sm->sm_verfbody;
 	sm->sendsz = 8*1024;
 	sm->recvsz = 4*8*1024;
 	sm->credits = credits ? credits : 10; //default value if credits = 0;
@@ -145,11 +144,11 @@ svc_msk_create(msk_trans_t *trans, u_int credits, void (*callback)(void*), void*
 
 	return (xprt);
 freedata:
-	(void) __warnx("svc_msk_create: out of memory");
+	__warnx(TIRPC_DEBUG_FLAG_SVC_RDMA, "%s: out of memory", __func__);
 	if (xprt) {
             if (sm)
                 (void) mem_free(sm, sizeof (*sm));
-            svc_rqst_finalize_xprt(xprt);
+            svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
             (void) mem_free(xprt, sizeof (SVCXPRT));
 	}
 	return (NULL);
@@ -171,7 +170,7 @@ svc_msk_stat(xprt)
 }
 
 static bool
-svc_msk_recv(SVCXPRT *xprt, struct rpc_msg *msg)
+svc_msk_recv(SVCXPRT *xprt, struct svc_req *req)
 {
 	struct svc_msk_data *sm = sm_data(xprt);
 	XDR *xdrs = &(sm->sm_xdrs);
@@ -180,18 +179,16 @@ svc_msk_recv(SVCXPRT *xprt, struct rpc_msg *msg)
 
 	rpcrdma_svc_setbuf(xdrs, 0, XDR_DECODE);
 
-	if (! xdr_callmsg(xdrs, msg)) {
+	if (! xdr_callmsg(xdrs, req->rq_msg)) {
 		return (FALSE);
 	}
 
-        /* XXX actually using sm->sm_xid !MT-SAFE */
-	sm->sm_xid = msg->rm_xid;
 
 	return (TRUE);
 }
 
 static bool
-svc_msk_reply(SVCXPRT *xprt, struct rpc_msg *msg)
+svc_msk_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 {
 	struct svc_msk_data *sm = sm_data(xprt);
 	XDR *xdrs = &(sm->sm_xdrs);
@@ -215,14 +212,10 @@ svc_msk_reply(SVCXPRT *xprt, struct rpc_msg *msg)
 
 	rpcrdma_svc_setbuf(xdrs, 0, XDR_ENCODE);
 
-        /* MT-SAFE */
-        if (! (msg->rm_flags & RPC_MSG_FLAG_MT_XID))
-            msg->rm_xid = sm->sm_xid;
-
-	if (xdr_replymsg(xdrs, msg) &&
-	    (!has_args || (xprt->xp_auth &&
-	     SVCAUTH_WRAP(xprt->xp_auth, xdrs, xdr_results, xdr_location)))) {
-
+        if (xdr_replymsg(xdrs, msg) &&
+            (!has_args || (req->rq_auth &&
+                       SVCAUTH_WRAP(req->rq_auth, req, xdrs, xdr_results,
+                                    xdr_location)))) {
 		return rpcrdma_svc_flushout(xdrs);
 
 	}
@@ -231,14 +224,26 @@ svc_msk_reply(SVCXPRT *xprt, struct rpc_msg *msg)
 }
 
 static bool
-svc_msk_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
+svc_msk_getargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args, void *args_ptr, void *u_data)
 {
-	if (! SVCAUTH_UNWRAP(xprt->xp_auth, &(sm_data(xprt)->sm_xdrs),
-			     xdr_args, args_ptr)) {
-		(void)svc_freeargs(xprt, xdr_args, args_ptr);
-		return FALSE;
-	}
-	return TRUE;
+    bool rslt = TRUE;
+    struct x_vc_data *xd = (struct x_vc_data *) xprt->xp_p1;
+    XDR *xdrs = &xd->shared.xdrs_in; /* recv queue */
+
+    /* threads u_data for advanced decoders*/
+    xdrs->x_public = u_data;
+
+    if (! SVCAUTH_UNWRAP(req->rq_auth, req, xdrs, xdr_args, args_ptr))
+        rslt = FALSE;
+
+    /* XXX Upstream TI-RPC lacks this call, but -does- call svc_dg_freeargs
+     * in svc_dg_getargs if SVCAUTH_UNWRAP fails. */
+    if (! rslt)
+        svc_msk_freeargs(xprt, xdr_args, args_ptr);
+    else
+        req->rq_cksum = xdr_inrec_cksum(xdrs);
+
+    return (rslt);
 }
 
 static bool
@@ -255,10 +260,6 @@ svc_msk_destroy(SVCXPRT *xprt)
 {
 	struct svc_msk_data *sm = sm_data(xprt);
 
-	if (xprt->xp_auth != NULL) {
-		SVCAUTH_DESTROY(xprt->xp_auth);
-		xprt->xp_auth = NULL;
-	}
 	XDR_DESTROY(&(sm->sm_xdrs));
 	msk_destroy_trans(&(sm->trans));
 	(void) mem_free(sm, sizeof (*sm));
