@@ -37,6 +37,14 @@
 #ifndef _CLNT_INTERNAL_H
 #define _CLNT_INTERNAL_H
 
+#include <mooshika.h>
+
+struct ct_wait_entry
+{
+	mutex_t mtx;
+	cond_t  cv;
+};
+
 #include <misc/rbtree_x.h>
 #include <rpc/xdr_ioq.h>
 #include <misc/wait_queue.h>
@@ -138,9 +146,13 @@ struct ct_data {
 
 struct cm_data {
 	msk_trans_t       *trans; /* connection's "fd" since it's not an int... */
-	bool_tcm_closeit; /* close it on destroy */
-	struct timevalcm_wait; /* wait interval in milliseconds */
+	bool cm_closeit; /* close it on destroy */
+	struct timeval cm_wait; /* wait interval in milliseconds */
+	struct timeval cm_total; /* total time for the call */
+	struct rpc_err cm_error;
 	XDR cm_xdrs;
+	u_int cm_xdrpos;
+	struct rpc_msg call_msg;
 	//add a lastreceive?
 	char *buffers;
 };

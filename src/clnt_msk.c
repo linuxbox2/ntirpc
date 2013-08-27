@@ -63,18 +63,18 @@
 
 #include "clnt_internal.h"
 #include "rpc_rdma.h"
-#include "vc_lock.h"
+#include "rpc_dplx_internal.h"
 
 #define MAX_DEFAULT_FDS                 20000
 
 static struct clnt_ops *clnt_msk_ops(void);
-static bool_t time_not_ok(struct timeval *);
-static enum clnt_stat clnt_msk_call(CLIENT *, rpcproc_t, xdrproc_t, void *,
+static bool time_not_ok(struct timeval *);
+static enum clnt_stat clnt_msk_call(CLIENT *, AUTH *auth, rpcproc_t, xdrproc_t, void *,
 	    xdrproc_t, void *, struct timeval);
 static void clnt_msk_geterr(CLIENT *, struct rpc_err *);
-static bool_t clnt_msk_freeres(CLIENT *, xdrproc_t, void *);
+static bool clnt_msk_freeres(CLIENT *, xdrproc_t, void *);
 static void clnt_msk_abort(CLIENT *);
-static bool_t clnt_msk_control(CLIENT *, u_int, void *);
+static bool clnt_msk_control(CLIENT *, u_int, void *);
 static void clnt_msk_destroy(CLIENT *);
 
 
@@ -89,6 +89,7 @@ clnt_msk_create(msk_trans_t *trans,	        /* init but NOT connect()ed descript
 {
 	CLIENT *cl = NULL;		/* client handle */
 	struct cx_data *cx = NULL;	/* private data */
+
         struct cm_data *cm = NULL;
 	struct timeval now;
 
@@ -125,7 +126,8 @@ clnt_msk_create(msk_trans_t *trans,	        /* init but NOT connect()ed descript
 	cm->cm_wait.tv_usec = 0;
 
 	(void) gettimeofday(&now, NULL);
-	cm->call_msg.rm_xid = __RPC_GETXID(&now);
+	//	cm->call_msg.rm_xid = __RPC_GETXID(&now);
+	cm->call_msg.rm_xid = 1;
 	cm->call_msg.rm_call.cb_prog = program;
 	cm->call_msg.rm_call.cb_vers = version;
 
@@ -143,14 +145,17 @@ clnt_msk_create(msk_trans_t *trans,	        /* init but NOT connect()ed descript
 	 */
 	cm->cm_closeit = FALSE;
 	cl->cl_ops = clnt_msk_ops();
-	cl->cl_private = (caddr_t)(void *) cx;
-	cl->cl_auth = authnone_create();
+	//	cl->cl_private = (caddr_t)(void *) cx;
+	cl->cl_p1 =  (caddr_t)(void *) cx;
+	cl->cl_p2 =  NULL;
+	//	cl->cl_p2 =  rec;
+	//	cl->cl_auth = authnone_create();
 	cl->cl_tp = NULL;
 	cl->cl_netid = NULL;
 	
 	return (cl);
 err1:
-	__warnx("clnt_msk_create: out of memory");
+	__warnx(TIRPC_DEBUG_FLAG_CLNT_RDMA, "%s: err, out of memory", __func__);
 	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 	rpc_createerr.cf_error.re_errno = errno;
 	if (cl) {
@@ -163,6 +168,7 @@ err1:
 
 static enum clnt_stat
 clnt_msk_call(CLIENT *cl,             /* client handle */
+              AUTH *auth,
              rpcproc_t proc,         /* procedure number */
              xdrproc_t xargs,        /* xdr routine for args */
              void *argsp,            /* pointer to args */
@@ -170,11 +176,11 @@ clnt_msk_call(CLIENT *cl,             /* client handle */
              void *resultsp,         /* pointer to results */
              struct timeval utimeout /* seconds to wait before giving up */)
 {
-        struct cm_data *cm = CM_DATA((struct cx_data *) cl->cl_private);
+        struct cm_data *cm = CM_DATA((struct cx_data *) cl->cl_p1);
 	XDR *xdrs;
 	size_t outlen = 0;
 	struct rpc_msg reply_msg;
-	bool_t ok;
+	bool ok;
 	int nrefreshes = 2;		/* number of times to refresh cred */
 	struct timeval timeout;
 	int total_time;
@@ -209,8 +215,8 @@ call_again:
 	}
 
 	if ((! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
-	    (! AUTH_MARSHALL(cl->cl_auth, xdrs)) ||
-	    (! AUTH_WRAP(cl->cl_auth, xdrs, xargs, argsp))) {
+	    (! AUTH_MARSHALL(auth, xdrs)) ||
+	    (! AUTH_WRAP(auth, xdrs, xargs, argsp))) {
 		cm->cm_error.re_status = RPC_CANTENCODEARGS;
 		goto out;
 	}
@@ -253,11 +259,11 @@ get_reply:
 			_seterr_reply(&reply_msg, &(cm->cm_error));
 
 		if (cm->cm_error.re_status == RPC_SUCCESS) {
-			if (! AUTH_VALIDATE(cl->cl_auth,
+			if (! AUTH_VALIDATE(auth,
 					    &reply_msg.acpted_rply.ar_verf)) {
 				cm->cm_error.re_status = RPC_AUTHERROR;
 				cm->cm_error.re_why = AUTH_INVALIDRESP;
-			} else if (! AUTH_UNWRAP(cl->cl_auth, &cm->cm_xdrs,
+			} else if (! AUTH_UNWRAP(auth, &cm->cm_xdrs,
 						 xresults, resultsp)) {
 				if (cm->cm_error.re_status == RPC_SUCCESS)
 				     cm->cm_error.re_status = RPC_CANTDECODERES;
@@ -275,7 +281,7 @@ get_reply:
 		else if (cm->cm_error.re_status == RPC_AUTHERROR)
 			/* maybe our credentials need to be refreshed ... */
 			if (nrefreshes > 0 &&
-			    AUTH_REFRESH(cl->cl_auth, &reply_msg)) {
+			    AUTH_REFRESH(auth, &reply_msg)) {
 				nrefreshes--;
 				goto call_again;
 			}
@@ -295,17 +301,17 @@ out:
 static void
 clnt_msk_geterr(CLIENT *cl, struct rpc_err *errp)
 {
-	struct cm_data *cm = CM_DATA((struct cx_data *) cl->cl_private);
+	struct cm_data *cm = CM_DATA((struct cx_data *) cl->cl_p1);
 	*errp = cm->cm_error;
 }
 
-static bool_t
+static bool
 clnt_msk_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
 {
-	struct cm_data *cm = CM_DATA((struct cx_data *)cl->cl_private);
+	struct cm_data *cm = CM_DATA((struct cx_data *)cl->cl_p1);
 	XDR *xdrs;
 	sigset_t mask, newmask;
-	bool_t dummy = 0;
+	bool dummy = 0;
 
         /* XXX guard against illegal invocation from libc (will fix) */
 	if (! xdr_res)
@@ -315,17 +321,19 @@ clnt_msk_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
 
         /* Handle our own signal mask here, the signal section is
          * larger than the wait (not 100% clear why) */
+
+	/* barrier recv channel */
+	//	rpc_dplx_rwc(clnt, rpc_flag_clear);
+
 	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-
-        vc_fd_wait_c(cl, rpc_flag_clear);        
 
 	xdrs->x_op = XDR_FREE;
 	if (xdr_res)
 		dummy = (*xdr_res)(xdrs, res_ptr);
 
 	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
-        vc_fd_signal_c(cl, VC_LOCK_FLAG_NONE);
+	rpc_dplx_rsc(cl, RPC_DPLX_FLAG_NONE);
 
 out:
 	return (dummy);
@@ -337,15 +345,17 @@ clnt_msk_abort(CLIENT *h)
 {
 }
 
-static bool_t
+static bool
 clnt_msk_control(CLIENT *cl, u_int request, void *info)
 {
-	struct cm_data *cm = CM_DATA((struct cx_data *) cl->cl_private);
+	struct cm_data *cm = CM_DATA((struct cx_data *) cl->cl_p1);
 	sigset_t mask;
-        bool_t result = TRUE;
+        bool result = TRUE;
 
         thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
-        vc_fd_lock_c(cl, &mask);
+	/* always take recv lock first if taking together */
+	rpc_dplx_rlc(cl); //receive lock clnt
+	rpc_dplx_slc(cl); //send lock clnt
 
 	switch (request) {
 	case CLSET_FD_CLOSE:
@@ -428,7 +438,8 @@ clnt_msk_control(CLIENT *cl, u_int request, void *info)
 	}
 
 unlock:
-        vc_fd_unlock_c(cl, &mask);
+	rpc_dplx_ruc(cl);
+	rpc_dplx_suc(cl);
 	return (result);
 }
 
@@ -469,7 +480,7 @@ clnt_msk_ops(void)
 /*
  * Make sure that the time is not garbage.  -1 value is allowed.
  */
-static bool_t
+static bool
 time_not_ok(struct timeval *t)
 {
 	return (t->tv_sec < -1 || t->tv_sec > 100000000 ||
