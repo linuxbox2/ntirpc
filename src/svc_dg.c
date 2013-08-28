@@ -228,6 +228,7 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
     struct iovec iov;
     size_t replylen;
     ssize_t rlen;
+    unsigned int len;
 
     memset(&ss, 0xff, sizeof(struct sockaddr_storage));
 
@@ -283,6 +284,15 @@ again:
     req->rq_clntcred = req->rq_msg->rm_call.cb_cred.oa_base +
 	    (2 * MAX_AUTH_BYTES);
 
+    len = xprt->xp_rtaddr.len;
+    req->rq_rtaddr.buf = mem_zalloc(len);
+    if (req->rq_rtaddr.buf != NULL) {
+        req->rq_rtaddr.maxlen = req->rq_rtaddr.len = len;
+        memcpy(req->rq_rtaddr.buf, xprt->xp_rtaddr.buf ,len);
+    }
+    else
+        return (FALSE);
+
     /* XXX su->su_xid !MT-SAFE */
     su->su_xid = req->rq_msg->rm_xid;
     if (su->su_cache != NULL) {
@@ -324,7 +334,7 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
     xdrs->x_op = XDR_ENCODE;
     XDR_SETPOS(xdrs, 0);
 
-    if (xdr_replymsg(xdrs, msg) &&
+    if (xdr_replymsg(xdrs, msg) && req->rq_rtaddr.len &&
         (!has_args || (SVCAUTH_WRAP(req->rq_auth, req, xdrs, xdr_results,
                                     xdr_location)))) {
         struct msghdr *msg = &su->su_msghdr;
@@ -334,7 +344,7 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
         iov.iov_len = slen = XDR_GETPOS(xdrs);
         msg->msg_iov = &iov;
         msg->msg_iovlen = 1;
-        msg->msg_name = (struct sockaddr *)(void *) xprt->xp_rtaddr.buf;
+        msg->msg_name = (struct sockaddr *)(void *) req->rq_rtaddr.buf;
         msg->msg_namelen = xprt->xp_rtaddr.len;
         /* cmsg already set in svc_dg_recv */
 

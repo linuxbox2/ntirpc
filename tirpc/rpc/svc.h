@@ -342,6 +342,8 @@ struct svc_req {
     struct SVCAUTH  *rq_auth;        /* auth handle */
     void            *rq_ap1;         /* auth private */
     void            *rq_ap2;         /* auth private */
+
+    struct netbuf   rq_rtaddr;  /* remote transport address */
 };
 
 /*
