@@ -68,7 +68,6 @@
 struct svc_msk_data {
 	msk_trans_t    *trans;
 	size_t          sm_iosz;                /* size of send.recv buffer */
-	u_int32_t       sm_xid;                 /* transaction id */
 	XDR             sm_xdrs;                        /* XDR handle */
 	char            sm_verfbody[MAX_AUTH_BYTES];    /* verifier body */
 	u_int32_t	sendsz;
@@ -177,12 +176,19 @@ svc_msk_recv(SVCXPRT *xprt, struct svc_req *req)
 
 	printf("in recv, waiting for incoming buffer\n");
 
-	rpcrdma_svc_setbuf(xdrs, 0, XDR_DECODE);
-
-	if (! xdr_callmsg(xdrs, req->rq_msg)) {
+	if (rpcrdma_svc_setbuf(xdrs, 0, XDR_DECODE))
 		return (FALSE);
-	}
 
+	req->rq_msg = xdrs->x_base;
+	req->rq_xprt = xprt;
+	req->rq_prog = req->rq_msg->rm_call.cb_prog;
+	req->rq_vers = req->rq_msg->rm_call.cb_vers;
+	req->rq_proc = req->rq_msg->rm_call.cb_proc;
+	req->rq_xid = ntohl(req->rq_msg->rm_xid);
+	req->rq_clntcred = req->rq_msg->rm_call.cb_cred.oa_base +
+		(2 * MAX_AUTH_BYTES);
+
+	/* checksum? check if this is valid rpc? */
 
 	return (TRUE);
 }
