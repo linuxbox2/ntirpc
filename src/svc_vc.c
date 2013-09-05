@@ -1295,9 +1295,16 @@ svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
         xdr_location = NULL;
     }
 
-    /* XXX */
+    /* XXX Until gss_get_mic and gss_wrap can be replaced with
+     * iov equivalents, replies with RPCSEC_GSS security must be
+     * encoded in a contiguous buffer.
+     *
+     * Nb, we should probably use getpagesize() on Unix.  Need
+     * an equivalent for Windows.
+     */
     gss = (req->rq_cred.oa_flavor == RPCSEC_GSS);
-    xdrs_2 = xdr_ioq_create(8192, 65536,
+    xdrs_2 = xdr_ioq_create(8192 /* default segment size */,
+                            xd->shared.sendsz + 8192 /* max segment size */,
 			    gss ? IOQ_FLAG_REALLOC : IOQ_FLAG_NONE);
     if (xdr_replymsg(xdrs_2, msg) &&
         (!has_args || (req->rq_auth &&
