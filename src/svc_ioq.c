@@ -86,7 +86,6 @@ cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
     mutex_unlock(&xprt->xp_lock);
 }
 
-#define VREC_NIOVS 12
 #define LAST_FRAG ((u_int32_t)(1 << 31))
 
 static inline void
