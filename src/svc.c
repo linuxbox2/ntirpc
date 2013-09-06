@@ -971,13 +971,16 @@ svc_shutdown(u_long flags)
 {
     int code = 0;
 
-    /* XXX assert quiescent */
+    /* finalize ioq */
+    svc_ioq_shutdown();
 
     /* dispose all xprts and support */
     svc_xprt_shutdown();
 
     /* release fd lock records */
     rpc_dplx_shutdown();
+
+    /* XXX assert quiescent */
 
     return (code);
 }

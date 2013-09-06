@@ -181,31 +181,52 @@ thrdpool_submit_work(struct thrdpool *pool, thrd_func_t func, void *arg)
 {
     int code = 0;
 
+    /* queue is draining */
     mutex_lock(&pool->we.mtx);
+    if (unlikely(pool->flags & THRD_FLAG_SHUTDOWN)) {
+        goto unlock;
+    }
+
+    /* idle thread(s) available */
     if (pool->n_idle > 0) {
         if (thrdpool_dispatch(pool, func, arg)) {
-            mutex_unlock(&pool->we.mtx);
-            goto out;
+            goto unlock;
         }
     }
+
+    /* need a thread */
     if ((pool->params.thrd_max == 0) ||
         (pool->n_threads < pool->params.thrd_max)) {
         code = thrdpool_spawn(pool, func, arg);
-        mutex_unlock(&pool->we.mtx);
-        goto out;
+        goto unlock;
     }
 
+unlock:
     mutex_unlock(&pool->we.mtx);
 
-out:
     return (code);
 }
 
 int
 thrdpool_shutdown(struct thrdpool *pool)
 {
-    /* XXX */
+    struct timespec ts;
+    int wait = 1;
+
+    mutex_lock(&pool->we.mtx);
+    pool->flags |= THRD_FLAG_SHUTDOWN;
+    while (pool->n_threads > 0) {
+        cond_broadcast(&pool->we.cv);
+        clock_gettime(CLOCK_REALTIME, &ts);
+        timespec_addms(&ts, 1000 * wait);
+        (void) cond_timedwait(&pool->we.cv, &pool->we.mtx, &ts);
+        /* wait a bit longer */
+        wait = 5;
+    }
+
     mem_free(pool->name, 0);
+    mutex_unlock(&pool->we.mtx);
     destroy_wait_entry(&pool->we);
-    return 0;
+
+    return (0);
 }

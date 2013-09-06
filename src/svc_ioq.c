@@ -64,9 +64,11 @@
 #include <rpc/xdr_ioq.h>
 #include <getpeereid.h>
 #include <misc/thrdpool.h>
+#include <misc/opr.h>
 #include "svc_ioq.h"
 
 static struct thrdpool pool;
+static uint32_t ioq_shutdown = false;
 
 void svc_ioq_init() 
 {
@@ -140,13 +142,15 @@ ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd, struct xdr_ioq *xioq)
 void svc_ioq(struct thrd_context *thr_ctx)
 {
     struct svc_ioq_args *arg = (struct svc_ioq_args *) thr_ctx->arg;
+    struct thrd *thrd = opr_containerof(thr_ctx, struct thrd, ctx);
+    struct thrdpool *pool = thrd->pool;
     SVCXPRT *xprt = arg->xprt;
     struct x_vc_data *xd = arg->xd;
     struct xdr_ioq *xioq = NULL;
 
     for (;;) {
         mutex_lock(&xprt->xp_lock);
-        if (! xd->shared.ioq.size) {
+        if (unlikely((! xd->shared.ioq.size) || ioq_shutdown)) {
             xd->shared.ioq.active = false;
             SVC_RELEASE(xprt, SVC_RELEASE_FLAG_LOCKED);
             goto out;
@@ -161,6 +165,10 @@ void svc_ioq(struct thrd_context *thr_ctx)
     }
 
 out:
+    mutex_lock(&pool->we.mtx);
+    --(pool->n_threads);
+    cond_signal(&pool->we.cv);
+    mutex_unlock(&pool->we.mtx);
     return;
 }
 
@@ -168,7 +176,15 @@ void
 svc_ioq_append(SVCXPRT *xprt, struct x_vc_data *xd, XDR *xdrs)
 {
     struct xdr_ioq *xioq = xdrs->x_private;
+    bool qdrain = atomic_fetch_uint32_t(&ioq_shutdown);
 
+    /* discard */
+    if (unlikely(qdrain)) {
+        XDR_DESTROY(xioq->xdrs);
+        return;
+    }
+
+    /* submit */
     mutex_lock(&xprt->xp_lock);
     TAILQ_INSERT_TAIL(&xd->shared.ioq.q, xioq, ioq_s);
     (xd->shared.ioq.size)++;
@@ -179,7 +195,7 @@ svc_ioq_append(SVCXPRT *xprt, struct x_vc_data *xd, XDR *xdrs)
         arg->xd = xd;
         xd->shared.ioq.active = true;
         thrdpool_submit_work(&pool, svc_ioq, arg);
-        SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
+        SVC_REF(xprt, SVC_REF_FLAG_LOCKED); /* !LOCKED */
     }
     else
         mutex_unlock(&xprt->xp_lock);
@@ -188,5 +204,6 @@ svc_ioq_append(SVCXPRT *xprt, struct x_vc_data *xd, XDR *xdrs)
 void
 svc_ioq_shutdown()
 {
-    /* XXX */
+    atomic_store_uint32_t(&ioq_shutdown, true);
+    thrdpool_shutdown(&pool);
 }

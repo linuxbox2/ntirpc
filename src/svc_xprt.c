@@ -380,11 +380,9 @@ void svc_xprt_shutdown()
         while (n != NULL) {
             srec = opr_containerof(n, struct svc_xprt_rec, node_k);
             if (srec->xprt) {
-                /* call each_func with t !LOCKED, srec LOCKED */
-                mutex_lock(&srec->mtx);
-                SVC_DESTROY(srec->xprt);
+                /* call each_func with t !LOCKED, srec !LOCKED */
+                SVC_DESTROY(srec->xprt); /* locks srec, so avoid deadlock */
                 srec->xprt = NULL;
-                mutex_unlock(&srec->mtx);
                 mutex_destroy(&srec->mtx);
             }
             /* now remove srec */
