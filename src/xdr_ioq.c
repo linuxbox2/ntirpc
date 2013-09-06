@@ -150,6 +150,7 @@ get_vrec(struct xdr_ioq *xioq)
 {
     struct v_rec *vrec;
     vrec = mem_alloc(sizeof(struct v_rec));
+    TAILQ_INIT_ENTRY(vrec, ioq);
     return (vrec);
 }
 
@@ -189,7 +190,6 @@ init_ioq(struct xdr_ioq *xioq)
     vrec->flags = IOQ_FLAG_RECLAIM;
     ioq_append_rec(xioq, vrec);
     ioq_stream_reset(xioq, VREC_RESET_POS);
-
 }
 
 XDR *xdr_ioq_create(u_int def_bsize, u_int max_bsize, u_int flags)
@@ -205,7 +205,7 @@ XDR *xdr_ioq_create(u_int def_bsize, u_int max_bsize, u_int flags)
     xdrs->x_private = xioq;
 
     xioq->def_bsize = def_bsize; /* XXX small multiple of pagesize */
-    xioq->def_bsize = max_bsize;
+    xioq->max_bsize = max_bsize;
     xioq->flags = flags;
     init_ioq(xioq);
 
@@ -223,41 +223,45 @@ vrec_next(struct xdr_ioq *xioq, u_int flags)
 
     pos = vrec_fpos(xioq);
 
-    /* XXX workaround for lack of segmented buffer interfaces
-     * in some callers (e.g, GSS_WRAP) */
-    if (xioq->flags & IOQ_FLAG_REALLOC) {
-      if (flags & IOQ_FLAG_XTENDQ) {
-	void *base;
-	vrec  = pos->vrec;
-	base = mem_alloc(xioq->max_bsize);
-	memcpy(base, vrec->base, vrec->len);
-	mem_free(vrec->base, 0);
-	vrec->base = base;
-	vrec->size = xioq->max_bsize;
-	return (TRUE);
-      }
-    }
-
-    /* re-use following buffers */
+    /* next buffer, if any */
     vrec = TAILQ_NEXT(pos->vrec, ioq);
+
     /* append new segments, iif requested */
-    if (likely(! vrec) && (flags & IOQ_FLAG_XTENDQ)) {
-      vrec  = get_vrec(xioq);
+    if ((! vrec) && likely(flags & IOQ_FLAG_XTENDQ)) {
+      vrec = get_vrec(xioq);
       /* alloc a buffer, iif requested */
       if (flags & IOQ_FLAG_BALLOC) {
-	vrec->size = xioq->def_bsize;
-	vrec->base = alloc_buffer(vrec->size);
-	vrec->flags = IOQ_FLAG_RECLAIM;
+          /* XXX workaround for lack of segmented buffer interfaces
+           * in some callers (e.g, GSS_WRAP) */
+          if (xioq->flags & IOQ_FLAG_REALLOC) {
+              void *base;
+              vrec = pos->vrec;
+              base = mem_alloc(xioq->max_bsize);
+              memcpy(base, vrec->base, vrec->len);
+              mem_free(vrec->base, vrec->size);
+              vrec->base = base;
+              vrec->size = xioq->max_bsize;
+              assert(vrec->flags & IOQ_FLAG_RECLAIM);
+          } else {
+              vrec->size = xioq->def_bsize;
+              vrec->base = alloc_buffer(vrec->size);
+              vrec->flags = IOQ_FLAG_RECLAIM;
+          }
       } else {
+          /* XXX empty buffer slot (not supported for now) */
+          abort();
           vrec->size = 0;
           vrec->base = NULL;
           vrec->flags = IOQ_FLAG_NONE;
       }
+      /* all XTENDQ cases */
       vrec->refcnt = 1;
+      vrec->off = 0;
+      vrec->len = 0;
       ioq_append_rec(xioq, vrec);
     }
-    vrec->off = 0;
-    vrec->len = 0;
+
+    /* advance iterator */
     pos->vrec = vrec;
     (pos->bpos)++;
     pos->boff = 0;
@@ -333,6 +337,7 @@ xdr_ioq_getbytes(XDR *xdrs, char *addr, u_int len)
 {
     struct xdr_ioq *xioq = (struct xdr_ioq *) xdrs->x_private;
     struct vpos_t *pos;
+    uint32_t off = 0;
 
     switch (xdrs->x_op) {
     case XDR_ENCODE:
@@ -341,7 +346,7 @@ xdr_ioq_getbytes(XDR *xdrs, char *addr, u_int len)
         pos = vrec_fpos(xioq);
         while ((len > 0) &&
                (pos->loff < xioq->ioq.frag_len)) {
-            u_int delta = MIN(len, (pos->vrec->len - pos->boff));
+            int delta = MIN(len, (pos->vrec->len - pos->boff));
             if (unlikely(! delta)) {
                 if (! vrec_next(xioq, IOQ_FLAG_NONE))
                     return (FALSE);
@@ -351,9 +356,10 @@ xdr_ioq_getbytes(XDR *xdrs, char *addr, u_int len)
              * overlapping areas, see Fedora Bug 691336 (NOTABUG);
              * we dont permit overlapping segments, so memcpy may be a
              * small win over memmove */
-            memcpy(addr, (pos->vrec->base + pos->boff), delta);
+            memcpy(addr+off, (pos->vrec->base + pos->boff), delta);
             pos->loff += delta;
             pos->boff += delta;
+            off += delta;
             len -= delta;
         }
         break;
@@ -372,6 +378,7 @@ xdr_ioq_putbytes(XDR *xdrs, const char *addr, u_int len)
 {
     struct xdr_ioq *xioq = (struct xdr_ioq *) xdrs->x_private;
     struct vpos_t *pos;
+    uint32_t off = 0;
     int delta;
 
     while (len > 0) {
@@ -379,16 +386,18 @@ xdr_ioq_putbytes(XDR *xdrs, const char *addr, u_int len)
         delta = MIN(len,  pos->vrec->size - pos->vrec->len);
         if (unlikely(! delta)) {
             /* advance fill pointer */
-            if (! vrec_next(xioq, IOQ_FLAG_XTENDQ|IOQ_FLAG_BALLOC))
+            if (unlikely(! vrec_next(xioq, IOQ_FLAG_XTENDQ|IOQ_FLAG_BALLOC))) {
                 return (FALSE);
+            }
             continue;
         }
         /* see note above */
-        memcpy((pos->vrec->base + pos->vrec->off), addr, delta);
+        memcpy((pos->vrec->base + pos->vrec->off), addr+off, delta);
         pos->vrec->off += delta;
         pos->vrec->len += delta;
         pos->boff += delta;
         pos->loff += delta;
+        off += delta;
 	if (pos->loff > xioq->ioq.frag_len)
 	  xioq->ioq.frag_len = pos->loff;
         len -= delta;

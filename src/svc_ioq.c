@@ -100,7 +100,7 @@ ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd, struct xdr_ioq *xioq)
     frag_header =
         htonl((u_int32_t)(xioq->ioq.frag_len | LAST_FRAG));
 
-    iov = alloca(xioq->ioq.size * sizeof(struct iovec));
+    iov = alloca((xioq->ioq.size) * sizeof(struct iovec));
     iov[0].iov_base = &(frag_header);
     iov[0].iov_len = sizeof(u_int32_t);
 
@@ -120,13 +120,11 @@ ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd, struct xdr_ioq *xioq)
             if (tiov->iov_len > nbytes) {
                 tiov->iov_base += nbytes;
                 tiov->iov_len -= nbytes;
+                break;
             } else {
                 nbytes -= tiov->iov_len;
-                iovcnt--;
-                continue;
             }
-        }
-
+        } /* advance */
         /* blocking write */
         nbytes = writev(xprt->xp_fd, iov, iovcnt);
         if (unlikely(nbytes < 0)) {
