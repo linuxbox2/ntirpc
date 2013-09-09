@@ -143,7 +143,7 @@ funname(msk_data_t *bufs, struct mskinfo *mi, ##optargs) {	\
 			break;					\
 								\
 		/* INFO LOG */					\
-		/* printf("Waiting for buffer to come in\n"); */\
+		printf(#funname " - waiting for buffer\n");     \
 		pthread_cond_wait(&mi->cl.cond, &mi->cl.lock); 	\
 	} while (1);						\
 								\
@@ -594,7 +594,7 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 
 	if (!xdrs) {
 		__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: no xdrs?", __func__);
-		return 0;
+		return -1;
 	}
 
 	mi = priv(xdrs);
