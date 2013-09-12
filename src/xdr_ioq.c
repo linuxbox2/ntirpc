@@ -49,6 +49,7 @@
 #include <assert.h>
 
 #include <intrinsic.h>
+#include <misc/abstract_atomic.h>
 #include "rpc_com.h"
 
 #include <rpc/xdr_ioq.h>
@@ -99,6 +100,8 @@ static const struct  xdr_ops xdr_ioq_ops = {
     } while (0)
 
 #define VREC_MAXBUFS 24
+
+static uint64_t next_id;
 
 #if 0 /* jemalloc docs warn about reclaim */
 #define alloc_buffer(size) mem_alloc_aligned(0x8, (size))
@@ -206,6 +209,8 @@ XDR *xdr_ioq_create(u_int def_bsize, u_int max_bsize, u_int flags)
     xioq->max_bsize = max_bsize;
     xioq->flags = flags;
     init_ioq(xioq);
+
+    xioq->id = atomic_inc_uint64_t(&next_id);
 
     return (xdrs);
 }

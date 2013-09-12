@@ -62,6 +62,7 @@ struct xdr_ioq
     u_int def_bsize;
     u_int max_bsize;
     u_int flags;
+    uint64_t id;
 };
 
 #define IOQ_FLAG_NONE          0x0000
