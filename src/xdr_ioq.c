@@ -149,7 +149,7 @@ static inline struct v_rec *
 get_vrec(struct xdr_ioq *xioq)
 {
     struct v_rec *vrec;
-    vrec = mem_alloc(sizeof(struct v_rec));
+    vrec = mem_zalloc(sizeof(struct v_rec));
     TAILQ_INIT_ENTRY(vrec, ioq);
     return (vrec);
 }
@@ -185,8 +185,6 @@ init_ioq(struct xdr_ioq *xioq)
     vrec->size = xioq->def_bsize;
     vrec->refcnt = 1;
     vrec->base = alloc_buffer(vrec->size);
-    vrec->off = 0;
-    vrec->len = 0;
     vrec->flags = IOQ_FLAG_RECLAIM;
     ioq_append_rec(xioq, vrec);
     ioq_stream_reset(xioq, VREC_RESET_POS);
@@ -228,7 +226,6 @@ vrec_next(struct xdr_ioq *xioq, u_int flags)
 
     /* append new segments, iif requested */
     if ((! vrec) && likely(flags & IOQ_FLAG_XTENDQ)) {
-      vrec = get_vrec(xioq);
       /* alloc a buffer, iif requested */
       if (flags & IOQ_FLAG_BALLOC) {
           /* XXX workaround for lack of segmented buffer interfaces
@@ -236,13 +233,18 @@ vrec_next(struct xdr_ioq *xioq, u_int flags)
           if (xioq->flags & IOQ_FLAG_REALLOC) {
               void *base;
               vrec = pos->vrec;
+	      /* bail if we have reached max bufsz */
+	      if (vrec->size >= xioq->max_bsize)
+		return false;
               base = mem_alloc(xioq->max_bsize);
               memcpy(base, vrec->base, vrec->len);
               mem_free(vrec->base, vrec->size);
               vrec->base = base;
               vrec->size = xioq->max_bsize;
               assert(vrec->flags & IOQ_FLAG_RECLAIM);
+	      goto done;
           } else {
+              vrec = get_vrec(xioq);
               vrec->size = xioq->def_bsize;
               vrec->base = alloc_buffer(vrec->size);
               vrec->flags = IOQ_FLAG_RECLAIM;
@@ -250,16 +252,18 @@ vrec_next(struct xdr_ioq *xioq, u_int flags)
       } else {
           /* XXX empty buffer slot (not supported for now) */
           abort();
+	  vrec = get_vrec(xioq);
           vrec->size = 0;
           vrec->base = NULL;
           vrec->flags = IOQ_FLAG_NONE;
       }
-      /* all XTENDQ cases */
-      vrec->refcnt = 1;
-      vrec->off = 0;
-      vrec->len = 0;
-      ioq_append_rec(xioq, vrec);
     }
+
+    /* new vrec */
+    vrec->refcnt = 1;
+    vrec->off = 0;
+    vrec->len = 0;
+    ioq_append_rec(xioq, vrec);
 
     /* advance iterator */
     pos->vrec = vrec;
@@ -267,6 +271,7 @@ vrec_next(struct xdr_ioq *xioq, u_int flags)
     pos->boff = 0;
     /* pos->loff is unchanged */
 
+ done:
     return (TRUE);
 }
 
