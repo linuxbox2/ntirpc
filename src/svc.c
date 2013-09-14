@@ -144,6 +144,10 @@ svc_init(svc_init_params * params)
 #endif
     __svc_params->idle_timeout = params->idle_timeout;
 
+    /* XXX defaults to the legacy max sendsz */
+    __svc_params->svc_ioq_maxbuf =
+      (params->svc_ioq_maxbuf) ? (params->svc_ioq_maxbuf) : 262144;
+
     svc_ioq_init();
 
     /* allow consumers to manage all xprt registration */
