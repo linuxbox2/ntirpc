@@ -1277,7 +1277,7 @@ svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
     XDR *xdrs_2;
     xdrproc_t xdr_results;
     caddr_t xdr_location;
-    bool rstat;
+    bool rstat = false;
     bool has_args;
     bool gss;
 
