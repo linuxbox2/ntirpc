@@ -826,13 +826,16 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
     SVCXPRT *xprt;
 
     int ix, code = 0;
-    int timeout_ms = 30*1000;
+    int timeout_ms = 120*1000; /* XXX */
     int n_events;
+    static uint32_t wakeups;
     uint32_t refcnt;
 
     for (;;) {
 
         mutex_lock(&sr_rec->mtx);
+
+	++(wakeups);
 
         /* check for signals */
         if (sr_rec->signals & SVC_RQST_SIGNAL_SHUTDOWN) {
@@ -900,6 +903,10 @@ svc_rqst_thrd_run_epoll(struct svc_rqst_rec *sr_rec,
                         } else
                             mutex_unlock(&xprt->xp_lock);
                     }
+		    /* XXX failsafe idle processing */
+		    if ((wakeups % 1000) == 0) {
+		      __svc_clean_idle2(__svc_params->idle_timeout, TRUE);
+		    }
                 } else {
                     /* signalled -- there was a wakeup on ctrl_ev (see
                      * top-of-loop) */
