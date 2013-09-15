@@ -229,7 +229,6 @@ authgss_ctx_gc_idle(void)
 
     cond_init_authgss_hash();
 
-
     for (ix = 0; ix < authgss_hash_st.xt.npart; ++ix) {
         xp = &(authgss_hash_st.xt.tree[ix]);
         axp = (struct authgss_x_part *) xp->u1;

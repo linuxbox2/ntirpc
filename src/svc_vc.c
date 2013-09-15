@@ -1522,6 +1522,9 @@ out:
     return (rflag);
 }
 
+/* XXX move to svc_run */
+void authgss_ctx_gc_idle(void);
+
 bool
 __svc_clean_idle2(int timeout, bool cleanblock)
 {
@@ -1538,6 +1541,10 @@ __svc_clean_idle2(int timeout, bool cleanblock)
 
     ++active;
 
+    /* trim gss context cache */
+    authgss_ctx_gc_idle();
+
+    /* trim xprts (not sorted, not aggressive [but self limiting]) */
     memset(&acc, 0, sizeof(struct svc_clean_idle_arg));
     (void) clock_gettime(CLOCK_MONOTONIC_FAST, &acc.ts);
     acc.cleanblock = cleanblock;
