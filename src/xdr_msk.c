@@ -190,7 +190,7 @@ static void rpcrdma_signal(msk_trans_t *trans) {
 	pthread_mutex_unlock(&cl->lock);
 }
 
-static void signal_callback(msk_trans_t *trans, void *arg) {
+static void signal_callback(msk_trans_t *trans, msk_data_t *data, void *arg) {
 	XDR *xdrs = trans->private_data;
 	rpcrdma_signal(trans);
 	printf("received something!\n");
@@ -199,9 +199,8 @@ static void signal_callback(msk_trans_t *trans, void *arg) {
 		(callback_of_xdrs(xdrs))(callbackarg_of_xdrs(xdrs));
 }
 
-static void setunused_callback(msk_trans_t *trans, void *arg) {
-	msk_data_t *data, *prevdata;
-	data = arg;
+static void setunused_callback(msk_trans_t *trans, msk_data_t *data, void *arg) {
+	msk_data_t *prevdata;
 	prevdata = NULL;
 	do {
 		data->size = 0;
@@ -211,6 +210,11 @@ static void setunused_callback(msk_trans_t *trans, void *arg) {
 	} while ((data = data->next) != NULL);
 
 	rpcrdma_signal(trans);
+}
+
+static void err_callback(msk_trans_t *trans, msk_data_t *data, void *arg) {
+	if(trans->state != MSK_CLOSING && trans->state != MSK_CLOSED)
+		printf("error callback on buffer %p", data);
 }
 
 
@@ -445,16 +449,20 @@ xdrmsk_create(XDR *xdrs,
 		mi->outbufs[i].max_size = sendsz;
 		mi->outbufs[i].size = 0;
 		mi->outbufs[i].data = mi->mskbase + i*sendsz;
+		mi->outbufs[i].mr = mi->mr;
 		mi->hdrbufs[i].max_size = HDR_MAX_SIZE;
 		mi->hdrbufs[i].size = 0;
 		mi->hdrbufs[i].data = mi->mskbase + credits*sendsz + i*HDR_MAX_SIZE;
+		mi->hdrbufs[i].mr = mi->mr;
 		mi->rdmabufs[i].max_size = recvsz;
 		mi->rdmabufs[i].size = 0;
 		mi->rdmabufs[i].data = mi->mskbase + credits*(sendsz + HDR_MAX_SIZE) + i * recvsz;
+		mi->rdmabufs[i].mr = mi->mr;
 		mi->inbufs[i].max_size = recvsz;
 		mi->inbufs[i].size = 0;
 		mi->inbufs[i].data = mi->mskbase + credits*(sendsz + HDR_MAX_SIZE + recvsz) + i*recvsz;
-		msk_post_recv(mi->trans, mi->inbufs + i, mi->mr, signal_callback, NULL);
+		mi->inbufs[i].mr = mi->mr;
+		msk_post_recv(mi->trans, mi->inbufs + i, signal_callback, err_callback, NULL);
 	}
 
 	mi->pos = xdrs->x_base = NULL;
@@ -497,7 +505,7 @@ rpcrdma_clnt_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 		break;
 	    case XDR_DECODE:
 		mi->curbuf->size = 0; // set this for countusedbuf
-		msk_post_recv(mi->trans, mi->curbuf, mi->mr, signal_callback, NULL);
+		msk_post_recv(mi->trans, mi->curbuf, signal_callback, err_callback, NULL);
 		break;
 	    default:
 		break;
@@ -635,7 +643,7 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 			tmp_buf->size = ntohl(read_chunk->rc_target.rs_length);
 			rpcrdma_rloc_from_segment(&rloc, &read_chunk->rc_target);
 			//FIXME: get them only when needed in xdrmsk_getnextbuf or at least post all the reads and wait only at the end...
-			msk_wait_read(mi->trans, tmp_buf, mi->mr, &rloc);
+			msk_wait_read(mi->trans, tmp_buf, &rloc);
 
 #ifdef MSK_DUMP_FRAGMENTS
 			rpcrdma_dump_msg(tmp_buf, "svcreaddata", ((struct rpcrdma_msg *)mi->curbuf->data)->rm_xid);
@@ -793,7 +801,7 @@ rpcrdma_clnt_flushout(XDR * xdrs) {
 #endif
 
 		/* actual send, callback will take care of cleanup */
-		msk_post_n_send(mi->trans, hdr_buf, 2, mi->mr, setunused_callback, hdr_buf);
+		msk_post_n_send(mi->trans, hdr_buf, 2, setunused_callback, err_callback, hdr_buf);
 		break;
 	    case REPLY:
 		break;
@@ -865,7 +873,7 @@ rpcrdma_svc_flushout(XDR * xdrs) {
 			/* actual send, callback will take care of cleanup */
 			/* TODO: make it work with not just one outbuf, but get more outbufs as needed in xdrmsk_getnextbuf?
 			   add something in mi instead of checking call_array->wc_discrim everytime... */
-			msk_post_n_send(mi->trans, hdr_buf, 2, mi->mr, setunused_callback, hdr_buf);
+			msk_post_n_send(mi->trans, hdr_buf, 2, setunused_callback, err_callback, hdr_buf);
 
 		} else {
 			rmsg->rm_type = htonl(RDMA_NOMSG);
@@ -886,7 +894,7 @@ rpcrdma_svc_flushout(XDR * xdrs) {
 
 				/** @todo: check if remote addr + size = next remote addr and send in a single write if so */
 
-				msk_wait_write(mi->trans, mi->curbuf, mi->mr, &rloc); /* FIXME: change to msk_post_write and wait somehow */
+				msk_wait_write(mi->trans, mi->curbuf, &rloc); /* FIXME: change to msk_post_write and wait somehow */
 
 
 				w_array->wc_array[i].wc_target.rs_handle = call_array->wc_array[i].wc_target.rs_handle;
@@ -924,13 +932,13 @@ rpcrdma_svc_flushout(XDR * xdrs) {
 #endif
 
 			/* actual send, callback will take care of cleanup */
-			msk_post_send(mi->trans, hdr_buf, mi->mr, setunused_callback, hdr_buf);
+			msk_post_send(mi->trans, hdr_buf, setunused_callback, err_callback, hdr_buf);
 
 		}
 
 		/* free the old inbuf we only kept for header, and repost it. */
 		mi->callbuf->size = 0; // set this for countusedbuf
-		msk_post_recv(mi->trans, mi->callbuf, mi->mr, signal_callback, NULL);
+		msk_post_recv(mi->trans, mi->callbuf, signal_callback, err_callback, NULL);
 
 		break;
 	}

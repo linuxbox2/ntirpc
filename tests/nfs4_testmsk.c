@@ -119,9 +119,8 @@ int main() {
 	attr.rq_depth = CREDITS;
 	attr.sq_depth = CREDITS;
 	attr.max_send_sge = 4;
-	attr.addr.sa_in.sin_family = AF_INET;
-	attr.addr.sa_in.sin_port = htons(20049);
-	attr.addr.sa_in.sin_addr.s_addr = inet_addr("127.0.0.1");
+	attr.port = "20049";
+	attr.node = "::1";
 
 	if (msk_init(&trans, &attr))
 		die("couldn't init trans", ENOMEM);

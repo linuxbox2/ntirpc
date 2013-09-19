@@ -139,8 +139,6 @@ svc_msk_create(msk_trans_t *trans, u_int credits, void (*callback)(void*), void*
 		return FALSE;
 	}
 
-	__rpc_set_netbuf(&xprt->xp_rtaddr, &sm->trans->addr.sa_stor, sizeof (struct sockaddr_storage));
-
 	return (xprt);
 freedata:
 	__warnx(TIRPC_DEBUG_FLAG_SVC_RDMA, "%s: out of memory", __func__);
