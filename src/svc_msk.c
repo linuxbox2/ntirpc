@@ -166,6 +166,7 @@ svc_msk_stat(xprt)
 	}
 }
 
+
 static bool
 svc_msk_recv(SVCXPRT *xprt, struct svc_req *req)
 {
@@ -177,12 +178,24 @@ svc_msk_recv(SVCXPRT *xprt, struct svc_req *req)
 	if (rpcrdma_svc_setbuf(xdrs, 0, XDR_DECODE))
 		return (FALSE);
 
-	req->rq_msg = xdrs->x_base;
+	struct rpc_msg *msg = xdrs->x_base;
+
+	req->rq_msg = malloc(sizeof(*req->rq_msg));
+	msg->fr_vec[0] = malloc(sizeof(*msg->fr_vec[0]));
+
 	req->rq_xprt = xprt;
+	req->rq_msg->rm_xid = ntohl(msg->rm_xid);
+	req->rq_msg->rm_direction = ntohl(msg->rm_direction);
+	req->rq_msg->rm_call.cb_prog = ntohl(msg->rm_call.cb_prog);
+	req->rq_msg->rm_call.cb_vers = ntohl(msg->rm_call.cb_vers);
+	req->rq_msg->rm_call.cb_proc = ntohl(msg->rm_call.cb_proc);
+
+	req->rq_msg->rm_call.cb_cred.oa_flavor = AUTH_NULL;
+
 	req->rq_prog = req->rq_msg->rm_call.cb_prog;
 	req->rq_vers = req->rq_msg->rm_call.cb_vers;
 	req->rq_proc = req->rq_msg->rm_call.cb_proc;
-	req->rq_xid = ntohl(req->rq_msg->rm_xid);
+	req->rq_xid = req->rq_msg->rm_xid;
 	req->rq_clntcred = req->rq_msg->rm_call.cb_cred.oa_base +
 		(2 * MAX_AUTH_BYTES);
 
@@ -231,8 +244,11 @@ static bool
 svc_msk_getargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args, void *args_ptr, void *u_data)
 {
     bool rslt = TRUE;
-    struct x_vc_data *xd = (struct x_vc_data *) xprt->xp_p1;
-    XDR *xdrs = &xd->shared.xdrs_in; /* recv queue */
+    struct svc_msk_data *sm = sm_data(xprt);
+    XDR *xdrs = &(sm->sm_xdrs);
+
+    return TRUE;
+
 
     /* threads u_data for advanced decoders*/
     xdrs->x_public = u_data;
@@ -286,6 +302,15 @@ svc_msk_lock(SVCXPRT *xprt, uint32_t flags, const char *file, int line)
 static void
 svc_msk_unlock(SVCXPRT *xprt, uint32_t flags, const char *file, int line)
 {
+}
+
+static bool
+svc_msk_ref(SVCXPRT *xprt, u_int flags, const char *tag, const int line) {
+	return true;
+}
+
+static void
+svc_msk_release(SVCXPRT *xprt, u_int flags, const char *tag, const int line) {
 }
 
 static bool
@@ -367,6 +392,8 @@ svc_msk_ops(SVCXPRT *xprt)
 		ops.xp_destroy = svc_msk_destroy;
 	        ops.xp_lock = svc_msk_lock;
 		ops.xp_unlock = svc_msk_unlock;
+		ops.xp_ref = svc_msk_ref;
+		ops.xp_release = svc_msk_release;
 		ops2.xp_control = svc_msk_control;
 		ops2.xp_getreq = svc_getreq_default;
                 ops2.xp_dispatch = svc_dispatch_default;
