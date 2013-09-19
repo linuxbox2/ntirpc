@@ -242,8 +242,8 @@ svc_msk_getargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args, void *ar
     if (! SVCAUTH_UNWRAP(req->rq_auth, req, xdrs, xdr_args, args_ptr))
         rslt = FALSE;
 
-    /* XXX Upstream TI-RPC lacks this call, but -does- call svc_dg_freeargs
-     * in svc_dg_getargs if SVCAUTH_UNWRAP fails. */
+    /* XXX Upstream TI-RPC lacks this call, but -does- call svc_msk_freeargs
+     * in svc_msk_getargs if SVCAUTH_UNWRAP fails. */
     if (! rslt)
         svc_msk_freeargs(xprt, xdr_args, args_ptr);
     else
@@ -277,6 +277,18 @@ svc_msk_destroy(SVCXPRT *xprt)
 }
 
 extern mutex_t ops_lock;
+
+
+static void
+svc_msk_lock(SVCXPRT *xprt, uint32_t flags, const char *file, int line)
+{
+/* pretend we lock for now */
+}
+
+static void
+svc_msk_unlock(SVCXPRT *xprt, uint32_t flags, const char *file, int line)
+{
+}
 
 static bool
 /*ARGSUSED*/
@@ -355,6 +367,8 @@ svc_msk_ops(SVCXPRT *xprt)
 		ops.xp_reply = svc_msk_reply;
 		ops.xp_freeargs = svc_msk_freeargs;
 		ops.xp_destroy = svc_msk_destroy;
+	        ops.xp_lock = svc_msk_lock;
+		ops.xp_unlock = svc_msk_unlock;
 		ops2.xp_control = svc_msk_control;
 		ops2.xp_getreq = svc_getreq_default;
                 ops2.xp_dispatch = svc_dispatch_default;
