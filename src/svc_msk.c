@@ -303,11 +303,50 @@ svc_msk_unlock(SVCXPRT *xprt, uint32_t flags, const char *file, int line)
 
 static bool
 svc_msk_ref(SVCXPRT *xprt, u_int flags, const char *tag, const int line) {
-	return true;
+	uint32_t refcnt;
+
+	if (! (flags & SVC_REF_FLAG_LOCKED))
+		mutex_lock(&xprt->xp_lock);
+
+	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
+		mutex_unlock(&xprt->xp_lock);
+		return (false);
+	}
+
+	refcnt = ++(xprt->xp_refcnt);
+
+	XPRT_TRACE_RADDR(xprt, __func__, tag, line);
+
+	mutex_unlock(&xprt->xp_lock);
+
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
+			"%s: tag %s line %d postref %p xp_refcnt %u",
+			__func__, tag, line, xprt, refcnt);
+
+	return (true);
 }
 
 static void
 svc_msk_release(SVCXPRT *xprt, u_int flags, const char *tag, const int line) {
+	uint32_t xp_refcnt;
+
+	if (! (flags & SVC_RELEASE_FLAG_LOCKED))
+		mutex_lock(&xprt->xp_lock);
+
+	xp_refcnt = --(xprt->xp_refcnt);
+	mutex_unlock(&xprt->xp_lock);
+
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
+			"%s: postunref %p xp_refcnt %u", __func__, xprt, xp_refcnt);
+
+	/* conditional destroy */
+	if ((xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) &&
+		(xp_refcnt == 0)) {
+		__warnx(TIRPC_DEBUG_FLAG_REFCNT,
+				"%s: %p xp_refcnt %u should actually destroy things",
+				__func__, xprt, xp_refcnt);
+		/* rdvs_dodestroy(xprt); */
+	}
 }
 
 static bool
