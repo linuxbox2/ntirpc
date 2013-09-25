@@ -58,6 +58,8 @@
 
 #include "rpc_rdma.h"
 
+#define MSK_DUMP_FRAGMENTS 1
+
 static void xdrmsk_destroy(XDR *);
 static bool xdrmsk_getlong_aligned(XDR *, long *);
 static bool xdrmsk_putlong_aligned(XDR *, const long *);
@@ -193,7 +195,7 @@ static void rpcrdma_signal(msk_trans_t *trans) {
 static void signal_callback(msk_trans_t *trans, msk_data_t *data, void *arg) {
 	XDR *xdrs = trans->private_data;
 	rpcrdma_signal(trans);
-	printf("received something!\n");
+	printf("received something on trans %p!\n", trans);
 
 	if (callback_of_xdrs(xdrs))
 		(callback_of_xdrs(xdrs))(callbackarg_of_xdrs(xdrs));
@@ -214,8 +216,9 @@ static void setunused_callback(msk_trans_t *trans, msk_data_t *data, void *arg) 
 
 static void err_callback(msk_trans_t *trans, msk_data_t *data, void *arg) {
 	if(trans->state != MSK_CLOSING && trans->state != MSK_CLOSED)
-		printf("error callback on buffer %p", data);
+		printf("error callback on buffer %p\n", data);
 }
+
 
 
 /***********************************/
@@ -1098,15 +1101,15 @@ xdrmsk_getbytes(XDR *xdrs, char *addr, u_int len)
 			return (FALSE);
 
 	while (len > 0) {
+		if (xdrs->x_handy == 0)
+			if (xdrmsk_getnextbuf(xdrs) == FALSE)
+				return (FALSE);
 		size = MIN(len, xdrs->x_handy);
 		memmove(addr, priv(xdrs)->pos, size);
 		addr += size;
 		len -= size;
 		xdrs->x_handy -= size;
 		priv(xdrs)->pos = (char *)priv(xdrs)->pos + size;
-		if (xdrs->x_handy == 0)
-			if (xdrmsk_getnextbuf(xdrs) == FALSE)
-				return (FALSE);
 	}
 	return (TRUE);
 }
@@ -1120,15 +1123,15 @@ xdrmsk_putbytes(XDR *xdrs, const char *addr, u_int len)
 		return (FALSE);
 
 	while (len > 0) {
+		if (xdrs->x_handy == 0)
+			if (xdrmsk_getnextbuf(xdrs) == FALSE)
+				return (FALSE);
 		size = MIN(len, xdrs->x_handy);
 		memmove(priv(xdrs)->pos, addr, size);
 		addr += size;
 		len -= size;
 		xdrs->x_handy -= size;
 		priv(xdrs)->pos = (char *)priv(xdrs)->pos + size;
-		if (xdrs->x_handy == 0)
-			if (xdrmsk_getnextbuf(xdrs) == FALSE)
-				return (FALSE);
 	}
 	return (TRUE);
 }

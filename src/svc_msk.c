@@ -127,15 +127,16 @@ svc_msk_create(msk_trans_t *trans, u_int credits, void (*callback)(void*), void*
 	sm->credits = credits ? credits : 10; //default value if credits = 0;
 	sm->trans = trans;
 
+	__rpc_set_netbuf(&xprt->xp_ltaddr, msk_get_dst_addr(trans), sizeof(struct sockaddr));
+	__rpc_set_netbuf(&xprt->xp_rtaddr, msk_get_src_addr(trans), sizeof(struct sockaddr));
+
 	svc_msk_ops(xprt);
 
  	if (xdrmsk_create(&(sm->sm_xdrs), sm->trans, sm->sendsz, sm->recvsz, sm->credits, callback, callbackarg)) {
-		abort();
 		return FALSE;
 	}
 
 	if (msk_finalize_accept(sm->trans)) {
-		abort();
 		return FALSE;
 	}
 
@@ -175,23 +176,20 @@ svc_msk_recv(SVCXPRT *xprt, struct svc_req *req)
 
 	printf("in recv, waiting for incoming buffer\n");
 
+
+	req->rq_msg = alloc_rpc_msg();
+
 	if (rpcrdma_svc_setbuf(xdrs, 0, XDR_DECODE))
 		return (FALSE);
 
-	struct rpc_msg *msg = xdrs->x_base;
 
-	req->rq_msg = malloc(sizeof(*req->rq_msg));
-	msg->fr_vec[0] = malloc(sizeof(*msg->fr_vec[0]));
+	xdrs->x_op = XDR_DECODE;
+	XDR_SETPOS(xdrs, 0);
+	if (! xdr_callmsg(xdrs, req->rq_msg)) {
+		return (FALSE);
+	}
 
 	req->rq_xprt = xprt;
-	req->rq_msg->rm_xid = ntohl(msg->rm_xid);
-	req->rq_msg->rm_direction = ntohl(msg->rm_direction);
-	req->rq_msg->rm_call.cb_prog = ntohl(msg->rm_call.cb_prog);
-	req->rq_msg->rm_call.cb_vers = ntohl(msg->rm_call.cb_vers);
-	req->rq_msg->rm_call.cb_proc = ntohl(msg->rm_call.cb_proc);
-
-	req->rq_msg->rm_call.cb_cred.oa_flavor = AUTH_NULL;
-
 	req->rq_prog = req->rq_msg->rm_call.cb_prog;
 	req->rq_vers = req->rq_msg->rm_call.cb_vers;
 	req->rq_proc = req->rq_msg->rm_call.cb_proc;
@@ -199,7 +197,9 @@ svc_msk_recv(SVCXPRT *xprt, struct svc_req *req)
 	req->rq_clntcred = req->rq_msg->rm_call.cb_cred.oa_base +
 		(2 * MAX_AUTH_BYTES);
 
-	/* checksum? check if this is valid rpc? */
+	/* the checksum */
+	req->rq_cksum =
+		CityHash64WithSeed(xdrs->x_base, MIN(256, xdrs->x_handy), 103);
 
 	return (TRUE);
 }
@@ -246,9 +246,6 @@ svc_msk_getargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args, void *ar
     bool rslt = TRUE;
     struct svc_msk_data *sm = sm_data(xprt);
     XDR *xdrs = &(sm->sm_xdrs);
-
-    return TRUE;
-
 
     /* threads u_data for advanced decoders*/
     xdrs->x_public = u_data;
@@ -381,7 +378,7 @@ svc_msk_ops(SVCXPRT *xprt)
 	mutex_lock(&ops_lock);
 
 	/* Fill in type of service */
-        xprt->xp_type = XPRT_UDP;
+        xprt->xp_type = XPRT_RDMA;
 
 	if (ops.xp_recv == NULL) {
 		ops.xp_recv = svc_msk_recv;
