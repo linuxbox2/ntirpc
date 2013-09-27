@@ -37,6 +37,7 @@
 #include <misc/rbtree_x.h>
 #include <misc/queue.h>
 #include <misc/abstract_atomic.h>
+#include <intrinsic.h>
 
 #ifdef HAVE_HEIMDAL
 #include <gssapi.h>
@@ -65,6 +66,7 @@ typedef struct gss_union_ctx_id_t
 
 #define SVC_RPC_GSS_FLAG_NONE    0x0000
 #define SVC_RPC_GSS_FLAG_MSPAC   0x0001
+#define SVC_RPC_GSS_FLAG_LOCKED  0x0002
 
 struct svc_rpc_gss_data
 {
@@ -102,19 +104,34 @@ alloc_svc_rpc_gss_data(void)
     struct svc_rpc_gss_data *gd = mem_zalloc(sizeof(struct svc_rpc_gss_data));
     mutex_init(&gd->lock, NULL);
     TAILQ_INIT_ENTRY(gd, lru_q);
+    gd->refcnt = 1;
     return (gd);
 }
 
 static inline void
-unref_svc_rpc_gss_data(struct svc_rpc_gss_data *gd)
+unref_svc_rpc_gss_data(struct svc_rpc_gss_data *gd, uint32_t flags)
 {
     u_int refcnt;
+    bool gd_locked = flags & SVC_RPC_GSS_FLAG_LOCKED;
 
     refcnt = atomic_dec_uint32_t(&gd->refcnt);
 
     /* if refcnt is 0, gd is not reachable */
-    if (refcnt == 0)
-        svcauth_gss_destroy(gd->auth);
+    if (unlikely(refcnt == 0)) {
+        if (! gd_locked) {
+            mutex_lock(&gd->lock);
+	    gd_locked = true;
+            if (likely(refcnt == 0)) {
+	         mutex_unlock(&gd->lock);
+		 /* XXX disposes gd */
+                 svcauth_gss_destroy(gd->auth);
+		 return;
+            }
+        }
+    }
+
+    if (gd_locked)
+        mutex_unlock(&gd->lock);
 }
 
 void authgss_hash_init();

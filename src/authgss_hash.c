@@ -34,6 +34,7 @@
 #include "rpc_com.h"
 #include <intrinsic.h>
 #include <misc/abstract_atomic.h>
+#include <intrinsic.h>
 #include <rpc/svc.h>
 #include <rpc/svc_auth.h>
 #include <rpc/gss_internal.h>
@@ -51,6 +52,8 @@ struct authgss_hash_st
 {
     mutex_t lock;
     struct rbtree_x xt;
+    uint32_t max_part;
+    uint32_t size;
     bool initialized;
 };
 
@@ -127,6 +130,10 @@ authgss_hash_init()
         TAILQ_INIT(&axp->lru_q);
         xp->u1 = axp;
     }
+
+    authgss_hash_st.size = 0;
+    authgss_hash_st.max_part =
+      __svc_params->gss.max_gc / authgss_hash_st.xt.npart;
     authgss_hash_st.initialized = TRUE;
 
 unlock:
@@ -195,6 +202,9 @@ authgss_ctx_hash_set(struct svc_rpc_gss_data *gd)
     TAILQ_INSERT_TAIL(&axp->lru_q, gd, lru_q);
     mutex_unlock(&t->mtx);
 
+    /* global size */
+    (void) atomic_inc_uint32_t(&authgss_hash_st.size);
+
     return (rslt);
 }
 
@@ -208,13 +218,16 @@ authgss_ctx_hash_del(struct svc_rpc_gss_data *gd)
 
     t = rbtx_partition_of_scalar(&authgss_hash_st.xt, gd->hk.k);
     mutex_lock(&t->mtx);
-    rbtree_x_cached_remove(&authgss_hash_st.xt, t,  &gd->node_k, gd->hk.k);
+    rbtree_x_cached_remove(&authgss_hash_st.xt, t, &gd->node_k, gd->hk.k);
     axp = (struct authgss_x_part *) t->u1;
     TAILQ_REMOVE(&axp->lru_q, gd, lru_q);
     mutex_unlock(&t->mtx);
 
+    /* global size */
+    (void) atomic_dec_uint32_t(&authgss_hash_st.size);
+
     /* release gd */
-    unref_svc_rpc_gss_data(gd);
+    unref_svc_rpc_gss_data(gd, SVC_RPC_GSS_FLAG_NONE);
 
     return (TRUE);
 }
@@ -238,18 +251,20 @@ authgss_ctx_gc_idle(void)
         gd = TAILQ_FIRST(&axp->lru_q);
         if (! gd)
             goto next_t;
-        if (abs(axp->gen - gd->gen) > __svc_params->gss.max_idle_gen) {
-            /* entry at LRU will eventually have no refs */
-            if (gd->refcnt == 0) {
-                rbtree_x_cached_remove(&authgss_hash_st.xt, xp, &gd->node_k,
-                                       gd->hk.k);
-                TAILQ_REMOVE(&axp->lru_q, gd, lru_q);
-                mutex_unlock(&xp->mtx);
-                unref_svc_rpc_gss_data(gd);
-                mutex_lock(&xp->mtx);
-            }
-            if (cnt++ <  __svc_params->gss.max_gc)
-                goto again;
+
+	if (unlikely((authgss_hash_st.size > __svc_params->gss.max_gc) ||
+		     ((abs(axp->gen - gd->gen) >
+		       __svc_params->gss.max_idle_gen)))) {
+
+	    /* remove entry and drop sentinel ref */
+	    rbtree_x_cached_remove(&authgss_hash_st.xt, xp, &gd->node_k,
+				   gd->hk.k);
+	    TAILQ_REMOVE(&axp->lru_q, gd, lru_q);
+	    (void) atomic_dec_uint32_t(&authgss_hash_st.size);
+	    unref_svc_rpc_gss_data(gd, SVC_RPC_GSS_FLAG_NONE);
+
+	    if (++cnt < authgss_hash_st.max_part)
+	        goto again;
         }
     next_t:
         mutex_unlock(&xp->mtx);

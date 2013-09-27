@@ -131,6 +131,7 @@ typedef struct svc_init_params
     u_int svc_ioq_maxbuf;
     int32_t idle_timeout;
     u_int gss_ctx_hash_partitions;
+    u_int gss_max_ctx;
     u_int gss_max_idle_gen;
     u_int gss_max_gc;
     warnx_t warnx;

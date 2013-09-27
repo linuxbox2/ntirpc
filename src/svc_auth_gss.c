@@ -343,11 +343,14 @@ svcauth_gss_nextverf(struct svc_req *req, struct svc_rpc_gss_data *gd,
 #define svcauth_gss_return(code) \
     do { \
         if (gc) \
-            xdr_free((xdrproc_t)xdr_rpc_gss_cred, gc); \
-        if (gd_locked) \
-            mutex_unlock(&gd->lock); \
+            xdr_free((xdrproc_t) xdr_rpc_gss_cred, gc); \
+        if (gd) { \
+            uint32_t flags = \
+                gd_locked ? SVC_RPC_GSS_FLAG_LOCKED : SVC_RPC_GSS_FLAG_NONE; \
+            unref_svc_rpc_gss_data(gd, flags); \
+        } \
         return (code); \
-    } while (0);
+    } while (0)
 
 enum auth_stat
 _svcauth_gss(struct svc_req *req, struct rpc_msg *msg, bool *no_dispatch)
@@ -530,6 +533,9 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg, bool *no_dispatch)
           }
       }
       break;
+
+    /* XXX next 2 cases:  is it correct to leave gd in cache
+     * after a validate or verf failure ? */
 
     case RPCSEC_GSS_DATA:
       if (! svcauth_gss_validate(req, gd, msg))

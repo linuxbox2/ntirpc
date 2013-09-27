@@ -61,6 +61,7 @@ struct svc_params
 
     struct {
         int ctx_hash_partitions;
+        int max_ctx;
         int max_idle_gen;
         int max_gc;
     } gss;
@@ -76,6 +77,7 @@ extern struct svc_params __svc_params[1];
                              .max_connections = 8192, \
                              .max_events = 512, \
                              .gss_ctx_hash_partitions = 13, \
+                             .gss_max_ctx = 1024, \
                              .gss_max_idle_gen = 1024, \
                              .gss_max_gc = 200 \
                              }); \
