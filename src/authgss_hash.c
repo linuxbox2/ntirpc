@@ -241,18 +241,24 @@ authgss_ctx_expired(struct svc_rpc_gss_data *gd)
     return (maj_stat == GSS_S_CONTEXT_EXPIRED);
 }
 
+static uint32_t idle_next = 0; /* by definition */
+
+#define IDLE_NEXT() \
+	(atomic_inc_uint32_t(&(idle_next)) % authgss_hash_st.xt.npart)
+
 void
 authgss_ctx_gc_idle(void)
 {
     struct rbtree_x_part *xp;
     struct authgss_x_part *axp;
     struct svc_rpc_gss_data *gd;
-    int ix, cnt;
+    int ix, cnt, part;
 
     cond_init_authgss_hash();
 
-    for (ix = 0; ix < authgss_hash_st.xt.npart; ++ix) {
-        xp = &(authgss_hash_st.xt.tree[ix]);
+    for (ix = 0, part = IDLE_NEXT(); ix < authgss_hash_st.xt.npart;
+	 ++ix, part = IDLE_NEXT()) {
+        xp = &(authgss_hash_st.xt.tree[part]);
         axp = (struct authgss_x_part *) xp->u1;
         cnt = 0;
         mutex_lock(&xp->mtx);
@@ -281,4 +287,7 @@ authgss_ctx_gc_idle(void)
     next_t:
         mutex_unlock(&xp->mtx);
     }
+
+    /* perturb by 1 */
+    (void) IDLE_NEXT();
 }
