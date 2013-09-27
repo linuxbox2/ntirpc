@@ -232,6 +232,15 @@ authgss_ctx_hash_del(struct svc_rpc_gss_data *gd)
     return (TRUE);
 }
 
+static inline bool
+authgss_ctx_expired(struct svc_rpc_gss_data *gd)
+{
+    OM_uint32 maj_stat, min_stat;
+    maj_stat = gss_inquire_context (&min_stat, gd->ctx, NULL, NULL, NULL,
+				    NULL, NULL, NULL, NULL);
+    return (maj_stat == GSS_S_CONTEXT_EXPIRED);
+}
+
 void
 authgss_ctx_gc_idle(void)
 {
@@ -254,13 +263,16 @@ authgss_ctx_gc_idle(void)
 
 	if (unlikely((authgss_hash_st.size > __svc_params->gss.max_gc) ||
 		     ((abs(axp->gen - gd->gen) >
-		       __svc_params->gss.max_idle_gen)))) {
+		       __svc_params->gss.max_idle_gen)) ||
+		     (authgss_ctx_expired(gd)))) {
 
-	    /* remove entry and drop sentinel ref */
+	    /* remove entry */
 	    rbtree_x_cached_remove(&authgss_hash_st.xt, xp, &gd->node_k,
 				   gd->hk.k);
 	    TAILQ_REMOVE(&axp->lru_q, gd, lru_q);
 	    (void) atomic_dec_uint32_t(&authgss_hash_st.size);
+
+	    /* drop sentinel ref (may free gd) */
 	    unref_svc_rpc_gss_data(gd, SVC_RPC_GSS_FLAG_NONE);
 
 	    if (++cnt < authgss_hash_st.max_part)
