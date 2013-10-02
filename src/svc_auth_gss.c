@@ -44,14 +44,20 @@
 #include "rpc_com.h"
 #include <rpc/gss_internal.h>
 
-static bool svcauth_gss_wrap(SVCAUTH *, struct svc_req *, XDR *, xdrproc_t,
-                             caddr_t);
-static bool svcauth_gss_unwrap(SVCAUTH *, struct svc_req *, XDR *, xdrproc_t,
-                               caddr_t);
+static bool svcauth_gss_wrap(SVCAUTH *, struct svc_req *, XDR *,
+                             xdrproc_t, caddr_t);
+
+static bool svcauth_gss_unwrap(SVCAUTH *, struct svc_req *, XDR *,
+                               xdrproc_t, caddr_t);
+
+static bool svcauth_gss_release(SVCAUTH *, struct svc_req *);
+
+bool svcauth_gss_destroy(SVCAUTH *);
 
 struct svc_auth_ops svc_auth_gss_ops = {
     svcauth_gss_wrap,
     svcauth_gss_unwrap,
+    svcauth_gss_release,
     svcauth_gss_destroy
 };
 
@@ -344,11 +350,8 @@ svcauth_gss_nextverf(struct svc_req *req, struct svc_rpc_gss_data *gd,
     do { \
         if (gc) \
             xdr_free((xdrproc_t) xdr_rpc_gss_cred, gc); \
-        if (gd) { \
-            uint32_t flags = \
-                gd_locked ? SVC_RPC_GSS_FLAG_LOCKED : SVC_RPC_GSS_FLAG_NONE; \
-            unref_svc_rpc_gss_data(gd, flags); \
-        } \
+	if (gd_locked) \
+	    mutex_unlock(&gd->lock); \
         return (code); \
     } while (0)
 
@@ -572,6 +575,21 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg, bool *no_dispatch)
     }
 
     svcauth_gss_return(AUTH_OK);
+}
+
+static bool
+svcauth_gss_release(SVCAUTH * __attribute__((unused)) auth,
+                    struct svc_req *__attribute__((unused)) req)
+{
+    struct svc_rpc_gss_data *gd;
+
+    gd = SVCAUTH_PRIVATE(auth);
+    if (gd) {
+        unref_svc_rpc_gss_data(gd, SVC_RPC_GSS_FLAG_NONE);
+    }
+    req->rq_auth = NULL;
+
+    return (TRUE);
 }
 
 bool

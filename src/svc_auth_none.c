@@ -40,13 +40,16 @@
 #include <rpc/svc.h>
 #include <rpc/svc_auth.h>
 
-static bool svcauth_none_destroy(SVCAUTH *);
+
 static bool svcauth_none_wrap(SVCAUTH *, struct svc_req *, XDR *, xdrproc_t,
                               caddr_t);
+static bool svcauth_none_release(SVCAUTH *, struct svc_req *);
+static bool svcauth_none_destroy(SVCAUTH *);
 
 struct svc_auth_ops svc_auth_none_ops = {
     svcauth_none_wrap,
     svcauth_none_wrap,
+    svcauth_none_release,
     svcauth_none_destroy
 };
 
@@ -55,12 +58,6 @@ SVCAUTH svc_auth_none = {
     NULL,
 };
 
-static bool
-svcauth_none_destroy(SVCAUTH *auth)
-{
-    return (TRUE);
-}
-
 /* aka, unwrap */
 static bool
 svcauth_none_wrap(SVCAUTH * __attribute__((unused)) auth,
@@ -68,6 +65,19 @@ svcauth_none_wrap(SVCAUTH * __attribute__((unused)) auth,
                   xdrproc_t xdr_func, caddr_t xdr_ptr)
 {
     return ((*xdr_func)(xdrs, xdr_ptr));
+}
+
+static bool
+svcauth_none_release(SVCAUTH * __attribute__((unused)) auth,
+                     struct svc_req *__attribute__((unused)) req)
+{
+    return (TRUE);
+}
+
+static bool
+svcauth_none_destroy(SVCAUTH *auth)
+{
+    return (TRUE);
 }
 
 enum auth_stat
