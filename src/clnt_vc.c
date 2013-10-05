@@ -73,6 +73,8 @@
 #include "rpc_ctx.h"
 #include <rpc/svc_rqst.h>
 #include <rpc/xdr_inrec.h>
+#include <rpc/xdr_ioq.h>
+#include "svc_ioq.h"
 
 #ifndef __APPLE__
 struct cmessage {
@@ -96,6 +98,7 @@ int generic_read_vc(XDR *, void *, void *, int);
 int generic_write_vc(XDR *, void *, void *, int);
 
 #include "clnt_internal.h"
+#include "svc_internal.h"
 
 /*
  *      This machinery implements per-fd locks for MT-safety.  It is not
@@ -321,19 +324,26 @@ err:
     return (NULL);
 }
 
+#define vc_call_return(r) \
+    do { \
+	result=(r); \
+        goto out; \
+    } while (0)
+
 #define vc_call_return_slocked(r) \
     do { \
-	result=(r);							\
-	rpc_dplx_suc(clnt);						\
+	result=(r); \
+	if (! bidi) \
+            rpc_dplx_suc(clnt); \
         goto out; \
-    } while (0);
+    } while (0)
 
 #define vc_call_return_rlocked(r) \
     do { \
         result=(r); \
         rpc_dplx_ruc(clnt); \
         goto out; \
-    } while (0);
+    } while (0)
 
 static enum clnt_stat
 clnt_vc_call(CLIENT *clnt,
@@ -354,7 +364,9 @@ clnt_vc_call(CLIENT *clnt,
     XDR *xdrs;
     int code, refreshes = 2;
     bool ctx_needack = false;
+    bool bidi = (rec->hdl.xprt != NULL);
     bool shipnow;
+    bool gss = false;
 
     /* Create a call context.  A lot of TI-RPC decisions need to be
      * looked at, including:
@@ -390,12 +402,24 @@ clnt_vc_call(CLIENT *clnt,
          && timeout.tv_usec == 0) ? FALSE : TRUE;
 
 call_again:
-    rpc_dplx_slc(clnt);
-
-    xdrs = &(xd->shared.xdrs_out);
-
-    xdrs->x_lib[0] = (void *) RPC_DPLX_CLNT;
-    xdrs->x_lib[1] = (void *) ctx; /* transiently thread call ctx */
+    if (bidi) {
+        /* XXX Until gss_get_mic and gss_wrap can be replaced with
+         * iov equivalents, replies with RPCSEC_GSS security must be
+         * encoded in a contiguous buffer.
+         *
+         * Nb, we should probably use getpagesize() on Unix.  Need
+         * an equivalent for Windows.
+         */
+        gss = ((auth) && (auth->ah_cred.oa_flavor == RPCSEC_GSS));
+        xdrs = xdr_ioq_create( 8192 /* default segment size */,
+                               __svc_params->svc_ioq_maxbuf + 8192,
+                               gss ? IOQ_FLAG_REALLOC : IOQ_FLAG_NONE);
+    } else {
+        rpc_dplx_slc(clnt);
+        xdrs = &(xd->shared.xdrs_out);
+        xdrs->x_lib[0] = (void *) RPC_DPLX_CLNT;
+        xdrs->x_lib[1] = (void *) ctx; /* thread call ctx */
+    }
 
     ctx->error.re_status = RPC_SUCCESS;
     cs->ct_u.ct_mcalli = ntohl(ctx->xid);
@@ -406,24 +430,32 @@ call_again:
         (! AUTH_WRAP(auth, xdrs, xdr_args, args_ptr))) {
         if (ctx->error.re_status == RPC_SUCCESS)
             ctx->error.re_status = RPC_CANTENCODEARGS;
-        (void)xdrrec_endofrecord(xdrs, TRUE);
-        vc_call_return_slocked(ctx->error.re_status);
+        /* error case */
+        if (! bidi) {
+            (void) xdrrec_endofrecord(xdrs, TRUE);
+            vc_call_return_slocked(ctx->error.re_status);
+        } else
+            vc_call_return(ctx->error.re_status);
     }
 
-    if (! xdrrec_endofrecord(xdrs, shipnow))
-        vc_call_return_slocked(ctx->error.re_status = RPC_CANTSEND);
+    if (bidi) {
+        svc_ioq_append(rec->hdl.xprt, xd, xdrs);
+    } else {
+        if (! xdrrec_endofrecord(xdrs, shipnow))
+            vc_call_return_slocked(ctx->error.re_status = RPC_CANTSEND);
+        if (! shipnow)
+            vc_call_return_slocked(RPC_SUCCESS);
 
-    if (! shipnow)
-        vc_call_return_slocked(RPC_SUCCESS);
+        /*
+         * Hack to provide rpc-based message passing
+         */
+        if (timeout.tv_sec == 0 && timeout.tv_usec == 0)
+            vc_call_return_slocked(ctx->error.re_status = RPC_TIMEDOUT);
 
-    /*
-     * Hack to provide rpc-based message passing
-     */
-    if (timeout.tv_sec == 0 && timeout.tv_usec == 0)
-        vc_call_return_slocked(ctx->error.re_status = RPC_TIMEDOUT);
+        rpc_dplx_suc(clnt);
+    }
 
     /* reply */
-    rpc_dplx_suc(clnt);
     rpc_dplx_rlc(clnt);
 
     /* if the channel is bi-directional, then the the shared conn is in a
@@ -434,7 +466,7 @@ call_again:
     xdrs->x_lib[0] = (void *) RPC_DPLX_CLNT;
     xdrs->x_lib[1] = (void *) ctx; /* transiently thread call ctx */
     
-    if (rec->hdl.xprt) {
+    if (bidi) {
         code = rpc_ctx_wait_reply(ctx, RPC_DPLX_FLAG_LOCKED); /* RECV! */
         if (code == ETIMEDOUT) {
             /* UL can retry, we dont.  This CAN indicate xprt destroyed
