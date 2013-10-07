@@ -189,6 +189,7 @@ xdr_inrec_create(XDR *xdrs,
     xdrs->x_lib[1] = NULL;
     xdrs->x_public = NULL;
     xdrs->x_private = rstrm;
+    xdrs->x_flags = XDR_FLAG_CKSUM;
     rstrm->xdrs = xdrs;
     rstrm->tcp_handle = tcp_handle;
     rstrm->readit = readit;
@@ -212,9 +213,11 @@ xdr_inrec_cksum(XDR *xdrs)
     RECSTREAM *rstrm = (RECSTREAM *)(xdrs->x_private);
 
     /* handle checksumming if requested (short request case) */
-    if (! (rstrm->cksum)) {
-        if (rstrm->cklen) {
-            compute_buffer_cksum(rstrm);
+    if (xdrs->x_flags & XDR_FLAG_CKSUM) {
+        if (! (rstrm->cksum)) {
+            if (rstrm->cklen) {
+                compute_buffer_cksum(rstrm);
+            }
         }
     }
 
@@ -276,10 +279,12 @@ xdr_inrec_getbytes(XDR *xdrs, char *addr, u_int len)
         rstrm->fbtbc -= current;
         len -= current;
         /* handle checksumming if requested */
-        if (rstrm->cklen) {
-            if (! (rstrm->cksum)) {
-                if (rstrm->offset >= rstrm->cklen) {
-                    compute_buffer_cksum(rstrm);
+        if (xdrs->x_flags & XDR_FLAG_CKSUM) {
+            if (rstrm->cklen) {
+                if (! (rstrm->cksum)) {
+                    if (rstrm->offset >= rstrm->cklen) {
+                        compute_buffer_cksum(rstrm);
+                    }
                 }
             }
         }

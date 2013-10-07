@@ -134,6 +134,9 @@ typedef struct rpc_buffers {
 #define XDR_PUTBUFS_FLAG_NONE   0x0000
 #define XDR_PUTBUFS_FLAG_BRELE  0x0001
 
+#define XDR_FLAG_NONE    0x0000
+#define XDR_FLAG_CKSUM   0x0001
+
 /*
  * The XDR handle.
  * Contains operation which is being applied to the stream,
@@ -169,6 +172,7 @@ typedef struct rpc_xdr {
     void *x_lib[2]; /* RPC library private */
     void *x_base;  /* private used for position info */
     u_int x_handy; /* extra private word */
+    u_int x_flags; /* shared flags */
 } XDR;
 
 /*
