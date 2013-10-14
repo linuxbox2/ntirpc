@@ -32,13 +32,15 @@
 
 struct v_rec
 {
-    TAILQ_ENTRY(v_rec) ioq;
-    uint32_t refcnt;
-    char *base;
-    u_int off;
-    u_int len;
-    u_int size;
-    u_int flags;
+     TAILQ_ENTRY(v_rec) ioq;
+     uint32_t refcnt;
+     char *base;
+     u_int off;
+     u_int len;
+     u_int size;
+     u_int flags;
+     /* spliced buffers, if any */
+     struct xdr_uio x_uio;
 };
 
 struct vpos_t

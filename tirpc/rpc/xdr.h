@@ -112,27 +112,30 @@ enum xdr_op {
 #define XBS_FLAG_GIFT   0x0001
 
 /* XDR buffer descriptors. */
-typedef struct rpc_buffer {
-    void *xb_base;
-    int   xb_len;
-    u_int xb_flags;
-    void *xb_p1; /* XDR private data */
-    void *xb_u1; /* User data */
-} xdr_buffer;
+typedef struct xdr_iovec {
+     char *iov_base;
+     size_t iov_len;
+     void *iov_p1; /* XDR private data */
+     void *iov_u1; /* user data */
+     void *iov_u2;
+} xdr_iovec;
 
-typedef struct rpc_buffers {
-    xdr_buffer *xbs_buf; /* array of buffers */
-    int         xbs_cnt; /* count of buffers */
-    size_t      xbs_offset; /* not used (yet) */
-    size_t      xbs_resid; /* residual bytes */
-    u_int       xbs_flags;
-    void       *xbs_p1;
-    void       *xbs_u1;
+struct xdr_uio;
+typedef void (*xdr_iov_release)(struct xdr_uio *, u_int);
+
+typedef struct xdr_uio {
+     xdr_iovec *uio_iov;
+     int         uio_iovcnt; /* count of buffers */
+     size_t      uio_offset;
+     size_t      uio_resid; /* residual bytes */
+     u_int       uio_flags;
+     xdr_iov_release uio_rele;
+     void       *uio_p1;
+     void       *uio_u1;
 } xdr_uio;
 
 /* Op flags */
 #define XDR_PUTBUFS_FLAG_NONE   0x0000
-#define XDR_PUTBUFS_FLAG_BRELE  0x0001
 
 #define XDR_FLAG_NONE    0x0000
 #define XDR_FLAG_CKSUM   0x0001
@@ -164,7 +167,7 @@ typedef struct rpc_xdr {
         void (*x_destroy)(struct rpc_xdr *);
         bool (*x_control)(struct rpc_xdr *, int, void *);
         /* new vector and refcounted interfaces */
-        bool (*x_getbufs)(struct rpc_xdr *, xdr_uio *, u_int, u_int);
+        bool (*x_getbufs)(struct rpc_xdr *, xdr_uio *, u_int);
         bool (*x_putbufs)(struct rpc_xdr *, xdr_uio *, u_int);
     } *x_ops;
     void *x_public; /* users' data */

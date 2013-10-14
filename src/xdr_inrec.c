@@ -85,7 +85,7 @@ static bool xdr_inrec_noop(void);
 extern bool xdr_inrec_readahead(XDR *, u_int);
 
 typedef bool (* dummyfunc3)(XDR *, int, void *);
-typedef bool (* dummy_getbufs)(XDR *, xdr_uio *, u_int, u_int);
+typedef bool (* dummy_getbufs)(XDR *, xdr_uio *, u_int);
 typedef bool (* dummy_putbufs)(XDR *, xdr_uio *, u_int);
 
 static const struct  xdr_ops xdr_inrec_ops = {

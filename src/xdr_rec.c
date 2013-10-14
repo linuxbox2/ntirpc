@@ -80,7 +80,7 @@ static void xdrrec_destroy(XDR *);
 static bool xdrrec_noop(void);
 
 typedef bool (* dummyfunc3)(XDR *, int, void *);
-typedef bool (* dummy_getbufs)(XDR *, xdr_uio *, u_int, u_int);
+typedef bool (* dummy_getbufs)(XDR *, xdr_uio *, u_int);
 typedef bool (* dummy_putbufs)(XDR *, xdr_uio *, u_int);
 
 static const struct  xdr_ops xdrrec_ops = {

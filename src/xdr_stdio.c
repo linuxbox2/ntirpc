@@ -60,7 +60,7 @@ static int32_t *xdrstdio_inline(XDR *, u_int);
 static bool xdrstdio_noop(void);
 
 typedef bool (* dummyfunc3)(XDR *, int, void *);
-typedef bool (* dummy_getbufs)(XDR *, xdr_uio *, u_int, u_int);
+typedef bool (* dummy_getbufs)(XDR *, xdr_uio *, u_int);
 typedef bool (* dummy_putbufs)(XDR *, xdr_uio *, u_int);
 
 /*

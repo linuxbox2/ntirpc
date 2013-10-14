@@ -58,7 +58,7 @@ static bool xdr_ioq_getlong(XDR *xdrs, long *lp);
 static bool xdr_ioq_putlong(XDR *xdrs, const long *lp);
 static bool xdr_ioq_getbytes(XDR *xdrs, char *addr, u_int len);
 static bool xdr_ioq_putbytes(XDR *xdrs, const char *addr, u_int len);
-static bool xdr_ioq_getbufs(XDR *xdrs, xdr_uio *uio, u_int len, u_int flags);
+static bool xdr_ioq_getbufs(XDR *xdrs, xdr_uio *uio, u_int flags);
 static bool xdr_ioq_putbufs(XDR *xdrs, xdr_uio *uio, u_int flags);
 static u_int xdr_ioq_getpos(XDR *xdrs);
 static bool xdr_ioq_setpos(XDR *xdrs, u_int pos);
@@ -170,7 +170,11 @@ vrec_rele(struct xdr_ioq *xioq, struct v_rec *vrec)
     if (unlikely(vrec->refcnt == 0)) {
         if (vrec->flags & IOQ_FLAG_RECLAIM) {
             free_buffer(vrec->base);
-        }
+        } else {
+	     if (vrec->x_uio.uio_rele) {
+		  vrec->x_uio.uio_rele(&vrec->x_uio, XDR_FLAG_NONE);
+	     }
+	}
         mem_free(vrec, 0);
     }
 }
@@ -417,10 +421,14 @@ xdr_ioq_putbytes(XDR *xdrs, const char *addr, u_int len)
 
 /* Get buffers from the queue. */
 static bool
-xdr_ioq_getbufs(XDR *xdrs, xdr_uio *uio, u_int len, u_int flags)
+xdr_ioq_getbufs(XDR *xdrs, xdr_uio *uio, u_int flags)
 {
+    /* XXX finalize */
+#if 0
+
     struct xdr_ioq *xioq = (struct xdr_ioq *) xdrs->x_private;
     struct vpos_t *pos = vrec_fpos(xioq);
+
     int ix;
 
     /* allocate sufficient slots to empty the queue, else MAX */
@@ -451,6 +459,7 @@ restart:
         pos->boff += delta;
         len -= delta;
     }
+#endif /* 0 */
 
     /* assert(len == 0); */
     return (TRUE);
@@ -463,38 +472,29 @@ xdr_ioq_putbufs(XDR *xdrs, xdr_uio *uio, u_int flags)
 {
     struct xdr_ioq *xioq = (struct xdr_ioq *) xdrs->x_private;
     struct vpos_t *pos = vrec_fpos(xioq);
-    xdr_buffer *xbuf;
+    xdr_iovec *iov;
     int ix;
 
-    /* XXXX fixme */
+    for (ix = 0; ix < uio->uio_iovcnt; ++ix) {
+	 /* advance fill pointer, do not allocate buffers, refs =1 */
+	 if (! vrec_next(xioq, IOQ_FLAG_XTENDQ))
+	      return (FALSE);
 
-    switch (flags & XDR_PUTBUFS_FLAG_BRELE) {
-    case TRUE:
-        /* the caller is returning buffers */
-        for (ix = 0; ix < uio->xbs_cnt; ++ix) {
-            struct v_rec *vrec = (struct v_rec *)(uio->xbs_buf[ix]).xb_p1;
-            vrec_rele(xioq, vrec);
-            mem_free(uio->xbs_buf, 0);
-        }
-        break;
-    case FALSE:
-    default:
-        for (ix = 0; ix < uio->xbs_cnt; ++ix) {
-            /* advance fill pointer, do not allocate buffers */
-            if (! vrec_next(xioq, IOQ_FLAG_XTENDQ))
-                return (FALSE);
-            xbuf = &(uio->xbs_buf[ix]);
-            xioq->ioq.frag_len += xbuf->xb_len;
-            pos->loff += xbuf->xb_len;
-            pos->vrec->flags = IOQ_FLAG_NONE; /* !RECLAIM */
-            pos->vrec->refcnt = (xbuf->xb_flags & XBS_FLAG_GIFT) ? 0 : 1;
-            pos->vrec->base = xbuf->xb_base;
-            pos->vrec->size = xbuf->xb_len;
-            pos->vrec->len = xbuf->xb_len;
-            pos->vrec->off = 0;
-        }
-        break;
+	 iov = &(uio->uio_iov[ix]);
+	 xioq->ioq.frag_len += iov->iov_len;
+	 pos->loff += iov->iov_len;
+	 pos->vrec->flags = IOQ_FLAG_NONE; /* !RECLAIM */
+	 pos->vrec->base = iov->iov_base;
+	 pos->vrec->size = iov->iov_len;
+	 pos->vrec->len = iov->iov_len;
+	 pos->vrec->off = 0;
+
+	 /* save original buffer sequence for rele */
+	 if (ix == 0) {
+	      pos->vrec->x_uio = *uio;
+	 }
     }
+
     return (TRUE);
 }
 
