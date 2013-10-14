@@ -67,9 +67,9 @@ static int32_t *xdrmem_inline_aligned(XDR *, u_int);
 static int32_t *xdrmem_inline_unaligned(XDR *, u_int);
 static bool xdrmem_noop(void);
 
-typedef bool(*dummyfunc3) (XDR *, int, void *);
-typedef bool(*dummy_getbufs) (XDR *, xdr_uio *, u_int, u_int);
-typedef bool(*dummy_putbufs) (XDR *, xdr_uio *, u_int);
+typedef bool (*dummyfunc3)(XDR *, int, void *);
+typedef bool (*dummy_getbufs)(XDR *, xdr_uio *, u_int);
+typedef bool (*dummy_putbufs)(XDR *, xdr_uio *, u_int);
 
 static const struct xdr_ops xdrmem_ops_aligned = {
 	xdrmem_getlong_aligned,

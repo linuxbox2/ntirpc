@@ -112,27 +112,30 @@ enum xdr_op {
 #define XBS_FLAG_GIFT   0x0001
 
 /* XDR buffer descriptors. */
-typedef struct rpc_buffer {
-	void *xb_base;
-	int xb_len;
-	u_int xb_flags;
-	void *xb_p1;		/* XDR private data */
-	void *xb_u1;		/* User data */
-} xdr_buffer;
+typedef struct xdr_iovec {
+	char *iov_base;
+	size_t iov_len;
+	void *iov_p1; /* XDR private data */
+	void *iov_u1; /* user data */
+	void *iov_u2;
+} xdr_iovec;
 
-typedef struct rpc_buffers {
-	xdr_buffer *xbs_buf;	/* array of buffers */
-	int xbs_cnt;		/* count of buffers */
-	size_t xbs_offset;	/* not used (yet) */
-	size_t xbs_resid;	/* residual bytes */
-	u_int xbs_flags;
-	void *xbs_p1;
-	void *xbs_u1;
+struct xdr_uio;
+typedef void (*xdr_iov_release)(struct xdr_uio *, u_int);
+
+typedef struct xdr_uio {
+	xdr_iovec *uio_iov;
+	int         uio_iovcnt; /* count of buffers */
+	size_t      uio_offset;
+	size_t      uio_resid;  /* residual bytes */
+	u_int       uio_flags;
+	xdr_iov_release uio_rele;
+	void       *uio_p1;
+	void       *uio_u1;
 } xdr_uio;
 
 /* Op flags */
 #define XDR_PUTBUFS_FLAG_NONE   0x0000
-#define XDR_PUTBUFS_FLAG_BRELE  0x0001
 
 #define XDR_FLAG_NONE    0x0000
 #define XDR_FLAG_CKSUM   0x0001
@@ -144,35 +147,35 @@ typedef struct rpc_buffers {
  * and two private fields for the use of the particular implementation.
  */
 typedef struct rpc_xdr {
-	enum xdr_op x_op;	/* operation; fast additional param */
+	enum xdr_op x_op;  /* operation; fast additional param */
 	const struct xdr_ops {
 		/* get a long from underlying stream */
-		bool(*x_getlong) (struct rpc_xdr *, long *);
+		bool (*x_getlong)(struct rpc_xdr *, long *);
 		/* put a long to " */
-		bool(*x_putlong) (struct rpc_xdr *, const long *);
+		bool (*x_putlong)(struct rpc_xdr *, const long *);
 		/* get some bytes from " */
-		bool(*x_getbytes) (struct rpc_xdr *, char *, u_int);
+		bool (*x_getbytes)(struct rpc_xdr *, char *, u_int);
 		/* put some bytes to " */
-		bool(*x_putbytes) (struct rpc_xdr *, const char *, u_int);
+		bool (*x_putbytes)(struct rpc_xdr *, const char *, u_int);
 		/* returns bytes off from beginning */
-		u_int(*x_getpostn) (struct rpc_xdr *);
+		u_int (*x_getpostn)(struct rpc_xdr *);
 		/* lets you reposition the stream */
-		bool(*x_setpostn) (struct rpc_xdr *, u_int);
+		bool (*x_setpostn)(struct rpc_xdr *, u_int);
 		/* buf quick ptr to buffered data */
-		int32_t *(*x_inline) (struct rpc_xdr *, u_int);
+		int32_t *(*x_inline)(struct rpc_xdr *, u_int);
 		/* free private resources of this xdr_stream */
-		void (*x_destroy) (struct rpc_xdr *);
-		 bool(*x_control) (struct rpc_xdr *, int, void *);
+		void (*x_destroy)(struct rpc_xdr *);
+		bool (*x_control)(struct rpc_xdr *, int, void *);
 		/* new vector and refcounted interfaces */
-		 bool(*x_getbufs) (struct rpc_xdr *, xdr_uio *, u_int, u_int);
-		 bool(*x_putbufs) (struct rpc_xdr *, xdr_uio *, u_int);
+		bool (*x_getbufs)(struct rpc_xdr *, xdr_uio *, u_int);
+		bool (*x_putbufs)(struct rpc_xdr *, xdr_uio *, u_int);
 	} *x_ops;
-	void *x_public;		/* users' data */
-	void *x_private;	/* pointer to private data */
-	void *x_lib[2];		/* RPC library private */
-	void *x_base;		/* private used for position info */
-	u_int x_handy;		/* extra private word */
-	u_int x_flags;		/* shared flags */
+	void *x_public; /* users' data */
+	void *x_private; /* pointer to private data */
+	void *x_lib[2]; /* RPC library private */
+	void *x_base;  /* private used for position info */
+	u_int x_handy; /* extra private word */
+	u_int x_flags; /* shared flags */
 } XDR;
 
 /*
