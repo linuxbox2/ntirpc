@@ -262,7 +262,6 @@ vrec_next(struct xdr_ioq *xioq, u_int flags)
 			}
 		} else {
 			/* XXX empty buffer slot (not supported for now) */
-			abort();
 			vrec = get_vrec(xioq);
 			vrec->size = 0;
 			vrec->base = NULL;
