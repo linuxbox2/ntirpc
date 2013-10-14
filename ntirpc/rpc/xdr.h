@@ -252,24 +252,24 @@ xdr_putint32(XDR *xdrs, int32_t *ip)
 #define xdr_getbufs(xdrs, uio, len, flags)		\
 	(*(xdrs)->x_ops->x_getbufs)(xdrs, uio, len, flags)
 
-#define XDR_PUTBUFS(xdrs, uio, len, flags)		\
-	(*(xdrs)->x_ops->x_putbufs)(xdrs, uio, len, flags)
-#define xdr_putbufs(xdrs, uio, len, flags)		\
-	(*(xdrs)->x_ops->x_putbufs)(xdrs, uio, len, flags)
+#define XDR_PUTBUFS(xdrs, uio, flags)			\
+	(*(xdrs)->x_ops->x_putbufs)(xdrs, uio, flags)
+#define xdr_putbufs(xdrs, uio, flags)			\
+	(*(xdrs)->x_ops->x_putbufs)(xdrs, uio, flags)
 
-#define XDR_GETPOS(xdrs)                        \
+#define XDR_GETPOS(xdrs)			\
 	(*(xdrs)->x_ops->x_getpostn)(xdrs)
-#define xdr_getpos(xdrs)                        \
+#define xdr_getpos(xdrs)			\
 	(*(xdrs)->x_ops->x_getpostn)(xdrs)
 
-#define XDR_SETPOS(xdrs, pos)                   \
+#define XDR_SETPOS(xdrs, pos)			\
 	(*(xdrs)->x_ops->x_setpostn)(xdrs, pos)
-#define xdr_setpos(xdrs, pos)                   \
+#define xdr_setpos(xdrs, pos)			\
 	(*(xdrs)->x_ops->x_setpostn)(xdrs, pos)
 
-#define XDR_INLINE(xdrs, len)                   \
+#define XDR_INLINE(xdrs, len)			\
 	(*(xdrs)->x_ops->x_inline)(xdrs, len)
-#define xdr_inline(xdrs, len)                   \
+#define xdr_inline(xdrs, len)			\
 	(*(xdrs)->x_ops->x_inline)(xdrs, len)
 
 #define XDR_DESTROY(xdrs)	     \
