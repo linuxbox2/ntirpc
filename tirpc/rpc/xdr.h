@@ -129,13 +129,16 @@ typedef struct xdr_uio {
      size_t      uio_offset;
      size_t      uio_resid; /* residual bytes */
      u_int       uio_flags;
+     u_int       uio_uflags; /* user flags */
      xdr_iov_release uio_rele;
      void       *uio_p1;
      void       *uio_u1;
+     void       *uio_u2;
 } xdr_uio;
 
 /* Op flags */
-#define XDR_PUTBUFS_FLAG_NONE   0x0000
+#define XDR_PUTBUFS_FLAG_NONE    0x0000
+#define XDR_PUTBUFS_FLAG_RDNLY   0x0001
 
 #define XDR_FLAG_NONE    0x0000
 #define XDR_FLAG_CKSUM   0x0001
