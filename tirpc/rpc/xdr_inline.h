@@ -482,6 +482,54 @@ inline_xdr_opaque(XDR *xdrs, caddr_t cp, u_int cnt)
 }
 
 /*
+ * XDR opaque UIO data
+ * Allows the specification of a fixed size sequence of opaque bytes.
+ * Data is encapsulated in uio.
+ */
+static inline bool
+inline_xdr_opaque_UIO(XDR *xdrs, xdr_uio *uio, u_int flags)
+{
+    u_int rndup;
+
+    /*
+     * for unit alignment
+     */
+    static const char inline_xdr_zero[BYTES_PER_XDR_UNIT] = { 0, 0, 0, 0 };
+
+    /*
+     * if no data we are done
+     */
+    if (uio->uio_resid == 0)
+        return (TRUE);
+
+    /*
+     * round byte count to full xdr units
+     */
+    rndup = uio->uio_resid % BYTES_PER_XDR_UNIT;
+    if (rndup > 0)
+        rndup = BYTES_PER_XDR_UNIT - rndup;
+
+    if (xdrs->x_op == XDR_DECODE) {
+      return (FALSE); /* XXX not yet*/
+    }
+
+    if (xdrs->x_op == XDR_ENCODE) {
+        if (! XDR_PUTBUFS(xdrs, uio, flags)) {
+            return (FALSE);
+        }
+        if (rndup == 0)
+            return (TRUE);
+        return (XDR_PUTBYTES(xdrs, inline_xdr_zero, rndup));
+    }
+
+    if (xdrs->x_op == XDR_FREE) {
+        return (TRUE);
+    }
+
+    return (FALSE);
+}
+
+/*
  * XDR counted bytes
  * *cpp is a pointer to the bytes, *sizep is the count.
  * If *cpp is NULL maxsize bytes are allocated

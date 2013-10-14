@@ -252,10 +252,10 @@ xdr_putint32(XDR *xdrs, int32_t *ip)
 #define xdr_getbufs(xdrs, uio, len, flags) \
     (*(xdrs)->x_ops->x_getbufs)(xdrs, uio, len, flags)
 
-#define XDR_PUTBUFS(xdrs, uio, len, flags) \
-    (*(xdrs)->x_ops->x_putbufs)(xdrs, uio, len, flags)
-#define xdr_putbufs(xdrs, uio, len, flags) \
-    (*(xdrs)->x_ops->x_putbufs)(xdrs, uio, len, flags)
+#define XDR_PUTBUFS(xdrs, uio, flags) \
+    (*(xdrs)->x_ops->x_putbufs)(xdrs, uio, flags)
+#define xdr_putbufs(xdrs, uio, flags) \
+    (*(xdrs)->x_ops->x_putbufs)(xdrs, uio, flags)
 
 #define XDR_GETPOS(xdrs)                        \
     (*(xdrs)->x_ops->x_getpostn)(xdrs)
