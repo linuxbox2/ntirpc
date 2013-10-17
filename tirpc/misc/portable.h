@@ -3,7 +3,7 @@
 #define NTIRPC_PORTABLE_H
 
 #include <misc/timespec.h>
-#include <misc/os_epoll.h> /* before rpc.h */
+#include <misc/os_epoll.h>	/* before rpc.h */
 
 #if defined(__FreeBSD__)
 #include <netinet/in.h>
@@ -14,8 +14,8 @@
 #define IP_PKTINFO IP_RECVIF
 
 struct in_pktinfo {
-  struct in_addr  ipi_addr;     /* destination IPv4 address */
-  int             ipi_ifindex;  /* received interface index */
+	struct in_addr ipi_addr;	/* destination IPv4 address */
+	int ipi_ifindex;	/* received interface index */
 };
 
 /* YES.  Move. */
@@ -29,8 +29,8 @@ struct in_pktinfo {
 #define CLOCK_MONOTONIC_FAST CLOCK_MONOTONIC_COARSE
 
 /* poll */
-#define POLLRDNORM     0x040           /* Normal data may be read.  */
-#define POLLRDBAND     0x080           /* Priority data may be read.  */
+#define POLLRDNORM     0x040	/* Normal data may be read.  */
+#define POLLRDBAND     0x080	/* Priority data may be read.  */
 
 #define HAVE_GETPEEREID 0
 
@@ -54,7 +54,7 @@ void warnx(const char *fmt, ...);
 
 #else
 #define PtrToUlong(addr) ((unsigned long)(addr))
-#endif /* !_WIN32 */
+#endif				/* !_WIN32 */
 
 #ifdef __APPLE__
 #include <sys/time.h>
@@ -72,4 +72,4 @@ extern int clock_gettime(clockid_t clock, struct timespec *ts);
 #endif
 #define CACHE_PAD(_n) char __pad ## _n [CACHE_LINE_SIZE]
 
-#endif /* NTIRPC_PORTABLE_H */
+#endif				/* NTIRPC_PORTABLE_H */

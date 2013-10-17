@@ -35,7 +35,7 @@
 #ifndef _TIRPC_RPC_H
 #define _TIRPC_RPC_H
 
-#include <rpc/types.h>  /* some typedefs */
+#include <rpc/types.h>		/* some typedefs */
 #if defined(_WIN32)
 #include <winsock2.h>
 #else
@@ -44,37 +44,37 @@
 #endif
 
 /* external data representation interfaces */
-#include <rpc/xdr.h>  /* generic (de)serializer */
+#include <rpc/xdr.h>		/* generic (de)serializer */
 
 /* Client side only authentication */
-#include <rpc/auth.h>  /* generic authenticator (client side) */
+#include <rpc/auth.h>		/* generic authenticator (client side) */
 
 /* Client side (mostly) remote procedure call */
-#include <rpc/clnt.h>  /* generic rpc stuff */
+#include <rpc/clnt.h>		/* generic rpc stuff */
 
 /* semi-private protocol headers */
-#include <rpc/rpc_msg.h> /* protocol for rpc messages */
-#include <rpc/auth_unix.h> /* protocol for unix style cred */
+#include <rpc/rpc_msg.h>	/* protocol for rpc messages */
+#include <rpc/auth_unix.h>	/* protocol for unix style cred */
 
 /*
  *  Uncomment-out the next line if you are building the rpc library with
  *  DES Authentication (see the README file in the secure_rpc/ directory).
  */
-#include <rpc/auth_des.h> /* protocol for des style cred */
+#include <rpc/auth_des.h>	/* protocol for des style cred */
 
 #ifdef HAVE_RPCSEC_GSS
-#include <rpc/auth_gss.h>   /* RPCSEC_GSS */
+#include <rpc/auth_gss.h>	/* RPCSEC_GSS */
 #endif
 
 /* Server side only remote procedure callee */
-#include <rpc/svc.h>  /* service manager and multiplexer */
+#include <rpc/svc.h>		/* service manager and multiplexer */
 
 /* Portmapper client, server, and protocol headers */
 #include <rpc/pmap_clnt.h>
 #include <rpc/pmap_prot.h>
 
 #ifndef _KERNEL
-#include <rpc/rpcb_clnt.h> /* rpcbind interface functions */
+#include <rpc/rpcb_clnt.h>	/* rpcbind interface functions */
 #endif
 #include <rpc/rpcent.h>
 
@@ -82,13 +82,12 @@
 #define UDPMSGSIZE 8800
 #endif
 
-__BEGIN_DECLS
-extern int get_myaddress(struct sockaddr_in *);
+__BEGIN_DECLS extern int get_myaddress(struct sockaddr_in *);
 extern int bindresvport(int, struct sockaddr_in *);
-extern int registerrpc(int, int, int, char *(*)(char [UDPMSGSIZE]),
-                       xdrproc_t, xdrproc_t);
-extern int callrpc(const char *, int, int, int, xdrproc_t, void *,
-                   xdrproc_t , void *);
+extern int registerrpc(int, int, int, char *(*)(char[UDPMSGSIZE]), xdrproc_t,
+		       xdrproc_t);
+extern int callrpc(const char *, int, int, int, xdrproc_t, void *, xdrproc_t,
+		   void *);
 extern int getrpcport(char *, int, int, int);
 
 char *taddr2uaddr(const struct netconfig *, const struct netbuf *);
@@ -102,17 +101,14 @@ extern void *__mem_alloc(size_t);
 extern void __mem_free(void *, size_t);
 
 __END_DECLS
-
 /*
  * The following are not exported interfaces, they are for internal library
  * and rpcbind use only. Do not use, they may change without notice.
  */
-__BEGIN_DECLS
-int __rpc_nconf2fd(const struct netconfig *);
+__BEGIN_DECLS int __rpc_nconf2fd(const struct netconfig *);
 int __rpc_nconf2fd_flags(const struct netconfig *, int);
 int __rpc_nconf2sockinfo(const struct netconfig *, struct __rpc_sockinfo *);
 int __rpc_fd2sockinfo(int, struct __rpc_sockinfo *);
 u_int __rpc_get_t_size(int, int, int);
 __END_DECLS
-
-#endif /* !_RPC_RPC_H */
+#endif				/* !_RPC_RPC_H */

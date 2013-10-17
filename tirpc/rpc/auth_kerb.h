@@ -47,36 +47,36 @@
  * There are two kinds of "names": fullnames and nicknames
  */
 enum authkerb_namekind {
-    AKN_FULLNAME,
-    AKN_NICKNAME
+	AKN_FULLNAME,
+	AKN_NICKNAME
 };
 /*
  * A fullname contains the ticket and the window
  */
 struct authkerb_fullname {
-    KTEXT_ST ticket;
-    u_long window;  /* associated window */
+	KTEXT_ST ticket;
+	u_long window;		/* associated window */
 };
 
 /*
  *  cooked credential stored in rq_clntcred
  */
 struct authkerb_clnt_cred {
-    /* start of AUTH_DAT */
-    unsigned char k_flags; /* Flags from ticket */
-    char    pname[ANAME_SZ]; /* Principal's name */
-    char    pinst[INST_SZ]; /* His Instance */
-    char    prealm[REALM_SZ]; /* His Realm */
-    unsigned long checksum; /* Data checksum (opt) */
-    C_Block session; /* Session Key */
-    int life;  /* Life of ticket */
-    unsigned long time_sec; /* Time ticket issued */
-    unsigned long address; /* Address in ticket */
-    /* KTEXT_ST reply; Auth reply (opt) */
-    /* end of AUTH_DAT */
-    unsigned long expiry; /* time the ticket is expiring */
-    u_long nickname; /* Nickname into cache */
-    u_long window;  /* associated window */
+	/* start of AUTH_DAT */
+	unsigned char k_flags;	/* Flags from ticket */
+	char pname[ANAME_SZ];	/* Principal's name */
+	char pinst[INST_SZ];	/* His Instance */
+	char prealm[REALM_SZ];	/* His Realm */
+	unsigned long checksum;	/* Data checksum (opt) */
+	C_Block session;	/* Session Key */
+	int life;		/* Life of ticket */
+	unsigned long time_sec;	/* Time ticket issued */
+	unsigned long address;	/* Address in ticket */
+	/* KTEXT_ST reply; Auth reply (opt) */
+	/* end of AUTH_DAT */
+	unsigned long expiry;	/* time the ticket is expiring */
+	u_long nickname;	/* Nickname into cache */
+	u_long window;		/* associated window */
 };
 
 typedef struct authkerb_clnt_cred authkerb_clnt_cred;
@@ -85,20 +85,20 @@ typedef struct authkerb_clnt_cred authkerb_clnt_cred;
  * A credential
  */
 struct authkerb_cred {
-    enum authkerb_namekind akc_namekind;
-    struct authkerb_fullname akc_fullname;
-    u_long akc_nickname;
+	enum authkerb_namekind akc_namekind;
+	struct authkerb_fullname akc_fullname;
+	u_long akc_nickname;
 };
 
 /*
  * A kerb authentication verifier
  */
 struct authkerb_verf {
-    union {
-        struct timeval akv_ctime; /* clear time */
-        des_block akv_xtime;  /* crypt time */
-    } akv_time_u;
-    u_long akv_int_u;
+	union {
+		struct timeval akv_ctime;	/* clear time */
+		des_block akv_xtime;	/* crypt time */
+	} akv_time_u;
+	u_long akv_int_u;
 };
 
 /*
@@ -129,8 +129,8 @@ struct authkerb_verf {
 /*
  * Register the service name, instance and realm.
  */
-extern int authkerb_ncreate(char *, char *, char *, u_int,
-                            struct netbuf *, int *, dev_t, int, AUTH **);
+extern int authkerb_ncreate(char *, char *, char *, u_int, struct netbuf *,
+			    int *, dev_t, int, AUTH **);
 extern bool xdr_authkerb_cred(XDR *, struct authkerb_cred *);
 extern bool xdr_authkerb_verf(XDR *, struct authkerb_verf *);
 extern int svc_kerb_reg(SVCXPRT *, char *, char *, char *);
@@ -139,5 +139,5 @@ extern enum auth_stat _svcauth_kerb(struct svc_req *, struct rpc_msg *);
 /* for backward compatibility */
 #include <rpc/tirpc_compat.h>
 
-#endif KERBEROS
-#endif /* !_RPC_AUTH_KERB_H */
+#endif	/* KERBEROS */
+#endif				/* !_RPC_AUTH_KERB_H */

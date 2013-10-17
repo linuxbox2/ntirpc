@@ -60,4 +60,4 @@
 #undef fputws
 #endif
 #include <stdio.h>
-#endif /* NTIRPC_STDIO_H */
+#endif				/* NTIRPC_STDIO_H */

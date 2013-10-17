@@ -42,35 +42,35 @@
 
 /* RPCSEC_GSS control procedures. */
 typedef enum {
-    RPCSEC_GSS_DATA = 0,
-    RPCSEC_GSS_INIT = 1,
-    RPCSEC_GSS_CONTINUE_INIT = 2,
-    RPCSEC_GSS_DESTROY = 3
+	RPCSEC_GSS_DATA = 0,
+	RPCSEC_GSS_INIT = 1,
+	RPCSEC_GSS_CONTINUE_INIT = 2,
+	RPCSEC_GSS_DESTROY = 3
 } rpc_gss_proc_t;
 
 /* RPCSEC_GSS services. */
 typedef enum {
-    RPCSEC_GSS_SVC_NONE = 1,
-    RPCSEC_GSS_SVC_INTEGRITY = 2,
-    RPCSEC_GSS_SVC_PRIVACY = 3
+	RPCSEC_GSS_SVC_NONE = 1,
+	RPCSEC_GSS_SVC_INTEGRITY = 2,
+	RPCSEC_GSS_SVC_PRIVACY = 3
 } rpc_gss_svc_t;
 
 #define RPCSEC_GSS_VERSION 1
 
 /* RPCSEC_GSS security triple. */
 struct rpc_gss_sec {
-    gss_OID  mech;  /* mechanism */
-    gss_qop_t qop;  /* quality of protection */
-    rpc_gss_svc_t svc;  /* service */
-    gss_cred_id_t cred;  /* cred handle */
-    u_int  req_flags; /* req flags for init_sec_context */
+	gss_OID mech;		/* mechanism */
+	gss_qop_t qop;		/* quality of protection */
+	rpc_gss_svc_t svc;	/* service */
+	gss_cred_id_t cred;	/* cred handle */
+	u_int req_flags;	/* req flags for init_sec_context */
 };
 
 /* Private data required for kernel implementation */
 struct authgss_private_data {
-    gss_ctx_id_t pd_ctx;  /* Session context handle */
-    gss_buffer_desc pd_ctx_hndl; /* Credentials context handle */
-    u_int  pd_seq_win; /* Sequence window */
+	gss_ctx_id_t pd_ctx;	/* Session context handle */
+	gss_buffer_desc pd_ctx_hndl;	/* Credentials context handle */
+	u_int pd_seq_win;	/* Sequence window */
 };
 
 #define g_OID_equal(o1, o2)           \
@@ -84,47 +84,43 @@ extern gss_OID_desc spkm3oid;
 
 /* Credentials. */
 struct rpc_gss_cred {
-    u_int  gc_v;  /* version */
-    rpc_gss_proc_t gc_proc; /* control procedure */
-    u_int  gc_seq;  /* sequence number */
-    rpc_gss_svc_t gc_svc;  /* service */
-    gss_buffer_desc gc_ctx;  /* context handle */
+	u_int gc_v;		/* version */
+	rpc_gss_proc_t gc_proc;	/* control procedure */
+	u_int gc_seq;		/* sequence number */
+	rpc_gss_svc_t gc_svc;	/* service */
+	gss_buffer_desc gc_ctx;	/* context handle */
 };
 
 /* Context creation response. */
 struct rpc_gss_init_res {
-    gss_buffer_desc  gr_ctx;  /* context handle */
-    u_int   gr_major; /* major status */
-    u_int   gr_minor; /* minor status */
-    u_int   gr_win;  /* sequence window */
-    gss_buffer_desc  gr_token; /* token */
+	gss_buffer_desc gr_ctx;	/* context handle */
+	u_int gr_major;		/* major status */
+	u_int gr_minor;		/* minor status */
+	u_int gr_win;		/* sequence window */
+	gss_buffer_desc gr_token;	/* token */
 };
 
 /* Maximum sequence number value. */
 #define MAXSEQ  0x80000000
 
 /* Prototypes. */
-__BEGIN_DECLS
-bool xdr_rpc_gss_cred(XDR *xdrs, struct rpc_gss_cred *p);
-bool xdr_rpc_gss_init_args(XDR *xdrs, gss_buffer_desc *p);
-bool xdr_rpc_gss_init_res(XDR *xdrs, struct rpc_gss_init_res *p);
-bool xdr_rpc_gss_data(XDR *xdrs, xdrproc_t xdr_func,
-                      caddr_t xdr_ptr, gss_ctx_id_t ctx,
-                      gss_qop_t qop, rpc_gss_svc_t svc,
-                      u_int seq);
+__BEGIN_DECLS bool xdr_rpc_gss_cred(XDR * xdrs, struct rpc_gss_cred *p);
+bool xdr_rpc_gss_init_args(XDR * xdrs, gss_buffer_desc * p);
+bool xdr_rpc_gss_init_res(XDR * xdrs, struct rpc_gss_init_res *p);
+bool xdr_rpc_gss_data(XDR * xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
+		      gss_ctx_id_t ctx, gss_qop_t qop, rpc_gss_svc_t svc,
+		      u_int seq);
 
 AUTH *authgss_ncreate(CLIENT *, gss_name_t, struct rpc_gss_sec *);
 AUTH *authgss_ncreate_default(CLIENT *, char *, struct rpc_gss_sec *);
-bool authgss_service(AUTH *auth, int svc);
-bool authgss_get_private_data(AUTH *auth, struct authgss_private_data *);
+bool authgss_service(AUTH * auth, int svc);
+bool authgss_get_private_data(AUTH * auth, struct authgss_private_data *);
 
 void log_debug(const char *fmt, ...);
 void log_status(char *m, OM_uint32 major, OM_uint32 minor);
-void gss_log_hexdump(const u_char *buf, int len, int offset);
+void gss_log_hexdump(const u_char * buf, int len, int offset);
 
 __END_DECLS
-
 /* for backward compatibility */
 #include <rpc/tirpc_compat.h>
-
-#endif /* !_TIRPC_AUTH_GSS_H */
+#endif				/* !_TIRPC_AUTH_GSS_H */

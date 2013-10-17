@@ -60,23 +60,23 @@
 #include <rpc/auth_unix.h>
 
 /* auth_unix.c */
-static void authunix_nextverf (AUTH *);
-static bool authunix_marshal (AUTH *, XDR *);
-static bool authunix_validate (AUTH *, struct opaque_auth *);
-static bool authunix_refresh (AUTH *, void *);
-static void authunix_destroy (AUTH *);
-static void marshal_new_auth (AUTH *);
-static struct auth_ops *authunix_ops (void);
+static void authunix_nextverf(AUTH *);
+static bool authunix_marshal(AUTH *, XDR *);
+static bool authunix_validate(AUTH *, struct opaque_auth *);
+static bool authunix_refresh(AUTH *, void *);
+static void authunix_destroy(AUTH *);
+static void marshal_new_auth(AUTH *);
+static struct auth_ops *authunix_ops(void);
 
 /*
  * This struct is pointed to by the ah_private field of an auth_handle.
  */
 struct audata {
-    struct opaque_auth au_origcred; /* original credentials */
-    struct opaque_auth au_shcred; /* short hand cred */
-    u_long au_shfaults; /* short hand cache faults */
-    char au_marshed[MAX_AUTH_BYTES];
-    u_int au_mpos; /* xdr pos at end of marshed */
+	struct opaque_auth au_origcred;	/* original credentials */
+	struct opaque_auth au_shcred;	/* short hand cred */
+	u_long au_shfaults;	/* short hand cache faults */
+	char au_marshed[MAX_AUTH_BYTES];
+	u_int au_mpos;		/* xdr pos at end of marshed */
 };
 #define AUTH_PRIVATE(auth) ((struct audata *)auth->ah_private)
 
@@ -84,95 +84,94 @@ struct audata {
  * Create a unix style authenticator.
  * Returns an auth handle with the given stuff in it.
  */
-AUTH *
-authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
-                 gid_t *aup_gids)
+AUTH *authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
+		       gid_t * aup_gids)
 {
-    struct authunix_parms aup;
-    char mymem[MAX_AUTH_BYTES];
-    struct timespec now;
-    XDR xdrs;
-    AUTH *auth;
-    struct audata *au;
+	struct authunix_parms aup;
+	char mymem[MAX_AUTH_BYTES];
+	struct timespec now;
+	XDR xdrs;
+	AUTH *auth;
+	struct audata *au;
 
-    memset(&rpc_createerr, 0, sizeof(rpc_createerr));
+	memset(&rpc_createerr, 0, sizeof(rpc_createerr));
 
-    /*
-     * Allocate and set up auth handle
-     */
-    au = NULL;
-    auth = mem_alloc(sizeof(*auth));
+	/*
+	 * Allocate and set up auth handle
+	 */
+	au = NULL;
+	auth = mem_alloc(sizeof(*auth));
 #ifndef _KERNEL
-    if (auth == NULL) {
-        rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-        rpc_createerr.cf_error.re_errno = ENOMEM;
-        goto cleanup_authunix_create;
-    }
+	if (auth == NULL) {
+		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+		rpc_createerr.cf_error.re_errno = ENOMEM;
+		goto cleanup_authunix_create;
+	}
 #endif
-    au = mem_alloc(sizeof(*au));
+	au = mem_alloc(sizeof(*au));
 #ifndef _KERNEL
-    if (au == NULL) {
-        rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-        rpc_createerr.cf_error.re_errno = ENOMEM;
-        goto cleanup_authunix_create;
-    }
+	if (au == NULL) {
+		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+		rpc_createerr.cf_error.re_errno = ENOMEM;
+		goto cleanup_authunix_create;
+	}
 #endif
-    auth->ah_ops = authunix_ops();
-    auth->ah_private = (caddr_t)au;
-    auth->ah_verf = au->au_shcred = _null_auth;
-    auth->ah_refcnt = 1;
-    au->au_shfaults = 0;
-    au->au_origcred.oa_base = NULL;
+	auth->ah_ops = authunix_ops();
+	auth->ah_private = (caddr_t) au;
+	auth->ah_verf = au->au_shcred = _null_auth;
+	auth->ah_refcnt = 1;
+	au->au_shfaults = 0;
+	au->au_origcred.oa_base = NULL;
 
-    /*
-     * fill in param struct from the given params
-     */
-    (void)clock_gettime(CLOCK_MONOTONIC_FAST, &now);
-    aup.aup_time = now.tv_sec;
-    aup.aup_machname = machname;
-    aup.aup_uid = uid;
-    aup.aup_gid = gid;
-    aup.aup_len = (u_int)len;
-    aup.aup_gids = aup_gids;
+	/*
+	 * fill in param struct from the given params
+	 */
+	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &now);
+	aup.aup_time = now.tv_sec;
+	aup.aup_machname = machname;
+	aup.aup_uid = uid;
+	aup.aup_gid = gid;
+	aup.aup_len = (u_int) len;
+	aup.aup_gids = aup_gids;
 
-    /*
-     * Serialize the parameters into origcred
-     */
-    xdrmem_create(&xdrs, mymem, MAX_AUTH_BYTES, XDR_ENCODE);
-    if (!xdr_authunix_parms(&xdrs, &aup)) {
-        rpc_createerr.cf_stat = RPC_CANTENCODEARGS;
-        goto cleanup_authunix_create;
-    }
-    au->au_origcred.oa_length = len = XDR_GETPOS(&xdrs);
-    au->au_origcred.oa_flavor = AUTH_UNIX;
+	/*
+	 * Serialize the parameters into origcred
+	 */
+	xdrmem_create(&xdrs, mymem, MAX_AUTH_BYTES, XDR_ENCODE);
+	if (!xdr_authunix_parms(&xdrs, &aup)) {
+		rpc_createerr.cf_stat = RPC_CANTENCODEARGS;
+		goto cleanup_authunix_create;
+	}
+	au->au_origcred.oa_length = len = XDR_GETPOS(&xdrs);
+	au->au_origcred.oa_flavor = AUTH_UNIX;
 #ifdef _KERNEL
-    au->au_origcred.oa_base = mem_alloc((u_int) len);
+	au->au_origcred.oa_base = mem_alloc((u_int) len);
 #else
-    if ((au->au_origcred.oa_base = mem_alloc((u_int) len)) == NULL) {
-        rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-        rpc_createerr.cf_error.re_errno = ENOMEM;
-        goto cleanup_authunix_create;
-    }
+	if ((au->au_origcred.oa_base = mem_alloc((u_int) len)) == NULL) {
+		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+		rpc_createerr.cf_error.re_errno = ENOMEM;
+		goto cleanup_authunix_create;
+	}
 #endif
-    memmove(au->au_origcred.oa_base, mymem, (size_t)len);
+	memmove(au->au_origcred.oa_base, mymem, (size_t) len);
 
-    /*
-     * set auth handle to reflect new cred.
-     */
-    auth->ah_cred = au->au_origcred;
-    marshal_new_auth(auth);
-    auth_get(auth);  /* Reference for caller */
-    return (auth);
+	/*
+	 * set auth handle to reflect new cred.
+	 */
+	auth->ah_cred = au->au_origcred;
+	marshal_new_auth(auth);
+	auth_get(auth);		/* Reference for caller */
+	return (auth);
 #ifndef _KERNEL
-cleanup_authunix_create:
-    if (auth)
-        mem_free(auth, sizeof(*auth));
-    if (au) {
-        if (au->au_origcred.oa_base)
-            mem_free(au->au_origcred.oa_base, (u_int)len);
-        mem_free(au, sizeof(*au));
-    }
-    return (NULL);
+ cleanup_authunix_create:
+	if (auth)
+		mem_free(auth, sizeof(*auth));
+	if (au) {
+		if (au->au_origcred.oa_base)
+			mem_free(au->au_origcred.oa_base, (u_int) len);
+		mem_free(au, sizeof(*au));
+	}
+	return (NULL);
 #endif
 }
 
@@ -180,70 +179,69 @@ cleanup_authunix_create:
  * Returns an auth handle with parameters determined by doing lots of
  * syscalls.
  */
-AUTH *
-authunix_ncreate_default(void)
+AUTH *authunix_ncreate_default(void)
 {
-    int len;
-    char machname[MAXHOSTNAMELEN + 1];
-    uid_t uid;
-    gid_t gid, *gids;
-    AUTH *result;
+	int len;
+	char machname[MAXHOSTNAMELEN + 1];
+	uid_t uid;
+	gid_t gid, *gids;
+	AUTH *result;
 
-    memset(&rpc_createerr, 0, sizeof(rpc_createerr));
+	memset(&rpc_createerr, 0, sizeof(rpc_createerr));
 
-    if (gethostname(machname, sizeof machname) == -1) {
-        rpc_createerr.cf_error.re_errno = errno;
-        goto out_err;
-    }
-    machname[sizeof(machname) - 1] = 0;
-    uid = geteuid();
-    gid = getegid();
+	if (gethostname(machname, sizeof machname) == -1) {
+		rpc_createerr.cf_error.re_errno = errno;
+		goto out_err;
+	}
+	machname[sizeof(machname) - 1] = 0;
+	uid = geteuid();
+	gid = getegid();
 
-    /* According to glibc comments, an intervening setgroups(2)
-     * call can increase the number of supplemental groups between
-     * these two getgroups(2) calls. */
-retry:
-    len = getgroups(0, NULL);
-    if (len == -1) {
-        rpc_createerr.cf_error.re_errno = errno;
-        goto out_err;
-    }
+	/* According to glibc comments, an intervening setgroups(2)
+	 * call can increase the number of supplemental groups between
+	 * these two getgroups(2) calls. */
+ retry:
+	len = getgroups(0, NULL);
+	if (len == -1) {
+		rpc_createerr.cf_error.re_errno = errno;
+		goto out_err;
+	}
 
-    /* Bump allocation size.  A zero allocation size may result in a
-     * NULL calloc(3) result, which is not reliably distinguishable
-     * from a memory allocation error. */
-    gids = mem_alloc((len + 1)*sizeof(gid_t));
-    if (gids == NULL) {
-        rpc_createerr.cf_error.re_errno = ENOMEM;
-        goto out_err;
-    }
+	/* Bump allocation size.  A zero allocation size may result in a
+	 * NULL calloc(3) result, which is not reliably distinguishable
+	 * from a memory allocation error. */
+	gids = mem_alloc((len + 1) * sizeof(gid_t));
+	if (gids == NULL) {
+		rpc_createerr.cf_error.re_errno = ENOMEM;
+		goto out_err;
+	}
 
-    len = getgroups(len, gids);
-    if (len == -1) {
-        rpc_createerr.cf_error.re_errno = errno;
-        mem_free(gids, 0); /* XXX */
-        if (rpc_createerr.cf_error.re_errno == EINVAL) {
-            rpc_createerr.cf_error.re_errno = 0;
-            goto retry;
-        }
-        goto out_err;
-    }
+	len = getgroups(len, gids);
+	if (len == -1) {
+		rpc_createerr.cf_error.re_errno = errno;
+		mem_free(gids, 0);	/* XXX */
+		if (rpc_createerr.cf_error.re_errno == EINVAL) {
+			rpc_createerr.cf_error.re_errno = 0;
+			goto retry;
+		}
+		goto out_err;
+	}
 
-    /*
-     * AUTH_UNIX sends on the wire only the first NGRPS groups in the
-     * supplemental groups list.
-     */
-    if (len > NGRPS)
-        len = NGRPS;
+	/*
+	 * AUTH_UNIX sends on the wire only the first NGRPS groups in the
+	 * supplemental groups list.
+	 */
+	if (len > NGRPS)
+		len = NGRPS;
 
-    /* XXX: interface problem; those should all have been unsigned */
-    result = authunix_ncreate(machname, uid, gid, len, gids);
-    mem_free(gids, 0); /* XXX */
-    return result;
+	/* XXX: interface problem; those should all have been unsigned */
+	result = authunix_ncreate(machname, uid, gid, len, gids);
+	mem_free(gids, 0);	/* XXX */
+	return result;
 
-out_err:
-    rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-    return NULL;
+ out_err:
+	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
+	return NULL;
 }
 
 /*
@@ -251,169 +249,162 @@ out_err:
  */
 
 /* ARGSUSED */
-static void
-authunix_nextverf(AUTH *auth)
+static void authunix_nextverf(AUTH * auth)
 {
-    /* no action necessary */
+	/* no action necessary */
 }
 
-static bool
-authunix_marshal(AUTH *auth, XDR *xdrs)
+static bool authunix_marshal(AUTH * auth, XDR * xdrs)
 {
-    struct audata *au;
+	struct audata *au;
 
-    assert(auth != NULL);
-    assert(xdrs != NULL);
+	assert(auth != NULL);
+	assert(xdrs != NULL);
 
-    au = AUTH_PRIVATE(auth);
-    return (XDR_PUTBYTES(xdrs, au->au_marshed, au->au_mpos));
+	au = AUTH_PRIVATE(auth);
+	return (XDR_PUTBYTES(xdrs, au->au_marshed, au->au_mpos));
 }
 
-static bool
-authunix_validate(AUTH *auth, struct opaque_auth *verf)
+static bool authunix_validate(AUTH * auth, struct opaque_auth *verf)
 {
-    struct audata *au;
-    XDR xdrs;
+	struct audata *au;
+	XDR xdrs;
 
-    assert(auth != NULL);
-    assert(verf != NULL);
+	assert(auth != NULL);
+	assert(verf != NULL);
 
-    if (verf->oa_flavor == AUTH_SHORT) {
-        au = AUTH_PRIVATE(auth);
-        xdrmem_create(&xdrs, verf->oa_base, verf->oa_length,
-                      XDR_DECODE);
+	if (verf->oa_flavor == AUTH_SHORT) {
+		au = AUTH_PRIVATE(auth);
+		xdrmem_create(&xdrs, verf->oa_base, verf->oa_length,
+			      XDR_DECODE);
 
-        if (au->au_shcred.oa_base != NULL) {
-            mem_free(au->au_shcred.oa_base,
-                     au->au_shcred.oa_length);
-            au->au_shcred.oa_base = NULL;
-        }
-        if (xdr_opaque_auth(&xdrs, &au->au_shcred)) {
-            auth->ah_cred = au->au_shcred;
-        } else {
-            xdrs.x_op = XDR_FREE;
-            (void)xdr_opaque_auth(&xdrs, &au->au_shcred);
-            au->au_shcred.oa_base = NULL;
-            auth->ah_cred = au->au_origcred;
-        }
-        marshal_new_auth(auth);
-    }
-    return (TRUE);
+		if (au->au_shcred.oa_base != NULL) {
+			mem_free(au->au_shcred.oa_base,
+				 au->au_shcred.oa_length);
+			au->au_shcred.oa_base = NULL;
+		}
+		if (xdr_opaque_auth(&xdrs, &au->au_shcred)) {
+			auth->ah_cred = au->au_shcred;
+		} else {
+			xdrs.x_op = XDR_FREE;
+			(void)xdr_opaque_auth(&xdrs, &au->au_shcred);
+			au->au_shcred.oa_base = NULL;
+			auth->ah_cred = au->au_origcred;
+		}
+		marshal_new_auth(auth);
+	}
+	return (TRUE);
 }
 
-static bool
-authunix_refresh(AUTH *auth, void *dummy)
+static bool authunix_refresh(AUTH * auth, void *dummy)
 {
-    struct audata *au = AUTH_PRIVATE(auth);
-    struct authunix_parms aup;
-    struct timespec now;
-    XDR xdrs;
-    int stat;
+	struct audata *au = AUTH_PRIVATE(auth);
+	struct authunix_parms aup;
+	struct timespec now;
+	XDR xdrs;
+	int stat;
 
-    assert(auth != NULL);
+	assert(auth != NULL);
 
-    if (auth->ah_cred.oa_base == au->au_origcred.oa_base) {
-        /* there is no hope.  Punt */
-        return (FALSE);
-    }
-    au->au_shfaults ++;
+	if (auth->ah_cred.oa_base == au->au_origcred.oa_base) {
+		/* there is no hope.  Punt */
+		return (FALSE);
+	}
+	au->au_shfaults++;
 
-    /* first deserialize the creds back into a struct authunix_parms */
-    aup.aup_machname = NULL;
-    aup.aup_gids = NULL;
-    xdrmem_create(&xdrs, au->au_origcred.oa_base,
-                  au->au_origcred.oa_length, XDR_DECODE);
-    stat = xdr_authunix_parms(&xdrs, &aup);
-    if (! stat)
-        goto done;
+	/* first deserialize the creds back into a struct authunix_parms */
+	aup.aup_machname = NULL;
+	aup.aup_gids = NULL;
+	xdrmem_create(&xdrs, au->au_origcred.oa_base, au->au_origcred.oa_length,
+		      XDR_DECODE);
+	stat = xdr_authunix_parms(&xdrs, &aup);
+	if (!stat)
+		goto done;
 
-    /* update the time and serialize in place */
-    (void)clock_gettime(CLOCK_MONOTONIC_FAST, &now);
-    aup.aup_time = now.tv_sec;
-    xdrs.x_op = XDR_ENCODE;
-    XDR_SETPOS(&xdrs, 0);
-    stat = xdr_authunix_parms(&xdrs, &aup);
-    if (! stat)
-        goto done;
-    auth->ah_cred = au->au_origcred;
-    marshal_new_auth(auth);
-done:
-    /* free the struct authunix_parms created by deserializing */
-    xdrs.x_op = XDR_FREE;
-    (void)xdr_authunix_parms(&xdrs, &aup);
-    XDR_DESTROY(&xdrs);
-    return (stat);
+	/* update the time and serialize in place */
+	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &now);
+	aup.aup_time = now.tv_sec;
+	xdrs.x_op = XDR_ENCODE;
+	XDR_SETPOS(&xdrs, 0);
+	stat = xdr_authunix_parms(&xdrs, &aup);
+	if (!stat)
+		goto done;
+	auth->ah_cred = au->au_origcred;
+	marshal_new_auth(auth);
+ done:
+	/* free the struct authunix_parms created by deserializing */
+	xdrs.x_op = XDR_FREE;
+	(void)xdr_authunix_parms(&xdrs, &aup);
+	XDR_DESTROY(&xdrs);
+	return (stat);
 }
 
-static void
-authunix_destroy(AUTH *auth)
+static void authunix_destroy(AUTH * auth)
 {
-    struct audata *au;
+	struct audata *au;
 
-    assert(auth != NULL);
+	assert(auth != NULL);
 
-    au = AUTH_PRIVATE(auth);
-    mem_free(au->au_origcred.oa_base, au->au_origcred.oa_length);
+	au = AUTH_PRIVATE(auth);
+	mem_free(au->au_origcred.oa_base, au->au_origcred.oa_length);
 
-    if (au->au_shcred.oa_base != NULL)
-        mem_free(au->au_shcred.oa_base, au->au_shcred.oa_length);
+	if (au->au_shcred.oa_base != NULL)
+		mem_free(au->au_shcred.oa_base, au->au_shcred.oa_length);
 
-    mem_free(auth->ah_private, sizeof(struct audata));
+	mem_free(auth->ah_private, sizeof(struct audata));
 
-    if (auth->ah_verf.oa_base != NULL)
-        mem_free(auth->ah_verf.oa_base, auth->ah_verf.oa_length);
+	if (auth->ah_verf.oa_base != NULL)
+		mem_free(auth->ah_verf.oa_base, auth->ah_verf.oa_length);
 
-    mem_free(auth, sizeof(*auth));
+	mem_free(auth, sizeof(*auth));
 }
 
 /*
  * Marshals (pre-serializes) an auth struct.
  * sets private data, au_marshed and au_mpos
  */
-static void
-marshal_new_auth(AUTH *auth)
+static void marshal_new_auth(AUTH * auth)
 {
-    XDR xdr_stream;
-    XDR *xdrs = &xdr_stream;
-    struct audata *au;
+	XDR xdr_stream;
+	XDR *xdrs = &xdr_stream;
+	struct audata *au;
 
-    assert(auth != NULL);
+	assert(auth != NULL);
 
-    au = AUTH_PRIVATE(auth);
-    xdrmem_create(xdrs, au->au_marshed, MAX_AUTH_BYTES, XDR_ENCODE);
-    if ((! xdr_opaque_auth(xdrs, &(auth->ah_cred))) ||
-        (! xdr_opaque_auth(xdrs, &(auth->ah_verf))))
-        __warnx(TIRPC_DEBUG_FLAG_AUTH, "auth_none.c - Fatal marshalling "
-                "problem");
-    else
-        au->au_mpos = XDR_GETPOS(xdrs);
-    XDR_DESTROY(xdrs);
+	au = AUTH_PRIVATE(auth);
+	xdrmem_create(xdrs, au->au_marshed, MAX_AUTH_BYTES, XDR_ENCODE);
+	if ((!xdr_opaque_auth(xdrs, &(auth->ah_cred)))
+	    || (!xdr_opaque_auth(xdrs, &(auth->ah_verf))))
+		__warnx(TIRPC_DEBUG_FLAG_AUTH,
+			"auth_none.c - Fatal marshalling " "problem");
+	else
+		au->au_mpos = XDR_GETPOS(xdrs);
+	XDR_DESTROY(xdrs);
 }
 
-static bool
-authunix_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xfunc, caddr_t xwhere)
+static bool authunix_wrap(AUTH * auth, XDR * xdrs, xdrproc_t xfunc,
+			  caddr_t xwhere)
 {
-    return ((*xfunc)(xdrs, xwhere));
+	return ((*xfunc) (xdrs, xwhere));
 }
 
-static struct auth_ops *
-authunix_ops(void)
+static struct auth_ops *authunix_ops(void)
 {
-    static struct auth_ops ops;
-    extern mutex_t ops_lock;
+	static struct auth_ops ops;
+	extern mutex_t ops_lock;
 
-    /* VARIABLES PROTECTED BY ops_lock: ops */
+	/* VARIABLES PROTECTED BY ops_lock: ops */
 
-    mutex_lock(&ops_lock);
-    if (ops.ah_nextverf == NULL) {
-        ops.ah_nextverf = authunix_nextverf;
-        ops.ah_marshal = authunix_marshal;
-        ops.ah_validate = authunix_validate;
-        ops.ah_refresh = authunix_refresh;
-        ops.ah_destroy = authunix_destroy;
-        ops.ah_wrap = authunix_wrap;
-        ops.ah_unwrap = authunix_wrap;
-    }
-    mutex_unlock(&ops_lock);
-    return (&ops);
+	mutex_lock(&ops_lock);
+	if (ops.ah_nextverf == NULL) {
+		ops.ah_nextverf = authunix_nextverf;
+		ops.ah_marshal = authunix_marshal;
+		ops.ah_validate = authunix_validate;
+		ops.ah_refresh = authunix_refresh;
+		ops.ah_destroy = authunix_destroy;
+		ops.ah_wrap = authunix_wrap;
+		ops.ah_unwrap = authunix_wrap;
+	}
+	mutex_unlock(&ops_lock);
+	return (&ops);
 }

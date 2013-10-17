@@ -46,24 +46,22 @@
  * internal structure to keep track of a netpath "session"
  */
 struct netpath_chain {
-    struct netconfig *ncp;  /* an nconf entry */
-    struct netpath_chain *nchain_next; /* next nconf entry allocated */
+	struct netconfig *ncp;	/* an nconf entry */
+	struct netpath_chain *nchain_next;	/* next nconf entry allocated */
 };
 
-
 struct netpath_vars {
-    int   valid;     /* token that indicates a valid netpath_vars */
-    void *nc_handlep;     /* handle for current netconfig "session" */
-    char *netpath;     /* pointer to current view-point in NETPATH */
-    char *netpath_start;    /* pointer to start of our copy of NETPATH */
-    struct netpath_chain *ncp_list;  /* list of nconfs allocated this session*/
+	int valid;		/* token that indicates a valid netpath_vars */
+	void *nc_handlep;	/* handle for current netconfig "session" */
+	char *netpath;		/* pointer to current view-point in NETPATH */
+	char *netpath_start;	/* pointer to start of our copy of NETPATH */
+	struct netpath_chain *ncp_list;	/* list of nconfs allocated this session */
 };
 
 #define NP_VALID 0xf00d
 #define NP_INVALID 0
 
 char *_get_next_token(char *, int);
-
 
 /*
  * A call to setnetpath() establishes a NETPATH "session".  setnetpath()
@@ -76,41 +74,41 @@ char *_get_next_token(char *, int);
  * returned.
  */
 
-void *
-setnetpath(void)
+void *setnetpath(void)
 {
 
-    struct netpath_vars *np_sessionp;   /* this session's variables */
-    char *npp;    /* NETPATH env variable */
+	struct netpath_vars *np_sessionp;	/* this session's variables */
+	char *npp;		/* NETPATH env variable */
 
 #ifdef MEM_CHK
-    malloc_debug(1);
+	malloc_debug(1);
 #endif
 
-    if ((np_sessionp = (struct netpath_vars *)
-         mem_zalloc(sizeof (struct netpath_vars))) == NULL) {
-        return (NULL);
-    }
-    if ((np_sessionp->nc_handlep = setnetconfig()) == NULL) {
-        syslog (LOG_ERR, "rpc: failed to open " NETCONFIG);
-        return (NULL);
-    }
-    np_sessionp->valid = NP_VALID;
-    np_sessionp->ncp_list = NULL;
-    if ((npp = getenv(NETPATH)) == NULL) {
-        np_sessionp->netpath = NULL;
-    } else {
-        (void) endnetconfig(np_sessionp->nc_handlep);/* won't need nc session*/
-        np_sessionp->nc_handlep = NULL;
-        if ((np_sessionp->netpath = mem_zalloc(strlen(npp)+1)) == NULL) {
-            mem_free(np_sessionp, 0); /* XXX */
-            return (NULL);
-        } else {
-            (void) strcpy(np_sessionp->netpath, npp);
-        }
-    }
-    np_sessionp->netpath_start = np_sessionp->netpath;
-    return ((void *)np_sessionp);
+	if ((np_sessionp = (struct netpath_vars *)
+	     mem_zalloc(sizeof(struct netpath_vars))) == NULL) {
+		return (NULL);
+	}
+	if ((np_sessionp->nc_handlep = setnetconfig()) == NULL) {
+		syslog(LOG_ERR, "rpc: failed to open " NETCONFIG);
+		return (NULL);
+	}
+	np_sessionp->valid = NP_VALID;
+	np_sessionp->ncp_list = NULL;
+	if ((npp = getenv(NETPATH)) == NULL) {
+		np_sessionp->netpath = NULL;
+	} else {
+		(void)endnetconfig(np_sessionp->nc_handlep);	/* won't need nc session */
+		np_sessionp->nc_handlep = NULL;
+		if ((np_sessionp->netpath =
+		     mem_zalloc(strlen(npp) + 1)) == NULL) {
+			mem_free(np_sessionp, 0);	/* XXX */
+			return (NULL);
+		} else {
+			(void)strcpy(np_sessionp->netpath, npp);
+		}
+	}
+	np_sessionp->netpath_start = np_sessionp->netpath;
+	return ((void *)np_sessionp);
 }
 
 /*
@@ -132,54 +130,56 @@ setnetpath(void)
  * database, in the order in which they are listed.
  */
 
-struct netconfig *
-getnetpath(void *handlep)
+struct netconfig *getnetpath(void *handlep)
 {
-    struct netpath_vars *np_sessionp = (struct netpath_vars *)handlep;
-    struct netconfig *ncp = NULL;   /* temp. holds a netconfig session */
-    struct netpath_chain *chainp;   /* holds chain of ncp's we alloc */
-    char  *npp;  /* holds current NETPATH */
+	struct netpath_vars *np_sessionp = (struct netpath_vars *)handlep;
+	struct netconfig *ncp = NULL;	/* temp. holds a netconfig session */
+	struct netpath_chain *chainp;	/* holds chain of ncp's we alloc */
+	char *npp;		/* holds current NETPATH */
 
-    if (np_sessionp == NULL || np_sessionp->valid != NP_VALID) {
-        errno = EINVAL;
-        return (NULL);
-    }
-    if (np_sessionp->netpath_start == NULL) { /* NETPATH was not set */
-        do {                /* select next visible network */
-            if (np_sessionp->nc_handlep == NULL) {
-                np_sessionp->nc_handlep = setnetconfig();
-                if (np_sessionp->nc_handlep == NULL)
-                    syslog (LOG_ERR, "rpc: failed to open " NETCONFIG);
-            }
-            if ((ncp = getnetconfig(np_sessionp->nc_handlep)) == NULL) {
-                return(NULL);
-            }
-        } while ((ncp->nc_flag & NC_VISIBLE) == 0);
-        return (ncp);
-    }
-    /*
-     * Find first valid network ID in netpath.
-     */
-    while ((npp = np_sessionp->netpath) != NULL && strlen(npp) != 0) {
-        np_sessionp->netpath = _get_next_token(npp, ':');
-        /*
-         * npp is a network identifier.
-         */
-        if ((ncp = getnetconfigent(npp)) != NULL) {
-            chainp = (struct netpath_chain *) /* cobble alloc chain entry */
-                mem_zalloc(sizeof (struct netpath_chain));
-            chainp->ncp = ncp;
-            chainp->nchain_next = NULL;
-            if (np_sessionp->ncp_list == NULL) {
-                np_sessionp->ncp_list = chainp;
-            } else {
-                np_sessionp->ncp_list->nchain_next = chainp;
-            }
-            return (ncp);
-        }
-        /* couldn't find this token in the database; go to next one. */
-    }
-    return (NULL);
+	if (np_sessionp == NULL || np_sessionp->valid != NP_VALID) {
+		errno = EINVAL;
+		return (NULL);
+	}
+	if (np_sessionp->netpath_start == NULL) {	/* NETPATH was not set */
+		do {		/* select next visible network */
+			if (np_sessionp->nc_handlep == NULL) {
+				np_sessionp->nc_handlep = setnetconfig();
+				if (np_sessionp->nc_handlep == NULL)
+					syslog(LOG_ERR,
+					       "rpc: failed to open "
+					       NETCONFIG);
+			}
+			if ((ncp =
+			     getnetconfig(np_sessionp->nc_handlep)) == NULL) {
+				return (NULL);
+			}
+		} while ((ncp->nc_flag & NC_VISIBLE) == 0);
+		return (ncp);
+	}
+	/*
+	 * Find first valid network ID in netpath.
+	 */
+	while ((npp = np_sessionp->netpath) != NULL && strlen(npp) != 0) {
+		np_sessionp->netpath = _get_next_token(npp, ':');
+		/*
+		 * npp is a network identifier.
+		 */
+		if ((ncp = getnetconfigent(npp)) != NULL) {
+			chainp = (struct netpath_chain *)	/* cobble alloc chain entry */
+			    mem_zalloc(sizeof(struct netpath_chain));
+			chainp->ncp = ncp;
+			chainp->nchain_next = NULL;
+			if (np_sessionp->ncp_list == NULL) {
+				np_sessionp->ncp_list = chainp;
+			} else {
+				np_sessionp->ncp_list->nchain_next = chainp;
+			}
+			return (ncp);
+		}
+		/* couldn't find this token in the database; go to next one. */
+	}
+	return (NULL);
 }
 
 /*
@@ -187,37 +187,33 @@ getnetpath(void *handlep)
  * releasing resources for reuse.  It returns 0 on success and -1 on failure
  * (e.g. if setnetpath() was not called previously.
  */
-int
-endnetpath(void *handlep)
+int endnetpath(void *handlep)
 {
-    struct netpath_vars *np_sessionp = (struct netpath_vars *)handlep;
-    struct netpath_chain *chainp, *lastp;
+	struct netpath_vars *np_sessionp = (struct netpath_vars *)handlep;
+	struct netpath_chain *chainp, *lastp;
 
-    if (np_sessionp == NULL || np_sessionp->valid != NP_VALID) {
-        errno = EINVAL;
-        return (-1);
-    }
-    if (np_sessionp->nc_handlep != NULL)
-        endnetconfig(np_sessionp->nc_handlep);
-    if (np_sessionp->netpath_start != NULL)
-        mem_free(np_sessionp->netpath_start, 0);
-    for (chainp = np_sessionp->ncp_list; chainp != NULL;
-         lastp=chainp, chainp=chainp->nchain_next, mem_free(lastp, 0)) {
-        freenetconfigent(chainp->ncp);
-    }
+	if (np_sessionp == NULL || np_sessionp->valid != NP_VALID) {
+		errno = EINVAL;
+		return (-1);
+	}
+	if (np_sessionp->nc_handlep != NULL)
+		endnetconfig(np_sessionp->nc_handlep);
+	if (np_sessionp->netpath_start != NULL)
+		mem_free(np_sessionp->netpath_start, 0);
+	for (chainp = np_sessionp->ncp_list; chainp != NULL;
+	     lastp = chainp, chainp = chainp->nchain_next, mem_free(lastp, 0)) {
+		freenetconfigent(chainp->ncp);
+	}
 
-
-    mem_free(np_sessionp, 0);
+	mem_free(np_sessionp, 0);
 #ifdef MEM_CHK
-    if (malloc_verify() == 0) {
-        fprintf(stderr, "memory heap corrupted in endnetpath\n");
-        exit(1);
-    }
+	if (malloc_verify() == 0) {
+		fprintf(stderr, "memory heap corrupted in endnetpath\n");
+		exit(1);
+	}
 #endif
-    return (0);
+	return (0);
 }
-
-
 
 /*
  * Returns pointer to the rest-of-the-string after the current token.
@@ -225,40 +221,39 @@ endnetpath(void *handlep)
  * if either the arg is empty, or if this is the last token.
  */
 
-char *
-_get_next_token(char *npp, /* string */
-                int token  /* char to parse string for */)
+char *_get_next_token(char *npp,	/* string */
+		      int token /* char to parse string for */ )
 {
-    char  *cp;  /* char pointer */
-    char  *np;  /* netpath pointer */
-    char  *ep;  /* escape pointer */
+	char *cp;		/* char pointer */
+	char *np;		/* netpath pointer */
+	char *ep;		/* escape pointer */
 
-    if ((cp = strchr(npp, token)) == NULL) {
-        return (NULL);
-    }
-    /*
-     * did find a token, but it might be escaped.
-     */
-    if ((cp > npp) && (cp[-1] == '\\')) {
-        /* if slash was also escaped, carry on, otherwise find next token */
-        if ((cp > npp + 1) && (cp[-2] != '\\')) {
-            /* shift r-o-s  onto the escaped token */
-            strcpy(&cp[-1], cp);    /* XXX: overlapping string copy */
-            /*
-             * Do a recursive call.
-             * We don't know how many escaped tokens there might be.
-             */
-            return (_get_next_token(cp, token));
-        }
-    }
+	if ((cp = strchr(npp, token)) == NULL) {
+		return (NULL);
+	}
+	/*
+	 * did find a token, but it might be escaped.
+	 */
+	if ((cp > npp) && (cp[-1] == '\\')) {
+		/* if slash was also escaped, carry on, otherwise find next token */
+		if ((cp > npp + 1) && (cp[-2] != '\\')) {
+			/* shift r-o-s  onto the escaped token */
+			strcpy(&cp[-1], cp);	/* XXX: overlapping string copy */
+			/*
+			 * Do a recursive call.
+			 * We don't know how many escaped tokens there might be.
+			 */
+			return (_get_next_token(cp, token));
+		}
+	}
 
-    *cp++ = '\0';  /* null-terminate token */
-    /* get rid of any backslash escapes */
-    ep = npp;
-    while ((np = strchr(ep, '\\')) != 0) {
-        if (np[1] == '\\')
-            np++;
-        strcpy(np, (ep = &np[1]));  /* XXX: overlapping string copy */
-    }
-    return (cp);  /* return ptr to r-o-s */
+	*cp++ = '\0';		/* null-terminate token */
+	/* get rid of any backslash escapes */
+	ep = npp;
+	while ((np = strchr(ep, '\\')) != 0) {
+		if (np[1] == '\\')
+			np++;
+		strcpy(np, (ep = &np[1]));	/* XXX: overlapping string copy */
+	}
+	return (cp);		/* return ptr to r-o-s */
 }

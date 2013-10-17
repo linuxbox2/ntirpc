@@ -52,80 +52,76 @@
 #include "rpc_dplx_internal.h"
 #include "rpc_ctx.h"
 
-
-static inline int
-clnt_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
+static inline int clnt_read_vc(XDR * xdrs, void *ctp, void *buf, int len)
 {
-    struct x_vc_data *xd = (struct x_vc_data *) ctp;
-    struct ct_data *ct = &xd->cx.data;
-    rpc_ctx_t *ctx = (rpc_ctx_t *) xdrs->x_lib[1];
-    struct pollfd fd;
-    int milliseconds = (int)((ct->ct_wait.tv_sec * 1000) +
-                             (ct->ct_wait.tv_usec / 1000));
+	struct x_vc_data *xd = (struct x_vc_data *)ctp;
+	struct ct_data *ct = &xd->cx.data;
+	rpc_ctx_t *ctx = (rpc_ctx_t *) xdrs->x_lib[1];
+	struct pollfd fd;
+	int milliseconds =
+	    (int)((ct->ct_wait.tv_sec * 1000) + (ct->ct_wait.tv_usec / 1000));
 
-    if (len == 0)
-        return (0);
+	if (len == 0)
+		return (0);
 
-    fd.fd = xd->cx.data.ct_fd;
-    fd.events = POLLIN;
-    for (;;) {
-        switch (poll(&fd, 1, milliseconds)) {
-        case 0:
-            ctx->error.re_status = RPC_TIMEDOUT;
-            return (-1);
+	fd.fd = xd->cx.data.ct_fd;
+	fd.events = POLLIN;
+	for (;;) {
+		switch (poll(&fd, 1, milliseconds)) {
+		case 0:
+			ctx->error.re_status = RPC_TIMEDOUT;
+			return (-1);
 
-        case -1:
-            if (errno == EINTR)
-                continue;
-            ctx->error.re_status = RPC_CANTRECV;
-            ctx->error.re_errno = errno;
-            return (-1);
-        }
-        break;
-    }
+		case -1:
+			if (errno == EINTR)
+				continue;
+			ctx->error.re_status = RPC_CANTRECV;
+			ctx->error.re_errno = errno;
+			return (-1);
+		}
+		break;
+	}
 
-    len = read(xd->cx.data.ct_fd, buf, (size_t)len);
+	len = read(xd->cx.data.ct_fd, buf, (size_t) len);
 
-    switch (len) {
-    case 0:
-        /* premature eof */
-        ctx->error.re_errno = ECONNRESET;
-        ctx->error.re_status = RPC_CANTRECV;
-        len = -1;  /* it's really an error */
-        break;
+	switch (len) {
+	case 0:
+		/* premature eof */
+		ctx->error.re_errno = ECONNRESET;
+		ctx->error.re_status = RPC_CANTRECV;
+		len = -1;	/* it's really an error */
+		break;
 
-    case -1:
-        ctx->error.re_errno = errno;
-        ctx->error.re_status = RPC_CANTRECV;
-        break;
-    }
-    return (len);
+	case -1:
+		ctx->error.re_errno = errno;
+		ctx->error.re_status = RPC_CANTRECV;
+		break;
+	}
+	return (len);
 }
 
-static inline int
-clnt_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
+static inline int clnt_write_vc(XDR * xdrs, void *ctp, void *buf, int len)
 {
-    struct x_vc_data *xd = (struct x_vc_data *) ctp;
-    rpc_ctx_t *ctx = (rpc_ctx_t *) xdrs->x_lib[1];
+	struct x_vc_data *xd = (struct x_vc_data *)ctp;
+	rpc_ctx_t *ctx = (rpc_ctx_t *) xdrs->x_lib[1];
 
-    int i = 0, cnt;
+	int i = 0, cnt;
 
-    for (cnt = len; cnt > 0; cnt -= i, buf += i) {
-        if ((i = write(xd->cx.data.ct_fd, buf, (size_t)cnt)) == -1) {
-            ctx->error.re_errno = errno;
-            ctx->error.re_status = RPC_CANTSEND;
-            return (-1);
-        }
-    }
-    return (len);
+	for (cnt = len; cnt > 0; cnt -= i, buf += i) {
+		if ((i = write(xd->cx.data.ct_fd, buf, (size_t) cnt)) == -1) {
+			ctx->error.re_errno = errno;
+			ctx->error.re_status = RPC_CANTSEND;
+			return (-1);
+		}
+	}
+	return (len);
 }
 
-static inline void
-cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
+static inline void cfconn_set_dead(SVCXPRT * xprt, struct x_vc_data *xd)
 {
-    mutex_lock(&xprt->xp_lock);
-    xd->sx.strm_stat = XPRT_DIED;
-    mutex_unlock(&xprt->xp_lock);
+	mutex_lock(&xprt->xp_lock);
+	xd->sx.strm_stat = XPRT_DIED;
+	mutex_unlock(&xprt->xp_lock);
 }
 
 /*
@@ -137,111 +133,106 @@ cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
  */
 #define EARLY_DEATH_DEBUG 1
 
-static inline int
-svc_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
+static inline int svc_read_vc(XDR * xdrs, void *ctp, void *buf, int len)
 {
-    SVCXPRT *xprt;
-    int milliseconds = 35 * 1000; /* XXX shouldn't this be configurable? */
-    struct pollfd pollfd;
-    struct x_vc_data *xd;
+	SVCXPRT *xprt;
+	int milliseconds = 35 * 1000;	/* XXX shouldn't this be configurable? */
+	struct pollfd pollfd;
+	struct x_vc_data *xd;
 
-    xd = (struct x_vc_data *) ctp;
-    xprt = xd->rec->hdl.xprt;
+	xd = (struct x_vc_data *)ctp;
+	xprt = xd->rec->hdl.xprt;
 
-    if (xd->shared.nonblock) {
-        len = read(xprt->xp_fd, buf, (size_t)len);
-        if (len < 0) {
-            if (errno == EAGAIN)
-                len = 0;
-            else
-                goto fatal_err;
-        }
-        if (len != 0)
-            (void) clock_gettime(
-                CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
-        return len;
-    }
+	if (xd->shared.nonblock) {
+		len = read(xprt->xp_fd, buf, (size_t) len);
+		if (len < 0) {
+			if (errno == EAGAIN)
+				len = 0;
+			else
+				goto fatal_err;
+		}
+		if (len != 0)
+			(void)clock_gettime(CLOCK_MONOTONIC_FAST,
+					    &xd->sx.last_recv);
+		return len;
+	}
 
-    do {
-        pollfd.fd = xprt->xp_fd;
-        pollfd.events = POLLIN;
-        pollfd.revents = 0;
-        switch (poll(&pollfd, 1, milliseconds)) {
-        case -1:
-            if (errno == EINTR)
-                continue;
-            /*FALLTHROUGH*/
-        case 0:
-            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                    "%s: poll returns 0 (will set dead)",
-                    __func__);
-            goto fatal_err;
+	do {
+		pollfd.fd = xprt->xp_fd;
+		pollfd.events = POLLIN;
+		pollfd.revents = 0;
+		switch (poll(&pollfd, 1, milliseconds)) {
+		case -1:
+			if (errno == EINTR)
+				continue;
+		 /*FALLTHROUGH*/ case 0:
+			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+				"%s: poll returns 0 (will set dead)", __func__);
+			goto fatal_err;
 
-        default:
-            break;
-        }
-    } while ((pollfd.revents & POLLIN) == 0);
+		default:
+			break;
+		}
+	} while ((pollfd.revents & POLLIN) == 0);
 
-    if ((len = read(xprt->xp_fd, buf, (size_t)len)) > 0) {
-        (void) clock_gettime(
-            CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
-        return (len);
-    }
+	if ((len = read(xprt->xp_fd, buf, (size_t) len)) > 0) {
+		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
+		return (len);
+	}
 
-fatal_err:
-    cfconn_set_dead(xprt, xd);
-    return (-1);
+ fatal_err:
+	cfconn_set_dead(xprt, xd);
+	return (-1);
 }
 
 /*
  * writes data to the tcp connection.
  * Any error is fatal and the connection is closed.
  */
-static inline int
-svc_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
+static inline int svc_write_vc(XDR * xdrs, void *ctp, void *buf, int len)
 {
-    SVCXPRT *xprt;
-    struct x_vc_data *xd;
-    struct timespec ts0, ts1;
-    int i, cnt;
+	SVCXPRT *xprt;
+	struct x_vc_data *xd;
+	struct timespec ts0, ts1;
+	int i, cnt;
 
-    xd = (struct x_vc_data *) ctp;
-    xprt = xd->rec->hdl.xprt;
+	xd = (struct x_vc_data *)ctp;
+	xprt = xd->rec->hdl.xprt;
 
-    if (xd->shared.nonblock)
-        (void) clock_gettime(CLOCK_MONOTONIC_FAST, &ts0);
+	if (xd->shared.nonblock)
+		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &ts0);
 
-    for (cnt = len; cnt > 0; cnt -= i, buf += i) {
-        i = write(xprt->xp_fd, buf, (size_t)cnt);
-        if (i  < 0) {
-            if (errno != EAGAIN || !xd->shared.nonblock) {
-                __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                        "%s: short write !EAGAIN (will set dead)",
-                        __func__);
-                cfconn_set_dead(xprt, xd);
-                return (-1);
-            }
-            if (xd->shared.nonblock && i != cnt) {
-                /*
-                 * For non-blocking connections, do not
-                 * take more than 2 seconds writing the
-                 * data out.
-                 *
-                 * XXX 2 is an arbitrary amount.
-                 */
-                (void) clock_gettime(CLOCK_MONOTONIC_FAST, &ts1);
-                if (ts1.tv_sec - ts0.tv_sec >= 2) {
-                    __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                            "%s: short write !EAGAIN (will set dead)",
-                            __func__);
-                    cfconn_set_dead(xprt, xd);
-                    return (-1);
-                }
-            }
-        }
-    }
+	for (cnt = len; cnt > 0; cnt -= i, buf += i) {
+		i = write(xprt->xp_fd, buf, (size_t) cnt);
+		if (i < 0) {
+			if (errno != EAGAIN || !xd->shared.nonblock) {
+				__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+					"%s: short write !EAGAIN (will set dead)",
+					__func__);
+				cfconn_set_dead(xprt, xd);
+				return (-1);
+			}
+			if (xd->shared.nonblock && i != cnt) {
+				/*
+				 * For non-blocking connections, do not
+				 * take more than 2 seconds writing the
+				 * data out.
+				 *
+				 * XXX 2 is an arbitrary amount.
+				 */
+				(void)clock_gettime(CLOCK_MONOTONIC_FAST, &ts1);
+				if (ts1.tv_sec - ts0.tv_sec >= 2) {
+					__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+						"%s: short write !EAGAIN (will set dead)",
+						__func__);
+					cfconn_set_dead(xprt, xd);
+					return (-1);
+				}
+			}
+		}
+	}
 
-    return (len);
+	return (len);
 }
 
 /* vector versions */
@@ -253,213 +244,204 @@ svc_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
  * All read operations timeout after 35 seconds.  A timeout is
  * fatal for the connection.
  */
-static inline size_t
-svc_readv_vc(XDR *xdrs, void *ctp, struct iovec *iov, int iovcnt,
-             u_int flags)
+static inline size_t svc_readv_vc(XDR * xdrs, void *ctp, struct iovec *iov,
+				  int iovcnt, u_int flags)
 {
-    SVCXPRT *xprt;
-    int milliseconds = 35 * 1000; /* XXX shouldn't this be configurable? */
-    struct pollfd pollfd;
-    struct x_vc_data *xd;
-    size_t nbytes = -1;
+	SVCXPRT *xprt;
+	int milliseconds = 35 * 1000;	/* XXX shouldn't this be configurable? */
+	struct pollfd pollfd;
+	struct x_vc_data *xd;
+	size_t nbytes = -1;
 
-    xd = (struct x_vc_data *) ctp;
-    xprt = xd->rec->hdl.xprt;
+	xd = (struct x_vc_data *)ctp;
+	xprt = xd->rec->hdl.xprt;
 
-    do {
-        pollfd.fd = xprt->xp_fd;
-        pollfd.events = POLLIN;
-        pollfd.revents = 0;
-        switch (poll(&pollfd, 1, milliseconds)) {
-        case -1:
-            if (errno == EINTR)
-                continue;
-            /*FALLTHROUGH*/
-        case 0:
-            __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                    "%s: poll returns 0 (will set dead)",
-                    __func__);
-            goto fatal_err;
-        default:
-            break;
-        }
-    } while ((pollfd.revents & POLLIN) == 0);
+	do {
+		pollfd.fd = xprt->xp_fd;
+		pollfd.events = POLLIN;
+		pollfd.revents = 0;
+		switch (poll(&pollfd, 1, milliseconds)) {
+		case -1:
+			if (errno == EINTR)
+				continue;
+		 /*FALLTHROUGH*/ case 0:
+			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+				"%s: poll returns 0 (will set dead)", __func__);
+			goto fatal_err;
+		default:
+			break;
+		}
+	} while ((pollfd.revents & POLLIN) == 0);
 
-    if ((nbytes = readv(xprt->xp_fd, iov, iovcnt)) > 0) {
-        (void) clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
-        goto out;
-    }
+	if ((nbytes = readv(xprt->xp_fd, iov, iovcnt)) > 0) {
+		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
+		goto out;
+	}
 
-fatal_err:
-    cfconn_set_dead(xprt, xd);
-out:
-    return (nbytes);
+ fatal_err:
+	cfconn_set_dead(xprt, xd);
+ out:
+	return (nbytes);
 }
 
 /*
  * writes data to the tcp connection.
  * Any error is fatal and the connection is closed.
  */
-static size_t
-svc_writev_vc(XDR *xdrs, void *ctp, struct iovec *iov, int iovcnt,
-              u_int flags)
+static size_t svc_writev_vc(XDR * xdrs, void *ctp, struct iovec *iov,
+			    int iovcnt, u_int flags)
 {
-    SVCXPRT *xprt;
-    struct x_vc_data *xd;
-    size_t nbytes;
+	SVCXPRT *xprt;
+	struct x_vc_data *xd;
+	size_t nbytes;
 
-    xd = (struct x_vc_data *) ctp;
-    xprt = xd->rec->hdl.xprt;
+	xd = (struct x_vc_data *)ctp;
+	xprt = xd->rec->hdl.xprt;
 
-    nbytes = writev(xprt->xp_fd, iov, iovcnt);
-    if (nbytes  < 0) {
-        __warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-                "%s: short writev (will set dead)",
-                __func__);
-        cfconn_set_dead(xprt, xd);
-        return (-1);
-    }
+	nbytes = writev(xprt->xp_fd, iov, iovcnt);
+	if (nbytes < 0) {
+		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+			"%s: short writev (will set dead)", __func__);
+		cfconn_set_dead(xprt, xd);
+		return (-1);
+	}
 
-    return (nbytes);
+	return (nbytes);
 }
 
 /* generic read and write callbacks */
-int
-generic_read_vc(XDR *xdrs, void *ctp, void* buf, int len)
+int generic_read_vc(XDR * xdrs, void *ctp, void *buf, int len)
 {
-    switch ((enum rpc_duplex_callpath) xdrs->x_lib[0]) {
-    case RPC_DPLX_CLNT:
-        return (clnt_read_vc(xdrs, ctp, buf, len));
-        break;
-    case RPC_DPLX_SVC:
-        return (svc_read_vc(xdrs, ctp, buf, len));
-        break;
-    default:
-        /* better not */
-        abort();
-    }
+	switch ((enum rpc_duplex_callpath)xdrs->x_lib[0]) {
+	case RPC_DPLX_CLNT:
+		return (clnt_read_vc(xdrs, ctp, buf, len));
+		break;
+	case RPC_DPLX_SVC:
+		return (svc_read_vc(xdrs, ctp, buf, len));
+		break;
+	default:
+		/* better not */
+		abort();
+	}
 }
 
-int
-generic_write_vc(XDR *xdrs, void *ctp, void* buf, int len)
+int generic_write_vc(XDR * xdrs, void *ctp, void *buf, int len)
 {
-    switch ((enum rpc_duplex_callpath) xdrs->x_lib[0]) {
-    case RPC_DPLX_CLNT:
-        return (clnt_write_vc(xdrs, ctp, buf, len));
-        break;
-    case RPC_DPLX_SVC:
-        return (svc_write_vc(xdrs, ctp, buf, len));
-        break;
-    default:
-        /* better not */
-        abort();
-    }
+	switch ((enum rpc_duplex_callpath)xdrs->x_lib[0]) {
+	case RPC_DPLX_CLNT:
+		return (clnt_write_vc(xdrs, ctp, buf, len));
+		break;
+	case RPC_DPLX_SVC:
+		return (svc_write_vc(xdrs, ctp, buf, len));
+		break;
+	default:
+		/* better not */
+		abort();
+	}
 }
 
-size_t
-generic_readv_vc(XDR *xdrs, void *xprtp, struct iovec *iov, int iovcnt,
-                 u_int flags)
+size_t generic_readv_vc(XDR * xdrs, void *xprtp, struct iovec *iov, int iovcnt,
+			u_int flags)
 {
-    switch ((enum rpc_duplex_callpath) xdrs->x_lib[0]) {
-#if 0 /* XXX implmenent */
-    case RPC_DPLX_CLNT:
-        return (clnt_readv_vc(xdrs, xprtp, iov, iovcnt, flags));
-        break;
+	switch ((enum rpc_duplex_callpath)xdrs->x_lib[0]) {
+#if 0				/* XXX implmenent */
+	case RPC_DPLX_CLNT:
+		return (clnt_readv_vc(xdrs, xprtp, iov, iovcnt, flags));
+		break;
 #endif
-    case RPC_DPLX_SVC:
-        return (svc_readv_vc(xdrs, xprtp, iov, iovcnt, flags));
-        break;
-    default:
-        /* better not */
-        abort();
-    }
+	case RPC_DPLX_SVC:
+		return (svc_readv_vc(xdrs, xprtp, iov, iovcnt, flags));
+		break;
+	default:
+		/* better not */
+		abort();
+	}
 }
 
-size_t
-generic_writev_vc(XDR *xdrs, void *xprtp, struct iovec *iov, int iovcnt,
-                  u_int flags)
+size_t generic_writev_vc(XDR * xdrs, void *xprtp, struct iovec *iov, int iovcnt,
+			 u_int flags)
 {
-    switch ((enum rpc_duplex_callpath) xdrs->x_lib[0]) {
-#if 0 /* XXX implement */
-    case RPC_DPLX_CLNT:
-        return (clnt_writev_vc(xdrs, xprtp, iov, iovcnt, flags));
-        break;
+	switch ((enum rpc_duplex_callpath)xdrs->x_lib[0]) {
+#if 0				/* XXX implement */
+	case RPC_DPLX_CLNT:
+		return (clnt_writev_vc(xdrs, xprtp, iov, iovcnt, flags));
+		break;
 #endif
-    case RPC_DPLX_SVC:
-        return (svc_writev_vc(xdrs, xprtp, iov, iovcnt, flags));
-        break;
-    default:
-        /* better not */
-        abort();
-    }
+	case RPC_DPLX_SVC:
+		return (svc_writev_vc(xdrs, xprtp, iov, iovcnt, flags));
+		break;
+	default:
+		/* better not */
+		abort();
+	}
 }
 
 void vc_shared_destroy(struct x_vc_data *xd)
 {
-    struct rpc_dplx_rec *rec = xd->rec;
-    struct ct_data *ct = &xd->cx.data;
-    SVCXPRT *xprt;
-    bool closed = FALSE;
-    bool xdrs_destroyed = FALSE;
+	struct rpc_dplx_rec *rec = xd->rec;
+	struct ct_data *ct = &xd->cx.data;
+	SVCXPRT *xprt;
+	bool closed = FALSE;
+	bool xdrs_destroyed = FALSE;
 
-    /* RECLOCKED */
+	/* RECLOCKED */
 
-    if (ct->ct_closeit && ct->ct_fd != RPC_ANYFD) {
-        (void)close(ct->ct_fd);
-        closed = TRUE;
-    }
+	if (ct->ct_closeit && ct->ct_fd != RPC_ANYFD) {
+		(void)close(ct->ct_fd);
+		closed = TRUE;
+	}
 
-    /* destroy shared XDR record streams (once) */
-    XDR_DESTROY(&xd->shared.xdrs_in);
-    XDR_DESTROY(&xd->shared.xdrs_out);
-    xdrs_destroyed = TRUE;
+	/* destroy shared XDR record streams (once) */
+	XDR_DESTROY(&xd->shared.xdrs_in);
+	XDR_DESTROY(&xd->shared.xdrs_out);
+	xdrs_destroyed = TRUE;
 
-    if (ct->ct_addr.buf)
-        mem_free(ct->ct_addr.buf, 0); /* XXX */
+	if (ct->ct_addr.buf)
+		mem_free(ct->ct_addr.buf, 0);	/* XXX */
 
-    /* svc_vc */
-    xprt = rec->hdl.xprt;
-    if (xprt) {
+	/* svc_vc */
+	xprt = rec->hdl.xprt;
+	if (xprt) {
 
-        XPRT_TRACE_RADDR(xprt, __func__, __func__, __LINE__);
+		XPRT_TRACE_RADDR(xprt, __func__, __func__, __LINE__);
 
-        rec->hdl.xprt = NULL; /* unreachable */
+		rec->hdl.xprt = NULL;	/* unreachable */
 
-        if (! closed) {
-            if (xprt->xp_fd != RPC_ANYFD)
-                (void)close(xprt->xp_fd);
-        }
+		if (!closed) {
+			if (xprt->xp_fd != RPC_ANYFD)
+				(void)close(xprt->xp_fd);
+		}
 
-        /* request socket */
-        if (! xdrs_destroyed) {
-            XDR_DESTROY(&(xd->shared.xdrs_in));
-            XDR_DESTROY(&(xd->shared.xdrs_out));
-        }
+		/* request socket */
+		if (!xdrs_destroyed) {
+			XDR_DESTROY(&(xd->shared.xdrs_in));
+			XDR_DESTROY(&(xd->shared.xdrs_out));
+		}
 
-        if (xprt->xp_rtaddr.buf)
-            mem_free(xprt->xp_rtaddr.buf, xprt->xp_rtaddr.maxlen);
-        if (xprt->xp_ltaddr.buf)
-            mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
-        if (xprt->xp_tp)
-            mem_free(xprt->xp_tp, 0);
-        if (xprt->xp_netid)
-            mem_free(xprt->xp_netid, 0);
+		if (xprt->xp_rtaddr.buf)
+			mem_free(xprt->xp_rtaddr.buf, xprt->xp_rtaddr.maxlen);
+		if (xprt->xp_ltaddr.buf)
+			mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
+		if (xprt->xp_tp)
+			mem_free(xprt->xp_tp, 0);
+		if (xprt->xp_netid)
+			mem_free(xprt->xp_netid, 0);
 
-        /* call free hook */
-        if (xprt->xp_ops2->xp_free_xprt)
-            xprt->xp_ops2->xp_free_xprt(xprt);
+		/* call free hook */
+		if (xprt->xp_ops2->xp_free_xprt)
+			xprt->xp_ops2->xp_free_xprt(xprt);
 
-        mem_free(xprt, sizeof(SVCXPRT));
-    }
+		mem_free(xprt, sizeof(SVCXPRT));
+	}
 
-    rec->hdl.xd = NULL;
+	rec->hdl.xd = NULL;
 
-    /* unref shared */
-    REC_UNLOCK(rec);
+	/* unref shared */
+	REC_UNLOCK(rec);
 
-    if (xprt)
-        rpc_dplx_unref(rec, RPC_DPLX_FLAG_NONE);
+	if (xprt)
+		rpc_dplx_unref(rec, RPC_DPLX_FLAG_NONE);
 
-    /* free xd itself */
-    mem_free(xd, sizeof(struct x_vc_data));
+	/* free xd itself */
+	mem_free(xd, sizeof(struct x_vc_data));
 }

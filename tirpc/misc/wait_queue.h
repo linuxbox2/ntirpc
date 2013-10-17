@@ -33,10 +33,9 @@
 #include <misc/queue.h>
 #include <reentrant.h>
 
-typedef struct wait_entry
-{
-    mutex_t mtx;
-    cond_t cv;
+typedef struct wait_entry {
+	mutex_t mtx;
+	cond_t cv;
 } wait_entry_t;
 
 #define Wqe_LFlag_None        0x0000
@@ -44,45 +43,40 @@ typedef struct wait_entry
 #define Wqe_LFlag_SyncDone    0x0002
 
 /* thread wait queue */
-typedef struct wait_q_entry
-{
-    uint32_t flags;
-    uint32_t waiters;
-    wait_entry_t lwe; /* left */
-    wait_entry_t rwe; /* right */
-    TAILQ_HEAD(we_tailq, waiter) waitq;
+typedef struct wait_q_entry {
+	uint32_t flags;
+	uint32_t waiters;
+	wait_entry_t lwe;	/* left */
+	wait_entry_t rwe;	/* right */
+	 TAILQ_HEAD(we_tailq, waiter) waitq;
 } wait_q_entry_t;
 
-static inline void
-init_wait_entry(wait_entry_t *we)
+static inline void init_wait_entry(wait_entry_t * we)
 {
-    mutex_init(&we->mtx, NULL);
-    pthread_cond_init(&we->cv, NULL);
+	mutex_init(&we->mtx, NULL);
+	pthread_cond_init(&we->cv, NULL);
 }
 
-static inline void
-destroy_wait_entry(wait_entry_t *we)
+static inline void destroy_wait_entry(wait_entry_t * we)
 {
-    mutex_destroy(&we->mtx);
-    cond_destroy(&we->cv);
+	mutex_destroy(&we->mtx);
+	cond_destroy(&we->cv);
 }
 
-static inline void
-init_wait_q_entry(wait_q_entry_t *wqe)
+static inline void init_wait_q_entry(wait_q_entry_t * wqe)
 {
-    TAILQ_INIT(&wqe->waitq);
-    init_wait_entry(&wqe->lwe);
-    init_wait_entry(&wqe->rwe);
+	TAILQ_INIT(&wqe->waitq);
+	init_wait_entry(&wqe->lwe);
+	init_wait_entry(&wqe->rwe);
 }
 
-static inline void
-thread_delay_ms(unsigned long ms)
+static inline void thread_delay_ms(unsigned long ms)
 {
-     struct timespec then = {
-	 .tv_sec = ms / 1000,
-	 .tv_nsec = ms % 1000000UL
-     };
-     nanosleep(&then, NULL);
+	struct timespec then = {
+		.tv_sec = ms / 1000,
+		.tv_nsec = ms % 1000000UL
+	};
+	nanosleep(&then, NULL);
 }
 
-#endif /* WAIT_QUEUE_H */
+#endif				/* WAIT_QUEUE_H */

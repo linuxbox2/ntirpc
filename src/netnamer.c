@@ -47,12 +47,12 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-static char    *OPSYS = "unix";
-static char    *NETID = "netid.byname";
-static char    *NETIDFILE = "/etc/netid";
+static char *OPSYS = "unix";
+static char *NETID = "netid.byname";
+static char *NETIDFILE = "/etc/netid";
 
-static int getnetid( char *, char * );
-static int _getgroups( char *, gid_t * );
+static int getnetid(char *, char *);
+static int _getgroups(char *, gid_t *);
 
 #ifndef NGROUPS
 #define NGROUPS 16
@@ -61,20 +61,19 @@ static int _getgroups( char *, gid_t * );
 /*
  * Convert network-name into unix credential
  */
-int
-netname2user(char netname[MAXNETNAMELEN + 1], uid_t *uidp, gid_t *gidp, int *gidlenp,
-             gid_t *gidlist)
+int netname2user(char netname[MAXNETNAMELEN + 1], uid_t * uidp, gid_t * gidp,
+		 int *gidlenp, gid_t * gidlist)
 {
-	char           *p;
-	int             gidlen;
-	uid_t           uid;
-	long		luid;
-	struct passwd  *pwd;
-	char            val[1024];
-	char           *val1, *val2;
-	char           *domain;
-	int             vallen;
-	int             err;
+	char *p;
+	int gidlen;
+	uid_t uid;
+	long luid;
+	struct passwd *pwd;
+	char val[1024];
+	char *val1, *val2;
+	char *domain;
+	int vallen;
+	int err;
 
 	if (getnetid(netname, val)) {
 		char *res = val;
@@ -102,7 +101,7 @@ netname2user(char netname[MAXNETNAMELEN + 1], uid_t *uidp, gid_t *gidp, int *gid
 	val1 = strchr(netname, '.');
 	if (val1 == NULL)
 		return (0);
-	if (strncmp(netname, OPSYS, (val1-netname)))
+	if (strncmp(netname, OPSYS, (val1 - netname)))
 		return (0);
 	val1++;
 	val2 = strchr(val1, '@');
@@ -111,7 +110,7 @@ netname2user(char netname[MAXNETNAMELEN + 1], uid_t *uidp, gid_t *gidp, int *gid
 	vallen = val2 - val1;
 	if (vallen > (1024 - 1))
 		vallen = 1024 - 1;
-	(void) strncpy(val, val1, 1024);
+	(void)strncpy(val, val1, 1024);
 	val[vallen] = 0;
 
 	err = __rpc_get_default_domain(&domain);	/* change to rpc */
@@ -139,14 +138,13 @@ netname2user(char netname[MAXNETNAMELEN + 1], uid_t *uidp, gid_t *gidp, int *gid
  * initgroups
  */
 
-static int
-_getgroups(char *uname, gid_t groups[NGROUPS])
+static int _getgroups(char *uname, gid_t groups[NGROUPS])
 {
-	gid_t           ngroups = 0;
+	gid_t ngroups = 0;
 	struct group *grp;
-	int    i;
-	int    j;
-	int             filter;
+	int i;
+	int j;
+	int filter;
 
 	setgrent();
 	while ((grp = getgrent())) {
@@ -155,7 +153,8 @@ _getgroups(char *uname, gid_t groups[NGROUPS])
 				if (ngroups == NGROUPS) {
 #ifdef DEBUG
 					fprintf(stderr,
-				"initgroups: %s is in too many groups\n", uname);
+						"initgroups: %s is in too many groups\n",
+						uname);
 #endif
 					goto toomany;
 				}
@@ -170,7 +169,7 @@ _getgroups(char *uname, gid_t groups[NGROUPS])
 					groups[ngroups++] = grp->gr_gid;
 			}
 	}
-toomany:
+ toomany:
 	endgrent();
 	return (ngroups);
 }
@@ -178,20 +177,19 @@ toomany:
 /*
  * Convert network-name to hostname
  */
-int
-netname2host(char netname[MAXNETNAMELEN + 1], char *hostname, int hostlen)
+int netname2host(char netname[MAXNETNAMELEN + 1], char *hostname, int hostlen)
 {
-	int             err;
-	char            valbuf[1024];
-	char           *val;
-	char           *val2;
-	int             vallen;
-	char           *domain;
+	int err;
+	char valbuf[1024];
+	char *val;
+	char *val2;
+	int vallen;
+	char *domain;
 
 	if (getnetid(netname, valbuf)) {
 		val = valbuf;
 		if ((*val == '0') && (val[1] == ':')) {
-			(void) strncpy(hostname, val + 2, hostlen);
+			(void)strncpy(hostname, val + 2, hostlen);
 			return (1);
 		}
 	}
@@ -207,7 +205,7 @@ netname2host(char netname[MAXNETNAMELEN + 1], char *hostname, int hostlen)
 	vallen = val2 - val;
 	if (vallen > (hostlen - 1))
 		vallen = hostlen - 1;
-	(void) strncpy(hostname, val, vallen);
+	(void)strncpy(hostname, val, vallen);
 	hostname[vallen] = 0;
 
 	err = __rpc_get_default_domain(&domain);	/* change to rpc */
@@ -224,91 +222,62 @@ netname2host(char netname[MAXNETNAMELEN + 1], char *hostname, int hostlen)
  * reads the file /etc/netid looking for a + to optionally go to the
  * network information service.
  */
-int
-getnetid(char *key, char *ret;
-{
-	char            buf[1024];	/* big enough */
-	char           *res;
-	char           *mkey;
-	char           *mval;
-	FILE           *fd;
+int getnetid(char *key, char *ret; {
+	     char buf[1024];	/* big enough */
+	     char *res; char *mkey; char *mval; FILE * fd;
 #ifdef YP
-	char           *domain;
-	int             err;
-	char           *lookup;
-	int             len;
+	     char *domain; int err; char *lookup; int len;
 #endif
-
-	fd = fopen(NETIDFILE, "r");
-	if (fd == NULL) {
+	     fd = fopen(NETIDFILE, "r"); if (fd == NULL) {
 #ifdef YP
-		res = "+";
-		goto getnetidyp;
+	     res = "+"; goto getnetidyp;
 #else
-		return (0);
+	     return (0);
 #endif
-	}
-	for (;;) {
-		if (fd == NULL)
-			return (0);	/* getnetidyp brings us here */
-		res = fgets(buf, sizeof(buf), fd);
-		if (res == NULL) {
-			fclose(fd);
-			return (0);
-		}
-		if (res[0] == '#')
-			continue;
-		else if (res[0] == '+') {
+	     }
+	     for (;;) {
+	     if (fd == NULL)
+	     return (0);	/* getnetidyp brings us here */
+	     res = fgets(buf, sizeof(buf), fd); if (res == NULL) {
+	     fclose(fd); return (0);}
+	     if (res[0] == '#')
+	     continue;
+	     else
+	     if (res[0] == '+') {
 #ifdef YP
-	getnetidyp:
-			err = yp_get_default_domain(&domain);
-			if (err) {
-				continue;
-			}
-			lookup = NULL;
-			err = yp_match(domain, NETID, key,
-				strlen(key), &lookup, &len);
-			if (err) {
+ getnetidyp:
+	     err = yp_get_default_domain(&domain); if (err) {
+	     continue;}
+	     lookup = NULL;
+	     err = yp_match(domain, NETID, key, strlen(key), &lookup, &len);
+	     if (err) {
 #ifdef DEBUG
-				fprintf(stderr, "match failed error %d\n", err);
+	     fprintf(stderr, "match failed error %d\n", err);
 #endif
-				continue;
-			}
-			lookup[len] = 0;
-			strcpy(ret, lookup);
-			free(lookup); /* yp allocated with malloc */
-			if (fd != NULL)
-				fclose(fd);
-			return (2);
-#else	/* YP */
+	     continue;}
+	     lookup[len] = 0; strcpy(ret, lookup); free(lookup);	/* yp allocated with malloc */
+	     if (fd != NULL)
+	     fclose(fd); return (2);
+#else				/* YP */
 #ifdef DEBUG
-			fprintf(stderr,
-"Bad record in %s '+' -- NIS not supported in this library copy\n",
-				NETIDFILE);
+	     fprintf(stderr,
+		     "Bad record in %s '+' -- NIS not supported in this library copy\n",
+		     NETIDFILE);
 #endif
-			continue;
-#endif	/* YP */
-		} else {
-			mkey = strsep(&res, "\t ");
-			if (mkey == NULL) {
-				fprintf(stderr,
-		"Bad record in %s -- %s", NETIDFILE, buf);
-				continue;
-			}
-			do {
-				mval = strsep(&res, " \t#\n");
-			} while (mval != NULL && !*mval);
-			if (mval == NULL) {
-				fprintf(stderr,
-		"Bad record in %s val problem - %s", NETIDFILE, buf);
-				continue;
-			}
-			if (strcmp(mkey, key) == 0) {
-				strcpy(ret, mval);
-				fclose(fd);
-				return (1);
-
-			}
-		}
-	}
-}
+	     continue;
+#endif				/* YP */
+	     }
+	     else {
+	     mkey = strsep(&res, "\t "); if (mkey == NULL) {
+	     fprintf(stderr, "Bad record in %s -- %s", NETIDFILE, buf);
+	     continue;}
+	     do {
+	     mval = strsep(&res, " \t#\n");} while (mval != NULL && !*mval);
+	     if (mval == NULL) {
+	     fprintf(stderr, "Bad record in %s val problem - %s", NETIDFILE,
+		     buf); continue;}
+	     if (strcmp(mkey, key) == 0) {
+	     strcpy(ret, mval); fclose(fd); return (1);}
+	     }
+	     }
+	     }

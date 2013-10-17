@@ -55,7 +55,7 @@
 #include <rpc/pmap_prot.h>
 #include <rpc/pmap_clnt.h>
 #include <rpc/pmap_rmt.h>
-#endif    /* PORTMAP */
+#endif				/* PORTMAP */
 #include <rpc/nettype.h>
 #include <arpa/inet.h>
 #ifdef RPC_DEBUG
@@ -70,9 +70,9 @@
 
 #include "rpc_com.h"
 
-#define MAXBCAST 20 /* Max no of broadcasting transports */
-#define INITTIME 4000 /* Time to wait initially */
-#define WAITTIME 8000 /* Maximum time to wait */
+#define MAXBCAST 20		/* Max no of broadcasting transports */
+#define INITTIME 4000		/* Time to wait initially */
+#define WAITTIME 8000		/* Maximum time to wait */
 
 /*
  * If nettype is NULL, it broadcasts on all the available
@@ -101,11 +101,10 @@
 
 #define TAILQ_FIRST(head) ((head)->tqh_first)
 
-
 struct broadif {
-    int index;
-    struct sockaddr_storage broadaddr;
-    TAILQ_ENTRY(broadif) link;
+	int index;
+	struct sockaddr_storage broadaddr;
+	 TAILQ_ENTRY(broadif) link;
 };
 
 typedef TAILQ_HEAD(, broadif) broadlist_t;
@@ -116,547 +115,556 @@ int __rpc_broadenable(int, int, struct broadif *);
 
 int __rpc_lowvers = 0;
 
-int
-__rpc_getbroadifs(int af, int proto, int socktype, broadlist_t *list)
+int __rpc_getbroadifs(int af, int proto, int socktype, broadlist_t * list)
 {
-    int count = 0;
-    struct broadif *bip;
-    struct ifaddrs *ifap, *ifp;
+	int count = 0;
+	struct broadif *bip;
+	struct ifaddrs *ifap, *ifp;
 #ifdef INET6
-    struct sockaddr_in6 *sin6;
+	struct sockaddr_in6 *sin6;
 #endif
-    struct sockaddr_in *sin;
-    struct addrinfo hints, *res;
+	struct sockaddr_in *sin;
+	struct addrinfo hints, *res;
 
-    if (getifaddrs(&ifp) < 0)
-        return 0;
+	if (getifaddrs(&ifp) < 0)
+		return 0;
 
-    memset(&hints, 0, sizeof hints);
+	memset(&hints, 0, sizeof hints);
 
-    hints.ai_family = af;
-    hints.ai_protocol = proto;
-    hints.ai_socktype = socktype;
+	hints.ai_family = af;
+	hints.ai_protocol = proto;
+	hints.ai_socktype = socktype;
 
-    if (getaddrinfo(NULL, "sunrpc", &hints, &res) != 0)
-        return 0;
+	if (getaddrinfo(NULL, "sunrpc", &hints, &res) != 0)
+		return 0;
 
-    for (ifap = ifp; ifap != NULL; ifap = ifap->ifa_next) {
-        if (ifap->ifa_addr->sa_family != af ||
-            !(ifap->ifa_flags & IFF_UP))
-            continue;
-        bip = (struct broadif *) mem_alloc(sizeof *bip);
-        if (bip == NULL)
-            break;
-        bip->index = if_nametoindex(ifap->ifa_name);
-        if (
+	for (ifap = ifp; ifap != NULL; ifap = ifap->ifa_next) {
+		if (ifap->ifa_addr->sa_family != af
+		    || !(ifap->ifa_flags & IFF_UP))
+			continue;
+		bip = (struct broadif *)mem_alloc(sizeof *bip);
+		if (bip == NULL)
+			break;
+		bip->index = if_nametoindex(ifap->ifa_name);
+		if (
 #ifdef INET6
-            af != AF_INET6 &&
+			   af != AF_INET6 &&
 #endif
-            (ifap->ifa_flags & IFF_BROADCAST) &&
-            ifap->ifa_broadaddr) {
-            /* memcpy(&bip->broadaddr, ifap->ifa_broadaddr,
-               (size_t)ifap->ifa_broadaddr->sa_len);*/
-            memcpy(&bip->broadaddr, ifap->ifa_broadaddr,
-                   sizeof(bip->broadaddr));
-            sin = (struct sockaddr_in *)(void *)&bip->broadaddr;
-            sin->sin_port =
-                ((struct sockaddr_in *)
-                 (void *)res->ai_addr)->sin_port;
-        } else
+			   (ifap->ifa_flags & IFF_BROADCAST)
+			   && ifap->ifa_broadaddr) {
+			/* memcpy(&bip->broadaddr, ifap->ifa_broadaddr,
+			   (size_t)ifap->ifa_broadaddr->sa_len); */
+			memcpy(&bip->broadaddr, ifap->ifa_broadaddr,
+			       sizeof(bip->broadaddr));
+			sin = (struct sockaddr_in *)(void *)&bip->broadaddr;
+			sin->sin_port = ((struct sockaddr_in *)
+					 (void *)res->ai_addr)->sin_port;
+		} else
 #ifdef INET6
-            if (af == AF_INET6 && (ifap->ifa_flags & IFF_MULTICAST)) {
-                sin6 = (struct sockaddr_in6 *)(void *)&bip->broadaddr;
-                inet_pton(af, RPCB_MULTICAST_ADDR, &sin6->sin6_addr);
-                sin6->sin6_family = af;
-                sin6->sin6_port =
-                    ((struct sockaddr_in6 *)
-                     (void *)res->ai_addr)->sin6_port;
-                sin6->sin6_scope_id = bip->index;
-            } else
+		if (af == AF_INET6 && (ifap->ifa_flags & IFF_MULTICAST)) {
+			sin6 = (struct sockaddr_in6 *)(void *)&bip->broadaddr;
+			inet_pton(af, RPCB_MULTICAST_ADDR, &sin6->sin6_addr);
+			sin6->sin6_family = af;
+			sin6->sin6_port = ((struct sockaddr_in6 *)
+					   (void *)res->ai_addr)->sin6_port;
+			sin6->sin6_scope_id = bip->index;
+		} else
 #endif
-            {
-                mem_free(bip, 0);
-                continue;
-            }
-        TAILQ_INSERT_TAIL(list, bip, link);
-        count++;
-    }
-    freeifaddrs(ifp);
-    freeaddrinfo(res);
+		{
+			mem_free(bip, 0);
+			continue;
+		}
+		TAILQ_INSERT_TAIL(list, bip, link);
+		count++;
+	}
+	freeifaddrs(ifp);
+	freeaddrinfo(res);
 
-    return count;
+	return count;
 }
 
-void
-__rpc_freebroadifs(broadlist_t *list)
+void __rpc_freebroadifs(broadlist_t * list)
 {
-    struct broadif *bip, *next;
+	struct broadif *bip, *next;
 
-    bip = TAILQ_FIRST(list);
+	bip = TAILQ_FIRST(list);
 
-    while (bip != NULL) {
-        next = TAILQ_NEXT(bip, link);
-        mem_free(bip, 0);
-        bip = next;
-    }
+	while (bip != NULL) {
+		next = TAILQ_NEXT(bip, link);
+		mem_free(bip, 0);
+		bip = next;
+	}
 }
 
-int
-/*ARGSUSED*/
-__rpc_broadenable(int af, int s, struct broadif *bip)
+int /*ARGSUSED*/ __rpc_broadenable(int af, int s, struct broadif *bip)
 {
-    int o = 1;
+	int o = 1;
 
 #if 0
-    if (af == AF_INET6) {
-        fprintf(stderr, "set v6 multicast if to %d\n", bip->index);
-        if (setsockopt(s, IPPROTO_IPV6, IPV6_MULTICAST_IF, &bip->index,
-                       sizeof bip->index) < 0)
-            return -1;
-    } else
+	if (af == AF_INET6) {
+		fprintf(stderr, "set v6 multicast if to %d\n", bip->index);
+		if (setsockopt
+		    (s, IPPROTO_IPV6, IPV6_MULTICAST_IF, &bip->index,
+		     sizeof bip->index) < 0)
+			return -1;
+	} else
 #endif
-        if (setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof o) < 0)
-            return -1;
+	if (setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof o) < 0)
+		return -1;
 
-    return 0;
+	return 0;
 }
 
-enum clnt_stat
-rpc_broadcast_exp(rpcprog_t prog,  /* program number */
-                  rpcvers_t vers,  /* version number */
-                  rpcproc_t proc,  /* procedure number */
-                  xdrproc_t xargs,  /* xdr routine for args */
-                  caddr_t argsp,  /* pointer to args */
-                  xdrproc_t xresults,     /* xdr routine for results */
-                  caddr_t resultsp,         /* pointer to results */
-                  resultproc_t eachresult, /* call with each result obtained */
-                  int inittime,                 /* how long to wait initially */
-                  int waittime,            /* maximum time to wait */
-                  const char *nettype        /* transport type */)
+enum clnt_stat rpc_broadcast_exp(rpcprog_t prog,	/* program number */
+				 rpcvers_t vers,	/* version number */
+				 rpcproc_t proc,	/* procedure number */
+				 xdrproc_t xargs,	/* xdr routine for args */
+				 caddr_t argsp,	/* pointer to args */
+				 xdrproc_t xresults,	/* xdr routine for results */
+				 caddr_t resultsp,	/* pointer to results */
+				 resultproc_t eachresult,	/* call with each result obtained */
+				 int inittime,	/* how long to wait initially */
+				 int waittime,	/* maximum time to wait */
+				 const char *nettype /* transport type */ )
 {
-    enum clnt_stat stat = RPC_SUCCESS; /* Return status */
-    XDR   xdr_stream; /* XDR stream */
-    XDR   *xdrs = &xdr_stream;
-    struct rpc_msg msg; /* RPC message */
-    struct timespec ts;
-    char   *outbuf = NULL; /* Broadcast msg buffer */
-    char  *inbuf = NULL; /* Reply buf */
-    int  inlen;
-    u_int   maxbufsize = 0;
-    AUTH   *sys_auth = authunix_ncreate_default();
-    int  i;
-    void  *handle;
-    char  uaddress[1024]; /* A self imposed limit */
-    char  *uaddrp = uaddress;
-    int   pmap_reply_flag; /* reply recvd from PORTMAP */
-    /* An array of all the suitable broadcast transports */
-    struct {
-        int fd;  /* File descriptor */
-        int af;
-        int proto;
-        struct netconfig *nconf; /* Netconfig structure */
-        u_int asize; /* Size of the addr buf */
-        u_int dsize; /* Size of the data buf */
-        struct sockaddr_storage raddr; /* Remote address */
-        broadlist_t nal;
-    } fdlist[MAXBCAST];
-    struct pollfd pfd[MAXBCAST];
-    size_t fdlistno = 0;
-    struct r_rpcb_rmtcallargs barg; /* Remote arguments */
-    struct r_rpcb_rmtcallres bres; /* Remote results */
-    size_t outlen;
-    struct netconfig *nconf;
-    int msec;
-    int pollretval;
-    int fds_found;
+	enum clnt_stat stat = RPC_SUCCESS;	/* Return status */
+	XDR xdr_stream;		/* XDR stream */
+	XDR *xdrs = &xdr_stream;
+	struct rpc_msg msg;	/* RPC message */
+	struct timespec ts;
+	char *outbuf = NULL;	/* Broadcast msg buffer */
+	char *inbuf = NULL;	/* Reply buf */
+	int inlen;
+	u_int maxbufsize = 0;
+	AUTH *sys_auth = authunix_ncreate_default();
+	int i;
+	void *handle;
+	char uaddress[1024];	/* A self imposed limit */
+	char *uaddrp = uaddress;
+	int pmap_reply_flag;	/* reply recvd from PORTMAP */
+	/* An array of all the suitable broadcast transports */
+	struct {
+		int fd;		/* File descriptor */
+		int af;
+		int proto;
+		struct netconfig *nconf;	/* Netconfig structure */
+		u_int asize;	/* Size of the addr buf */
+		u_int dsize;	/* Size of the data buf */
+		struct sockaddr_storage raddr;	/* Remote address */
+		broadlist_t nal;
+	} fdlist[MAXBCAST];
+	struct pollfd pfd[MAXBCAST];
+	size_t fdlistno = 0;
+	struct r_rpcb_rmtcallargs barg;	/* Remote arguments */
+	struct r_rpcb_rmtcallres bres;	/* Remote results */
+	size_t outlen;
+	struct netconfig *nconf;
+	int msec;
+	int pollretval;
+	int fds_found;
 
 #ifdef PORTMAP
-    size_t outlen_pmap = 0;
-    u_long port;  /* Remote port number */
-    int pmap_flag = 0; /* UDP exists ? */
-    char *outbuf_pmap = NULL;
-    struct rmtcallargs barg_pmap; /* Remote arguments */
-    struct rmtcallres bres_pmap; /* Remote results */
-    u_int udpbufsz = 0;
-#endif    /* PORTMAP */
+	size_t outlen_pmap = 0;
+	u_long port;		/* Remote port number */
+	int pmap_flag = 0;	/* UDP exists ? */
+	char *outbuf_pmap = NULL;
+	struct rmtcallargs barg_pmap;	/* Remote arguments */
+	struct rmtcallres bres_pmap;	/* Remote results */
+	u_int udpbufsz = 0;
+#endif				/* PORTMAP */
 
-    if (sys_auth == NULL) {
-        return (RPC_SYSTEMERROR);
-    }
-    /*
-     * initialization: create a fd, a broadcast address, and send the
-     * request on the broadcast transport.
-     * Listen on all of them and on replies, call the user supplied
-     * function.
-     */
+	if (sys_auth == NULL) {
+		return (RPC_SYSTEMERROR);
+	}
+	/*
+	 * initialization: create a fd, a broadcast address, and send the
+	 * request on the broadcast transport.
+	 * Listen on all of them and on replies, call the user supplied
+	 * function.
+	 */
 
-    if (nettype == NULL)
-        nettype = "datagram_n";
-    if ((handle = __rpc_setconf(nettype)) == NULL) {
-        return (RPC_UNKNOWNPROTO);
-    }
-    while ((nconf = __rpc_getconf(handle)) != NULL) {
-        int fd;
-        struct __rpc_sockinfo si;
+	if (nettype == NULL)
+		nettype = "datagram_n";
+	if ((handle = __rpc_setconf(nettype)) == NULL) {
+		return (RPC_UNKNOWNPROTO);
+	}
+	while ((nconf = __rpc_getconf(handle)) != NULL) {
+		int fd;
+		struct __rpc_sockinfo si;
 
-        if (nconf->nc_semantics != NC_TPI_CLTS)
-            continue;
-        if (fdlistno >= MAXBCAST)
-            break; /* No more slots available */
-        if (!__rpc_nconf2sockinfo(nconf, &si))
-            continue;
+		if (nconf->nc_semantics != NC_TPI_CLTS)
+			continue;
+		if (fdlistno >= MAXBCAST)
+			break;	/* No more slots available */
+		if (!__rpc_nconf2sockinfo(nconf, &si))
+			continue;
 
-        TAILQ_INIT(&fdlist[fdlistno].nal);
-        if (__rpc_getbroadifs(si.si_af, si.si_proto, si.si_socktype,
-                              &fdlist[fdlistno].nal) == 0)
-            continue;
+		TAILQ_INIT(&fdlist[fdlistno].nal);
+		if (__rpc_getbroadifs
+		    (si.si_af, si.si_proto, si.si_socktype,
+		     &fdlist[fdlistno].nal) == 0)
+			continue;
 
-        fd = socket(si.si_af, si.si_socktype, si.si_proto);
-        if (fd < 0) {
-            stat = RPC_CANTSEND;
-            continue;
-        }
-        fdlist[fdlistno].af = si.si_af;
-        fdlist[fdlistno].proto = si.si_proto;
-        fdlist[fdlistno].fd = fd;
-        fdlist[fdlistno].nconf = nconf;
-        fdlist[fdlistno].asize = __rpc_get_a_size(si.si_af);
-        pfd[fdlistno].events = POLLIN | POLLPRI |
-            POLLRDNORM | POLLRDBAND;
-        pfd[fdlistno].fd = fdlist[fdlistno].fd = fd;
-        fdlist[fdlistno].dsize = __rpc_get_t_size(si.si_af, si.si_proto,
-                                                  0);
+		fd = socket(si.si_af, si.si_socktype, si.si_proto);
+		if (fd < 0) {
+			stat = RPC_CANTSEND;
+			continue;
+		}
+		fdlist[fdlistno].af = si.si_af;
+		fdlist[fdlistno].proto = si.si_proto;
+		fdlist[fdlistno].fd = fd;
+		fdlist[fdlistno].nconf = nconf;
+		fdlist[fdlistno].asize = __rpc_get_a_size(si.si_af);
+		pfd[fdlistno].events =
+		    POLLIN | POLLPRI | POLLRDNORM | POLLRDBAND;
+		pfd[fdlistno].fd = fdlist[fdlistno].fd = fd;
+		fdlist[fdlistno].dsize =
+		    __rpc_get_t_size(si.si_af, si.si_proto, 0);
 
-        if (maxbufsize <= fdlist[fdlistno].dsize)
-            maxbufsize = fdlist[fdlistno].dsize;
-
-#ifdef PORTMAP
-        if (si.si_af == AF_INET && si.si_proto == IPPROTO_UDP) {
-            udpbufsz = fdlist[fdlistno].dsize;
-            if ((outbuf_pmap = mem_alloc(udpbufsz)) == NULL) {
-                close(fd);
-                stat = RPC_SYSTEMERROR;
-                goto done_broad;
-            }
-            pmap_flag = 1;
-        }
-#endif    /* PORTMAP */
-        fdlistno++;
-    }
-
-    if (fdlistno == 0) {
-        if (stat == RPC_SUCCESS)
-            stat = RPC_UNKNOWNPROTO;
-        goto done_broad;
-    }
-    if (maxbufsize == 0) {
-        if (stat == RPC_SUCCESS)
-            stat = RPC_CANTSEND;
-        goto done_broad;
-    }
-    inbuf = mem_alloc(maxbufsize);
-    outbuf = mem_alloc(maxbufsize);
-    if ((inbuf == NULL) || (outbuf == NULL)) {
-        stat = RPC_SYSTEMERROR;
-        goto done_broad;
-    }
-
-    /* Serialize all the arguments which have to be sent */
-    (void)clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
-    msg.rm_xid = __RPC_GETXID(&ts);
-    msg.rm_direction = CALL;
-    msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
-    msg.rm_call.cb_prog = RPCBPROG;
-    msg.rm_call.cb_vers = RPCBVERS;
-    msg.rm_call.cb_proc = RPCBPROC_CALLIT;
-    barg.prog = prog;
-    barg.vers = vers;
-    barg.proc = proc;
-    barg.args.args_val = argsp;
-    barg.xdr_args = xargs;
-    bres.addr = uaddrp;
-    bres.results.results_val = resultsp;
-    bres.xdr_res = xresults;
-    msg.rm_call.cb_cred = sys_auth->ah_cred;
-    msg.rm_call.cb_verf = sys_auth->ah_verf;
-    xdrmem_create(xdrs, outbuf, maxbufsize, XDR_ENCODE);
-    if ((!xdr_callmsg(xdrs, &msg)) ||
-        (!xdr_rpcb_rmtcallargs(xdrs,
-                               (struct rpcb_rmtcallargs *)(void *)&barg))) {
-        stat = RPC_CANTENCODEARGS;
-        goto done_broad;
-    }
-    outlen = xdr_getpos(xdrs);
-    xdr_destroy(xdrs);
+		if (maxbufsize <= fdlist[fdlistno].dsize)
+			maxbufsize = fdlist[fdlistno].dsize;
 
 #ifdef PORTMAP
-    /* Prepare the packet for version 2 PORTMAP */
-    if (pmap_flag) {
-        msg.rm_xid++; /* One way to distinguish */
-        msg.rm_call.cb_prog = PMAPPROG;
-        msg.rm_call.cb_vers = PMAPVERS;
-        msg.rm_call.cb_proc = PMAPPROC_CALLIT;
-        barg_pmap.prog = prog;
-        barg_pmap.vers = vers;
-        barg_pmap.proc = proc;
-        barg_pmap.args_ptr = argsp;
-        barg_pmap.xdr_args = xargs;
-        bres_pmap.port_ptr = &port;
-        bres_pmap.xdr_results = xresults;
-        bres_pmap.results_ptr = resultsp;
-        xdrmem_create(xdrs, outbuf_pmap, udpbufsz, XDR_ENCODE);
-        if ((! xdr_callmsg(xdrs, &msg)) ||
-            (! xdr_rmtcall_args(xdrs, &barg_pmap))) {
-            stat = RPC_CANTENCODEARGS;
-            goto done_broad;
-        }
-        outlen_pmap = xdr_getpos(xdrs);
-        xdr_destroy(xdrs);
-    }
-#endif    /* PORTMAP */
+		if (si.si_af == AF_INET && si.si_proto == IPPROTO_UDP) {
+			udpbufsz = fdlist[fdlistno].dsize;
+			if ((outbuf_pmap = mem_alloc(udpbufsz)) == NULL) {
+				close(fd);
+				stat = RPC_SYSTEMERROR;
+				goto done_broad;
+			}
+			pmap_flag = 1;
+		}
+#endif				/* PORTMAP */
+		fdlistno++;
+	}
 
-    /*
-     * Basic loop: broadcast the packets to transports which
-     * support data packets of size such that one can encode
-     * all the arguments.
-     * Wait a while for response(s).
-     * The response timeout grows larger per iteration.
-     */
-    for (msec = inittime; msec <= waittime; msec += msec) {
-        struct broadif *bip;
+	if (fdlistno == 0) {
+		if (stat == RPC_SUCCESS)
+			stat = RPC_UNKNOWNPROTO;
+		goto done_broad;
+	}
+	if (maxbufsize == 0) {
+		if (stat == RPC_SUCCESS)
+			stat = RPC_CANTSEND;
+		goto done_broad;
+	}
+	inbuf = mem_alloc(maxbufsize);
+	outbuf = mem_alloc(maxbufsize);
+	if ((inbuf == NULL) || (outbuf == NULL)) {
+		stat = RPC_SYSTEMERROR;
+		goto done_broad;
+	}
 
-        /* Broadcast all the packets now */
-        for (i = 0; i < fdlistno; i++) {
-            if (fdlist[i].dsize < outlen) {
-                stat = RPC_CANTSEND;
-                continue;
-            }
-            for (bip = TAILQ_FIRST(&fdlist[i].nal); bip != NULL;
-                 bip = TAILQ_NEXT(bip, link)) {
-                void *addr;
+	/* Serialize all the arguments which have to be sent */
+	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
+	msg.rm_xid = __RPC_GETXID(&ts);
+	msg.rm_direction = CALL;
+	msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
+	msg.rm_call.cb_prog = RPCBPROG;
+	msg.rm_call.cb_vers = RPCBVERS;
+	msg.rm_call.cb_proc = RPCBPROC_CALLIT;
+	barg.prog = prog;
+	barg.vers = vers;
+	barg.proc = proc;
+	barg.args.args_val = argsp;
+	barg.xdr_args = xargs;
+	bres.addr = uaddrp;
+	bres.results.results_val = resultsp;
+	bres.xdr_res = xresults;
+	msg.rm_call.cb_cred = sys_auth->ah_cred;
+	msg.rm_call.cb_verf = sys_auth->ah_verf;
+	xdrmem_create(xdrs, outbuf, maxbufsize, XDR_ENCODE);
+	if ((!xdr_callmsg(xdrs, &msg))
+	    ||
+	    (!xdr_rpcb_rmtcallargs
+	     (xdrs, (struct rpcb_rmtcallargs *)(void *)&barg))) {
+		stat = RPC_CANTENCODEARGS;
+		goto done_broad;
+	}
+	outlen = xdr_getpos(xdrs);
+	xdr_destroy(xdrs);
 
-                addr = &bip->broadaddr;
+#ifdef PORTMAP
+	/* Prepare the packet for version 2 PORTMAP */
+	if (pmap_flag) {
+		msg.rm_xid++;	/* One way to distinguish */
+		msg.rm_call.cb_prog = PMAPPROG;
+		msg.rm_call.cb_vers = PMAPVERS;
+		msg.rm_call.cb_proc = PMAPPROC_CALLIT;
+		barg_pmap.prog = prog;
+		barg_pmap.vers = vers;
+		barg_pmap.proc = proc;
+		barg_pmap.args_ptr = argsp;
+		barg_pmap.xdr_args = xargs;
+		bres_pmap.port_ptr = &port;
+		bres_pmap.xdr_results = xresults;
+		bres_pmap.results_ptr = resultsp;
+		xdrmem_create(xdrs, outbuf_pmap, udpbufsz, XDR_ENCODE);
+		if ((!xdr_callmsg(xdrs, &msg))
+		    || (!xdr_rmtcall_args(xdrs, &barg_pmap))) {
+			stat = RPC_CANTENCODEARGS;
+			goto done_broad;
+		}
+		outlen_pmap = xdr_getpos(xdrs);
+		xdr_destroy(xdrs);
+	}
+#endif				/* PORTMAP */
 
-                __rpc_broadenable(fdlist[i].af, fdlist[i].fd,
-                                  bip);
+	/*
+	 * Basic loop: broadcast the packets to transports which
+	 * support data packets of size such that one can encode
+	 * all the arguments.
+	 * Wait a while for response(s).
+	 * The response timeout grows larger per iteration.
+	 */
+	for (msec = inittime; msec <= waittime; msec += msec) {
+		struct broadif *bip;
 
-                /*
-                 * Only use version 3 if lowvers is not set
-                 */
+		/* Broadcast all the packets now */
+		for (i = 0; i < fdlistno; i++) {
+			if (fdlist[i].dsize < outlen) {
+				stat = RPC_CANTSEND;
+				continue;
+			}
+			for (bip = TAILQ_FIRST(&fdlist[i].nal); bip != NULL;
+			     bip = TAILQ_NEXT(bip, link)) {
+				void *addr;
 
-                if (!__rpc_lowvers)
-                    if (sendto(fdlist[i].fd, outbuf,
-                               outlen, 0, (struct sockaddr*)addr,
-                               (size_t)fdlist[i].asize) !=
-                        outlen) {
+				addr = &bip->broadaddr;
+
+				__rpc_broadenable(fdlist[i].af, fdlist[i].fd,
+						  bip);
+
+				/*
+				 * Only use version 3 if lowvers is not set
+				 */
+
+				if (!__rpc_lowvers)
+					if (sendto
+					    (fdlist[i].fd, outbuf, outlen, 0,
+					     (struct sockaddr *)addr,
+					     (size_t) fdlist[i].asize) !=
+					    outlen) {
 #ifdef RPC_DEBUG
-                        perror("sendto");
+						perror("sendto");
 #endif
-                        __warnx(TIRPC_DEBUG_FLAG_CLNT_BCAST,
-                                "clnt_bcast: cannot send broadcast packet");
-                        stat = RPC_CANTSEND;
-                        continue;
-                    };
+						__warnx
+						    (TIRPC_DEBUG_FLAG_CLNT_BCAST,
+						     "clnt_bcast: cannot send broadcast packet");
+						stat = RPC_CANTSEND;
+						continue;
+					};
 #ifdef RPC_DEBUG
-                if (!__rpc_lowvers)
-                    fprintf(stderr, "Broadcast packet sent "
-                            "for %s\n",
-                            fdlist[i].nconf->nc_netid);
+				if (!__rpc_lowvers)
+					fprintf(stderr,
+						"Broadcast packet sent "
+						"for %s\n",
+						fdlist[i].nconf->nc_netid);
 #endif
 #ifdef PORTMAP
-                /*
-                 * Send the version 2 packet also
-                 * for UDP/IP
-                 */
-                if (pmap_flag &&
-                    fdlist[i].proto == IPPROTO_UDP) {
-                    if (sendto(fdlist[i].fd, outbuf_pmap,
-                               outlen_pmap, 0, addr,
-                               (size_t)fdlist[i].asize) !=
-                        outlen_pmap) {
-                        __warnx(TIRPC_DEBUG_FLAG_CLNT_BCAST,
-                                "clnt_bcast: Cannot send broadcast packet");
-                        stat = RPC_CANTSEND;
-                        continue;
-                    }
-                }
+				/*
+				 * Send the version 2 packet also
+				 * for UDP/IP
+				 */
+				if (pmap_flag && fdlist[i].proto == IPPROTO_UDP) {
+					if (sendto
+					    (fdlist[i].fd, outbuf_pmap,
+					     outlen_pmap, 0, addr,
+					     (size_t) fdlist[i].asize) !=
+					    outlen_pmap) {
+						__warnx
+						    (TIRPC_DEBUG_FLAG_CLNT_BCAST,
+						     "clnt_bcast: Cannot send broadcast packet");
+						stat = RPC_CANTSEND;
+						continue;
+					}
+				}
 #ifdef RPC_DEBUG
-                fprintf(stderr, "PMAP Broadcast packet "
-                        "sent for %s\n",
-                        fdlist[i].nconf->nc_netid);
+				fprintf(stderr,
+					"PMAP Broadcast packet "
+					"sent for %s\n",
+					fdlist[i].nconf->nc_netid);
 #endif
-#endif    /* PORTMAP */
-            }
-            /* End for sending all packets on this transport */
-        } /* End for sending on all transports */
+#endif				/* PORTMAP */
+			}
+			/* End for sending all packets on this transport */
+		}		/* End for sending on all transports */
 
-        if (eachresult == NULL) {
-            stat = RPC_SUCCESS;
-            goto done_broad;
-        }
+		if (eachresult == NULL) {
+			stat = RPC_SUCCESS;
+			goto done_broad;
+		}
 
-        /*
-         * Get all the replies from these broadcast requests
-         */
-    recv_again:
+		/*
+		 * Get all the replies from these broadcast requests
+		 */
+ recv_again:
 
-        switch (pollretval = poll(pfd, fdlistno, msec)) {
-        case 0:  /* timed out */
-            stat = RPC_TIMEDOUT;
-            continue;
-        case -1: /* some kind of error - we ignore it */
-            goto recv_again;
-        }  /* end of poll results switch */
+		switch (pollretval = poll(pfd, fdlistno, msec)) {
+		case 0:	/* timed out */
+			stat = RPC_TIMEDOUT;
+			continue;
+		case -1:	/* some kind of error - we ignore it */
+			goto recv_again;
+		}		/* end of poll results switch */
 
-        for (i = fds_found = 0;
-             i < fdlistno && fds_found < pollretval; i++) {
-            bool done = FALSE;
+		for (i = fds_found = 0; i < fdlistno && fds_found < pollretval;
+		     i++) {
+			bool done = FALSE;
 
-            if (pfd[i].revents == 0)
-                continue;
-            else if (pfd[i].revents & POLLNVAL) {
-                /*
-                 * Something bad has happened to this descri-
-                 * ptor. We can cause _poll() to ignore
-                 * it simply by using a negative fd.  We do that
-                 * rather than compacting the pfd[] and fdlist[]
-                 * arrays.
-                 */
-                pfd[i].fd = -1;
-                fds_found++;
-                continue;
-            } else
-                fds_found++;
+			if (pfd[i].revents == 0)
+				continue;
+			else if (pfd[i].revents & POLLNVAL) {
+				/*
+				 * Something bad has happened to this descri-
+				 * ptor. We can cause _poll() to ignore
+				 * it simply by using a negative fd.  We do that
+				 * rather than compacting the pfd[] and fdlist[]
+				 * arrays.
+				 */
+				pfd[i].fd = -1;
+				fds_found++;
+				continue;
+			} else
+				fds_found++;
 #ifdef RPC_DEBUG
-            fprintf(stderr, "response for %s\n",
-                    fdlist[i].nconf->nc_netid);
+			fprintf(stderr, "response for %s\n",
+				fdlist[i].nconf->nc_netid);
 #endif
-        try_again:
-            inlen = recvfrom(fdlist[i].fd, inbuf, fdlist[i].dsize,
-                             0, (struct sockaddr *)(void *)&fdlist[i].raddr,
-                             &fdlist[i].asize);
-            if (inlen < 0) {
-                if (errno == EINTR)
-                    goto try_again;
-                __warnx(TIRPC_DEBUG_FLAG_CLNT_BCAST,
-                        "clnt_bcast: Cannot receive reply to broadcast");
-                stat = RPC_CANTRECV;
-                continue;
-            }
-            if (inlen < sizeof (u_int32_t))
-                continue; /* Drop that and go ahead */
-            /*
-             * see if reply transaction id matches sent id.
-             * If so, decode the results. If return id is xid + 1
-             * it was a PORTMAP reply
-             */
-            if (*((u_int32_t *)(void *)(inbuf)) ==
-                *((u_int32_t *)(void *)(outbuf))) {
-                pmap_reply_flag = 0;
-                msg.acpted_rply.ar_verf = _null_auth;
-                msg.acpted_rply.ar_results.where =
-                    (caddr_t)(void *)&bres;
-                msg.acpted_rply.ar_results.proc =
-                    (xdrproc_t)xdr_rpcb_rmtcallres;
+ try_again:
+			inlen =
+			    recvfrom(fdlist[i].fd, inbuf, fdlist[i].dsize, 0,
+				     (struct sockaddr *)(void *)
+				     &fdlist[i].raddr, &fdlist[i].asize);
+			if (inlen < 0) {
+				if (errno == EINTR)
+					goto try_again;
+				__warnx(TIRPC_DEBUG_FLAG_CLNT_BCAST,
+					"clnt_bcast: Cannot receive reply to broadcast");
+				stat = RPC_CANTRECV;
+				continue;
+			}
+			if (inlen < sizeof(u_int32_t))
+				continue;	/* Drop that and go ahead */
+			/*
+			 * see if reply transaction id matches sent id.
+			 * If so, decode the results. If return id is xid + 1
+			 * it was a PORTMAP reply
+			 */
+			if (*((u_int32_t *) (void *)(inbuf)) ==
+			    *((u_int32_t *) (void *)(outbuf))) {
+				pmap_reply_flag = 0;
+				msg.acpted_rply.ar_verf = _null_auth;
+				msg.acpted_rply.ar_results.where =
+				    (caddr_t) (void *)&bres;
+				msg.acpted_rply.ar_results.proc =
+				    (xdrproc_t) xdr_rpcb_rmtcallres;
 #ifdef PORTMAP
-            } else if (pmap_flag &&
-                       *((u_int32_t *)(void *)(inbuf)) ==
-                       *((u_int32_t *)(void *)(outbuf_pmap))) {
-                pmap_reply_flag = 1;
-                msg.acpted_rply.ar_verf = _null_auth;
-                msg.acpted_rply.ar_results.where =
-                    (caddr_t)(void *)&bres_pmap;
-                msg.acpted_rply.ar_results.proc =
-                    (xdrproc_t)xdr_rmtcallres;
-#endif    /* PORTMAP */
-            } else
-                continue;
-            xdrmem_create(xdrs, inbuf, (u_int)inlen, XDR_DECODE);
-            if (xdr_replymsg(xdrs, &msg)) {
-                if ((msg.rm_reply.rp_stat == MSG_ACCEPTED) &&
-                    (msg.acpted_rply.ar_stat == SUCCESS)) {
-                    struct netbuf *np;
+			} else if (pmap_flag
+				   && *((u_int32_t *) (void *)(inbuf)) ==
+				   *((u_int32_t *) (void *)(outbuf_pmap))) {
+				pmap_reply_flag = 1;
+				msg.acpted_rply.ar_verf = _null_auth;
+				msg.acpted_rply.ar_results.where =
+				    (caddr_t) (void *)&bres_pmap;
+				msg.acpted_rply.ar_results.proc =
+				    (xdrproc_t) xdr_rmtcallres;
+#endif				/* PORTMAP */
+			} else
+				continue;
+			xdrmem_create(xdrs, inbuf, (u_int) inlen, XDR_DECODE);
+			if (xdr_replymsg(xdrs, &msg)) {
+				if ((msg.rm_reply.rp_stat == MSG_ACCEPTED)
+				    && (msg.acpted_rply.ar_stat == SUCCESS)) {
+					struct netbuf *np;
 #ifdef PORTMAP
-                    struct netbuf taddr;
-                    struct sockaddr_in sin;
+					struct netbuf taddr;
+					struct sockaddr_in sin;
 
-                    if (pmap_flag && pmap_reply_flag) {
-                        memcpy(&sin, &fdlist[i].raddr, sizeof(sin));
-                        sin.sin_port = htons((u_short)port);
-                        memcpy(&fdlist[i].raddr, &sin, sizeof(sin));
-                        taddr.len = taddr.maxlen =
-                            sizeof(fdlist[i].raddr);
-                        taddr.buf = &fdlist[i].raddr;
-                        done = (*eachresult)(resultsp,
-                                             &taddr, fdlist[i].nconf);
-                    } else {
-#endif    /* PORTMAP */
+					if (pmap_flag && pmap_reply_flag) {
+						memcpy(&sin, &fdlist[i].raddr,
+						       sizeof(sin));
+						sin.sin_port =
+						    htons((u_short) port);
+						memcpy(&fdlist[i].raddr, &sin,
+						       sizeof(sin));
+						taddr.len = taddr.maxlen =
+						    sizeof(fdlist[i].raddr);
+						taddr.buf = &fdlist[i].raddr;
+						done =
+						    (*eachresult) (resultsp,
+								   &taddr,
+								   fdlist[i].
+								   nconf);
+					} else {
+#endif				/* PORTMAP */
 #ifdef RPC_DEBUG
-                        fprintf(stderr, "uaddr %s\n",
-                                uaddrp);
+						fprintf(stderr, "uaddr %s\n",
+							uaddrp);
 #endif
-                        np = uaddr2taddr(
-                            fdlist[i].nconf, uaddrp);
-                        done = (*eachresult)(resultsp,
-                                             np, fdlist[i].nconf);
-                        mem_free(np, 0);
+						np = uaddr2taddr(fdlist[i].
+								 nconf, uaddrp);
+						done =
+						    (*eachresult) (resultsp, np,
+								   fdlist[i].
+								   nconf);
+						mem_free(np, 0);
 #ifdef PORTMAP
-                    }
-#endif    /* PORTMAP */
-                }
-                /* otherwise, we just ignore the errors ... */
-            }
-            /* else some kind of deserialization problem ... */
+					}
+#endif				/* PORTMAP */
+				}
+				/* otherwise, we just ignore the errors ... */
+			}
+			/* else some kind of deserialization problem ... */
 
-            xdrs->x_op = XDR_FREE;
-            msg.acpted_rply.ar_results.proc = (xdrproc_t) xdr_void;
-            (void) xdr_replymsg(xdrs, &msg);
-            (void) (*xresults)(xdrs, resultsp);
-            XDR_DESTROY(xdrs);
-            if (done) {
-                stat = RPC_SUCCESS;
-                goto done_broad;
-            } else {
-                goto recv_again;
-            }
-        }  /* The recv for loop */
-    }   /* The giant for loop */
+			xdrs->x_op = XDR_FREE;
+			msg.acpted_rply.ar_results.proc = (xdrproc_t) xdr_void;
+			(void)xdr_replymsg(xdrs, &msg);
+			(void)(*xresults) (xdrs, resultsp);
+			XDR_DESTROY(xdrs);
+			if (done) {
+				stat = RPC_SUCCESS;
+				goto done_broad;
+			} else {
+				goto recv_again;
+			}
+		}		/* The recv for loop */
+	}			/* The giant for loop */
 
-done_broad:
-    if (inbuf)
-        mem_free(inbuf, 0);
-    if (outbuf)
-        mem_free(outbuf, 0);
+ done_broad:
+	if (inbuf)
+		mem_free(inbuf, 0);
+	if (outbuf)
+		mem_free(outbuf, 0);
 #ifdef PORTMAP
-    if (outbuf_pmap)
-        mem_free(outbuf_pmap, 0);
-#endif    /* PORTMAP */
-    for (i = 0; i < fdlistno; i++) {
-        (void)close(fdlist[i].fd);
-        __rpc_freebroadifs(&fdlist[i].nal);
-    }
-    AUTH_DESTROY(sys_auth);
-    (void) __rpc_endconf(handle);
+	if (outbuf_pmap)
+		mem_free(outbuf_pmap, 0);
+#endif				/* PORTMAP */
+	for (i = 0; i < fdlistno; i++) {
+		(void)close(fdlist[i].fd);
+		__rpc_freebroadifs(&fdlist[i].nal);
+	}
+	AUTH_DESTROY(sys_auth);
+	(void)__rpc_endconf(handle);
 
-    return (stat);
+	return (stat);
 }
 
-
-enum clnt_stat
-rpc_broadcast(rpcprog_t prog,  /* program number */
-              rpcvers_t vers,  /* version number */
-              rpcproc_t proc,  /* procedure number */
-              xdrproc_t xargs,  /* xdr routine for args */
-              caddr_t   argsp,  /* pointer to args */
-              xdrproc_t xresults, /* xdr routine for results */
-              caddr_t resultsp, /* pointer to results */
-              resultproc_t eachresult, /* call with each result obtained */
-              const char *nettype /* transport type */)
+enum clnt_stat rpc_broadcast(rpcprog_t prog,	/* program number */
+			     rpcvers_t vers,	/* version number */
+			     rpcproc_t proc,	/* procedure number */
+			     xdrproc_t xargs,	/* xdr routine for args */
+			     caddr_t argsp,	/* pointer to args */
+			     xdrproc_t xresults,	/* xdr routine for results */
+			     caddr_t resultsp,	/* pointer to results */
+			     resultproc_t eachresult,	/* call with each result obtained */
+			     const char *nettype /* transport type */ )
 {
-    enum clnt_stat dummy;
+	enum clnt_stat dummy;
 
-    dummy = rpc_broadcast_exp(prog, vers, proc, xargs, argsp,
-                              xresults, resultsp, eachresult,
-                              INITTIME, WAITTIME, nettype);
-    return (dummy);
+	dummy =
+	    rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults,
+			      resultsp, eachresult, INITTIME, WAITTIME,
+			      nettype);
+	return (dummy);
 }

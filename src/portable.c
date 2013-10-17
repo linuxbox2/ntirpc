@@ -30,53 +30,51 @@
 #include <reentrant.h>
 
 #ifdef __APPLE__
-int
-clock_gettime(clockid_t clock, struct timespec *ts)
+int clock_gettime(clockid_t clock, struct timespec *ts)
 {
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  ts->tv_sec = tv.tv_sec;
-  ts->tv_nsec = tv.tv_usec * 1000UL;
-  return 0;
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	ts->tv_sec = tv.tv_sec;
+	ts->tv_nsec = tv.tv_usec * 1000UL;
+	return 0;
 }
 #endif
 
 #if defined(_WIN32)
 pthread_mutex_t clock_mtx = PTHREAD_MUTEX_INITIALIZER;
 
-int
-clock_gettime(clockid_t clock, struct timespec *ts)
+int clock_gettime(clockid_t clock, struct timespec *ts)
 {
-  static bool initialized;
-  static LARGE_INTEGER start, freq, ctr, m;
-  static double ftom;
-  bool rslt = false;
+	static bool initialized;
+	static LARGE_INTEGER start, freq, ctr, m;
+	static double ftom;
+	bool rslt = false;
 
-  if (! initialized) {
-      mutex_lock(&clock_mtx);
-      if (! initialized) {
-	QueryPerformanceCounter(&start);
-	(void) QueryPerformanceFrequency(&freq); /* XXXX can be 0, would need to fall back */
-	ftom = (double) freq.QuadPart / 1000000.;
-      }      
-      mutex_unlock(&clock_mtx);
-  }
+	if (!initialized) {
+		mutex_lock(&clock_mtx);
+		if (!initialized) {
+			QueryPerformanceCounter(&start);
+			(void)QueryPerformanceFrequency(&freq);	/* XXXX can be 0, would need to fall back */
+			ftom = (double)freq.QuadPart / 1000000.;
+		}
+		mutex_unlock(&clock_mtx);
+	}
 
-  rslt = QueryPerformanceCounter(&ctr);
-  switch (rslt) {
-  case 0:
-    ts->tv_sec = 0;
-    ts->tv_nsec = 0;
-    break;
-  default:
-    ctr.QuadPart -= start.QuadPart;
-    m.QuadPart = ctr.QuadPart / ftom;
-    ctr.QuadPart =  m.QuadPart % 1000000;
-    ts->tv_sec = m.QuadPart / 1000000;
-    ts->tv_nsec = ctr.QuadPart * 1000;
-  }
+	rslt = QueryPerformanceCounter(&ctr);
+	switch (rslt) {
+	case 0:
+		ts->tv_sec = 0;
+		ts->tv_nsec = 0;
+		break;
+	default:
+		ctr.QuadPart -= start.QuadPart;
+		m.QuadPart = ctr.QuadPart / ftom;
+		ctr.QuadPart = m.QuadPart % 1000000;
+		ts->tv_sec = m.QuadPart / 1000000;
+		ts->tv_nsec = ctr.QuadPart * 1000;
+	}
 
-  return (rslt);
+	return (rslt);
 }
 
 /* XXX this mutex actually -is- serializing calls, however, these
@@ -92,9 +90,9 @@ void warnx(const char *fmt, ...)
 	if (fmt != NULL)
 		_vsnprintf(msg, 128, fmt, ap);
 	else
-		msg[0]='\0';
+		msg[0] = '\0';
 	va_end(ap);
 	fprintf(stderr, "%s\n", msg);
 }
 
-#endif /* _WIN32 */
+#endif				/* _WIN32 */

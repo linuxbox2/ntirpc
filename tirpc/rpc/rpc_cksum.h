@@ -46,8 +46,7 @@
 #define RPC_CKSUM_H
 
 /* table-driven, software crc32c */
-uint32_t
-calculate_crc32c(uint32_t crc32c, const unsigned char *buffer,
-                 unsigned int length);
+uint32_t calculate_crc32c(uint32_t crc32c, const unsigned char *buffer,
+			  unsigned int length);
 
-#endif /* RPC_CKSUM_H */
+#endif				/* RPC_CKSUM_H */

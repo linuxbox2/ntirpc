@@ -28,7 +28,6 @@
 
 #include <rpc/rpc.h>
 
-
 /*
  * This file should only contain common data (global data) that is exported
  * by public interfaces 

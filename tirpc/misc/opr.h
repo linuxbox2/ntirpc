@@ -4,4 +4,4 @@
 #define opr_containerof(ptr, structure, member) \
    ((structure *)((char *)(ptr)-(char *)(&((structure *)NULL)->member)))
 
-#endif /* OPR_H */
+#endif				/* OPR_H */

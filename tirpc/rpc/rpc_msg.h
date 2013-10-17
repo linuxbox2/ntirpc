@@ -55,27 +55,27 @@
  */
 
 enum msg_type {
-    CALL=0,
-    REPLY=1
+	CALL = 0,
+	REPLY = 1
 };
 
 enum reply_stat {
-    MSG_ACCEPTED=0,
-    MSG_DENIED=1
+	MSG_ACCEPTED = 0,
+	MSG_DENIED = 1
 };
 
 enum accept_stat {
-    SUCCESS=0,
-    PROG_UNAVAIL=1,
-    PROG_MISMATCH=2,
-    PROC_UNAVAIL=3,
-    GARBAGE_ARGS=4,
-    SYSTEM_ERR=5
+	SUCCESS = 0,
+	PROG_UNAVAIL = 1,
+	PROG_MISMATCH = 2,
+	PROC_UNAVAIL = 3,
+	GARBAGE_ARGS = 4,
+	SYSTEM_ERR = 5
 };
 
 enum reject_stat {
-    RPC_MISMATCH=0,
-    AUTH_ERROR=1
+	RPC_MISMATCH = 0,
+	AUTH_ERROR = 1
 };
 
 /*
@@ -88,19 +88,19 @@ enum reject_stat {
  * accepted.
  */
 struct accepted_reply {
-    struct opaque_auth ar_verf;
-    enum accept_stat ar_stat;
-    union {
-        struct {
-            rpcvers_t low;
-            rpcvers_t high;
-        } AR_versions;
-        struct {
-            caddr_t where;
-            xdrproc_t proc;
-        } AR_results;
-        /* and many other null cases */
-    } ru;
+	struct opaque_auth ar_verf;
+	enum accept_stat ar_stat;
+	union {
+		struct {
+			rpcvers_t low;
+			rpcvers_t high;
+		} AR_versions;
+		struct {
+			caddr_t where;
+			xdrproc_t proc;
+		} AR_results;
+		/* and many other null cases */
+	} ru;
 #define ar_results ru.AR_results
 #define ar_vers  ru.AR_versions
 };
@@ -109,14 +109,14 @@ struct accepted_reply {
  * Reply to an rpc request that was rejected by the server.
  */
 struct rejected_reply {
-    enum reject_stat rj_stat;
-    union {
-        struct {
-            rpcvers_t low;
-            rpcvers_t high;
-        } RJ_versions;
-        enum auth_stat RJ_why;  /* why authentication did not work */
-    } ru;
+	enum reject_stat rj_stat;
+	union {
+		struct {
+			rpcvers_t low;
+			rpcvers_t high;
+		} RJ_versions;
+		enum auth_stat RJ_why;	/* why authentication did not work */
+	} ru;
 #define rj_vers ru.RJ_versions
 #define rj_why ru.RJ_why
 };
@@ -125,11 +125,11 @@ struct rejected_reply {
  * Body of a reply to an rpc request.
  */
 struct reply_body {
-    enum reply_stat rp_stat;
-    union {
-        struct accepted_reply RP_ar;
-        struct rejected_reply RP_dr;
-    } ru;
+	enum reply_stat rp_stat;
+	union {
+		struct accepted_reply RP_ar;
+		struct rejected_reply RP_dr;
+	} ru;
 #define rp_acpt ru.RP_ar
 #define rp_rjct ru.RP_dr
 };
@@ -138,12 +138,12 @@ struct reply_body {
  * Body of an rpc request call.
  */
 struct call_body {
-    rpcvers_t cb_rpcvers; /* must be equal to two */
-    rpcprog_t cb_prog;
-    rpcvers_t cb_vers;
-    rpcproc_t cb_proc;
-    struct opaque_auth cb_cred;
-    struct opaque_auth cb_verf; /* protocol specific - provided by client */
+	rpcvers_t cb_rpcvers;	/* must be equal to two */
+	rpcprog_t cb_prog;
+	rpcvers_t cb_vers;
+	rpcproc_t cb_proc;
+	struct opaque_auth cb_cred;
+	struct opaque_auth cb_verf;	/* protocol specific - provided by client */
 };
 
 /*
@@ -153,19 +153,19 @@ struct call_body {
 #define RPC_MSG_FLAG_NONE       0x0000
 
 struct rpc_msg {
-    u_int32_t  rm_xid;
-    enum msg_type  rm_direction;
-    struct {
-        struct call_body RM_cmb;
-        struct reply_body RM_rmb;
-    } ru;
+	u_int32_t rm_xid;
+	enum msg_type rm_direction;
+	struct {
+		struct call_body RM_cmb;
+		struct reply_body RM_rmb;
+	} ru;
 #define rm_call  ru.RM_cmb
 #define rm_reply ru.RM_rmb
-    caddr_t fr_vec[1];
-    int32_t *rm_ibuf;
-    uint32_t rm_flags;
-    /* queue of msgs for control xfer */
-    TAILQ_ENTRY(rpc_msg) msg_q;
+	caddr_t fr_vec[1];
+	int32_t *rm_ibuf;
+	uint32_t rm_flags;
+	/* queue of msgs for control xfer */
+	 TAILQ_ENTRY(rpc_msg) msg_q;
 };
 #define acpted_rply ru.RM_rmb.ru.RP_ar
 #define rjcted_rply ru.RM_rmb.ru.RP_dr
@@ -205,7 +205,6 @@ extern bool xdr_ncallhdr(XDR *, struct rpc_msg *);
  */
 extern bool xdr_nreplymsg(XDR *, struct rpc_msg *);
 
-
 /*
  * XDR routine to handle an accepted rpc reply.
  * xdr_accepted_reply(xdrs, rej)
@@ -230,8 +229,6 @@ extern bool xdr_nrejected_reply(XDR *, struct rejected_reply *);
  */
 extern void _seterr_reply(struct rpc_msg *, struct rpc_err *);
 __END_DECLS
-
 /* For backward compatibility */
 #include <rpc/tirpc_compat.h>
-
-#endif /* !_TIRPC_RPC_MSG_H */
+#endif				/* !_TIRPC_RPC_MSG_H */

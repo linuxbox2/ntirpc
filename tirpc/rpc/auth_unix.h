@@ -57,27 +57,25 @@
  * Unix style credentials.
  */
 struct authunix_parms {
-    u_long  aup_time;
-    char *aup_machname;
-    uid_t aup_uid;
-    gid_t aup_gid;
-    u_int aup_len;
-    gid_t *aup_gids;
+	u_long aup_time;
+	char *aup_machname;
+	uid_t aup_uid;
+	gid_t aup_gid;
+	u_int aup_len;
+	gid_t *aup_gids;
 };
 
 #define authsys_parms authunix_parms
 
-__BEGIN_DECLS
-extern bool xdr_authunix_parms(XDR *, struct authunix_parms *);
+__BEGIN_DECLS extern bool xdr_authunix_parms(XDR *, struct authunix_parms *);
 __END_DECLS
-
 /*
  * If a response verifier has flavor AUTH_SHORT,
  * then the body of the response verifier encapsulates the following structure;
  * again it is serialized in the obvious fashion.
  */
-struct short_hand_verf {
-    struct opaque_auth new_cred;
+    struct short_hand_verf {
+	struct opaque_auth new_cred;
 };
 
-#endif /* !_TIRPC_AUTH_UNIX_H */
+#endif				/* !_TIRPC_AUTH_UNIX_H */

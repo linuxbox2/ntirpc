@@ -58,84 +58,82 @@ extern SVCAUTH svc_auth_none;
  * from mit-krb5-1.2.1 mechglue/mglueP.h:
  * Array of context IDs typed by mechanism OID
  */
-typedef struct gss_union_ctx_id_t
-{
-    gss_OID mech_type;
-    gss_ctx_id_t internal_ctx_id;
+typedef struct gss_union_ctx_id_t {
+	gss_OID mech_type;
+	gss_ctx_id_t internal_ctx_id;
 } gss_union_ctx_id_desc, *gss_union_ctx_id_t;
 
 #define SVC_RPC_GSS_FLAG_NONE    0x0000
 #define SVC_RPC_GSS_FLAG_MSPAC   0x0001
 #define SVC_RPC_GSS_FLAG_LOCKED  0x0002
 
-struct svc_rpc_gss_data
-{
-    struct opr_rbtree_node node_k;
-    TAILQ_ENTRY(svc_rpc_gss_data) lru_q;
-    mutex_t lock;
-    uint32_t flags;
-    uint32_t refcnt;
-    uint32_t gen;
-    struct {
-        uint32_t k;
-    } hk;
-    bool established;
-    gss_ctx_id_t ctx;  /* context id */
-    struct rpc_gss_sec sec; /* security triple */
-    gss_buffer_desc cname;  /* GSS client name */
-    u_int seq;
-    u_int win;
-    u_int seqlast;
-    uint32_t seqmask;
-    gss_name_t client_name;
-    gss_buffer_desc checksum;
-    struct {
-        /* extended krb5 ticket ("pac") data */
-        gss_buffer_desc ms_pac;
-    } pac;
-    SVCAUTH *auth;
+struct svc_rpc_gss_data {
+	struct opr_rbtree_node node_k;
+	 TAILQ_ENTRY(svc_rpc_gss_data) lru_q;
+	mutex_t lock;
+	uint32_t flags;
+	uint32_t refcnt;
+	uint32_t gen;
+	struct {
+		uint32_t k;
+	} hk;
+	bool established;
+	gss_ctx_id_t ctx;	/* context id */
+	struct rpc_gss_sec sec;	/* security triple */
+	gss_buffer_desc cname;	/* GSS client name */
+	u_int seq;
+	u_int win;
+	u_int seqlast;
+	uint32_t seqmask;
+	gss_name_t client_name;
+	gss_buffer_desc checksum;
+	struct {
+		/* extended krb5 ticket ("pac") data */
+		gss_buffer_desc ms_pac;
+	} pac;
+	SVCAUTH *auth;
 };
 
-bool svcauth_gss_destroy(SVCAUTH *auth);
+bool svcauth_gss_destroy(SVCAUTH * auth);
 
-static inline struct svc_rpc_gss_data *
-alloc_svc_rpc_gss_data(void)
+static inline struct svc_rpc_gss_data *alloc_svc_rpc_gss_data(void)
 {
-    struct svc_rpc_gss_data *gd = mem_zalloc(sizeof(struct svc_rpc_gss_data));
-    mutex_init(&gd->lock, NULL);
-    TAILQ_INIT_ENTRY(gd, lru_q);
-    gd->refcnt = 1;
-    return (gd);
+	struct svc_rpc_gss_data *gd =
+	    mem_zalloc(sizeof(struct svc_rpc_gss_data));
+	mutex_init(&gd->lock, NULL);
+	TAILQ_INIT_ENTRY(gd, lru_q);
+	gd->refcnt = 1;
+	return (gd);
 }
 
-static inline void
-unref_svc_rpc_gss_data(struct svc_rpc_gss_data *gd, uint32_t flags)
+static inline void unref_svc_rpc_gss_data(struct svc_rpc_gss_data *gd,
+					  uint32_t flags)
 {
-    u_int refcnt;
-    bool gd_locked = flags & SVC_RPC_GSS_FLAG_LOCKED;
+	u_int refcnt;
+	bool gd_locked = flags & SVC_RPC_GSS_FLAG_LOCKED;
 
-    refcnt = atomic_dec_uint32_t(&gd->refcnt);
+	refcnt = atomic_dec_uint32_t(&gd->refcnt);
 
-    /* if refcnt is 0, gd is not reachable */
-    if (unlikely(refcnt == 0)) {
-        if (! gd_locked) {
-            mutex_lock(&gd->lock);
-	    gd_locked = true;
-            if (likely(refcnt == 0)) {
-	         mutex_unlock(&gd->lock);
-		 /* XXX disposes gd */
-                 svcauth_gss_destroy(gd->auth);
-		 return;
-            }
-        }
-    }
+	/* if refcnt is 0, gd is not reachable */
+	if (unlikely(refcnt == 0)) {
+		if (!gd_locked) {
+			mutex_lock(&gd->lock);
+			gd_locked = true;
+			if (likely(refcnt == 0)) {
+				mutex_unlock(&gd->lock);
+				/* XXX disposes gd */
+				svcauth_gss_destroy(gd->auth);
+				return;
+			}
+		}
+	}
 
-    if (gd_locked)
-        mutex_unlock(&gd->lock);
+	if (gd_locked)
+		mutex_unlock(&gd->lock);
 }
 
 void authgss_hash_init();
-struct svc_rpc_gss_data * authgss_ctx_hash_get(struct rpc_gss_cred *gc);
+struct svc_rpc_gss_data *authgss_ctx_hash_get(struct rpc_gss_cred *gc);
 bool authgss_ctx_hash_set(struct svc_rpc_gss_data *gd);
 bool authgss_ctx_hash_del(struct svc_rpc_gss_data *gd);
 
@@ -143,4 +141,4 @@ bool svcauth_gss_acquire_cred(void);
 bool svcauth_gss_import_name(char *service);
 bool svcauth_gss_set_svc_name(gss_name_t name);
 
-#endif /* GSS_INTERNAL_H */
+#endif				/* GSS_INTERNAL_H */

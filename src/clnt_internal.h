@@ -41,16 +41,14 @@
 #include <rpc/xdr_ioq.h>
 #include <misc/wait_queue.h>
 
-typedef struct rpc_dplx_lock
-{
-    struct wait_entry we;
-    int32_t lock_flag_value; /* XXX killme */
-    struct {
-        const char *func;
-        int line;
-    } locktrace;
+typedef struct rpc_dplx_lock {
+	struct wait_entry we;
+	int32_t lock_flag_value;	/* XXX killme */
+	struct {
+		const char *func;
+		int line;
+	} locktrace;
 } rpc_dplx_lock_t;
-
 
 #define MCALL_MSG_SIZE 24
 
@@ -64,115 +62,112 @@ typedef struct rpc_dplx_lock
  * client calls sharing a client channel.
  */
 typedef struct rpc_call_ctx {
-    struct opr_rbtree_node node_k;
-    struct wait_entry we;
-    uint32_t xid;
-    uint32_t flags;
-    struct rpc_msg *msg;
-    struct rpc_err error;
-    union {
-        struct {
-            struct rpc_client *clnt;
-            struct x_vc_data *xd;
-            struct timespec timeout;
-        } clnt;
-        struct {
-            /* nothing */
-        } svc;
-    } ctx_u;
+	struct opr_rbtree_node node_k;
+	struct wait_entry we;
+	uint32_t xid;
+	uint32_t flags;
+	struct rpc_msg *msg;
+	struct rpc_err error;
+	union {
+		struct {
+			struct rpc_client *clnt;
+			struct x_vc_data *xd;
+			struct timespec timeout;
+		} clnt;
+		struct {
+			/* nothing */
+		} svc;
+	} ctx_u;
 } rpc_ctx_t;
 
-static inline int
-call_xid_cmpf(const struct opr_rbtree_node *lhs,
-              const struct opr_rbtree_node *rhs)
+static inline int call_xid_cmpf(const struct opr_rbtree_node *lhs,
+				const struct opr_rbtree_node *rhs)
 {
-    rpc_ctx_t *lk, *rk;
+	rpc_ctx_t *lk, *rk;
 
-    lk = opr_containerof(lhs, rpc_ctx_t, node_k);
-    rk = opr_containerof(rhs, rpc_ctx_t, node_k);
+	lk = opr_containerof(lhs, rpc_ctx_t, node_k);
+	rk = opr_containerof(rhs, rpc_ctx_t, node_k);
 
-    if (lk->xid < rk->xid)
-        return (-1);
+	if (lk->xid < rk->xid)
+		return (-1);
 
-    if (lk->xid == rk->xid)
-        return (0);
+	if (lk->xid == rk->xid)
+		return (0);
 
-    return (1);
+	return (1);
 }
 
 /* unify client private data  */
 
 struct cu_data {
-    int cu_fd;          /* connections fd */
-    bool cu_closeit; /* opened by library */
-    struct sockaddr_storage cu_raddr; /* remote address */
-    int cu_rlen;
-    struct timeval cu_wait; /* retransmit interval */
-    struct timeval cu_total; /* total time for the call */
-    struct rpc_err cu_error;
-    XDR cu_outxdrs;
-    u_int cu_xdrpos;
-    u_int cu_sendsz; /* send size */
-    u_int cu_recvsz; /* recv size */
-    int cu_async;
-    int cu_connect; /* Use connect(). */
-    int cu_connected; /* Have done connect(). */
-    /* formerly, buffers were tacked onto the end */
-    char *cu_inbuf;
-    char *cu_outbuf;
+	int cu_fd;		/* connections fd */
+	bool cu_closeit;	/* opened by library */
+	struct sockaddr_storage cu_raddr;	/* remote address */
+	int cu_rlen;
+	struct timeval cu_wait;	/* retransmit interval */
+	struct timeval cu_total;	/* total time for the call */
+	struct rpc_err cu_error;
+	XDR cu_outxdrs;
+	u_int cu_xdrpos;
+	u_int cu_sendsz;	/* send size */
+	u_int cu_recvsz;	/* recv size */
+	int cu_async;
+	int cu_connect;		/* Use connect(). */
+	int cu_connected;	/* Have done connect(). */
+	/* formerly, buffers were tacked onto the end */
+	char *cu_inbuf;
+	char *cu_outbuf;
 };
 
 struct ct_serialized {
-    union {
-        char ct_mcallc[MCALL_MSG_SIZE]; /* marshalled callmsg */
-        u_int32_t ct_mcalli;
-    } ct_u;
-    u_int ct_mpos;      /* pos after marshal */
+	union {
+		char ct_mcallc[MCALL_MSG_SIZE];	/* marshalled callmsg */
+		u_int32_t ct_mcalli;
+	} ct_u;
+	u_int ct_mpos;		/* pos after marshal */
 };
 
 struct ct_data {
-    int ct_fd;
-    bool ct_closeit; /* close it on destroy */
-    struct timeval ct_wait; /* wait interval in milliseconds */
-    bool ct_waitset; /* wait set by clnt_control? */
-    struct netbuf ct_addr; /* remote addr */
-    struct wait_entry ct_sync; /* wait for completion */
+	int ct_fd;
+	bool ct_closeit;	/* close it on destroy */
+	struct timeval ct_wait;	/* wait interval in milliseconds */
+	bool ct_waitset;	/* wait set by clnt_control? */
+	struct netbuf ct_addr;	/* remote addr */
+	struct wait_entry ct_sync;	/* wait for completion */
 };
 
-enum CX_TYPE
-{
-    CX_DG_DATA,
-    CX_VC_DATA
+enum CX_TYPE {
+	CX_DG_DATA,
+	CX_VC_DATA
 };
 
 #define X_VC_DATA_FLAG_NONE             0x0000
 #define X_VC_DATA_FLAG_SVC_DESTROYED    0x0001
 
 /* new unified state */
-struct rpc_dplx_rec
-{
-    int fd_k;
+struct rpc_dplx_rec {
+	int fd_k;
 #if 0
-    mutex_t mtx;
+	mutex_t mtx;
 #else
-    struct {
-        mutex_t mtx;
-        const char *func;
-        int line;
-    } locktrace;
+	struct {
+		mutex_t mtx;
+		const char *func;
+		int line;
+	} locktrace;
 #endif
-    struct opr_rbtree_node node_k;
-    uint32_t refcnt;
-    struct {
-        rpc_dplx_lock_t lock;
-    } send;
-    struct {
-        rpc_dplx_lock_t lock;
-    } recv;
-    struct {
-        struct x_vc_data *xd;
-        SVCXPRT *xprt;
-    } hdl;
+	struct opr_rbtree_node node_k;
+	uint32_t refcnt;
+	struct {
+		rpc_dplx_lock_t lock;
+	} send;
+	struct {
+		rpc_dplx_lock_t lock;
+	} recv;
+	struct {
+		struct x_vc_data *xd;
+		SVCXPRT *xprt;
+	} hdl;
 };
 
 #define REC_LOCK(rec) \
@@ -184,106 +179,101 @@ struct rpc_dplx_rec
 
 #define REC_UNLOCK(rec) mutex_unlock(&((rec)->locktrace.mtx))
 
-struct cx_data
-{
-    enum CX_TYPE type;
-    union {
-        struct cu_data cu;
-        struct ct_data ct;
-    } c_u;
-    int cx_fd; /* connection's fd */
-    struct rpc_dplx_rec *cx_rec; /* unified sync */
+struct cx_data {
+	enum CX_TYPE type;
+	union {
+		struct cu_data cu;
+		struct ct_data ct;
+	} c_u;
+	int cx_fd;		/* connection's fd */
+	struct rpc_dplx_rec *cx_rec;	/* unified sync */
 };
 
-struct x_vc_data
-{
-    uint32_t flags;
-    uint32_t refcnt;
-    struct rpc_dplx_rec *rec; /* unified sync */
-    struct {
-        struct ct_data data;
-        struct {
-            uint32_t xid; /* current xid */
-            struct opr_rbtree t;
-        } calls;
-    } cx;
-    struct {
-        enum xprt_stat strm_stat;
-        struct timespec last_recv; /* XXX move to shared? */
-        int32_t maxrec;
-    } sx;
-    struct {
-        struct {
-            TAILQ_HEAD(xdr_tailq, xdr_ioq) q;
-            int32_t size;
-            bool active;
-        } ioq;
-        bool nonblock;
-        u_int sendsz;
-        u_int recvsz;
-        XDR xdrs_in;  /* send queue */
-        XDR xdrs_out; /* recv queue */
-    } shared;
+struct x_vc_data {
+	uint32_t flags;
+	uint32_t refcnt;
+	struct rpc_dplx_rec *rec;	/* unified sync */
+	struct {
+		struct ct_data data;
+		struct {
+			uint32_t xid;	/* current xid */
+			struct opr_rbtree t;
+		} calls;
+	} cx;
+	struct {
+		enum xprt_stat strm_stat;
+		struct timespec last_recv;	/* XXX move to shared? */
+		int32_t maxrec;
+	} sx;
+	struct {
+		struct {
+			TAILQ_HEAD(xdr_tailq, xdr_ioq) q;
+			int32_t size;
+			bool active;
+		} ioq;
+		bool nonblock;
+		u_int sendsz;
+		u_int recvsz;
+		XDR xdrs_in;	/* send queue */
+		XDR xdrs_out;	/* recv queue */
+	} shared;
 };
 
 #define CU_DATA(cx) (& (cx)->c_u.cu)
 #define CT_DATA(cx) (& (cx)->c_u.ct)
 
 /* compartmentalize a bit */
-static inline struct x_vc_data *
-alloc_x_vc_data(void)
+static inline struct x_vc_data *alloc_x_vc_data(void)
 {
-    struct x_vc_data *xd = mem_zalloc(sizeof(struct x_vc_data));
-    TAILQ_INIT(&xd->shared.ioq.q);
-    return (xd);
+	struct x_vc_data *xd = mem_zalloc(sizeof(struct x_vc_data));
+	TAILQ_INIT(&xd->shared.ioq.q);
+	return (xd);
 }
 
-static inline void
-free_x_vc_data(struct x_vc_data * xd)
+static inline void free_x_vc_data(struct x_vc_data *xd)
 {
-    mem_free(xd, sizeof(struct x_vc_data));
+	mem_free(xd, sizeof(struct x_vc_data));
 }
 
-static inline struct cx_data *
-alloc_cx_data(enum CX_TYPE type, uint32_t sendsz, uint32_t recvsz)
+static inline struct cx_data *alloc_cx_data(enum CX_TYPE type, uint32_t sendsz,
+					    uint32_t recvsz)
 {
-    struct cx_data *cx = mem_zalloc(sizeof(struct cx_data));
-    cx->type = type;
-    switch (type) {
-    case CX_DG_DATA:
-        cx->c_u.cu.cu_inbuf = mem_alloc(recvsz);
-        cx->c_u.cu.cu_outbuf = mem_alloc(sendsz);
-    case CX_VC_DATA:
-        break;
-    default:
-        /* err */
-        __warnx(TIRPC_DEBUG_FLAG_MEM,
-                "%s: asked to allocate cx_data of unknown type (BUG)",
-                __func__);
-        break;
-    };
-    return (cx);
+	struct cx_data *cx = mem_zalloc(sizeof(struct cx_data));
+	cx->type = type;
+	switch (type) {
+	case CX_DG_DATA:
+		cx->c_u.cu.cu_inbuf = mem_alloc(recvsz);
+		cx->c_u.cu.cu_outbuf = mem_alloc(sendsz);
+	case CX_VC_DATA:
+		break;
+	default:
+		/* err */
+		__warnx(TIRPC_DEBUG_FLAG_MEM,
+			"%s: asked to allocate cx_data of unknown type (BUG)",
+			__func__);
+		break;
+	};
+	return (cx);
 }
 
-static inline void
-free_cx_data(struct cx_data *cx)
+static inline void free_cx_data(struct cx_data *cx)
 {
-    switch (cx->type) {
-    case CX_DG_DATA:
-        mem_free(cx->c_u.cu.cu_inbuf, cx->c_u.cu.cu_recvsz);
-        mem_free(cx->c_u.cu.cu_outbuf, cx->c_u.cu.cu_sendsz);
-    case CX_VC_DATA:
-        break;
-    default:
-        /* err */
-        __warnx(TIRPC_DEBUG_FLAG_MEM,
-                "%s: asked to free cx_data of unknown type (BUG)",
-                __func__);
-        break;
-    };
-    mem_free(cx, sizeof(struct cx_data));
+	switch (cx->type) {
+	case CX_DG_DATA:
+		mem_free(cx->c_u.cu.cu_inbuf, cx->c_u.cu.cu_recvsz);
+		mem_free(cx->c_u.cu.cu_outbuf, cx->c_u.cu.cu_sendsz);
+	case CX_VC_DATA:
+		break;
+	default:
+		/* err */
+		__warnx(TIRPC_DEBUG_FLAG_MEM,
+			"%s: asked to free cx_data of unknown type (BUG)",
+			__func__);
+		break;
+	};
+	mem_free(cx, sizeof(struct cx_data));
 }
 
 void vc_shared_destroy(struct x_vc_data *xd);
 
-#endif /* _CLNT_INTERNAL_H */
+#endif				/* _CLNT_INTERNAL_H */

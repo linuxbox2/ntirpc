@@ -53,15 +53,11 @@
 #define	_RPC_TCP	7
 #define	_RPC_UDP	8
 
-__BEGIN_DECLS
-extern void *__rpc_setconf(const char *);
+__BEGIN_DECLS extern void *__rpc_setconf(const char *);
 extern void __rpc_endconf(void *);
 extern struct netconfig *__rpc_getconf(void *);
 extern struct netconfig *__rpc_getconfip(const char *);
-extern struct netbuf * rpcb_find_mapped_addr(char *nettype, rpcprog_t prog,
-                                             rpcvers_t vers,
-                                             char *local_addr);
+extern struct netbuf *rpcb_find_mapped_addr(char *nettype, rpcprog_t prog,
+					    rpcvers_t vers, char *local_addr);
 __END_DECLS
-
-
-#endif	/* !_TIRPC_NETTYPE_H */
+#endif				/* !_TIRPC_NETTYPE_H */

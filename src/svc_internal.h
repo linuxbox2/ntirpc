@@ -29,42 +29,41 @@
 #include <misc/os_epoll.h>
 
 /* threading fdsets around is annoying */
-struct svc_params
-{
-    bool initialized;
-    mutex_t mtx;
-    u_long flags;
+struct svc_params {
+	bool initialized;
+	mutex_t mtx;
+	u_long flags;
 
-    /* package global event handling--may be overridden using the
-     * svc_rqst interface */
-    enum svc_event_type ev_type;
-    union {
-        struct {
-            uint32_t id;
-            uint32_t max_events;
-        } evchan;
-        struct {
-            fd_set set; /* select/fd_set (currently unhooked) */
-        } fd;
-    } ev_u;
+	/* package global event handling--may be overridden using the
+	 * svc_rqst interface */
+	enum svc_event_type ev_type;
+	union {
+		struct {
+			uint32_t id;
+			uint32_t max_events;
+		} evchan;
+		struct {
+			fd_set set;	/* select/fd_set (currently unhooked) */
+		} fd;
+	} ev_u;
 
-    int32_t idle_timeout;
-    u_int max_connections;
-    u_int svc_ioq_maxbuf;
+	int32_t idle_timeout;
+	u_int max_connections;
+	u_int svc_ioq_maxbuf;
 
-    union {
-        struct {
-            mutex_t mtx;
-            u_int nconns;
-        } vc;
-    } xprt_u;
+	union {
+		struct {
+			mutex_t mtx;
+			u_int nconns;
+		} vc;
+	} xprt_u;
 
-    struct {
-        int ctx_hash_partitions;
-        int max_ctx;
-        int max_idle_gen;
-        int max_gc;
-    } gss;
+	struct {
+		int ctx_hash_partitions;
+		int max_ctx;
+		int max_idle_gen;
+		int max_gc;
+	} gss;
 };
 
 extern struct svc_params __svc_params[1];
@@ -87,15 +86,15 @@ extern struct svc_params __svc_params[1];
 /* XXX */
 static inline bool svc_vc_new_conn_ok(void)
 {
-    bool ok = FALSE;
-    svc_cond_init();
-    mutex_lock((&__svc_params->xprt_u.vc.mtx));
-    if (__svc_params->xprt_u.vc.nconns < __svc_params->max_connections) {
-        ++(__svc_params->xprt_u.vc.nconns);
-        ok = TRUE;
-    }
-    mutex_unlock(&(__svc_params->xprt_u.vc.mtx));
-    return (ok);
+	bool ok = FALSE;
+	svc_cond_init();
+	mutex_lock((&__svc_params->xprt_u.vc.mtx));
+	if (__svc_params->xprt_u.vc.nconns < __svc_params->max_connections) {
+		++(__svc_params->xprt_u.vc.nconns);
+		ok = TRUE;
+	}
+	mutex_unlock(&(__svc_params->xprt_u.vc.mtx));
+	return (ok);
 }
 
 #define svc_vc_dec_nconns() \
@@ -106,11 +105,11 @@ static inline bool svc_vc_new_conn_ok(void)
     } while (0);
 
 struct __svc_ops {
-    bool (*svc_clean_idle)(fd_set *fds, int timeout, bool cleanblock);
-    void (*svc_run)(void);
-    void (*svc_getreq)(int rdfds); /* XXX */
-    void (*svc_getreqset)(fd_set *readfds); /* XXX */
-    void (*svc_exit)(void);
+	bool(*svc_clean_idle) (fd_set * fds, int timeout, bool cleanblock);
+	void (*svc_run) (void);
+	void (*svc_getreq) (int rdfds);	/* XXX */
+	void (*svc_getreqset) (fd_set * readfds);	/* XXX */
+	void (*svc_exit) (void);
 };
 
 extern struct __svc_ops *svc_ops;
@@ -128,7 +127,7 @@ extern struct __svc_ops *svc_ops;
  * Buffers are sent again if retransmissions are detected.
  */
 
-#define	SPARSENESS 4	/* 75% sparse */
+#define	SPARSENESS 4		/* 75% sparse */
 
 #define	ALLOC(type, size)	\
 	(type *) mem_alloc((sizeof (type) * (size)))
@@ -163,7 +162,6 @@ struct cache_node {
 	cache_ptr cache_next;
 };
 
-
 /*
  * the hashing function
  */
@@ -171,7 +169,7 @@ struct cache_node {
 	(xid % (SPARSENESS * ((struct cl_cache *) \
 		su_data(transp)->su_cache)->uc_size))
 
-extern mutex_t	dupreq_lock;
+extern mutex_t dupreq_lock;
 
 /*
  * The entire cache
@@ -191,13 +189,13 @@ struct cl_cache {
 #define EPOLL_CLOEXEC 02000000
 static inline int epoll_create_wr(size_t size, int flags)
 {
-  return (epoll_create(size));
+	return (epoll_create(size));
 }
 #else
 static inline int epoll_create_wr(size_t size, int flags)
 {
-  return (epoll_create1(flags));
+	return (epoll_create1(flags));
 }
 #endif
 
-#endif /* TIRPC_SVC_INTERNAL_H */
+#endif				/* TIRPC_SVC_INTERNAL_H */

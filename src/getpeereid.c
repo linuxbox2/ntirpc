@@ -35,16 +35,15 @@
 /*
  * BSD-style getpeereid() for platforms that lack it.
  */
-int
-getpeereid(int sock, uid_t *uid, gid_t *gid)
+int getpeereid(int sock, uid_t * uid, gid_t * gid)
 {
 #if defined(SO_PEERCRED)
 	/* Linux: use getsockopt(SO_PEERCRED) */
 	struct ucred peercred;
 	socklen_t so_len = sizeof(peercred);
 
-	if (getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &peercred, &so_len) != 0 ||
-		so_len != sizeof(peercred))
+	if (getsockopt(sock, SOL_SOCKET, SO_PEERCRED, &peercred, &so_len) != 0
+	    || so_len != sizeof(peercred))
 		return -1;
 	*uid = peercred.uid;
 	*gid = peercred.gid;
@@ -54,18 +53,18 @@ getpeereid(int sock, uid_t *uid, gid_t *gid)
 	struct xucred peercred;
 	ACCEPT_TYPE_ARG3 so_len = sizeof(peercred);
 
-	if (getsockopt(sock, 0, LOCAL_PEERCRED, &peercred, &so_len) != 0 ||
-		so_len != sizeof(peercred) ||
-		peercred.cr_version != XUCRED_VERSION)
+	if (getsockopt(sock, 0, LOCAL_PEERCRED, &peercred, &so_len) != 0
+	    || so_len != sizeof(peercred)
+	    || peercred.cr_version != XUCRED_VERSION)
 		return -1;
 	*uid = peercred.cr_uid;
 	*gid = peercred.cr_gid;
 	return 0;
 #elif defined(HAVE_GETPEERUCRED)
 	/* Solaris: use getpeerucred() */
-	ucred_t    *ucred;
+	ucred_t *ucred;
 
-	ucred = NULL;				/* must be initialized to NULL */
+	ucred = NULL;		/* must be initialized to NULL */
 	if (getpeerucred(sock, &ucred) == -1)
 		return -1;
 
@@ -83,4 +82,4 @@ getpeereid(int sock, uid_t *uid, gid_t *gid)
 #endif
 }
 
-#endif /* HAVE_PEEREID */
+#endif				/* HAVE_PEEREID */

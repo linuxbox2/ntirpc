@@ -31,9 +31,9 @@
 
 /* XDR pseudo records for tcp */
 extern void xdr_inrec_create(XDR *, u_int, void *,
-                          int (*)(XDR *xdrs, void *, void *, int));
+			     int (*)(XDR * xdrs, void *, void *, int));
 
-extern bool xdr_inrec_readahead(XDR *xdrs, u_int maxfraglen);
+extern bool xdr_inrec_readahead(XDR * xdrs, u_int maxfraglen);
 
 /* make end of xdr record */
 extern bool xdr_inrec_endofrecord(XDR *, bool);
@@ -47,4 +47,4 @@ extern bool xdr_inrec_eof(XDR *);
 /* intrinsic checksum (be careful) */
 extern uint64_t xdr_inrec_cksum(XDR *);
 
-#endif /* XDR_INREC_H */
+#endif				/* XDR_INREC_H */

@@ -33,20 +33,20 @@
     rpc_dplx_slxi(xprt, __func__, __LINE__)
 
 /* slxi: send lock xprt impl */
-void rpc_dplx_slxi(SVCXPRT *xprt, const char *file, int line);
+void rpc_dplx_slxi(SVCXPRT * xprt, const char *file, int line);
 
 /* sux: send unlock xprt */
-void rpc_dplx_sux(SVCXPRT *xprt);
+void rpc_dplx_sux(SVCXPRT * xprt);
 
 /* rlx: recv lock xprt */
 #define rpc_dplx_rlx(xprt) \
     rpc_dplx_rlxi(xprt, __func__, __LINE__)
 
 /* rlxi: recv lock xprt impl */
-void rpc_dplx_rlxi(SVCXPRT *xprt, const char *file, int line);
+void rpc_dplx_rlxi(SVCXPRT * xprt, const char *file, int line);
 
 /* rux: recv unlock xprt */
-void rpc_dplx_rux(SVCXPRT *xprt);
+void rpc_dplx_rux(SVCXPRT * xprt);
 
 /* CLIENT variants */
 
@@ -55,20 +55,20 @@ void rpc_dplx_rux(SVCXPRT *xprt);
     rpc_dplx_slci(clnt, __func__, __LINE__)
 
 /* slci: send lock clnt impl */
-void rpc_dplx_slci(CLIENT *clnt, const char *file, int line);
+void rpc_dplx_slci(CLIENT * clnt, const char *file, int line);
 
 /* suc: send unlock clnt */
-void rpc_dplx_suc(CLIENT *clnt);
+void rpc_dplx_suc(CLIENT * clnt);
 
 /* rlc: recv lock clnt */
 #define rpc_dplx_rlc(clnt) \
     rpc_dplx_rlci(clnt, __func__, __LINE__)
 
 /* rlci: recv lock clnt impl */
-void rpc_dplx_rlci(CLIENT *clnt, const char *file, int line);
+void rpc_dplx_rlci(CLIENT * clnt, const char *file, int line);
 
 /* ruc: recv unlock clnt */
-void rpc_dplx_ruc(CLIENT *client);
+void rpc_dplx_ruc(CLIENT * client);
 
 /* fd variants--these interfaces should be used only when NO OTHER
  * APPROACH COULD WORK.  Please. */
@@ -93,4 +93,4 @@ void rpc_dplx_rlfi(int fd, const char *file, int line);
 /* ruf: recv unlock fd */
 void rpc_dplx_ruf(int fd);
 
-#endif /* RPC_DPLX_H */
+#endif				/* RPC_DPLX_H */

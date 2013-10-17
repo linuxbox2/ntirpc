@@ -66,11 +66,10 @@
  * void (*dispatch)();
  * int protocol;    like TCP or UDP, zero means do not register
  */
-__BEGIN_DECLS
-extern bool svc_register(SVCXPRT *, u_long, u_long,
-                         void (*)(struct svc_req *, SVCXPRT *), int);
+__BEGIN_DECLS extern bool svc_register(SVCXPRT *, u_long, u_long,
+				       void (*)(struct svc_req *, SVCXPRT *),
+				       int);
 __END_DECLS
-
 /*
  * Service un-registration
  *
@@ -78,44 +77,31 @@ __END_DECLS
  * u_long prog;
  * u_long vers;
  */
-__BEGIN_DECLS
-extern void svc_unregister(u_long, u_long);
+__BEGIN_DECLS extern void svc_unregister(u_long, u_long);
 __END_DECLS
-
-
 /*
  * Memory based rpc for testing and timing.
  */
-__BEGIN_DECLS
-extern SVCXPRT *svcraw_ncreate(void);
+__BEGIN_DECLS extern SVCXPRT *svcraw_ncreate(void);
 __END_DECLS
-
-
 /*
  * Udp based rpc.
  */
-__BEGIN_DECLS
-extern SVCXPRT *svcudp_ncreate(int);
+__BEGIN_DECLS extern SVCXPRT *svcudp_ncreate(int);
 extern SVCXPRT *svcudp_nbufcreate(int, u_int, u_int);
 extern int svcudp_enablecache(SVCXPRT *, u_long);
 extern SVCXPRT *svcudp6_ncreate(int);
 extern SVCXPRT *svcudp6_nbufcreate(int, u_int, u_int);
 __END_DECLS
-
-
 /*
  * Tcp based rpc.
  */
-__BEGIN_DECLS
-extern SVCXPRT *svctcp_ncreate(int, u_int, u_int);
+__BEGIN_DECLS extern SVCXPRT *svctcp_ncreate(int, u_int, u_int);
 extern SVCXPRT *svctcp6_ncreate(int, u_int, u_int);
 __END_DECLS
-
 /*
  * Fd based rpc.
  */
-__BEGIN_DECLS
-extern SVCXPRT *svcfd_ncreate(int, u_int, u_int);
+__BEGIN_DECLS extern SVCXPRT *svcfd_ncreate(int, u_int, u_int);
 __END_DECLS
-
-#endif /* !_RPC_SVC_SOC_H */
+#endif				/* !_RPC_SVC_SOC_H */

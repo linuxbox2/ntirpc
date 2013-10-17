@@ -35,7 +35,6 @@
   __FBSDID("$FreeBSD: src/lib/libc/rpc/auth_none.c,v 1.12 2002/03/22 23:18:35 obrien Exp $");
 */
 
-
 /*
  * auth_none.c
  * Creates a client authentication handle for passing "null"
@@ -61,117 +60,110 @@
  * Authenticator operations routines
  */
 
-static bool authnone_marshal (AUTH *, XDR *);
-static void authnone_verf (AUTH *);
-static bool authnone_validate (AUTH *, struct opaque_auth *);
-static bool authnone_refresh (AUTH *, void *);
-static void authnone_destroy (AUTH *);
+static bool authnone_marshal(AUTH *, XDR *);
+static void authnone_verf(AUTH *);
+static bool authnone_validate(AUTH *, struct opaque_auth *);
+static bool authnone_refresh(AUTH *, void *);
+static void authnone_destroy(AUTH *);
 
 static struct auth_ops *authnone_ops(void);
 
 struct authnone_private {
-    AUTH no_client;
-    char marshalled_client[MAX_MARSHAL_SIZE];
-    u_int mcnt;
+	AUTH no_client;
+	char marshalled_client[MAX_MARSHAL_SIZE];
+	u_int mcnt;
 };
 
 static struct authnone_private auth_none_priv;
-static struct authnone_private *ap = NULL; /* already */
+static struct authnone_private *ap = NULL;	/* already */
 
 static pthread_mutex_t init_lock = MUTEX_INITIALIZER;
 
-AUTH *
-authnone_ncreate(void)
+AUTH *authnone_ncreate(void)
 {
-    XDR xdr_stream;
-    XDR *xdrs;
+	XDR xdr_stream;
+	XDR *xdrs;
 
-    if (! ap) {
-        mutex_lock(&init_lock);
-        if (! ap) {
-            ap = &auth_none_priv; /* many clients shall point to this */
-            ap->no_client.ah_cred = ap->no_client.ah_verf = _null_auth;
-            ap->no_client.ah_ops = authnone_ops();
-            xdrs = &xdr_stream;
-            xdrmem_create(xdrs, ap->marshalled_client,
-                          (u_int)MAX_MARSHAL_SIZE, XDR_ENCODE);
-            (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_cred);
-            (void)inline_xdr_opaque_auth(xdrs, &ap->no_client.ah_verf);
-            ap->mcnt = XDR_GETPOS(xdrs);
-            XDR_DESTROY(xdrs);
-        }
-        mutex_unlock(&init_lock);
-    }
+	if (!ap) {
+		mutex_lock(&init_lock);
+		if (!ap) {
+			ap = &auth_none_priv;	/* many clients shall point to this */
+			ap->no_client.ah_cred = ap->no_client.ah_verf =
+			    _null_auth;
+			ap->no_client.ah_ops = authnone_ops();
+			xdrs = &xdr_stream;
+			xdrmem_create(xdrs, ap->marshalled_client,
+				      (u_int) MAX_MARSHAL_SIZE, XDR_ENCODE);
+			(void)inline_xdr_opaque_auth(xdrs,
+						     &ap->no_client.ah_cred);
+			(void)inline_xdr_opaque_auth(xdrs,
+						     &ap->no_client.ah_verf);
+			ap->mcnt = XDR_GETPOS(xdrs);
+			XDR_DESTROY(xdrs);
+		}
+		mutex_unlock(&init_lock);
+	}
 
-    return (&ap->no_client);
+	return (&ap->no_client);
 }
 
-/*ARGSUSED*/
-static bool
-authnone_marshal(AUTH *client, XDR *xdrs)
+ /*ARGSUSED*/ static bool authnone_marshal(AUTH * client, XDR * xdrs)
 {
-    struct authnone_private *ap =
-        opr_containerof(client, struct authnone_private, no_client);
+	struct authnone_private *ap =
+	    opr_containerof(client, struct authnone_private, no_client);
 
-    return( (*xdrs->x_ops->x_putbytes)
-            (xdrs, ap->marshalled_client, ap->mcnt) );
+	return ((*xdrs->x_ops->x_putbytes)
+		(xdrs, ap->marshalled_client, ap->mcnt));
 }
 
 /* All these unused parameters are required to keep ANSI-C from grumbling */
-/*ARGSUSED*/
-static void
-authnone_verf(__attribute__((unused)) AUTH *client)
+ /*ARGSUSED*/ static void authnone_verf( __attribute__ ((unused)) AUTH * client)
 {
-    /* do nothing */
+	/* do nothing */
 }
 
-/*ARGSUSED*/
-static bool
-authnone_validate(__attribute__((unused)) AUTH *client,
-                  __attribute__((unused)) struct opaque_auth *opaque)
+ /*ARGSUSED*/ static bool authnone_validate( __attribute__ ((unused)) AUTH *
+					    client, __attribute__ ((unused))
+					    struct opaque_auth *opaque)
 {
-    return (TRUE);
+	return (TRUE);
 }
 
-/*ARGSUSED*/
-static bool
-authnone_refresh(__attribute__((unused)) AUTH *client,
-                 __attribute__((unused)) void *dummy)
+ /*ARGSUSED*/ static bool authnone_refresh( __attribute__ ((unused)) AUTH *
+					   client, __attribute__ ((unused))
+					   void *dummy)
 {
-    return (FALSE);
+	return (FALSE);
 }
 
-/*ARGSUSED*/
-static void
-authnone_destroy(AUTH *client)
+ /*ARGSUSED*/ static void authnone_destroy(AUTH * client)
 {
-    /* do nothing */
+	/* do nothing */
 }
 
-static bool
-authnone_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xfunc, caddr_t xwhere)
+static bool authnone_wrap(AUTH * auth, XDR * xdrs, xdrproc_t xfunc,
+			  caddr_t xwhere)
 {
-    return ((*xfunc)(xdrs, xwhere));
+	return ((*xfunc) (xdrs, xwhere));
 }
 
-static struct auth_ops *
-authnone_ops(void)
+static struct auth_ops *authnone_ops(void)
 {
-    static struct auth_ops ops;
-    extern mutex_t ops_lock;
+	static struct auth_ops ops;
+	extern mutex_t ops_lock;
 
 /* VARIABLES PROTECTED BY ops_lock: ops */
 
-    mutex_lock(&ops_lock);
-    if (ops.ah_nextverf == NULL) {
-        ops.ah_nextverf = authnone_verf;
-        ops.ah_marshal = authnone_marshal;
-        ops.ah_validate = authnone_validate;
-        ops.ah_refresh = authnone_refresh;
-        ops.ah_destroy = authnone_destroy;
-        ops.ah_wrap = authnone_wrap;
-        ops.ah_unwrap = authnone_wrap;
-    }
-    mutex_unlock(&ops_lock);
-    return (&ops);
+	mutex_lock(&ops_lock);
+	if (ops.ah_nextverf == NULL) {
+		ops.ah_nextverf = authnone_verf;
+		ops.ah_marshal = authnone_marshal;
+		ops.ah_validate = authnone_validate;
+		ops.ah_refresh = authnone_refresh;
+		ops.ah_destroy = authnone_destroy;
+		ops.ah_wrap = authnone_wrap;
+		ops.ah_unwrap = authnone_wrap;
+	}
+	mutex_unlock(&ops_lock);
+	return (&ops);
 }

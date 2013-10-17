@@ -30,49 +30,45 @@
 #include <stdbool.h>
 #include <misc/queue.h>
 
-struct v_rec
-{
-    TAILQ_ENTRY(v_rec) ioq;
-    uint32_t refcnt;
-    void *base;
-    u_int off;
-    u_int len;
-    u_int size;
-    u_int flags;
+struct v_rec {
+	TAILQ_ENTRY(v_rec) ioq;
+	uint32_t refcnt;
+	void *base;
+	u_int off;
+	u_int len;
+	u_int size;
+	u_int flags;
 };
 
-#define VQSIZE 2 /* 64 */
+#define VQSIZE 2		/* 64 */
 
-struct v_rec_pos_t
-{
-    struct v_rec *vrec;
-    int32_t loff; /* logical byte offset (convenience?) */
-    int32_t bpos; /* buffer index (offset) in the current stream */
-    int32_t boff; /* byte offset in buffer */
+struct v_rec_pos_t {
+	struct v_rec *vrec;
+	int32_t loff;		/* logical byte offset (convenience?) */
+	int32_t bpos;		/* buffer index (offset) in the current stream */
+	int32_t boff;		/* byte offset in buffer */
 };
 
 #define VREC_QFLAG_NONE      0x0000
 
-struct v_rec_queue
-{
-    TAILQ_HEAD(vrq_tailq, v_rec) q;
-    struct v_rec_pos_t fpos; /* fill position */
-    struct v_rec_pos_t lpos; /* logical position, GET|SETPOS */
-    int size; /* count of buffer segments */
-    u_int flags;
+struct v_rec_queue {
+	TAILQ_HEAD(vrq_tailq, v_rec) q;
+	struct v_rec_pos_t fpos;	/* fill position */
+	struct v_rec_pos_t lpos;	/* logical position, GET|SETPOS */
+	int size;		/* count of buffer segments */
+	u_int flags;
 };
 
 /* preallocate memory */
-struct vrec_prealloc
-{
-    struct v_rec_queue v_req;
-    struct v_rec_queue v_req_buf;
+struct vrec_prealloc {
+	struct v_rec_queue v_req;
+	struct v_rec_queue v_req_buf;
 };
 
 /* streams are unidirectional */
 enum xdr_vrec_direction {
-    XDR_VREC_IN,
-    XDR_VREC_OUT,
+	XDR_VREC_IN,
+	XDR_VREC_OUT,
 };
 
 #define VREC_NSINK 2
@@ -80,54 +76,53 @@ enum xdr_vrec_direction {
 #define VREC_STATIC_FRAG (VREC_NSTATIC-1)
 #define VREC_DISCARD_BUFSZ 8192
 
-struct v_rec_strm
-{
-    enum xdr_vrec_direction direction;
+struct v_rec_strm {
+	enum xdr_vrec_direction direction;
 
-    /* XDR */
-    XDR *xdrs;
+	/* XDR */
+	XDR *xdrs;
 
-    /* buffer queues */
-    struct v_rec_queue ioq;
+	/* buffer queues */
+	struct v_rec_queue ioq;
 
-    /* opaque provider handle */
-    void *vp_handle;
+	/* opaque provider handle */
+	void *vp_handle;
 
-    /*
-     * ops
-     */
-    union {
-        size_t (*readv)(XDR *, void *, struct iovec *, int, u_int);
-        size_t (*writev)(XDR *, void *, struct iovec *, int, u_int);
-    } ops;
+	/*
+	 * ops
+	 */
+	union {
+		size_t(*readv) (XDR *, void *, struct iovec *, int, u_int);
+		size_t(*writev) (XDR *, void *, struct iovec *, int, u_int);
+	} ops;
 
-    /* stream params */
-    int maxbufs;
-    u_int def_bsize; /* def. size of allocated buffers */
+	/* stream params */
+	int maxbufs;
+	u_int def_bsize;	/* def. size of allocated buffers */
 
-    /* stream state */
-    union {
-        struct {
-            u_long buflen; /* logical input buffer length */
-            u_long fbtbc; /* fragment bytes to be consumed */
-            u_long rbtbc; /* readahead bytes to be consumed */
-            long readahead_bytes; /* bytes to read ahead across fragments */
-            bool last_frag; /* private */
-            bool next_frag; /* private */
-            bool haveheader;
-        } in;
-        struct {
-            u_int32_t frag_header; /* beginning of outgoing fragment */
-            u_long frag_len; /* fragment length */
-            bool frag_sent; /* true if buffer sent in middle of record */
-        } out;
-    } st_u;
+	/* stream state */
+	union {
+		struct {
+			u_long buflen;	/* logical input buffer length */
+			u_long fbtbc;	/* fragment bytes to be consumed */
+			u_long rbtbc;	/* readahead bytes to be consumed */
+			long readahead_bytes;	/* bytes to read ahead across fragments */
+			bool last_frag;	/* private */
+			bool next_frag;	/* private */
+			bool haveheader;
+		} in;
+		struct {
+			u_int32_t frag_header;	/* beginning of outgoing fragment */
+			u_long frag_len;	/* fragment length */
+			bool frag_sent;	/* true if buffer sent in middle of record */
+		} out;
+	} st_u;
 
-    /* free lists */
-    struct vrec_prealloc prealloc;
+	/* free lists */
+	struct vrec_prealloc prealloc;
 
-    /* discard buffers */
-    struct iovec iovsink[VREC_NSTATIC];
+	/* discard buffers */
+	struct iovec iovsink[VREC_NSTATIC];
 };
 
 typedef struct v_rec_strm V_RECSTREAM;
@@ -147,11 +142,10 @@ typedef struct v_rec_strm V_RECSTREAM;
 /* vector equivalents */
 
 extern void xdr_vrec_create(XDR *, enum xdr_vrec_direction, void *,
-                            size_t (*)(XDR *, void *, struct iovec *, int,
-                                       u_int),
-                            size_t (*)(XDR *, void *, struct iovec *, int,
-                                       u_int),
-                            u_int, u_int);
+			    size_t(*)(XDR *, void *, struct iovec *, int,
+				      u_int), size_t(*)(XDR *, void *,
+							struct iovec *, int,
+							u_int), u_int, u_int);
 
 /* make end of xdr record */
 extern bool xdr_vrec_endofrecord(XDR *, bool);
@@ -162,4 +156,4 @@ extern bool xdr_vrec_skiprecord(XDR *);
 /* true if no more input */
 extern bool xdr_vrec_eof(XDR *);
 
-#endif /* XDR_VREC_H */
+#endif				/* XDR_VREC_H */

@@ -56,13 +56,12 @@
 #ifndef __RPC_GETXID
 #define __RPC_GETXID(now) ((u_int32_t)getpid() ^ (u_int32_t)(now)->tv_sec ^ \
                            (u_int32_t)((now)->tv_nsec))
-#endif /* !__RPC_GETXID */
+#endif				/* !__RPC_GETXID */
 
-__BEGIN_DECLS
-extern u_int __rpc_get_a_size(int);
+__BEGIN_DECLS extern u_int __rpc_get_a_size(int);
 extern int __rpc_dtbsize(void);
-extern struct netconfig * __rpcgettp(int);
-extern  int  __rpc_get_default_domain(char **);
+extern struct netconfig *__rpcgettp(int);
+extern int __rpc_get_default_domain(char **);
 struct netbuf *__rpc_set_netbuf(struct netbuf *, const void *, size_t);
 
 char *__rpc_taddr2uaddr_af(int, const struct netbuf *);
@@ -75,13 +74,12 @@ void *rpc_nullproc(CLIENT *);
 int __rpc_sockisbound(int);
 
 struct netbuf *__rpcb_findaddr(rpcprog_t, rpcvers_t, const struct netconfig *,
-                               const char *, CLIENT **);
+			       const char *, CLIENT **);
 struct netbuf *__rpcb_findaddr_timed(rpcprog_t, rpcvers_t,
-                                     const struct netconfig *,
-                                     const char *host, CLIENT **clpp,
-                                     struct timeval *tp);
+				     const struct netconfig *, const char *host,
+				     CLIENT ** clpp, struct timeval *tp);
 
-bool __rpc_control(int,void *);
+bool __rpc_control(int, void *);
 
 char *_get_next_token(char *, int);
 
@@ -99,10 +97,10 @@ void __xprt_set_raddr(SVCXPRT *, const struct sockaddr_storage *);
 
 static inline char *rpc_strdup(const char *s)
 {
-    char *t = mem_alloc(strlen(s) + 1);
-    if (t)
-        strcpy(t,s);
-    return (t);
+	char *t = mem_alloc(strlen(s) + 1);
+	if (t)
+		strcpy(t, s);
+	return (t);
 }
 
 void __rpc_free(void *ptr);
@@ -110,5 +108,4 @@ void __rpc_free(void *ptr);
 extern int __svc_maxrec;
 
 __END_DECLS
-
-#endif /* _TIRPC_RPCCOM_H */
+#endif				/* _TIRPC_RPCCOM_H */

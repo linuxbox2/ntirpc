@@ -26,7 +26,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 /*
  * Copyright (c) 1985 by Sun Microsystems, Inc.
  */
@@ -43,8 +42,7 @@
 #include <rpc/rpc.h>
 #include <rpc/pmap_clnt.h>
 
-int
-getrpcport(char *host, int prognum, int versnum, int proto)
+int getrpcport(char *host, int prognum, int versnum, int proto)
 {
 	struct sockaddr_in addr;
 	struct hostent *hp;
@@ -55,11 +53,11 @@ getrpcport(char *host, int prognum, int versnum, int proto)
 		return (0);
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;
-	addr.sin_port =  0;
+	addr.sin_port = 0;
 	if (hp->h_length > sizeof(addr))
-	  hp->h_length = sizeof(addr);
-	memcpy(&addr.sin_addr.s_addr, hp->h_addr, (size_t)hp->h_length);
+		hp->h_length = sizeof(addr);
+	memcpy(&addr.sin_addr.s_addr, hp->h_addr, (size_t) hp->h_length);
 	/* Inconsistent interfaces need casts! :-( */
-	return (pmap_getport(&addr, (u_long)prognum, (u_long)versnum, 
-	    (u_int)proto));
+	return (pmap_getport
+		(&addr, (u_long) prognum, (u_long) versnum, (u_int) proto));
 }

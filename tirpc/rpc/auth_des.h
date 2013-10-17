@@ -48,8 +48,8 @@
  * There are two kinds of "names": fullnames and nicknames
  */
 enum authdes_namekind {
-    ADN_FULLNAME,
-    ADN_NICKNAME
+	ADN_FULLNAME,
+	ADN_NICKNAME
 };
 
 /*
@@ -57,35 +57,32 @@ enum authdes_namekind {
  * a conversation key and the window
  */
 struct authdes_fullname {
-    char *name;  /* network name of client, up to MAXNETNAMELEN */
-    union des_block key;  /* conversation key */
-    /* u_long window; */
-    u_int32_t window; /* associated window */
+	char *name;		/* network name of client, up to MAXNETNAMELEN */
+	union des_block key;	/* conversation key */
+	/* u_long window; */
+	u_int32_t window;	/* associated window */
 };
-
 
 /*
  * A credential
  */
 struct authdes_cred {
-    enum authdes_namekind adc_namekind;
-    struct authdes_fullname adc_fullname;
-    /*u_long adc_nickname;*/
-    u_int32_t adc_nickname;
+	enum authdes_namekind adc_namekind;
+	struct authdes_fullname adc_fullname;
+	/*u_long adc_nickname; */
+	u_int32_t adc_nickname;
 };
-
-
 
 /*
  * A des authentication verifier
  */
 struct authdes_verf {
-    union {
-        struct timeval adv_ctime; /* clear time */
-        des_block adv_xtime;  /* crypt time */
-    } adv_time_u;
-    /*u_long adv_int_u;*/
-    u_int32_t adv_int_u;
+	union {
+		struct timeval adv_ctime;	/* clear time */
+		des_block adv_xtime;	/* crypt time */
+	} adv_time_u;
+	/*u_long adv_int_u; */
+	u_int32_t adv_int_u;
 };
 
 /*
@@ -114,18 +111,14 @@ struct authdes_verf {
  * Map a des credential into a unix cred.
  *
  */
-__BEGIN_DECLS
-extern int authdes_getucred( struct authdes_cred *, uid_t *, gid_t *, int *,
-                             gid_t * );
-__END_DECLS
-
-__BEGIN_DECLS
-extern bool xdr_authdes_cred(XDR *, struct authdes_cred *);
+__BEGIN_DECLS extern int authdes_getucred(struct authdes_cred *, uid_t *,
+					  gid_t *, int *, gid_t *);
+__END_DECLS __BEGIN_DECLS extern bool xdr_authdes_cred(XDR *,
+						       struct authdes_cred *);
 extern bool xdr_authdes_verf(XDR *, struct authdes_verf *);
 extern int rtime(dev_t, struct netbuf *, int, struct timeval *,
-                 struct timeval *);
+		 struct timeval *);
 extern void kgetnetname(char *);
 extern enum auth_stat _svcauth_des(struct svc_req *, struct rpc_msg *);
 __END_DECLS
-
-#endif /* ndef _TI_AUTH_DES_ */
+#endif				/* ndef _TI_AUTH_DES_ */

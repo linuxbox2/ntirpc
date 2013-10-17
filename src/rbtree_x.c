@@ -40,42 +40,39 @@
 #define RBTX_REC_MAXPART 23
 
 int rbtx_init(struct rbtree_x *xt, opr_rbtree_cmpf_t cmpf, uint32_t npart,
-              uint32_t flags)
+	      uint32_t flags)
 {
-    int ix, code = 0;
-    pthread_rwlockattr_t rwlock_attr;
-    struct rbtree_x_part *t;
+	int ix, code = 0;
+	pthread_rwlockattr_t rwlock_attr;
+	struct rbtree_x_part *t;
 
-    xt->flags = flags;
+	xt->flags = flags;
 
-    if ((npart > RBTX_REC_MAXPART) ||
-        (npart % 2 == 0)) {
-        __warnx(TIRPC_DEBUG_FLAG_RBTREE,
-                "rbtx_init: value %d is an unlikely value for npart "
-                "(suggest a small prime)",
-                npart);
-        }
+	if ((npart > RBTX_REC_MAXPART) || (npart % 2 == 0)) {
+		__warnx(TIRPC_DEBUG_FLAG_RBTREE,
+			"rbtx_init: value %d is an unlikely value for npart "
+			"(suggest a small prime)", npart);
+	}
 
-    if (flags & RBT_X_FLAG_ALLOC)
-        xt->tree = mem_alloc(npart * sizeof(struct rbtree_x_part));
+	if (flags & RBT_X_FLAG_ALLOC)
+		xt->tree = mem_alloc(npart * sizeof(struct rbtree_x_part));
 
-    /* prior versions of Linux tirpc are subject to default prefer-reader
-     * behavior (so have potential for writer starvation) */
-    rwlockattr_init(&rwlock_attr);
+	/* prior versions of Linux tirpc are subject to default prefer-reader
+	 * behavior (so have potential for writer starvation) */
+	rwlockattr_init(&rwlock_attr);
 #ifdef GLIBC
-    pthread_rwlockattr_setkind_np(
-        &rwlock_attr, 
-        PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+	pthread_rwlockattr_setkind_np(&rwlock_attr,
+				      PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
 #endif
 
-    xt->npart = npart;
+	xt->npart = npart;
 
-    for (ix = 0; ix < npart; ++ix) {
-        t = &(xt->tree[ix]);
-        mutex_init(&t->mtx, NULL);
-        rwlock_init(&t->lock, &rwlock_attr);
-        opr_rbtree_init(&t->t, cmpf /* may be NULL */);
-    }
+	for (ix = 0; ix < npart; ++ix) {
+		t = &(xt->tree[ix]);
+		mutex_init(&t->mtx, NULL);
+		rwlock_init(&t->lock, &rwlock_attr);
+		opr_rbtree_init(&t->t, cmpf /* may be NULL */ );
+	}
 
-    return (code);
+	return (code);
 }

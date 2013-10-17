@@ -131,23 +131,23 @@
 #undef		system
 #undef		tcdrain
 #undef		wait
-#endif	/* 0 */
+#endif				/* 0 */
 
 #ifdef _SIGNAL_H_
-int     	_sigaction(int, const struct sigaction *, struct sigaction *);
+int _sigaction(int, const struct sigaction *, struct sigaction *);
 #endif
 
 #ifdef _SYS_EVENT_H_
-int		_kevent(int, const struct kevent *, int, struct kevent *,
-		    int, const struct timespec *);
+int _kevent(int, const struct kevent *, int, struct kevent *, int,
+	    const struct timespec *);
 #endif
 
 #ifdef _SYS_FCNTL_H_
-int		_flock(int, int);
+int _flock(int, int);
 #endif
 
 #undef		err
 #undef		warn
 #undef		nsdispatch
 
-#endif	/* _UN_NAMESPACE_H_ */
+#endif				/* _UN_NAMESPACE_H_ */

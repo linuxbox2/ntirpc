@@ -51,101 +51,96 @@ extern SVCAUTH svc_auth_none;
 /*
  * Unix longhand authenticator
  */
-enum auth_stat
-_svcauth_unix(struct svc_req *req, struct rpc_msg *msg)
+enum auth_stat _svcauth_unix(struct svc_req *req, struct rpc_msg *msg)
 {
-    enum auth_stat stat;
-    XDR xdrs;
-    struct authunix_parms *aup;
-    int32_t *buf;
-    struct area {
-        struct authunix_parms area_aup;
-        char area_machname[MAX_MACHINE_NAME+1];
-        gid_t area_gids[NGRPS];
-    } *area;
-    u_int auth_len;
-    size_t str_len, gid_len;
-    u_int i;
+	enum auth_stat stat;
+	XDR xdrs;
+	struct authunix_parms *aup;
+	int32_t *buf;
+	struct area {
+		struct authunix_parms area_aup;
+		char area_machname[MAX_MACHINE_NAME + 1];
+		gid_t area_gids[NGRPS];
+	} *area;
+	u_int auth_len;
+	size_t str_len, gid_len;
+	u_int i;
 
-    assert(req != NULL);
-    assert(msg != NULL);
+	assert(req != NULL);
+	assert(msg != NULL);
 
-    req->rq_auth = &svc_auth_none;
+	req->rq_auth = &svc_auth_none;
 
-    area = (struct area *) req->rq_clntcred;
-    aup = &area->area_aup;
-    aup->aup_machname = area->area_machname;
-    aup->aup_gids = area->area_gids;
-    auth_len = (u_int)msg->rm_call.cb_cred.oa_length;
-    xdrmem_create(&xdrs, msg->rm_call.cb_cred.oa_base, auth_len,XDR_DECODE);
-    buf = XDR_INLINE(&xdrs, auth_len);
-    if (buf != NULL) {
-        aup->aup_time = IXDR_GET_INT32(buf);
-        str_len = (size_t)IXDR_GET_U_INT32(buf);
-        if (str_len > MAX_MACHINE_NAME) {
-            stat = AUTH_BADCRED;
-            goto done;
-        }
-        memmove(aup->aup_machname, buf, str_len);
-        aup->aup_machname[str_len] = 0;
-        str_len = RNDUP(str_len);
-        buf += str_len / sizeof (int32_t);
-        aup->aup_uid = (int)IXDR_GET_INT32(buf);
-        aup->aup_gid = (int)IXDR_GET_INT32(buf);
-        gid_len = (size_t)IXDR_GET_U_INT32(buf);
-        if (gid_len > NGRPS) {
-            stat = AUTH_BADCRED;
-            goto done;
-        }
-        aup->aup_len = gid_len;
-        for (i = 0; i < gid_len; i++) {
-            aup->aup_gids[i] = (int)IXDR_GET_INT32(buf);
-        }
-        /*
-         * five is the smallest unix credentials structure -
-         * timestamp, hostname len (0), uid, gid, and gids len (0).
-         */
-        if ((5 + gid_len) * BYTES_PER_XDR_UNIT + str_len > auth_len) {
-            __warnx(TIRPC_DEBUG_FLAG_AUTH,
-                    "bad auth_len gid %ld str %ld auth %u\n",
-                    (long)gid_len, (long)str_len, auth_len);
-            stat = AUTH_BADCRED;
-            goto done;
-        }
-    } else if (! xdr_authunix_parms(&xdrs, aup)) {
-        xdrs.x_op = XDR_FREE;
-        (void)xdr_authunix_parms(&xdrs, aup);
-        stat = AUTH_BADCRED;
-        goto done;
-    }
+	area = (struct area *)req->rq_clntcred;
+	aup = &area->area_aup;
+	aup->aup_machname = area->area_machname;
+	aup->aup_gids = area->area_gids;
+	auth_len = (u_int) msg->rm_call.cb_cred.oa_length;
+	xdrmem_create(&xdrs, msg->rm_call.cb_cred.oa_base, auth_len,
+		      XDR_DECODE);
+	buf = XDR_INLINE(&xdrs, auth_len);
+	if (buf != NULL) {
+		aup->aup_time = IXDR_GET_INT32(buf);
+		str_len = (size_t) IXDR_GET_U_INT32(buf);
+		if (str_len > MAX_MACHINE_NAME) {
+			stat = AUTH_BADCRED;
+			goto done;
+		}
+		memmove(aup->aup_machname, buf, str_len);
+		aup->aup_machname[str_len] = 0;
+		str_len = RNDUP(str_len);
+		buf += str_len / sizeof(int32_t);
+		aup->aup_uid = (int)IXDR_GET_INT32(buf);
+		aup->aup_gid = (int)IXDR_GET_INT32(buf);
+		gid_len = (size_t) IXDR_GET_U_INT32(buf);
+		if (gid_len > NGRPS) {
+			stat = AUTH_BADCRED;
+			goto done;
+		}
+		aup->aup_len = gid_len;
+		for (i = 0; i < gid_len; i++) {
+			aup->aup_gids[i] = (int)IXDR_GET_INT32(buf);
+		}
+		/*
+		 * five is the smallest unix credentials structure -
+		 * timestamp, hostname len (0), uid, gid, and gids len (0).
+		 */
+		if ((5 + gid_len) * BYTES_PER_XDR_UNIT + str_len > auth_len) {
+			__warnx(TIRPC_DEBUG_FLAG_AUTH,
+				"bad auth_len gid %ld str %ld auth %u\n",
+				(long)gid_len, (long)str_len, auth_len);
+			stat = AUTH_BADCRED;
+			goto done;
+		}
+	} else if (!xdr_authunix_parms(&xdrs, aup)) {
+		xdrs.x_op = XDR_FREE;
+		(void)xdr_authunix_parms(&xdrs, aup);
+		stat = AUTH_BADCRED;
+		goto done;
+	}
 
-    /* get the verifier */
-    if ((u_int)msg->rm_call.cb_verf.oa_length) {
-        req->rq_verf.oa_flavor =
-            msg->rm_call.cb_verf.oa_flavor;
-        req->rq_verf.oa_base =
-            msg->rm_call.cb_verf.oa_base;
-        req->rq_verf.oa_length =
-            msg->rm_call.cb_verf.oa_length;
-    } else {
-        req->rq_verf.oa_flavor = AUTH_NULL;
-        req->rq_verf.oa_length = 0;
-    }
-    stat = AUTH_OK;
-done:
-    XDR_DESTROY(&xdrs);
-    return (stat);
+	/* get the verifier */
+	if ((u_int) msg->rm_call.cb_verf.oa_length) {
+		req->rq_verf.oa_flavor = msg->rm_call.cb_verf.oa_flavor;
+		req->rq_verf.oa_base = msg->rm_call.cb_verf.oa_base;
+		req->rq_verf.oa_length = msg->rm_call.cb_verf.oa_length;
+	} else {
+		req->rq_verf.oa_flavor = AUTH_NULL;
+		req->rq_verf.oa_length = 0;
+	}
+	stat = AUTH_OK;
+ done:
+	XDR_DESTROY(&xdrs);
+	return (stat);
 }
-
 
 /*
  * Shorthand unix authenticator
  * Looks up longhand in a cache.
  */
-/*ARGSUSED*/
-enum auth_stat
-_svcauth_short(struct svc_req *req, struct rpc_msg *msg)
+ /*ARGSUSED*/ enum auth_stat _svcauth_short(struct svc_req *req,
+					    struct rpc_msg *msg)
 {
-    req->rq_auth = &svc_auth_none;
-    return (AUTH_REJECTEDCRED);
+	req->rq_auth = &svc_auth_none;
+	return (AUTH_REJECTEDCRED);
 }

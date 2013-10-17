@@ -34,14 +34,13 @@
  * $FreeBSD: src/sys/sys/socket.h,v 1.73 2003/11/14 18:48:15 bms Exp $
  */
 
-
 #ifndef _MISC_SYS_SOCKET_H_
 #define	_MISC_SYS_SOCKET_H_
 
 #include <sys/types.h>
-                                                                    
+
 #define CMGROUP_MAX 16
-#define SCM_CREDS       0x03            /* process creds (struct cmsgcred) */
+#define SCM_CREDS       0x03	/* process creds (struct cmsgcred) */
 
 #if defined(__linux__)
 /*
@@ -52,13 +51,13 @@
  * is the effective GID.)
  */
 struct cmsgcred {
-	pid_t	cmcred_pid;		/* PID of sending process */
-	uid_t	cmcred_uid;		/* real UID of sending process */
-	uid_t	cmcred_euid;		/* effective UID of sending process */
-	gid_t	cmcred_gid;		/* real GID of sending process */
-	short	cmcred_ngroups;		/* number or groups */
-	gid_t	cmcred_groups[CMGROUP_MAX];	/* groups */
+	pid_t cmcred_pid;	/* PID of sending process */
+	uid_t cmcred_uid;	/* real UID of sending process */
+	uid_t cmcred_euid;	/* effective UID of sending process */
+	gid_t cmcred_gid;	/* real GID of sending process */
+	short cmcred_ngroups;	/* number or groups */
+	gid_t cmcred_groups[CMGROUP_MAX];	/* groups */
 };
 #endif
 
-#endif /* _MISC_SYS_SOCKET_H_ */
+#endif				/* _MISC_SYS_SOCKET_H_ */

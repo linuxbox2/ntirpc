@@ -26,19 +26,17 @@
 #ifndef TIRPC_SVC_XPRT_H
 #define TIRPC_SVC_XPRT_H
 
-struct svc_xprt_rec
-{
-    struct opr_rbtree_node node_k;
-    int fd_k;
-    SVCXPRT *xprt;
-    uint64_t gen; /* generation number */
-    mutex_t mtx;
+struct svc_xprt_rec {
+	struct opr_rbtree_node node_k;
+	int fd_k;
+	SVCXPRT *xprt;
+	uint64_t gen;		/* generation number */
+	mutex_t mtx;
 };
 
-struct svc_xprt_set
-{
-    mutex_t lock;
-    struct rbtree_x xt;
+struct svc_xprt_set {
+	mutex_t lock;
+	struct rbtree_x xt;
 };
 
 #define SVC_XPRT_FLAG_NONE         0x0000
@@ -47,18 +45,18 @@ struct svc_xprt_set
 #define SVC_XPRT_FLAG_UNLOCK       0x0004
 #define SVC_XPRT_FLAG_MUTEX_LOCKED 0x0008
 
-SVCXPRT* svc_xprt_get(int fd);
-SVCXPRT* svc_xprt_set(SVCXPRT *xprt, uint32_t flags);
-SVCXPRT *svc_xprt_clear(SVCXPRT *xprt, uint32_t flags);
+SVCXPRT *svc_xprt_get(int fd);
+SVCXPRT *svc_xprt_set(SVCXPRT * xprt, uint32_t flags);
+SVCXPRT *svc_xprt_clear(SVCXPRT * xprt, uint32_t flags);
 
 /* iterator callback prototype */
 #define SVC_XPRT_FOREACH_NONE    0x0000
-#define SVC_XPRT_FOREACH_CLEAR   0x0001 /* each_f destroyed xprt */
+#define SVC_XPRT_FOREACH_CLEAR   0x0001	/* each_f destroyed xprt */
 
-typedef uint32_t (*svc_xprt_each_func_t) (SVCXPRT *xprt, void *arg);
+typedef uint32_t(*svc_xprt_each_func_t) (SVCXPRT * xprt, void *arg);
 int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg);
 
 void svc_xprt_dump_xprts(const char *tag);
 void svc_xprt_shutdown();
 
-#endif /* TIRPC_SVC_XPRT_H */
+#endif				/* TIRPC_SVC_XPRT_H */

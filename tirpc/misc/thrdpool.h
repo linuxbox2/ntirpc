@@ -33,44 +33,40 @@
 #define THRD_FLAG_SHUTDOWN    0x0001
 #define THRD_FLAG_ACTIVE      0x0002
 
-
 struct thrdpool;
 
-struct thrd
-{
-    TAILQ_ENTRY(thrd) tailq;
-    struct thrd_context {
-        pthread_t id;
-        struct wait_entry we;
-        void (*func)(struct thrd_context *);
-        void *arg;
-    } ctx;
-    struct thrdpool *pool;
-    bool idle;
+struct thrd {
+	TAILQ_ENTRY(thrd) tailq;
+	struct thrd_context {
+		pthread_t id;
+		struct wait_entry we;
+		void (*func) (struct thrd_context *);
+		void *arg;
+	} ctx;
+	struct thrdpool *pool;
+	bool idle;
 };
 
-struct thrdpool_params
-{
-    int32_t thrd_max;
-    int32_t thrd_min;
+struct thrdpool_params {
+	int32_t thrd_max;
+	int32_t thrd_min;
 };
 
-struct thrdpool
-{
-    char *name;
-    uint32_t flags;
-    struct thrdpool_params params;
-    pthread_attr_t attr;
-    struct wait_entry we;
-    TAILQ_HEAD(idle_tailq, thrd) idle_q;
-    int32_t n_idle;
-    int32_t n_threads;
+struct thrdpool {
+	char *name;
+	uint32_t flags;
+	struct thrdpool_params params;
+	pthread_attr_t attr;
+	struct wait_entry we;
+	 TAILQ_HEAD(idle_tailq, thrd) idle_q;
+	int32_t n_idle;
+	int32_t n_threads;
 };
 
-typedef void (*thrd_func_t)(struct thrd_context *);
+typedef void (*thrd_func_t) (struct thrd_context *);
 
-int thrdpool_init(struct thrdpool *, const char*, struct thrdpool_params *);
+int thrdpool_init(struct thrdpool *, const char *, struct thrdpool_params *);
 int thrdpool_submit_work(struct thrdpool *, thrd_func_t, void *);
 int thrdpool_shutdown(struct thrdpool *);
 
-#endif /* THRDPOOL_H */
+#endif				/* THRDPOOL_H */

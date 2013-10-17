@@ -40,17 +40,14 @@
 #include <rpc/xdr.h>
 #include <rpc/pmap_prot.h>
 
-
-bool
-xdr_pmap(XDR *xdrs, struct pmap *regs)
+bool xdr_pmap(XDR * xdrs, struct pmap *regs)
 {
 
-    assert(xdrs != NULL);
-    assert(regs != NULL);
+	assert(xdrs != NULL);
+	assert(regs != NULL);
 
-    if (xdr_u_long(xdrs, &regs->pm_prog) &&
-        xdr_u_long(xdrs, &regs->pm_vers) &&
-        xdr_u_long(xdrs, &regs->pm_prot))
-        return (xdr_u_long(xdrs, &regs->pm_port));
-    return (FALSE);
+	if (xdr_u_long(xdrs, &regs->pm_prog) && xdr_u_long(xdrs, &regs->pm_vers)
+	    && xdr_u_long(xdrs, &regs->pm_prot))
+		return (xdr_u_long(xdrs, &regs->pm_port));
+	return (FALSE);
 }

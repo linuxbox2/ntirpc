@@ -11,20 +11,20 @@
    ((structure *)((char *)(ptr)-(char *)(&((structure *)NULL)->member)))
 
 struct opr_rbtree_node {
-    struct opr_rbtree_node *left;
-    struct opr_rbtree_node *right;
-    struct opr_rbtree_node *parent;
-    int red;
+	struct opr_rbtree_node *left;
+	struct opr_rbtree_node *right;
+	struct opr_rbtree_node *parent;
+	int red;
 };
 
-typedef int (*opr_rbtree_cmpf_t) (const struct opr_rbtree_node* lhs,
-                                  const struct opr_rbtree_node* rhs);
+typedef int (*opr_rbtree_cmpf_t) (const struct opr_rbtree_node * lhs,
+				  const struct opr_rbtree_node * rhs);
 
 struct opr_rbtree {
-    struct opr_rbtree_node *root;
-    opr_rbtree_cmpf_t cmpf;
-    uint64_t size;
-    uint64_t gen; /* generation number */
+	struct opr_rbtree_node *root;
+	opr_rbtree_cmpf_t cmpf;
+	uint64_t size;
+	uint64_t gen;		/* generation number */
 };
 
 extern void opr_rbtree_init(struct opr_rbtree *head, opr_rbtree_cmpf_t cmpf);
@@ -33,23 +33,22 @@ extern struct opr_rbtree_node *opr_rbtree_last(struct opr_rbtree *head);
 extern struct opr_rbtree_node *opr_rbtree_next(struct opr_rbtree_node *node);
 extern struct opr_rbtree_node *opr_rbtree_prev(struct opr_rbtree_node *node);
 extern struct opr_rbtree_node *opr_rbtree_lookup(struct opr_rbtree *head,
-                                                 struct opr_rbtree_node *node);
+						 struct opr_rbtree_node *node);
 extern struct opr_rbtree_node *opr_rbtree_insert(struct opr_rbtree *head,
-                                                 struct opr_rbtree_node *node);
+						 struct opr_rbtree_node *node);
 extern void opr_rbtree_insert_at(struct opr_rbtree *head,
-                                 struct opr_rbtree_node *parent,
-                                 struct opr_rbtree_node **childptr,
-                                 struct opr_rbtree_node *node);
+				 struct opr_rbtree_node *parent,
+				 struct opr_rbtree_node **childptr,
+				 struct opr_rbtree_node *node);
 extern void opr_rbtree_remove(struct opr_rbtree *head,
 			      struct opr_rbtree_node *node);
 extern void opr_rbtree_replace(struct opr_rbtree *head,
 			       struct opr_rbtree_node *old,
 			       struct opr_rbtree_node *replacement);
 
-static inline unsigned long
-opr_rbtree_size(struct opr_rbtree *head)
+static inline unsigned long opr_rbtree_size(struct opr_rbtree *head)
 {
-    return (head->size);
+	return (head->size);
 }
 
-#endif /* _OPR_RBTREE_H */
+#endif				/* _OPR_RBTREE_H */

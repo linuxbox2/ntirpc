@@ -56,7 +56,7 @@
 
 /* svc_soc.h */
 #define svcraw_create() svcraw_ncreate()
-#define svcudp_create(a) svcudp_ncreate(a) 
+#define svcudp_create(a) svcudp_ncreate(a)
 #define svcudp_bufcreate(a, b, c) svcudp_nbufcreate(a, b, c)
 #define svcudp6_create(a) svcudp6_ncreate(a)
 #define svcudp6_bufcreate(a, b, c) svcudp6_nbufcreate(a, b, c)
@@ -75,7 +75,7 @@
 #define svc_dg_create(a, b, c) svc_dg_ncreate(a, b, c)
 #define svc_fd_create(a, b, c) svc_fd_ncreate(a, b, c)
 #define svcunixfd_create(a, b, c) svcunixfd_ncreate(a, b, c)
-#define svc_raw_create() svc_raw_ncreate() 
+#define svc_raw_create() svc_raw_ncreate()
 
 /* auth */
 #define authunix_create(a, b, c, d, e) authunix_ncreate(a, b, c, d, e)
@@ -103,4 +103,4 @@
 #define xdrmem_create(a, b, c, d) xdrmem_ncreate(a, b, c, d)
 #define xdr_free xdr_nfree
 
-#endif /* !TIRPC_COMPAT_H */
+#endif				/* !TIRPC_COMPAT_H */

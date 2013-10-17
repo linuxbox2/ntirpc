@@ -40,7 +40,7 @@
 #include <unistd.h>
 #include <signal.h>
 
-#include <rpc/types.h> /* before portable.h */
+#include <rpc/types.h>		/* before portable.h */
 #include <misc/portable.h>
 #include <rpc/rpc.h>
 #include "rpc_com.h"
@@ -56,53 +56,50 @@ extern struct svc_params __svc_params[1];
 bool __svc_clean_idle2(int timeout, bool cleanblock);
 
 #if defined(TIRPC_EPOLL)
-void svc_getreqset_epoll (struct epoll_event *events, int nfds);
+void svc_getreqset_epoll(struct epoll_event *events, int nfds);
 
-/* static */ void
-svc_run_epoll(void)
+/* static */ void svc_run_epoll(void)
 {
-    /* TODO: rename */
-    (void) svc_rqst_thrd_run(__svc_params->ev_u.evchan.id,
-                             SVC_RQST_FLAG_NONE);
+	/* TODO: rename */
+	(void)svc_rqst_thrd_run(__svc_params->ev_u.evchan.id,
+				SVC_RQST_FLAG_NONE);
 }
-#endif /* TIRPC_EPOLL */
+#endif				/* TIRPC_EPOLL */
 
-void
-svc_run(void)
+void svc_run(void)
 {
-    switch (__svc_params->ev_type) {
+	switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
-    case SVC_EVENT_EPOLL:
-        svc_run_epoll();
-        break;
+	case SVC_EVENT_EPOLL:
+		svc_run_epoll();
+		break;
 #endif
-    default:
-        /* XXX formerly select/fd_set case, now placeholder for new
-         * event systems, reworked select, etc. */
-        __warnx(TIRPC_DEBUG_FLAG_SVC,
-                "svc_run: unsupported event type");
-        break;
-    } /* switch */
+	default:
+		/* XXX formerly select/fd_set case, now placeholder for new
+		 * event systems, reworked select, etc. */
+		__warnx(TIRPC_DEBUG_FLAG_SVC,
+			"svc_run: unsupported event type");
+		break;
+	}			/* switch */
 }
 
 /*
  *      This function causes svc_run() to exit by telling it that it has no
  *      more work to do.
  */
-void
-svc_exit()
+void svc_exit()
 {
-    switch (__svc_params->ev_type) {
+	switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
-    case SVC_EVENT_EPOLL:
-        /* signal shutdown backchannel */
-        (void) svc_rqst_thrd_signal(__svc_params->ev_u.evchan.id,
-                                    SVC_RQST_SIGNAL_SHUTDOWN);
-        break;
+	case SVC_EVENT_EPOLL:
+		/* signal shutdown backchannel */
+		(void)svc_rqst_thrd_signal(__svc_params->ev_u.evchan.id,
+					   SVC_RQST_SIGNAL_SHUTDOWN);
+		break;
 #endif
-    default:
-        /* XXX formerly select/fd_set case, now placeholder for new
-         * event systems, reworked select, etc. */
-        break;
-    } /* switch */
+	default:
+		/* XXX formerly select/fd_set case, now placeholder for new
+		 * event systems, reworked select, etc. */
+		break;
+	}			/* switch */
 }

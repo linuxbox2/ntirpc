@@ -85,9 +85,9 @@
  * request.
  */
 enum xdr_op {
-    XDR_ENCODE=0,
-    XDR_DECODE=1,
-    XDR_FREE=2
+	XDR_ENCODE = 0,
+	XDR_DECODE = 1,
+	XDR_FREE = 2
 };
 
 /*
@@ -103,7 +103,7 @@ enum xdr_op {
  */
 #if 1
 #define RNDUP(x)  (((x) + BYTES_PER_XDR_UNIT - 1) & ~(BYTES_PER_XDR_UNIT - 1))
-#else /* this is the old routine */
+#else				/* this is the old routine */
 #define RNDUP(x)  ((((x) + BYTES_PER_XDR_UNIT - 1) / BYTES_PER_XDR_UNIT) \
                    * BYTES_PER_XDR_UNIT)
 #endif
@@ -113,21 +113,21 @@ enum xdr_op {
 
 /* XDR buffer descriptors. */
 typedef struct rpc_buffer {
-    void *xb_base;
-    int   xb_len;
-    u_int xb_flags;
-    void *xb_p1; /* XDR private data */
-    void *xb_u1; /* User data */
+	void *xb_base;
+	int xb_len;
+	u_int xb_flags;
+	void *xb_p1;		/* XDR private data */
+	void *xb_u1;		/* User data */
 } xdr_buffer;
 
 typedef struct rpc_buffers {
-    xdr_buffer *xbs_buf; /* array of buffers */
-    int         xbs_cnt; /* count of buffers */
-    size_t      xbs_offset; /* not used (yet) */
-    size_t      xbs_resid; /* residual bytes */
-    u_int       xbs_flags;
-    void       *xbs_p1;
-    void       *xbs_u1;
+	xdr_buffer *xbs_buf;	/* array of buffers */
+	int xbs_cnt;		/* count of buffers */
+	size_t xbs_offset;	/* not used (yet) */
+	size_t xbs_resid;	/* residual bytes */
+	u_int xbs_flags;
+	void *xbs_p1;
+	void *xbs_u1;
 } xdr_uio;
 
 /* Op flags */
@@ -144,35 +144,35 @@ typedef struct rpc_buffers {
  * and two private fields for the use of the particular implementation.
  */
 typedef struct rpc_xdr {
-    enum xdr_op x_op;  /* operation; fast additional param */
-    const struct xdr_ops {
-        /* get a long from underlying stream */
-        bool (*x_getlong)(struct rpc_xdr *, long *);
-        /* put a long to " */
-        bool (*x_putlong)(struct rpc_xdr *, const long *);
-        /* get some bytes from " */
-        bool (*x_getbytes)(struct rpc_xdr *, char *, u_int);
-        /* put some bytes to " */
-        bool (*x_putbytes)(struct rpc_xdr *, const char *, u_int);
-        /* returns bytes off from beginning */
-        u_int (*x_getpostn)(struct rpc_xdr *);
-        /* lets you reposition the stream */
-        bool (*x_setpostn)(struct rpc_xdr *, u_int);
-        /* buf quick ptr to buffered data */
-        int32_t *(*x_inline)(struct rpc_xdr *, u_int);
-        /* free private resources of this xdr_stream */
-        void (*x_destroy)(struct rpc_xdr *);
-        bool (*x_control)(struct rpc_xdr *, int, void *);
-        /* new vector and refcounted interfaces */
-        bool (*x_getbufs)(struct rpc_xdr *, xdr_uio *, u_int, u_int);
-        bool (*x_putbufs)(struct rpc_xdr *, xdr_uio *, u_int);
-    } *x_ops;
-    void *x_public; /* users' data */
-    void *x_private; /* pointer to private data */
-    void *x_lib[2]; /* RPC library private */
-    void *x_base;  /* private used for position info */
-    u_int x_handy; /* extra private word */
-    u_int x_flags; /* shared flags */
+	enum xdr_op x_op;	/* operation; fast additional param */
+	const struct xdr_ops {
+		/* get a long from underlying stream */
+		bool(*x_getlong) (struct rpc_xdr *, long *);
+		/* put a long to " */
+		bool(*x_putlong) (struct rpc_xdr *, const long *);
+		/* get some bytes from " */
+		bool(*x_getbytes) (struct rpc_xdr *, char *, u_int);
+		/* put some bytes to " */
+		bool(*x_putbytes) (struct rpc_xdr *, const char *, u_int);
+		/* returns bytes off from beginning */
+		u_int(*x_getpostn) (struct rpc_xdr *);
+		/* lets you reposition the stream */
+		bool(*x_setpostn) (struct rpc_xdr *, u_int);
+		/* buf quick ptr to buffered data */
+		int32_t *(*x_inline) (struct rpc_xdr *, u_int);
+		/* free private resources of this xdr_stream */
+		void (*x_destroy) (struct rpc_xdr *);
+		 bool(*x_control) (struct rpc_xdr *, int, void *);
+		/* new vector and refcounted interfaces */
+		 bool(*x_getbufs) (struct rpc_xdr *, xdr_uio *, u_int, u_int);
+		 bool(*x_putbufs) (struct rpc_xdr *, xdr_uio *, u_int);
+	} *x_ops;
+	void *x_public;		/* users' data */
+	void *x_private;	/* pointer to private data */
+	void *x_lib[2];		/* RPC library private */
+	void *x_base;		/* private used for position info */
+	u_int x_handy;		/* extra private word */
+	u_int x_flags;		/* shared flags */
 } XDR;
 
 /*
@@ -184,12 +184,12 @@ typedef struct rpc_xdr {
  * allocate dynamic storage of the appropriate size and return it.
  */
 #ifdef _KERNEL
-typedef bool (*xdrproc_t)(XDR *, void *, u_int);
+typedef bool(*xdrproc_t) (XDR *, void *, u_int);
 #else
 /*
  * XXX can't actually prototype it, because some take three args!!!
  */
-typedef bool (*xdrproc_t)(XDR *, ...);
+typedef bool(*xdrproc_t) (XDR *, ...);
 #endif
 
 /*
@@ -211,24 +211,22 @@ typedef bool (*xdrproc_t)(XDR *, ...);
 #define xdr_putlong(xdrs, longp)   \
     (*(xdrs)->x_ops->x_putlong)(xdrs, longp)
 
-static __inline int
-xdr_getint32(XDR *xdrs, int32_t *ip)
+static __inline int xdr_getint32(XDR * xdrs, int32_t * ip)
 {
-    long l;
+	long l;
 
-    if (!xdr_getlong(xdrs, &l))
-        return (FALSE);
-    *ip = (int32_t)l;
-    return (TRUE);
+	if (!xdr_getlong(xdrs, &l))
+		return (FALSE);
+	*ip = (int32_t) l;
+	return (TRUE);
 }
 
-static __inline int
-xdr_putint32(XDR *xdrs, int32_t *ip)
+static __inline int xdr_putint32(XDR * xdrs, int32_t * ip)
 {
-    long l;
+	long l;
 
-    l = (long)*ip;
-    return xdr_putlong(xdrs, &l);
+	l = (long)*ip;
+	return xdr_putlong(xdrs, &l);
 }
 
 #define XDR_GETINT32(xdrs, int32p) xdr_getint32(xdrs, int32p)
@@ -303,8 +301,8 @@ xdr_putint32(XDR *xdrs, int32_t *ip)
  */
 #define NULL_xdrproc_t ((xdrproc_t)0)
 struct xdr_discrim {
-    int value;
-    xdrproc_t proc;
+	int value;
+	xdrproc_t proc;
 };
 
 /*
@@ -342,12 +340,10 @@ struct xdr_discrim {
 #define IXDR_PUT_SHORT(buf, v)  IXDR_PUT_LONG((buf), (v))
 #define IXDR_PUT_U_SHORT(buf, v) IXDR_PUT_LONG((buf), (v))
 
-
 /*
  * These are the "generic" xdr routines.
  */
-__BEGIN_DECLS
-extern bool xdr_void(void);
+__BEGIN_DECLS extern bool xdr_void(void);
 extern bool xdr_int(XDR *, int *);
 extern bool xdr_u_int(XDR *, u_int *);
 extern bool xdr_long(XDR *, long *);
@@ -369,7 +365,7 @@ extern bool xdr_bytes(XDR *, char **, u_int *, u_int);
 extern bool xdr_opaque(XDR *, char *, u_int);
 extern bool xdr_string(XDR *, char **, u_int);
 extern bool xdr_union(XDR *, enum_t *, char *, const struct xdr_discrim *,
-                        xdrproc_t);
+		      xdrproc_t);
 extern bool xdr_char(XDR *, char *);
 extern bool xdr_u_char(XDR *, u_char *);
 extern bool xdr_vector(XDR *, char *, u_int, u_int, xdrproc_t);
@@ -389,15 +385,14 @@ extern bool xdr_u_longlong_t(XDR *, u_quad_t *);
 #define xdr_uquad_t xdr_uint64_t
 
 __END_DECLS
-
 /*
  * Common opaque bytes objects used by many rpc protocols;
  * declared here due to commonality.
  */
 #define MAX_NETOBJ_SZ 1024
-struct netobj {
-    u_int n_len;
-    char *n_bytes;
+    struct netobj {
+	u_int n_len;
+	char *n_bytes;
 };
 typedef struct netobj netobj;
 extern bool xdr_nnetobj(XDR *, struct netobj *);
@@ -418,8 +413,8 @@ extern void xdrstdio_create(XDR *, FILE *, enum xdr_op);
 
 /* XDR pseudo records for tcp */
 extern void xdrrec_create(XDR *, u_int, u_int, void *,
-                          int (*)(XDR *xdrs, void *, void *, int),
-                          int (*)(XDR *xdrs, void *, void *, int));
+			  int (*)(XDR * xdrs, void *, void *, int),
+			  int (*)(XDR * xdrs, void *, void *, int));
 
 /* make end of xdr record */
 extern bool xdrrec_endofrecord(XDR *, bool);
@@ -431,8 +426,6 @@ extern bool xdrrec_skiprecord(XDR *);
 extern bool xdrrec_eof(XDR *);
 
 __END_DECLS
-
 /* For backward compatibility */
 #include <rpc/tirpc_compat.h>
-
-#endif /* !_TIRPC_XDR_H */
+#endif				/* !_TIRPC_XDR_H */

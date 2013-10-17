@@ -52,26 +52,24 @@
 #ifndef        __BSD_EPOLL_H__
 #define        __BSD_EPOLL_H__
 
-union epoll_data
-{
-        int fd;
-        uint32_t u32;
-        uint64_t u64;
-        void *ptr;
+union epoll_data {
+	int fd;
+	uint32_t u32;
+	uint64_t u64;
+	void *ptr;
 };
 
 struct epoll_event {
-        uint32_t events;
-        union epoll_data data;
+	uint32_t events;
+	union epoll_data data;
 };
 
-enum EPOLL_EVENTS
-  {
-    EPOLLIN = 0x001,
+enum EPOLL_EVENTS {
+	EPOLLIN = 0x001,
 #define EPOLLIN EPOLLIN
-    EPOLLPRI = 0x002,
+	EPOLLPRI = 0x002,
 #define EPOLLPRI EPOLLPRI
-    EPOLLOUT = 0x004,
+	EPOLLOUT = 0x004,
 #define EPOLLOUT EPOLLOUT
 /*
     EPOLLRDNORM = 0x040,
@@ -89,13 +87,13 @@ enum EPOLL_EVENTS
     EPOLLHUP = 0x010,
 #define EPOLLHUP EPOLLHUP
 */
-    EPOLLRDHUP = 0x2000,
+	EPOLLRDHUP = 0x2000,
 #define EPOLLRDHUP EPOLLRDHUP
-    EPOLLONESHOT = (1 << 30),
+	EPOLLONESHOT = (1 << 30),
 #define EPOLLONESHOT EPOLLONESHOT
-    EPOLLET = (1 << 31)
+	EPOLLET = (1 << 31)
 #define EPOLLET EPOLLET
-  };
+};
 
 #define EPOLL_CTL_ADD     1
 #define EPOLL_CTL_DEL     2
@@ -103,9 +101,9 @@ enum EPOLL_EVENTS
 
 #define EPOLL_MAX_EVENTS        (INT_MAX / sizeof(struct epoll_event))
 
-extern int epoll_create(int size /*unused*/);
+extern int epoll_create(int size /*unused */ );
 extern int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
 extern int epoll_wait(int epfd, struct epoll_event *events, int maxevents,
-                      int timeout);
+		      int timeout);
 
-#endif /* __BSD_EPOLL_H__ */
+#endif				/* __BSD_EPOLL_H__ */

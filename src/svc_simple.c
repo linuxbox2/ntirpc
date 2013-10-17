@@ -58,16 +58,16 @@
 static void universal(struct svc_req *, SVCXPRT *);
 
 static struct proglst {
-    char *(*p_progname)(char *);
-    rpcprog_t p_prognum;
-    rpcvers_t p_versnum;
-    rpcproc_t p_procnum;
-    SVCXPRT *p_transp;
-    char *p_netid;
-    char *p_xdrbuf;
-    int p_recvsz;
-    xdrproc_t p_inproc, p_outproc;
-    struct proglst *p_nxt;
+	char *(*p_progname) (char *);
+	rpcprog_t p_prognum;
+	rpcvers_t p_versnum;
+	rpcproc_t p_procnum;
+	SVCXPRT *p_transp;
+	char *p_netid;
+	char *p_xdrbuf;
+	int p_recvsz;
+	xdrproc_t p_inproc, p_outproc;
+	struct proglst *p_nxt;
 } *proglst;
 
 static const char rpc_reg_err[] = "%s: %s";
@@ -88,146 +88,145 @@ static const char __no_mem_str[] = "out of memory";
  * should not use the simplified interfaces like this.
  */
 
-int
-rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
-        char *(*progname)(char *), xdrproc_t inproc,
-        xdrproc_t outproc, char *nettype)
+int rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
+	    char *(*progname) (char *), xdrproc_t inproc, xdrproc_t outproc,
+	    char *nettype)
 {
-    struct netconfig *nconf;
-    int done = FALSE;
-    void *handle;
-    extern mutex_t proglst_lock;
+	struct netconfig *nconf;
+	int done = FALSE;
+	void *handle;
+	extern mutex_t proglst_lock;
 
-    if (procnum == NULLPROC) {
-        __warnx(TIRPC_DEBUG_FLAG_SVC,
-                "%s can't reassign procedure number %u", rpc_reg_msg,
-                NULLPROC);
-        return (-1);
-    }
+	if (procnum == NULLPROC) {
+		__warnx(TIRPC_DEBUG_FLAG_SVC,
+			"%s can't reassign procedure number %u", rpc_reg_msg,
+			NULLPROC);
+		return (-1);
+	}
 
-    if (nettype == NULL)
-        nettype = "netpath";  /* The default behavior */
-    if ((handle = __rpc_setconf(nettype)) == NULL) {
-        __warnx(TIRPC_DEBUG_FLAG_SVC,
-                rpc_reg_err, rpc_reg_msg, __reg_err1);
-        return (-1);
-    }
+	if (nettype == NULL)
+		nettype = "netpath";	/* The default behavior */
+	if ((handle = __rpc_setconf(nettype)) == NULL) {
+		__warnx(TIRPC_DEBUG_FLAG_SVC, rpc_reg_err, rpc_reg_msg,
+			__reg_err1);
+		return (-1);
+	}
 /* VARIABLES PROTECTED BY proglst_lock: proglst */
-    mutex_lock(&proglst_lock);
-    while ((nconf = __rpc_getconf(handle)) != NULL) {
-        struct proglst *pl;
-        SVCXPRT *svcxprt;
-        int madenow;
-        u_int recvsz;
-        char *xdrbuf;
-        char *netid;
+	mutex_lock(&proglst_lock);
+	while ((nconf = __rpc_getconf(handle)) != NULL) {
+		struct proglst *pl;
+		SVCXPRT *svcxprt;
+		int madenow;
+		u_int recvsz;
+		char *xdrbuf;
+		char *netid;
 
-        madenow = FALSE;
-        svcxprt = NULL;
-        recvsz = 0;
-        xdrbuf = netid = NULL;
-        for (pl = proglst; pl; pl = pl->p_nxt) {
-            if (strcmp(pl->p_netid, nconf->nc_netid) == 0) {
-                svcxprt = pl->p_transp;
-                xdrbuf = pl->p_xdrbuf;
-                recvsz = pl->p_recvsz;
-                netid = pl->p_netid;
-                break;
-            }
-        }
+		madenow = FALSE;
+		svcxprt = NULL;
+		recvsz = 0;
+		xdrbuf = netid = NULL;
+		for (pl = proglst; pl; pl = pl->p_nxt) {
+			if (strcmp(pl->p_netid, nconf->nc_netid) == 0) {
+				svcxprt = pl->p_transp;
+				xdrbuf = pl->p_xdrbuf;
+				recvsz = pl->p_recvsz;
+				netid = pl->p_netid;
+				break;
+			}
+		}
 
-        if (svcxprt == NULL) {
-            struct __rpc_sockinfo si;
+		if (svcxprt == NULL) {
+			struct __rpc_sockinfo si;
 
-            svcxprt = svc_tli_ncreate(RPC_ANYFD, nconf, NULL, 0, 0);
-            if (svcxprt == NULL)
-                continue;
-            if (!__rpc_fd2sockinfo(svcxprt->xp_fd, &si)) {
-                __warnx(TIRPC_DEBUG_FLAG_SVC,
-                        rpc_reg_err, rpc_reg_msg, __reg_err2);
-                SVC_DESTROY(svcxprt);
-                continue;
-            }
-            recvsz = __rpc_get_t_size(si.si_af, si.si_proto, 0);
-            if (recvsz == 0) {
-                __warnx(TIRPC_DEBUG_FLAG_SVC,
-                        rpc_reg_err, rpc_reg_msg, __reg_err3);
-                SVC_DESTROY(svcxprt);
-                continue;
-            }
-            if (((xdrbuf = mem_alloc((unsigned)recvsz)) == NULL) ||
-                ((netid = rpc_strdup(nconf->nc_netid)) == NULL)) {
-                __warnx(TIRPC_DEBUG_FLAG_SVC,
-                        rpc_reg_err, rpc_reg_msg, __no_mem_str);
-                SVC_DESTROY(svcxprt);
-                break;
-            }
-            madenow = TRUE;
-        }
-        /*
-         * Check if this (program, version, netid) had already been
-         * registered.  The check may save a few RPC calls to rpcbind
-         */
-        for (pl = proglst; pl; pl = pl->p_nxt)
-            if ((pl->p_prognum == prognum) &&
-                (pl->p_versnum == versnum) &&
-                (strcmp(pl->p_netid, netid) == 0))
-                break;
-        if (pl == NULL) { /* Not yet */
-            (void) rpcb_unset(prognum, versnum, nconf);
-        } else {
-            /* so that svc_reg does not call rpcb_set() */
-            nconf = NULL;
-        }
+			svcxprt = svc_tli_ncreate(RPC_ANYFD, nconf, NULL, 0, 0);
+			if (svcxprt == NULL)
+				continue;
+			if (!__rpc_fd2sockinfo(svcxprt->xp_fd, &si)) {
+				__warnx(TIRPC_DEBUG_FLAG_SVC, rpc_reg_err,
+					rpc_reg_msg, __reg_err2);
+				SVC_DESTROY(svcxprt);
+				continue;
+			}
+			recvsz = __rpc_get_t_size(si.si_af, si.si_proto, 0);
+			if (recvsz == 0) {
+				__warnx(TIRPC_DEBUG_FLAG_SVC, rpc_reg_err,
+					rpc_reg_msg, __reg_err3);
+				SVC_DESTROY(svcxprt);
+				continue;
+			}
+			if (((xdrbuf = mem_alloc((unsigned)recvsz)) == NULL)
+			    || ((netid = rpc_strdup(nconf->nc_netid)) == NULL)) {
+				__warnx(TIRPC_DEBUG_FLAG_SVC, rpc_reg_err,
+					rpc_reg_msg, __no_mem_str);
+				SVC_DESTROY(svcxprt);
+				break;
+			}
+			madenow = TRUE;
+		}
+		/*
+		 * Check if this (program, version, netid) had already been
+		 * registered.  The check may save a few RPC calls to rpcbind
+		 */
+		for (pl = proglst; pl; pl = pl->p_nxt)
+			if ((pl->p_prognum == prognum)
+			    && (pl->p_versnum == versnum)
+			    && (strcmp(pl->p_netid, netid) == 0))
+				break;
+		if (pl == NULL) {	/* Not yet */
+			(void)rpcb_unset(prognum, versnum, nconf);
+		} else {
+			/* so that svc_reg does not call rpcb_set() */
+			nconf = NULL;
+		}
 
-        if (!svc_reg(svcxprt, prognum, versnum, universal, nconf)) {
-            __warnx(TIRPC_DEBUG_FLAG_SVC,
-                    "%s couldn't register prog %u vers %u for %s",
-                    rpc_reg_msg, (unsigned)prognum,
-                    (unsigned)versnum, netid);
-            if (madenow) {
-                SVC_DESTROY(svcxprt);
-                mem_free(xdrbuf, 0);
-                mem_free(netid, 0);
-            }
-            continue;
-        }
+		if (!svc_reg(svcxprt, prognum, versnum, universal, nconf)) {
+			__warnx(TIRPC_DEBUG_FLAG_SVC,
+				"%s couldn't register prog %u vers %u for %s",
+				rpc_reg_msg, (unsigned)prognum,
+				(unsigned)versnum, netid);
+			if (madenow) {
+				SVC_DESTROY(svcxprt);
+				mem_free(xdrbuf, 0);
+				mem_free(netid, 0);
+			}
+			continue;
+		}
 
-        pl = mem_alloc(sizeof (struct proglst));
-        if (pl == NULL) {
-            __warnx(TIRPC_DEBUG_FLAG_SVC,
-                    rpc_reg_err, rpc_reg_msg, __no_mem_str);
-            if (madenow) {
-                SVC_DESTROY(svcxprt);
-                mem_free(xdrbuf, 0);
-                mem_free(netid, 0);
-            }
-            break;
-        }
-        pl->p_progname = progname;
-        pl->p_prognum = prognum;
-        pl->p_versnum = versnum;
-        pl->p_procnum = procnum;
-        pl->p_inproc = inproc;
-        pl->p_outproc = outproc;
-        pl->p_transp = svcxprt;
-        pl->p_xdrbuf = xdrbuf;
-        pl->p_recvsz = recvsz;
-        pl->p_netid = netid;
-        pl->p_nxt = proglst;
-        proglst = pl;
-        done = TRUE;
-    }
-    __rpc_endconf(handle);
-    mutex_unlock(&proglst_lock);
+		pl = mem_alloc(sizeof(struct proglst));
+		if (pl == NULL) {
+			__warnx(TIRPC_DEBUG_FLAG_SVC, rpc_reg_err, rpc_reg_msg,
+				__no_mem_str);
+			if (madenow) {
+				SVC_DESTROY(svcxprt);
+				mem_free(xdrbuf, 0);
+				mem_free(netid, 0);
+			}
+			break;
+		}
+		pl->p_progname = progname;
+		pl->p_prognum = prognum;
+		pl->p_versnum = versnum;
+		pl->p_procnum = procnum;
+		pl->p_inproc = inproc;
+		pl->p_outproc = outproc;
+		pl->p_transp = svcxprt;
+		pl->p_xdrbuf = xdrbuf;
+		pl->p_recvsz = recvsz;
+		pl->p_netid = netid;
+		pl->p_nxt = proglst;
+		proglst = pl;
+		done = TRUE;
+	}
+	__rpc_endconf(handle);
+	mutex_unlock(&proglst_lock);
 
-    if (done == FALSE) {
-        __warnx(TIRPC_DEBUG_FLAG_SVC,
-                "%s cant find suitable transport for %s",
-                rpc_reg_msg, nettype);
-        return (-1);
-    }
-    return (0);
+	if (done == FALSE) {
+		__warnx(TIRPC_DEBUG_FLAG_SVC,
+			"%s cant find suitable transport for %s", rpc_reg_msg,
+			nettype);
+		return (-1);
+	}
+	return (0);
 }
 
 /*
@@ -235,73 +234,72 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
  * It handles both the connectionless and the connection oriented cases.
  */
 
-static void
-universal(struct svc_req *req, SVCXPRT *transp)
+static void universal(struct svc_req *req, SVCXPRT * transp)
 {
-    rpcprog_t prog;
-    rpcvers_t vers;
-    rpcproc_t proc;
-    char *outdata;
-    char *xdrbuf;
-    struct proglst *pl;
-    extern mutex_t proglst_lock;
+	rpcprog_t prog;
+	rpcvers_t vers;
+	rpcproc_t proc;
+	char *outdata;
+	char *xdrbuf;
+	struct proglst *pl;
+	extern mutex_t proglst_lock;
 
-    /*
-     * enforce "procnum 0 is echo" convention
-     */
-    if (req->rq_proc == NULLPROC) {
-        if (svc_sendreply(transp, req, (xdrproc_t) xdr_void, NULL) ==
-            FALSE) {
-            __warnx(TIRPC_DEBUG_FLAG_SVC,
-                    "svc_sendreply failed");
-        }
-        return;
-    }
-    prog = req->rq_prog;
-    vers = req->rq_vers;
-    proc = req->rq_proc;
-    mutex_lock(&proglst_lock);
-    for (pl = proglst; pl; pl = pl->p_nxt)
-        if (pl->p_prognum == prog && pl->p_procnum == proc &&
-            pl->p_versnum == vers &&
-            (strcmp(pl->p_netid, transp->xp_netid) == 0)) {
-            /* decode arguments into a CLEAN buffer */
-            xdrbuf = pl->p_xdrbuf;
-            /* Zero the arguments: reqd ! */
-            (void) memset(xdrbuf, 0, sizeof (pl->p_recvsz));
-            /*
-             * Assuming that sizeof (xdrbuf) would be enough
-             * for the arguments; if not then the program
-             * may bomb. BEWARE!
-             */
-            if (!svc_getargs(transp, req, pl->p_inproc, xdrbuf, NULL)) {
-                svcerr_decode(transp, req);
-                mutex_unlock(&proglst_lock);
-                return;
-            }
-            outdata = (*(pl->p_progname))(xdrbuf);
-            if (outdata == NULL &&
-                pl->p_outproc != (xdrproc_t) xdr_void){
-                /* there was an error */
-                mutex_unlock(&proglst_lock);
-                return;
-            }
-            if (!svc_sendreply(transp, req, pl->p_outproc, outdata)) {
-                __warnx(TIRPC_DEBUG_FLAG_SVC,
-                        "rpc: rpc_reg trouble replying to prog %u vers %u",
-                        (unsigned)prog, (unsigned)vers);
-                mutex_unlock(&proglst_lock);
-                return;
-            }
-            /* free the decoded arguments */
-            (void)svc_freeargs(transp, pl->p_inproc, xdrbuf);
-            mutex_unlock(&proglst_lock);
-            return;
-        }
-    mutex_unlock(&proglst_lock);
-    /* This should never happen */
-    __warnx(TIRPC_DEBUG_FLAG_SVC,
-            "rpc: rpc_reg: never registered prog %u vers %u",
-            (unsigned)prog, (unsigned)vers);
-    return;
+	/*
+	 * enforce "procnum 0 is echo" convention
+	 */
+	if (req->rq_proc == NULLPROC) {
+		if (svc_sendreply(transp, req, (xdrproc_t) xdr_void, NULL) ==
+		    FALSE) {
+			__warnx(TIRPC_DEBUG_FLAG_SVC, "svc_sendreply failed");
+		}
+		return;
+	}
+	prog = req->rq_prog;
+	vers = req->rq_vers;
+	proc = req->rq_proc;
+	mutex_lock(&proglst_lock);
+	for (pl = proglst; pl; pl = pl->p_nxt)
+		if (pl->p_prognum == prog && pl->p_procnum == proc
+		    && pl->p_versnum == vers
+		    && (strcmp(pl->p_netid, transp->xp_netid) == 0)) {
+			/* decode arguments into a CLEAN buffer */
+			xdrbuf = pl->p_xdrbuf;
+			/* Zero the arguments: reqd ! */
+			(void)memset(xdrbuf, 0, sizeof(pl->p_recvsz));
+			/*
+			 * Assuming that sizeof (xdrbuf) would be enough
+			 * for the arguments; if not then the program
+			 * may bomb. BEWARE!
+			 */
+			if (!svc_getargs
+			    (transp, req, pl->p_inproc, xdrbuf, NULL)) {
+				svcerr_decode(transp, req);
+				mutex_unlock(&proglst_lock);
+				return;
+			}
+			outdata = (*(pl->p_progname)) (xdrbuf);
+			if (outdata == NULL
+			    && pl->p_outproc != (xdrproc_t) xdr_void) {
+				/* there was an error */
+				mutex_unlock(&proglst_lock);
+				return;
+			}
+			if (!svc_sendreply(transp, req, pl->p_outproc, outdata)) {
+				__warnx(TIRPC_DEBUG_FLAG_SVC,
+					"rpc: rpc_reg trouble replying to prog %u vers %u",
+					(unsigned)prog, (unsigned)vers);
+				mutex_unlock(&proglst_lock);
+				return;
+			}
+			/* free the decoded arguments */
+			(void)svc_freeargs(transp, pl->p_inproc, xdrbuf);
+			mutex_unlock(&proglst_lock);
+			return;
+		}
+	mutex_unlock(&proglst_lock);
+	/* This should never happen */
+	__warnx(TIRPC_DEBUG_FLAG_SVC,
+		"rpc: rpc_reg: never registered prog %u vers %u",
+		(unsigned)prog, (unsigned)vers);
+	return;
 }

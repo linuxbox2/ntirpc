@@ -33,14 +33,13 @@
 #define RPC_CTX_FLAG_SYNCDONE 0x0004
 #define RPC_CTX_FLAG_ACKSYNC  0x0008
 
-rpc_ctx_t *
-alloc_rpc_call_ctx(CLIENT *cl, rpcproc_t proc, xdrproc_t xdr_args,
-                       void *args_ptr, xdrproc_t xdr_results, void *results_ptr,
-                       struct timeval timeout);
-void rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags);
-int rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags);
+rpc_ctx_t *alloc_rpc_call_ctx(CLIENT * cl, rpcproc_t proc, xdrproc_t xdr_args,
+			      void *args_ptr, xdrproc_t xdr_results,
+			      void *results_ptr, struct timeval timeout);
+void rpc_ctx_next_xid(rpc_ctx_t * ctx, uint32_t flags);
+int rpc_ctx_wait_reply(rpc_ctx_t * ctx, uint32_t flags);
 bool rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg);
-void rpc_ctx_ack_xfer(rpc_ctx_t *ctx);
-void free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags);
+void rpc_ctx_ack_xfer(rpc_ctx_t * ctx);
+void free_rpc_call_ctx(rpc_ctx_t * ctx, uint32_t flags);
 
-#endif /* TIRPC_RPC_CTX_H */
+#endif				/* TIRPC_RPC_CTX_H */

@@ -78,51 +78,48 @@
  * the net, yet is the data that the pointer points to which is interesting;
  * this sounds like a job for xdr_reference!
  */
-bool
-xdr_pmaplist(XDR *xdrs, struct pmaplist **rp)
+bool xdr_pmaplist(XDR * xdrs, struct pmaplist **rp)
 {
-    /*
-     * more_elements is pre-computed in case the direction is
-     * XDR_ENCODE or XDR_FREE.  more_elements is overwritten by
-     * xdr_bool when the direction is XDR_DECODE.
-     */
-    int freeing;
-    struct pmaplist **next = NULL; /* pacify gcc */
-    bool_t more_elements = FALSE; /* yes, bool_t */
+	/*
+	 * more_elements is pre-computed in case the direction is
+	 * XDR_ENCODE or XDR_FREE.  more_elements is overwritten by
+	 * xdr_bool when the direction is XDR_DECODE.
+	 */
+	int freeing;
+	struct pmaplist **next = NULL;	/* pacify gcc */
+	bool_t more_elements = FALSE;	/* yes, bool_t */
 
-    assert(xdrs != NULL);
-    assert(rp != NULL);
+	assert(xdrs != NULL);
+	assert(rp != NULL);
 
-    freeing = (xdrs->x_op == XDR_FREE);
+	freeing = (xdrs->x_op == XDR_FREE);
 
-    for (;;) {
-        more_elements = (bool_t)(*rp != NULL);
-        if (! xdr_bool(xdrs, &more_elements))
-            return (FALSE);
-        if (! more_elements)
-            return (TRUE);  /* we are done */
-        /*
-         * the unfortunate side effect of non-recursion is that in
-         * the case of freeing we must remember the next object
-         * before we free the current object ...
-         */
-        if (freeing)
-            next = &((*rp)->pml_next);
-        if (! xdr_reference(xdrs, (caddr_t *)rp,
-                            (u_int)sizeof(struct pmaplist),
-                            (xdrproc_t)xdr_pmap))
-            return (FALSE);
-        rp = (freeing) ? next : &((*rp)->pml_next);
-    }
+	for (;;) {
+		more_elements = (bool_t) (*rp != NULL);
+		if (!xdr_bool(xdrs, &more_elements))
+			return (FALSE);
+		if (!more_elements)
+			return (TRUE);	/* we are done */
+		/*
+		 * the unfortunate side effect of non-recursion is that in
+		 * the case of freeing we must remember the next object
+		 * before we free the current object ...
+		 */
+		if (freeing)
+			next = &((*rp)->pml_next);
+		if (!xdr_reference
+		    (xdrs, (caddr_t *) rp, (u_int) sizeof(struct pmaplist),
+		     (xdrproc_t) xdr_pmap))
+			return (FALSE);
+		rp = (freeing) ? next : &((*rp)->pml_next);
+	}
 }
-
 
 /*
  * xdr_pmaplist_ptr() is specified to take a PMAPLIST *, but is identical in
  * functionality to xdr_pmaplist().
  */
-bool
-xdr_pmaplist_ptr(XDR *xdrs, struct pmaplist *rp)
+bool xdr_pmaplist_ptr(XDR * xdrs, struct pmaplist * rp)
 {
-    return xdr_pmaplist(xdrs, (struct pmaplist **)(void *)rp);
+	return xdr_pmaplist(xdrs, (struct pmaplist **)(void *)rp);
 }

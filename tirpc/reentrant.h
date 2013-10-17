@@ -59,21 +59,20 @@
 #define RWLOCK_INITIALIZER	PTHREAD_RWLOCK_INITIALIZER
 #define ONCE_INITIALIZER	PTHREAD_ONCE_INIT
 
-static inline int
-mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *a
-           __attribute__((unused)))
+static inline int mutex_init(pthread_mutex_t * m, const pthread_mutexattr_t * a
+			     __attribute__ ((unused)))
 {
-    pthread_mutexattr_t attr;
-    int rslt;
+	pthread_mutexattr_t attr;
+	int rslt;
 
-    pthread_mutexattr_init(&attr);
+	pthread_mutexattr_init(&attr);
 #if defined(__linux__)
-    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ADAPTIVE_NP);
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ADAPTIVE_NP);
 #endif
-    rslt = pthread_mutex_init(m, &attr);
-    pthread_mutexattr_destroy(&attr);
+	rslt = pthread_mutex_init(m, &attr);
+	pthread_mutexattr_destroy(&attr);
 
-    return (rslt);
+	return (rslt);
 }
 
 #define mutex_lock(m)		pthread_mutex_lock(m)
@@ -110,4 +109,4 @@ mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *a
 #define thr_self()		pthread_self()
 #define thr_exit(x)		pthread_exit(x)
 
-#endif /* REENTRANT_H */
+#endif				/* REENTRANT_H */

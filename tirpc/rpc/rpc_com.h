@@ -55,12 +55,11 @@
 #define __RPC_GETXID(now) ((u_int32_t)getpid() ^ (u_int32_t)(now)->tv_sec ^ \
                            (u_int32_t)(now)->tv_usec)
 
-__BEGIN_DECLS
-extern u_int __rpc_get_a_size(int);
+__BEGIN_DECLS extern u_int __rpc_get_a_size(int);
 extern int __rpc_dtbsize(void);
 extern int _rpc_dtablesize(void);
-extern struct netconfig * __rpcgettp(int);
-extern  int  __rpc_get_default_domain(char **);
+extern struct netconfig *__rpcgettp(int);
+extern int __rpc_get_default_domain(char **);
 char *__rpc_taddr2uaddr_af(int, const struct netbuf *);
 struct netbuf *__rpc_uaddr2taddr_af(int, const char *);
 int __rpc_fixup_addr(struct netbuf *, const struct netbuf *);
@@ -73,11 +72,10 @@ int __rpc_sockisbound(int);
 struct netbuf *__rpc_set_netbuf(struct netbuf *, const void *, size_t);
 
 struct netbuf *__rpcb_findaddr(rpcprog_t, rpcvers_t, const struct netconfig *,
-                               const char *, CLIENT **);
-bool rpc_control(int,void *);
+			       const char *, CLIENT **);
+bool rpc_control(int, void *);
 
 char *_get_next_token(char *, int);
 
 __END_DECLS
-
-#endif /* _RPC_RPCCOM_H */
+#endif				/* _RPC_RPCCOM_H */

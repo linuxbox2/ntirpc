@@ -53,16 +53,15 @@
 #include <netdb.h>
 #include <sys/select.h>
 
-extern int _rpc_dtablesize( void );
+extern int _rpc_dtablesize(void);
 
 #define NYEARS	(unsigned long)(1970 - 1900)
 #define TOFFSET (unsigned long)(60*60*24*(365*NYEARS + (NYEARS/4)))
 
-static void do_close( int );
+static void do_close(int);
 
-int
-rtime(struct sockaddr_in *addrp, struct timeval *timep,
-      struct timeval *timeout)
+int rtime(struct sockaddr_in *addrp, struct timeval *timep,
+	  struct timeval *timeout)
 {
 	int s;
 	fd_set readfds;
@@ -80,67 +79,69 @@ rtime(struct sockaddr_in *addrp, struct timeval *timep,
 	}
 	s = socket(AF_INET, type, 0);
 	if (s < 0) {
-		return(-1);
+		return (-1);
 	}
 	addrp->sin_family = AF_INET;
 
 	/* TCP and UDP port are the same in this case */
 	if ((serv = getservbyname("time", "tcp")) == NULL) {
-		return(-1);
+		return (-1);
 	}
 
 	addrp->sin_port = serv->s_port;
 
 	if (type == SOCK_DGRAM) {
-		res = sendto(s, (char *)&thetime, sizeof(thetime), 0, 
-			     (struct sockaddr *)addrp, sizeof(*addrp));
+		res =
+		    sendto(s, (char *)&thetime, sizeof(thetime), 0,
+			   (struct sockaddr *)addrp, sizeof(*addrp));
 		if (res < 0) {
 			do_close(s);
-			return(-1);	
+			return (-1);
 		}
 		do {
 			FD_ZERO(&readfds);
 			FD_SET(s, &readfds);
-			res = select(_rpc_dtablesize(), &readfds,
-				     (fd_set *)NULL, (fd_set *)NULL, timeout);
+			res =
+			    select(_rpc_dtablesize(), &readfds, (fd_set *) NULL,
+				   (fd_set *) NULL, timeout);
 		} while (res < 0 && errno == EINTR);
 		if (res <= 0) {
 			if (res == 0) {
 				errno = ETIMEDOUT;
 			}
 			do_close(s);
-			return(-1);	
+			return (-1);
 		}
 		fromlen = sizeof(from);
-		res = recvfrom(s, (char *)&thetime, sizeof(thetime), 0, 
-			       (struct sockaddr *)&from, &fromlen);
+		res =
+		    recvfrom(s, (char *)&thetime, sizeof(thetime), 0,
+			     (struct sockaddr *)&from, &fromlen);
 		do_close(s);
 		if (res < 0) {
-			return(-1);	
+			return (-1);
 		}
 	} else {
 		if (connect(s, (struct sockaddr *)addrp, sizeof(*addrp)) < 0) {
 			do_close(s);
-			return(-1);
+			return (-1);
 		}
 		res = read(s, (char *)&thetime, sizeof(thetime));
 		do_close(s);
 		if (res < 0) {
-			return(-1);
+			return (-1);
 		}
 	}
 	if (res != sizeof(thetime)) {
 		errno = EIO;
-		return(-1);	
+		return (-1);
 	}
 	thetime = ntohl(thetime);
 	timep->tv_sec = thetime - TOFFSET;
 	timep->tv_usec = 0;
-	return(0);
+	return (0);
 }
 
-static void
-do_close(int s)
+static void do_close(int s)
 {
 	int save;
 

@@ -36,4 +36,4 @@
 #define unlikely(x) (x)
 #endif
 
-#endif /* _RPC_INTRINSIC_H */
+#endif				/* _RPC_INTRINSIC_H */

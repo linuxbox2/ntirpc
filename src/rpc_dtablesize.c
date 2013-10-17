@@ -44,8 +44,7 @@ int _rpc_dtablesize(void);	/* XXX */
  * Since old programs tend to use this call to determine the first arg
  * for _select(), having this return > FD_SETSIZE is a Bad Idea(TM)!
  */
-int
-_rpc_dtablesize(void)
+int _rpc_dtablesize(void)
 {
 	static int size;
 

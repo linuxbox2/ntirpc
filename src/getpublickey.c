@@ -51,13 +51,12 @@
 /*
  * Hack to let ypserv/rpc.nisd use AUTH_DES.
  */
-int (*__getpublickey_LOCAL)() = 0;
+int (*__getpublickey_LOCAL) () = 0;
 
 /*
  * Get somebody's public key
  */
-int
-__getpublickey_real(char *netname, char *publickey)
+int __getpublickey_real(char *netname, char *publickey)
 {
 	char lookup[3 * HEXKEYBYTES];
 	char *p;
@@ -71,7 +70,7 @@ __getpublickey_real(char *netname, char *publickey)
 		return (0);
 	}
 	*p = '\0';
-	(void) strncpy(publickey, lookup, HEXKEYBYTES);
+	(void)strncpy(publickey, lookup, HEXKEYBYTES);
 	publickey[HEXKEYBYTES] = '\0';
 	return (1);
 }
@@ -81,10 +80,9 @@ __getpublickey_real(char *netname, char *publickey)
  * yellow pages
  */
 
-int
-getpublicandprivatekey(char *key, char *ret)
+int getpublicandprivatekey(char *key, char *ret)
 {
-	char buf[1024];	/* big enough */
+	char buf[1024];		/* big enough */
 	char *res;
 	FILE *fd;
 	char *mkey;
@@ -114,7 +112,9 @@ getpublicandprivatekey(char *key, char *ret)
 				continue;
 			}
 			lookup = NULL;
-			err = yp_match(domain, PKMAP, key, strlen(key), &lookup, &len);
+			err =
+			    yp_match(domain, PKMAP, key, strlen(key), &lookup,
+				     &len);
 			if (err) {
 #ifdef DEBUG
 				fprintf(stderr, "match failed error %d\n", err);
@@ -124,20 +124,21 @@ getpublicandprivatekey(char *key, char *ret)
 			lookup[len] = 0;
 			strcpy(ret, lookup);
 			fclose(fd);
-			free(lookup); /* yp allocated with malloc */
+			free(lookup);	/* yp allocated with malloc */
 			return (2);
-#else /* YP */
+#else				/* YP */
 #ifdef DEBUG
 			fprintf(stderr,
-"Bad record in %s '+' -- NIS not supported in this library copy\n", PKFILE);
-#endif /* DEBUG */
+				"Bad record in %s '+' -- NIS not supported in this library copy\n",
+				PKFILE);
+#endif				/* DEBUG */
 			continue;
-#endif /* YP */
+#endif				/* YP */
 		} else {
 			mkey = strsep(&res, "\t ");
 			if (mkey == NULL) {
-				fprintf(stderr,
-				"Bad record in %s -- %s", PKFILE, buf);
+				fprintf(stderr, "Bad record in %s -- %s",
+					PKFILE, buf);
 				continue;
 			}
 			do {
@@ -145,7 +146,8 @@ getpublicandprivatekey(char *key, char *ret)
 			} while (mval != NULL && !*mval);
 			if (mval == NULL) {
 				fprintf(stderr,
-			"Bad record in %s val problem - %s", PKFILE, buf);
+					"Bad record in %s val problem - %s",
+					PKFILE, buf);
 				continue;
 			}
 			if (strcmp(mkey, key) == 0) {
@@ -160,7 +162,7 @@ getpublicandprivatekey(char *key, char *ret)
 int getpublickey(const char *netname, char *publickey)
 {
 	if (__getpublickey_LOCAL != NULL)
-		return(__getpublickey_LOCAL(netname, publickey));
+		return (__getpublickey_LOCAL(netname, publickey));
 	else
-		return(__getpublickey_real(netname, publickey));
+		return (__getpublickey_real(netname, publickey));
 }

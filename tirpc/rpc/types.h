@@ -52,7 +52,7 @@
 
 /* integral types */
 #ifndef _MSC_VER
-#include <_bsd_types.h> /* XXX mingw (defines u_long) */
+#include <_bsd_types.h>		/* XXX mingw (defines u_long) */
 #endif
 typedef uint8_t u_char;
 typedef uint16_t u_int16_t;
@@ -65,17 +65,17 @@ typedef uint64_t u_int64_t;
 typedef uint64_t u_quad_t;
 
 /* misc */
-typedef char * caddr_t;
+typedef char *caddr_t;
 typedef uint32_t uid_t;
 typedef uint32_t gid_t;
 
 struct iovec {
-  void *iov_base;
-  size_t iov_len;
+	void *iov_base;
+	size_t iov_len;
 };
 
 #include <winsock2.h>
-#include <ws2tcpip.h> /* XXX mingw */
+#include <ws2tcpip.h>		/* XXX mingw */
 
 #endif
 
@@ -90,17 +90,17 @@ typedef u_int32_t rpcport_t;
 typedef int32_t rpc_inline_t;
 
 #ifndef NULL
-# define NULL 0
+#define NULL 0
 #endif
 #define __dontcare__ -1
 
 #define honey_badger __dontcare__
 
 #ifndef FALSE
-# define FALSE (0)
+#define FALSE (0)
 #endif
 #ifndef TRUE
-# define TRUE (1)
+#define TRUE (1)
 #endif
 
 /*
@@ -154,18 +154,18 @@ typedef int32_t rpc_inline_t;
 #define TIRPC_DEBUG_FLAG_RPCSEC_GSS     0x2000000
 #define TIRPC_DEBUG_FLAG_REFCNT         0x4000000
 
-typedef void *(*mem_alloc_t)(size_t);
-typedef void (*mem_free_t)(void *, size_t);
-typedef  void (*std_free_t)(void *);
-typedef void (*warnx_t)(const char *fmt, ...);
+typedef void *(*mem_alloc_t) (size_t);
+typedef void (*mem_free_t) (void *, size_t);
+typedef void (*std_free_t) (void *);
+typedef void (*warnx_t) (const char *fmt, ...);
 
 /*
  * Package params support
  */
 typedef struct tirpc_pkg_params {
-    u_int flags;
-    u_int debug_flags;
-    warnx_t warnx;
+	u_int flags;
+	u_int debug_flags;
+	warnx_t warnx;
 } tirpc_pkg_params;
 
 extern tirpc_pkg_params __pkg_params;
@@ -203,9 +203,9 @@ extern tirpc_pkg_params __pkg_params;
  * The netbuf structure is used for transport-independent address storage.
  */
 struct netbuf {
-    unsigned int maxlen;
-    unsigned int len;
-    void *buf;
+	unsigned int maxlen;
+	unsigned int len;
+	void *buf;
 };
 
 /*
@@ -214,8 +214,8 @@ struct netbuf {
  */
 
 struct t_bind {
-    struct netbuf   addr;
-    unsigned int    qlen;
+	struct netbuf addr;
+	unsigned int qlen;
 };
 
 /*
@@ -223,10 +223,10 @@ struct t_bind {
  * not use.
  */
 struct __rpc_sockinfo {
-    int si_af;
-    int si_proto;
-    int si_socktype;
-    int si_alen;
+	int si_af;
+	int si_proto;
+	int si_socktype;
+	int si_alen;
 };
 
-#endif /* _TIRPC_TYPES_H */
+#endif				/* _TIRPC_TYPES_H */

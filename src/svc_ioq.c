@@ -70,140 +70,135 @@
 static struct thrdpool pool;
 static uint32_t ioq_shutdown = false;
 
-void svc_ioq_init() 
+void svc_ioq_init()
 {
-    struct thrdpool_params params = {
-        .thrd_max = 200,
-        .thrd_min = 2
-    };
+	struct thrdpool_params params = {
+		.thrd_max = 200,
+		.thrd_min = 2
+	};
 
-    (void) thrdpool_init(&pool, "svc_ioq", &params);
+	(void)thrdpool_init(&pool, "svc_ioq", &params);
 }
 
-static inline void
-cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
+static inline void cfconn_set_dead(SVCXPRT * xprt, struct x_vc_data *xd)
 {
-    mutex_lock(&xprt->xp_lock);
-    xd->sx.strm_stat = XPRT_DIED;
-    mutex_unlock(&xprt->xp_lock);
+	mutex_lock(&xprt->xp_lock);
+	xd->sx.strm_stat = XPRT_DIED;
+	mutex_unlock(&xprt->xp_lock);
 }
 
 #define LAST_FRAG ((u_int32_t)(1 << 31))
 
-static inline void
-ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd, struct xdr_ioq *xioq)
+static inline void ioq_flushv(SVCXPRT * xprt, struct x_vc_data *xd,
+			      struct xdr_ioq *xioq)
 {
-    struct iovec *iov, *tiov;
-    ssize_t nbytes = 0, resid = xioq->ioq.frag_len + sizeof(u_int32_t);
-    struct v_rec *vrec = NULL;
-    u_int32_t frag_header;
-    int iovcnt, ix;
+	struct iovec *iov, *tiov;
+	ssize_t nbytes = 0, resid = xioq->ioq.frag_len + sizeof(u_int32_t);
+	struct v_rec *vrec = NULL;
+	u_int32_t frag_header;
+	int iovcnt, ix;
 
-    frag_header =
-        htonl((u_int32_t)(xioq->ioq.frag_len | LAST_FRAG));
+	frag_header = htonl((u_int32_t) (xioq->ioq.frag_len | LAST_FRAG));
 
-    iov = alloca((xioq->ioq.size) * sizeof(struct iovec));
-    iov[0].iov_base = &(frag_header);
-    iov[0].iov_len = sizeof(u_int32_t);
+	iov = alloca((xioq->ioq.size) * sizeof(struct iovec));
+	iov[0].iov_base = &(frag_header);
+	iov[0].iov_len = sizeof(u_int32_t);
 
-    ix = 1;
-    TAILQ_FOREACH(vrec, &(xioq->ioq.q), ioq) {
-        tiov = iov+ix;
-        tiov->iov_base = vrec->base;
-        tiov->iov_len = vrec->len;
-        ix++;
-    }
-    
-    iovcnt = ix;
-    while (resid > 0) {
-        /* advance iov */
-        for (ix = 0, tiov = iov; ((nbytes > 0) && (ix < iovcnt)); ++ix) {
-            tiov = iov+ix;
-            if (tiov->iov_len > nbytes) {
-                tiov->iov_base += nbytes;
-                tiov->iov_len -= nbytes;
-                break;
-            } else {
-                nbytes -= tiov->iov_len;
-            }
-        } /* advance */
-        /* blocking write */
-        nbytes = writev(xprt->xp_fd, iov, iovcnt);
-        if (unlikely(nbytes < 0)) {
-            __warnx(TIRPC_DEBUG_FLAG_SVC_VC, "writev failed %d\n",
-                    __func__, errno);
-            cfconn_set_dead(xprt, xd);
-            return;
-        }
-        resid -= nbytes;
-    }
+	ix = 1;
+	TAILQ_FOREACH(vrec, &(xioq->ioq.q), ioq) {
+		tiov = iov + ix;
+		tiov->iov_base = vrec->base;
+		tiov->iov_len = vrec->len;
+		ix++;
+	}
+
+	iovcnt = ix;
+	while (resid > 0) {
+		/* advance iov */
+		for (ix = 0, tiov = iov; ((nbytes > 0) && (ix < iovcnt)); ++ix) {
+			tiov = iov + ix;
+			if (tiov->iov_len > nbytes) {
+				tiov->iov_base += nbytes;
+				tiov->iov_len -= nbytes;
+				break;
+			} else {
+				nbytes -= tiov->iov_len;
+			}
+		}		/* advance */
+		/* blocking write */
+		nbytes = writev(xprt->xp_fd, iov, iovcnt);
+		if (unlikely(nbytes < 0)) {
+			__warnx(TIRPC_DEBUG_FLAG_SVC_VC, "writev failed %d\n",
+				__func__, errno);
+			cfconn_set_dead(xprt, xd);
+			return;
+		}
+		resid -= nbytes;
+	}
 }
 
 void svc_ioq(struct thrd_context *thr_ctx)
 {
-    struct svc_ioq_args *arg = (struct svc_ioq_args *) thr_ctx->arg;
-    struct thrd *thrd = opr_containerof(thr_ctx, struct thrd, ctx);
-    struct thrdpool *pool = thrd->pool;
-    SVCXPRT *xprt = arg->xprt;
-    struct x_vc_data *xd = arg->xd;
-    struct xdr_ioq *xioq = NULL;
+	struct svc_ioq_args *arg = (struct svc_ioq_args *)thr_ctx->arg;
+	struct thrd *thrd = opr_containerof(thr_ctx, struct thrd, ctx);
+	struct thrdpool *pool = thrd->pool;
+	SVCXPRT *xprt = arg->xprt;
+	struct x_vc_data *xd = arg->xd;
+	struct xdr_ioq *xioq = NULL;
 
-    for (;;) {
-        mutex_lock(&xprt->xp_lock);
-        if (unlikely((! xd->shared.ioq.size) || ioq_shutdown)) {
-            xd->shared.ioq.active = false;
-            SVC_RELEASE(xprt, SVC_RELEASE_FLAG_LOCKED);
-            goto out;
-        }
-        xioq = TAILQ_FIRST(&xd->shared.ioq.q);
-        TAILQ_REMOVE(&xd->shared.ioq.q, xioq, ioq_s);
-        (xd->shared.ioq.size)--;
-        /* do i/o unlocked */
-        mutex_unlock(&xprt->xp_lock);
-        ioq_flushv(xprt, xd, xioq);
-        XDR_DESTROY(xioq->xdrs);
-    }
+	for (;;) {
+		mutex_lock(&xprt->xp_lock);
+		if (unlikely((!xd->shared.ioq.size) || ioq_shutdown)) {
+			xd->shared.ioq.active = false;
+			SVC_RELEASE(xprt, SVC_RELEASE_FLAG_LOCKED);
+			goto out;
+		}
+		xioq = TAILQ_FIRST(&xd->shared.ioq.q);
+		TAILQ_REMOVE(&xd->shared.ioq.q, xioq, ioq_s);
+		(xd->shared.ioq.size)--;
+		/* do i/o unlocked */
+		mutex_unlock(&xprt->xp_lock);
+		ioq_flushv(xprt, xd, xioq);
+		XDR_DESTROY(xioq->xdrs);
+	}
 
-out:
-    mutex_lock(&pool->we.mtx);
-    --(pool->n_threads);
-    cond_signal(&pool->we.cv);
-    mutex_unlock(&pool->we.mtx);
-    return;
+ out:
+	mutex_lock(&pool->we.mtx);
+	--(pool->n_threads);
+	cond_signal(&pool->we.cv);
+	mutex_unlock(&pool->we.mtx);
+	return;
 }
 
-void
-svc_ioq_append(SVCXPRT *xprt, struct x_vc_data *xd, XDR *xdrs)
+void svc_ioq_append(SVCXPRT * xprt, struct x_vc_data *xd, XDR * xdrs)
 {
-    struct xdr_ioq *xioq = xdrs->x_private;
-    bool qdrain = atomic_fetch_uint32_t(&ioq_shutdown);
+	struct xdr_ioq *xioq = xdrs->x_private;
+	bool qdrain = atomic_fetch_uint32_t(&ioq_shutdown);
 
-    /* discard */
-    if (unlikely(qdrain)) {
-        XDR_DESTROY(xioq->xdrs);
-        return;
-    }
+	/* discard */
+	if (unlikely(qdrain)) {
+		XDR_DESTROY(xioq->xdrs);
+		return;
+	}
 
-    /* submit */
-    mutex_lock(&xprt->xp_lock);
-    TAILQ_INSERT_TAIL(&xd->shared.ioq.q, xioq, ioq_s);
-    (xd->shared.ioq.size)++;
-    if (! xd->shared.ioq.active) {
-        struct svc_ioq_args *arg =
-            mem_alloc(sizeof(struct svc_ioq_args));
-        arg->xprt = xprt;
-        arg->xd = xd;
-        xd->shared.ioq.active = true;
-        thrdpool_submit_work(&pool, svc_ioq, arg);
-        SVC_REF(xprt, SVC_REF_FLAG_LOCKED); /* !LOCKED */
-    }
-    else
-        mutex_unlock(&xprt->xp_lock);
+	/* submit */
+	mutex_lock(&xprt->xp_lock);
+	TAILQ_INSERT_TAIL(&xd->shared.ioq.q, xioq, ioq_s);
+	(xd->shared.ioq.size)++;
+	if (!xd->shared.ioq.active) {
+		struct svc_ioq_args *arg =
+		    mem_alloc(sizeof(struct svc_ioq_args));
+		arg->xprt = xprt;
+		arg->xd = xd;
+		xd->shared.ioq.active = true;
+		thrdpool_submit_work(&pool, svc_ioq, arg);
+		SVC_REF(xprt, SVC_REF_FLAG_LOCKED);	/* !LOCKED */
+	} else
+		mutex_unlock(&xprt->xp_lock);
 }
 
-void
-svc_ioq_shutdown()
+void svc_ioq_shutdown()
 {
-    atomic_store_uint32_t(&ioq_shutdown, true);
-    thrdpool_shutdown(&pool);
+	atomic_store_uint32_t(&ioq_shutdown, true);
+	thrdpool_shutdown(&pool);
 }

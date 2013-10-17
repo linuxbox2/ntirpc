@@ -45,19 +45,18 @@
 /*      @(#)rpcent.h 1.1 88/12/06 SMI   */
 
 __BEGIN_DECLS
-
 /* These are defined in /usr/include/rpc/netdb.h */
 #if defined(__FreeBSD__)
-struct rpcent {
-	char	*r_name;	/* name of server for this rpc program */
-	char	**r_aliases;	/* alias list */
-	int	r_number;	/* rpc program number */
+    struct rpcent {
+	char *r_name;		/* name of server for this rpc program */
+	char **r_aliases;	/* alias list */
+	int r_number;		/* rpc program number */
 };
 #endif
 #if 0
 
-extern struct rpcent *getrpcbyname_r(const char *, struct rpcent *,
-					char *, int);
+extern struct rpcent *getrpcbyname_r(const char *, struct rpcent *, char *,
+				     int);
 extern struct rpcent *getrpcbynumber_r(int, struct rpcent *, char *, int);
 extern struct rpcent *getrpcent_r(struct rpcent *, char *, int);
 
@@ -70,5 +69,4 @@ extern struct rpcent *getrpcent(void);
 extern void setrpcent(int);
 extern void endrpcent(void);
 __END_DECLS
-
-#endif /* !_RPC_CENT_H */
+#endif				/* !_RPC_CENT_H */

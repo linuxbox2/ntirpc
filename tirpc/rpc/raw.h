@@ -48,10 +48,9 @@ extern "C" {
  * Raw interface
  * The common memory area over which they will communicate
  */
-extern char *__rpc_rawcombuf;
+	extern char *__rpc_rawcombuf;
 
 #ifdef	__cplusplus
 }
 #endif
-
-#endif	/* _RPC_RAW_H */
+#endif				/* _RPC_RAW_H */

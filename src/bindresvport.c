@@ -51,10 +51,9 @@
 /*
  * Bind a socket to a privileged IP port
  */
-int
-bindresvport(int sd, struct sockaddr_in *sin)
+int bindresvport(int sd, struct sockaddr_in *sin)
 {
-        return bindresvport_sa(sd, (struct sockaddr *)sin);
+	return bindresvport_sa(sd, (struct sockaddr *)sin);
 }
 
 #ifdef __linux__
@@ -64,11 +63,10 @@ bindresvport(int sd, struct sockaddr_in *sin)
 #define ENDPORT (IPPORT_RESERVED - 1)
 #define NPORTS  (ENDPORT - STARTPORT + 1)
 
-int
-bindresvport_sa(int sd, struct sockaddr *sa)
+int bindresvport_sa(int sd, struct sockaddr *sa)
 {
-        int res, af;
-        struct sockaddr_storage myaddr;
+	int res, af;
+	struct sockaddr_storage myaddr;
 	struct sockaddr_in *sin;
 #ifdef INET6
 	struct sockaddr_in6 *sin6;
@@ -81,60 +79,60 @@ bindresvport_sa(int sd, struct sockaddr *sa)
 	int endport = ENDPORT;
 	int i;
 
-        if (sa == NULL) {
-                salen = sizeof(myaddr);
-                sa = (struct sockaddr *)&myaddr;
+	if (sa == NULL) {
+		salen = sizeof(myaddr);
+		sa = (struct sockaddr *)&myaddr;
 
-                if (getsockname(sd, (struct sockaddr *)&myaddr, &salen) == -1)
-                        return -1;      /* errno is correctly set */
+		if (getsockname(sd, (struct sockaddr *)&myaddr, &salen) == -1)
+			return -1;	/* errno is correctly set */
 
-                af = myaddr.ss_family;
-        } else
-                af = sa->sa_family;
+		af = myaddr.ss_family;
+	} else
+		af = sa->sa_family;
 
-        switch (af) {
-        case AF_INET:
+	switch (af) {
+	case AF_INET:
 		sin = (struct sockaddr_in *)sa;
-                salen = sizeof(struct sockaddr_in);
-                port = ntohs(sin->sin_port);
+		salen = sizeof(struct sockaddr_in);
+		port = ntohs(sin->sin_port);
 		portp = &sin->sin_port;
 		break;
 #ifdef INET6
-        case AF_INET6:
+	case AF_INET6:
 		sin6 = (struct sockaddr_in6 *)sa;
-                salen = sizeof(struct sockaddr_in6);
-                port = ntohs(sin6->sin6_port);
-                portp = &sin6->sin6_port;
-                break;
+		salen = sizeof(struct sockaddr_in6);
+		port = ntohs(sin6->sin6_port);
+		portp = &sin6->sin6_port;
+		break;
 #endif
-        default:
-                errno = EPFNOSUPPORT;
-                return (-1);
-        }
-        sa->sa_family = af;
-
-        if (port == 0) {
-                port = (getpid() % NPORTS) + STARTPORT;
-        }
-        res = -1;
-        errno = EADDRINUSE;
-		again:
-        for (i = 0; i < nports; ++i) {
-                *portp = htons(port++);
-                 if (port > endport) 
-                        port = startport;
-                res = bind(sd, sa, salen);
-		if (res >= 0 || errno != EADDRINUSE)
-	                break;
-        }
-	if (i == nports && startport != LOWPORT) {
-	    startport = LOWPORT;
-	    endport = STARTPORT - 1;
-	    nports = STARTPORT - LOWPORT;
-	    port = LOWPORT + port % (STARTPORT - LOWPORT);
-	    goto again;
+	default:
+		errno = EPFNOSUPPORT;
+		return (-1);
 	}
-        return (res);
+	sa->sa_family = af;
+
+	if (port == 0) {
+		port = (getpid() % NPORTS) + STARTPORT;
+	}
+	res = -1;
+	errno = EADDRINUSE;
+ again:
+	for (i = 0; i < nports; ++i) {
+		*portp = htons(port++);
+		if (port > endport)
+			port = startport;
+		res = bind(sd, sa, salen);
+		if (res >= 0 || errno != EADDRINUSE)
+			break;
+	}
+	if (i == nports && startport != LOWPORT) {
+		startport = LOWPORT;
+		endport = STARTPORT - 1;
+		nports = STARTPORT - LOWPORT;
+		port = LOWPORT + port % (STARTPORT - LOWPORT);
+		goto again;
+	}
+	return (res);
 }
 #else
 
@@ -144,8 +142,7 @@ bindresvport_sa(int sd, struct sockaddr *sa)
 /*
  * Bind a socket to a privileged IP port
  */
-int
-bindresvport_sa(int sd, struct sockaddr *sa)
+int bindresvport_sa(int sd, struct sockaddr *sa)
 {
 	int old, error, af;
 	struct sockaddr_storage myaddr;
@@ -201,8 +198,8 @@ bindresvport_sa(int sd, struct sockaddr *sa)
 		if (error < 0)
 			return (error);
 
-		error = setsockopt(sd, proto, portrange, &portlow,
-		    sizeof(portlow));
+		error =
+		    setsockopt(sd, proto, portrange, &portlow, sizeof(portlow));
 		if (error < 0)
 			return (error);
 	}
@@ -213,8 +210,8 @@ bindresvport_sa(int sd, struct sockaddr *sa)
 		int saved_errno = errno;
 
 		if (error < 0) {
-			if (setsockopt(sd, proto, portrange, &old,
-			    sizeof(old)) < 0)
+			if (setsockopt(sd, proto, portrange, &old, sizeof(old))
+			    < 0)
 				errno = saved_errno;
 			return (error);
 		}

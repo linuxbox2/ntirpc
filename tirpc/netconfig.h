@@ -13,20 +13,20 @@
 #define NETPATH	  "NETPATH"
 
 struct netconfig {
-  char *nc_netid;		/* Network ID */
-  unsigned long nc_semantics;	/* Semantics (see below) */
-  unsigned long nc_flag;	/* Flags (see below) */
-  char *nc_protofmly;		/* Protocol family */
-  char *nc_proto;		/* Protocol name */
-  char *nc_device;		/* Network device pathname */
-  unsigned long nc_nlookups;	/* Number of directory lookup libs */
-  char **nc_lookups;		/* Names of the libraries */
-  unsigned long nc_unused[9];	/* reserved */
+	char *nc_netid;		/* Network ID */
+	unsigned long nc_semantics;	/* Semantics (see below) */
+	unsigned long nc_flag;	/* Flags (see below) */
+	char *nc_protofmly;	/* Protocol family */
+	char *nc_proto;		/* Protocol name */
+	char *nc_device;	/* Network device pathname */
+	unsigned long nc_nlookups;	/* Number of directory lookup libs */
+	char **nc_lookups;	/* Names of the libraries */
+	unsigned long nc_unused[9];	/* reserved */
 };
 
 typedef struct {
-  struct netconfig **nc_head;
-  struct netconfig **nc_curr;
+	struct netconfig **nc_head;
+	struct netconfig **nc_curr;
 } NCONF_HANDLE;
 
 /*
@@ -80,21 +80,18 @@ typedef struct {
 #define NC_UDP		"udp"
 #define NC_ICMP		"icmp"
 
-__BEGIN_DECLS
+__BEGIN_DECLS extern void *setnetconfig(void);
+extern struct netconfig *getnetconfig(void *);
+extern struct netconfig *getnetconfigent(const char *);
+extern void freenetconfigent(struct netconfig *);
+extern int endnetconfig(void *);
 
-extern void *setnetconfig (void);
-extern struct netconfig *getnetconfig (void *);
-extern struct netconfig *getnetconfigent (const char *);
-extern void freenetconfigent (struct netconfig *);
-extern int endnetconfig (void *);
+extern void *setnetpath(void);
+extern struct netconfig *getnetpath(void *);
+extern int endnetpath(void *);
 
-extern void *setnetpath (void);
-extern struct netconfig *getnetpath (void *);
-extern int endnetpath (void *);
-
-extern void nc_perror (const char *);
-extern char *nc_sperror (void);
+extern void nc_perror(const char *);
+extern char *nc_sperror(void);
 
 __END_DECLS
-
-#endif /* _NETCONFIG_H_ */
+#endif				/* _NETCONFIG_H_ */

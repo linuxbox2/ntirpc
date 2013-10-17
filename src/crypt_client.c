@@ -41,12 +41,11 @@
 
 #include <netconfig.h>
 
-int
-_des_crypt_call(char *buf, int len, struct desparams *dparms)
+int _des_crypt_call(char *buf, int len, struct desparams *dparms)
 {
 	CLIENT *clnt;
-	desresp  *result_1;
-	desargs  des_crypt_1_arg;
+	desresp *result_1;
+	desargs des_crypt_1_arg;
 	struct netconfig *nconf;
 	void *localhandle;
 	int stat;
@@ -54,18 +53,18 @@ _des_crypt_call(char *buf, int len, struct desparams *dparms)
 	nconf = NULL;
 	localhandle = setnetconfig();
 	while ((nconf = getnetconfig(localhandle)) != NULL) {
-		if (nconf->nc_protofmly != NULL &&
-		     strcmp(nconf->nc_protofmly, NC_LOOPBACK) == 0)
+		if (nconf->nc_protofmly != NULL
+		    && strcmp(nconf->nc_protofmly, NC_LOOPBACK) == 0)
 			break;
 	}
 	if (nconf == NULL) {
 		__warnx("getnetconfig: %s", nc_sperror());
-		return(DESERR_HWERROR);
+		return (DESERR_HWERROR);
 	}
 	clnt = clnt_tp_ncreate(NULL, CRYPT_PROG, CRYPT_VERS, nconf);
 	if (clnt == (CLIENT *) NULL) {
 		endnetconfig(localhandle);
-		return(DESERR_HWERROR);
+		return (DESERR_HWERROR);
 	}
 	endnetconfig(localhandle);
 
@@ -79,19 +78,19 @@ _des_crypt_call(char *buf, int len, struct desparams *dparms)
 	result_1 = des_crypt_1(&des_crypt_1_arg, clnt);
 	if (result_1 == (desresp *) NULL) {
 		clnt_destroy(clnt);
-		return(DESERR_HWERROR);
+		return (DESERR_HWERROR);
 	}
 
 	stat = result_1->stat;
 
-	if (result_1->stat == DESERR_NONE ||
-	    result_1->stat == DESERR_NOHWDEVICE) {
+	if (result_1->stat == DESERR_NONE
+	    || result_1->stat == DESERR_NOHWDEVICE) {
 		bcopy(result_1->desbuf.desbuf_val, buf, len);
 		bcopy(result_1->des_ivec, dparms->des_ivec, 8);
 	}
 
-	clnt_freeres(clnt, (xdrproc_t)xdr_desresp, result_1);
+	clnt_freeres(clnt, (xdrproc_t) xdr_desresp, result_1);
 	clnt_destroy(clnt);
 
-	return(stat);
+	return (stat);
 }

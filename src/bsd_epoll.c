@@ -68,12 +68,11 @@ int epoll_create(int size)
 	return kqueue();
 }
 
-static void
-kevent_to_epoll(struct kevent *kevent, struct epoll_event *event)
+static void kevent_to_epoll(struct kevent *kevent, struct epoll_event *event)
 {
 	/* if (kevent->flags & EV_ERROR) {
-		... Any special event flags on Errors?
-	} */
+	   ... Any special event flags on Errors?
+	   } */
 
 	memset(event, 0, sizeof(*event));
 	switch (kevent->filter) {
@@ -89,11 +88,11 @@ kevent_to_epoll(struct kevent *kevent, struct epoll_event *event)
 			event->events = EPOLLOUT;
 		break;
 	default:
-		fprintf(stderr, "Unsupported kevent_to_epoll event=%d"
+		fprintf(stderr,
+			"Unsupported kevent_to_epoll event=%d"
 			" data=%lx flags=0x%x ident=%ld fflags=0x%x\n",
-			kevent->filter, (long)kevent->data,
-			kevent->flags, (long)kevent->ident,
-			kevent->fflags);
+			kevent->filter, (long)kevent->data, kevent->flags,
+			(long)kevent->ident, kevent->fflags);
 	}
 	event->data.ptr = kevent->udata;
 }
@@ -105,7 +104,7 @@ static void kevent_to_epoll_arr(struct kevent *kevp, int count,
 
 	for (i = 0; i < count; i++) {
 		kevent_to_epoll(&kevp[i], &eep[i]);
-		/*printf("eep[%d]=%p\n", i, eep[i].data.ptr);*/
+		/*printf("eep[%d]=%p\n", i, eep[i].data.ptr); */
 	}
 }
 
@@ -116,7 +115,7 @@ static void kevent_to_epoll_arr(struct kevent *kevp, int count,
  */
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 {
-	struct kevent kev[2] = {{.flags = 0},};
+	struct kevent kev[2] = { {.flags = 0}, };
 	int read_flags, write_flags;
 
 	switch (op) {
@@ -124,26 +123,28 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 		epoll_ctl(epfd, EPOLL_CTL_DEL, fd, event);
 		/* fall through */
 	case EPOLL_CTL_ADD:
-	{
-		int flags;
+		{
+			int flags;
 
-		if ((event->events & EPOLLIN) || event->events & EPOLLPRI)
-			read_flags = EV_ENABLE;
-		else
-			read_flags = EV_DISABLE;
+			if ((event->events & EPOLLIN)
+			    || event->events & EPOLLPRI)
+				read_flags = EV_ENABLE;
+			else
+				read_flags = EV_DISABLE;
 
-		if (event->events & EPOLLOUT)
-			write_flags = EV_ENABLE;
-		else
-			write_flags = EV_DISABLE;
+			if (event->events & EPOLLOUT)
+				write_flags = EV_ENABLE;
+			else
+				write_flags = EV_DISABLE;
 
-		flags = EV_ADD;
-		if (event->events & EPOLLET)
-			flags |= EV_CLEAR;
-		if (event->events & EPOLLONESHOT)
-			flags |= EV_ONESHOT;
+			flags = EV_ADD;
+			if (event->events & EPOLLET)
+				flags |= EV_CLEAR;
+			if (event->events & EPOLLONESHOT)
+				flags |= EV_ONESHOT;
 
-		read_flags |= flags; write_flags |= flags;
+			read_flags |= flags;
+			write_flags |= flags;
 /*		printf("%s(fd=%d data.ptr=%p\n",
 			op == EPOLL_CTL_MOD ? "EPOLL_CTL_MOD" : "EPOLL_CTL_ADD",
 			fd ,event->data.ptr);
@@ -151,24 +152,25 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 			read_flags & EV_ENABLE, read_flags);
 		printf("    EVFILT_WRITE(on=%d write_flags=0x%x);\n",
 			write_flags & EV_ENABLE, write_flags);*/
-	}
+		}
 		break;
 	case EPOLL_CTL_DEL:
 		read_flags = write_flags = EV_DELETE | EV_DISABLE;
-		/*printf("EPOLL_CTL_DEL(fd=%d\n",fd);*/
+		/*printf("EPOLL_CTL_DEL(fd=%d\n",fd); */
 		break;
 	default:
-		fprintf(stderr, "Unsupported epoll operation=%d"
-			" epfd=%d, fd=%d events=%x\n",
-			op, epfd, fd, event->events);
+		fprintf(stderr,
+			"Unsupported epoll operation=%d"
+			" epfd=%d, fd=%d events=%x\n", op, epfd, fd,
+			event->events);
 		errno = EINVAL;
 		return -1;
 	}
 
 	EV_SET(&kev[0], fd, EVFILT_READ, read_flags, 0, 0,
-		event ? event->data.ptr : 0);
+	       event ? event->data.ptr : 0);
 	EV_SET(&kev[1], fd, EVFILT_WRITE, write_flags, 0, 0,
-		event ? event->data.ptr : 0);
+	       event ? event->data.ptr : 0);
 
 	return kevent(epfd, kev, 2, NULL, 0, NULL);
 }
@@ -176,8 +178,7 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 /*
  * Wait for a filter to be triggered on the epoll file descriptor.
  */
-int epoll_wait(int epfd, struct epoll_event *events,
-		       int maxevents, int timeout)
+int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 {
 	struct kevent *kevp;
 	struct timespec ts;
@@ -198,7 +199,7 @@ int epoll_wait(int epfd, struct epoll_event *events,
 	rc = kevent(epfd, NULL, 0, kevp, maxevents, &ts);
 
 	if (rc > 0) {
-		/*printf("epoll_wait LEAVE %d\n", rc);*/
+		/*printf("epoll_wait LEAVE %d\n", rc); */
 		kevent_to_epoll_arr(kevp, rc, events);
 	}
 
@@ -206,4 +207,4 @@ int epoll_wait(int epfd, struct epoll_event *events,
 	return rc;
 }
 
-#endif /* __FreeBSD__ */
+#endif				/* __FreeBSD__ */

@@ -30,7 +30,7 @@ pthread_mutex_t svcauthdesstats_lock = MUTEX_INITIALIZER;
 pthread_mutex_t authkerb_lock = MUTEX_INITIALIZER;
 /* protects kerb stats list */
 pthread_mutex_t svcauthkerbstats_lock = MUTEX_INITIALIZER;
-#endif /* KERBEROS */
+#endif				/* KERBEROS */
 
 /* protects the Auths list (svc_auth.c) */
 pthread_mutex_t authsvc_lock = MUTEX_INITIALIZER;
@@ -92,45 +92,43 @@ pthread_mutex_t serialize_pkey = MUTEX_INITIALIZER;
 
 struct rpc_createerr rpc_createerr;
 
-struct rpc_createerr *
-__rpc_createerr(void)
+struct rpc_createerr *__rpc_createerr(void)
 {
-    struct rpc_createerr *rce_addr;
+	struct rpc_createerr *rce_addr;
 
-    mutex_lock(&tsd_lock);
-    if (rce_key == -1)
-        thr_keycreate(&rce_key, free); /* XXX */
-    mutex_unlock(&tsd_lock);
+	mutex_lock(&tsd_lock);
+	if (rce_key == -1)
+		thr_keycreate(&rce_key, free);	/* XXX */
+	mutex_unlock(&tsd_lock);
 
-    rce_addr = (struct rpc_createerr *)thr_getspecific(rce_key);
-    if (!rce_addr) {
-        rce_addr = (struct rpc_createerr *)
-            mem_alloc(sizeof (struct rpc_createerr));
-        if (!rce_addr ||
-            thr_setspecific(rce_key, (void *) rce_addr) != 0) {
-            if (rce_addr)
-                mem_free(rce_addr, 0);
-            return (&rpc_createerr);
-        }
-        memset(rce_addr, 0, sizeof (struct rpc_createerr));
-    }
-    return (rce_addr);
+	rce_addr = (struct rpc_createerr *)thr_getspecific(rce_key);
+	if (!rce_addr) {
+		rce_addr = (struct rpc_createerr *)
+		    mem_alloc(sizeof(struct rpc_createerr));
+		if (!rce_addr
+		    || thr_setspecific(rce_key, (void *)rce_addr) != 0) {
+			if (rce_addr)
+				mem_free(rce_addr, 0);
+			return (&rpc_createerr);
+		}
+		memset(rce_addr, 0, sizeof(struct rpc_createerr));
+	}
+	return (rce_addr);
 }
 
 void tsd_key_delete(void)
 {
-    if (clnt_broadcast_key != -1)
-        pthread_key_delete(clnt_broadcast_key);
-    if (rpc_call_key != -1)
-        pthread_key_delete(rpc_call_key);
-    if (tcp_key != -1)
-        pthread_key_delete(tcp_key);
-    if (udp_key != -1)
-        pthread_key_delete(udp_key);
-    if (nc_key != -1)
-        pthread_key_delete(nc_key);
-    if (rce_key != -1)
-        pthread_key_delete(rce_key);
-    return;
+	if (clnt_broadcast_key != -1)
+		pthread_key_delete(clnt_broadcast_key);
+	if (rpc_call_key != -1)
+		pthread_key_delete(rpc_call_key);
+	if (tcp_key != -1)
+		pthread_key_delete(tcp_key);
+	if (udp_key != -1)
+		pthread_key_delete(udp_key);
+	if (nc_key != -1)
+		pthread_key_delete(nc_key);
+	if (rce_key != -1)
+		pthread_key_delete(rce_key);
+	return;
 }
-

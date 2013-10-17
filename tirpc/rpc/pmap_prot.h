@@ -41,7 +41,6 @@
 #include <rpc/xdr.h>
 
 __BEGIN_DECLS
-
 /* The following procedures are supported by the protocol:
  *
  * PMAPPROC_NULL() returns ()
@@ -72,7 +71,6 @@ __BEGIN_DECLS
  *
  * The service supports remote procedure calls on udp/ip or tcp/ip socket 111.
  */
-
 #define PMAPPORT  ((u_short)111)
 #define PMAPPROG  ((u_long)100000)
 #define PMAPVERS  ((u_long)2)
@@ -84,23 +82,21 @@ __BEGIN_DECLS
 #define PMAPPROC_GETPORT ((u_long)3)
 #define PMAPPROC_DUMP  ((u_long)4)
 #define PMAPPROC_CALLIT  ((u_long)5)
-
-struct pmap {
-    long unsigned pm_prog;
-    long unsigned pm_vers;
-    long unsigned pm_prot;
-    long unsigned pm_port;
+    struct pmap {
+	long unsigned pm_prog;
+	long unsigned pm_vers;
+	long unsigned pm_prot;
+	long unsigned pm_port;
 };
 
-extern bool xdr_pmap (XDR *__xdrs, struct pmap *__regs);
+extern bool xdr_pmap(XDR * __xdrs, struct pmap *__regs);
 
 struct pmaplist {
-    struct pmap pml_map;
-    struct pmaplist *pml_next;
+	struct pmap pml_map;
+	struct pmaplist *pml_next;
 };
 
-extern bool xdr_pmaplist (XDR *__xdrs, struct pmaplist **__rp);
+extern bool xdr_pmaplist(XDR * __xdrs, struct pmaplist **__rp);
 
 __END_DECLS
-
-#endif /* rpc/pmap_prot.h */
+#endif				/* rpc/pmap_prot.h */

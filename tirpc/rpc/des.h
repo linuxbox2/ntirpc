@@ -75,13 +75,13 @@ struct desparams {
 /* 
  * Encrypt of small amount of data, quickly
  */
-#define DESIOCQUICK	_IOWR('d', 7, struct desparams) 
+#define DESIOCQUICK	_IOWR('d', 7, struct desparams)
 
 #endif
 
 /*
  * Software DES.
  */
-extern int _des_crypt( char *, int, struct desparams * );
+extern int _des_crypt(char *, int, struct desparams *);
 
 #endif

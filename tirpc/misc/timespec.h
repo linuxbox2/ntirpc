@@ -53,8 +53,6 @@
         (vvp)->tv_sec += s;                                             \
     } while (0)
 
-
-
 #define timespec_addms(vvp, ms)                                         \
     do {                                                                \
         (vvp)->tv_sec += (ms) / 1000;                                   \
@@ -73,4 +71,4 @@
             (vvp)->tv_nsec += 1000000000;                               \
         }                                                               \
     } while (0)
-#endif /* TIMESPEC_H */
+#endif				/* TIMESPEC_H */

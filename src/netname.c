@@ -73,24 +73,23 @@ static char *OPSYS = "unix";
 /*
  * Figure out my fully qualified network name
  */
-int
-getnetname(char name[MAXNETNAMELEN+1])
+int getnetname(char name[MAXNETNAMELEN + 1])
 {
 	uid_t uid;
 
 	uid = geteuid();
 	if (uid == 0) {
-		return (host2netname(name, (char *) NULL, (char *) NULL));
+		return (host2netname(name, (char *)NULL, (char *)NULL));
 	} else {
-		return (user2netname(name, uid, (char *) NULL));
+		return (user2netname(name, uid, (char *)NULL));
 	}
 }
 
 /*
  * Convert unix cred to network-name
  */
-int
-user2netname(char netname[MAXNETNAMELEN + 1], const uid_t uid, const char *domain)
+int user2netname(char netname[MAXNETNAMELEN + 1], const uid_t uid,
+		 const char *domain)
 {
 	char *dfltdom;
 
@@ -100,21 +99,22 @@ user2netname(char netname[MAXNETNAMELEN + 1], const uid_t uid, const char *domai
 		}
 		domain = dfltdom;
 	}
-	if (strlen(domain) + 1 + INT_STRLEN_MAXIMUM(u_long) + 1 + strlen(OPSYS) > MAXNETNAMELEN) {
+	if (strlen(domain) + 1 + INT_STRLEN_MAXIMUM(u_long) + 1 +
+	    strlen(OPSYS) > MAXNETNAMELEN) {
 		return (0);
 	}
-	(void) sprintf(netname, "%s.%ld@%s", OPSYS, (u_long)uid, domain);	
+	(void)sprintf(netname, "%s.%ld@%s", OPSYS, (u_long) uid, domain);
 	return (1);
 }
 
 /*
  * Convert host to network-name
  */
-int
-host2netname(char netname[MAXNETNAMELEN + 1], const char *host, const char *domain)
+int host2netname(char netname[MAXNETNAMELEN + 1], const char *host,
+		 const char *domain)
 {
 	char *dfltdom;
-	char hostname[MAXHOSTNAMELEN+1];
+	char hostname[MAXHOSTNAMELEN + 1];
 
 	if (domain == NULL) {
 		if (__rpc_get_default_domain(&dfltdom) != 0) {
@@ -123,12 +123,13 @@ host2netname(char netname[MAXNETNAMELEN + 1], const char *host, const char *doma
 		domain = dfltdom;
 	}
 	if (host == NULL) {
-		(void) gethostname(hostname, sizeof(hostname));
+		(void)gethostname(hostname, sizeof(hostname));
 		host = hostname;
 	}
-	if (strlen(domain) + 1 + strlen(host) + 1 + strlen(OPSYS) > MAXNETNAMELEN) {
+	if (strlen(domain) + 1 + strlen(host) + 1 + strlen(OPSYS) >
+	    MAXNETNAMELEN) {
 		return (0);
-	} 
-	(void) sprintf(netname, "%s.%s@%s", OPSYS, host, domain);
+	}
+	(void)sprintf(netname, "%s.%s@%s", OPSYS, host, domain);
 	return (1);
 }

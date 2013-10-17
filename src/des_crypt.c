@@ -36,13 +36,14 @@
 #include <rpc/des.h>
 #if 0
 #ifndef lint
-static char sccsid[] = "@(#)des_crypt.c	2.2 88/08/10 4.0 RPCSRC; from 1.13 88/02/08 SMI";
+static char sccsid[] =
+    "@(#)des_crypt.c	2.2 88/08/10 4.0 RPCSRC; from 1.13 88/02/08 SMI";
 #endif
 #endif
 #include <sys/cdefs.h>
 
-static int common_crypt( char *, char *, unsigned, unsigned, struct desparams * );
-int (*__des_crypt_LOCAL)() = 0;
+static int common_crypt(char *, char *, unsigned, unsigned, struct desparams *);
+int (*__des_crypt_LOCAL) () = 0;
 extern int _des_crypt_call(char *, int, struct desparams *);
 /*
  * Copy 8 bytes
@@ -53,7 +54,7 @@ extern int _des_crypt_call(char *, int, struct desparams *);
 	*a++ = *b++; *a++ = *b++; *a++ = *b++; *a++ = *b++; \
 	*a++ = *b++; *a++ = *b++; *a++ = *b++; *a++ = *b++; \
 }
- 
+
 /*
  * Copy multiple of 8 bytes
  */
@@ -70,12 +71,7 @@ extern int _des_crypt_call(char *, int, struct desparams *);
 /*
  * CBC mode encryption
  */
-int
-cbc_crypt(char *key,
-          char *buf,
-          unsigned len,
-          unsigned mode,
-          char *ivec)
+int cbc_crypt(char *key, char *buf, unsigned len, unsigned mode, char *ivec)
 {
 	int err;
 	struct desparams dp;
@@ -89,18 +85,13 @@ cbc_crypt(char *key,
 	COPY8(ivec, dp.des_ivec);
 	err = common_crypt(key, buf, len, mode, &dp);
 	COPY8(dp.des_ivec, ivec);
-	return(err);
+	return (err);
 }
-
 
 /*
  * ECB mode encryption
  */
-int
-ecb_crypt(char *key,
-          char *buf,
-          unsigned len,
-          unsigned mode)
+int ecb_crypt(char *key, char *buf, unsigned len, unsigned mode)
 {
 	struct desparams dp;
 
@@ -110,28 +101,22 @@ ecb_crypt(char *key,
 #else
 	dp.des_mode = ECB;
 #endif
-	return(common_crypt(key, buf, len, mode, &dp));
+	return (common_crypt(key, buf, len, mode, &dp));
 }
-
-
 
 /*
  * Common code to cbc_crypt() & ecb_crypt()
  */
-static int
-common_crypt(char *key,
-             char *buf,
-             unsigned len,
-             unsigned mode,
-             struct desparams *desp)
+static int common_crypt(char *key, char *buf, unsigned len, unsigned mode,
+			struct desparams *desp)
 {
 	int desdev;
 
 	if ((len % 8) != 0 || len > DES_MAXDATA) {
-		return(DESERR_BADPARAM);
+		return (DESERR_BADPARAM);
 	}
 	desp->des_dir =
-		((mode & DES_DIRMASK) == DES_ENCRYPT) ? ENCRYPT : DECRYPT;
+	    ((mode & DES_DIRMASK) == DES_ENCRYPT) ? ENCRYPT : DECRYPT;
 
 	desdev = mode & DES_DEVMASK;
 	COPY8(key, desp->des_key);
@@ -147,5 +132,5 @@ common_crypt(char *key,
 			return (DESERR_HWERROR);
 		}
 	}
-	return(desdev == DES_SW ? DESERR_NONE : DESERR_NOHWDEVICE);
+	return (desdev == DES_SW ? DESERR_NONE : DESERR_NOHWDEVICE);
 }

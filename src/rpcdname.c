@@ -38,8 +38,7 @@
 
 static char *default_domain = 0;
 
-static char *
-get_default_domain(void)
+static char *get_default_domain(void)
 {
 	char temp[256];
 
@@ -47,11 +46,12 @@ get_default_domain(void)
 		return (default_domain);
 	if (getdomainname(temp, sizeof(temp)) < 0)
 		return (0);
-	if ((int) strlen(temp) > 0) {
-		default_domain = (char *) mem_alloc((strlen(temp)+(unsigned)1));
+	if ((int)strlen(temp) > 0) {
+		default_domain =
+		    (char *)mem_alloc((strlen(temp) + (unsigned)1));
 		if (default_domain == 0)
 			return (0);
-		(void) strcpy(default_domain, temp);
+		(void)strcpy(default_domain, temp);
 		return (default_domain);
 	}
 	return (0);
@@ -63,8 +63,7 @@ get_default_domain(void)
  * the domain name is non-null, knowing that the null string is going to
  * get rejected elsewhere in the NIS client package.
  */
-int
-__rpc_get_default_domain(char **domain)
+int __rpc_get_default_domain(char **domain)
 {
 	if ((*domain = get_default_domain()) != 0)
 		return (0);

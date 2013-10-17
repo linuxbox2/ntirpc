@@ -30,39 +30,36 @@
 #include <stdbool.h>
 #include <misc/queue.h>
 
-struct v_rec
-{
-    TAILQ_ENTRY(v_rec) ioq;
-    uint32_t refcnt;
-    void *base;
-    u_int off;
-    u_int len;
-    u_int size;
-    u_int flags;
+struct v_rec {
+	TAILQ_ENTRY(v_rec) ioq;
+	uint32_t refcnt;
+	void *base;
+	u_int off;
+	u_int len;
+	u_int size;
+	u_int flags;
 };
 
-struct vpos_t
-{
-    struct v_rec *vrec;
-    int32_t loff; /* logical byte offset  */
-    int32_t bpos; /* buffer index (offset) in the current stream */
-    int32_t boff; /* byte offset in buffer */
+struct vpos_t {
+	struct v_rec *vrec;
+	int32_t loff;		/* logical byte offset  */
+	int32_t bpos;		/* buffer index (offset) in the current stream */
+	int32_t boff;		/* byte offset in buffer */
 };
 
-struct xdr_ioq
-{
-    XDR xdrs[1];
-    TAILQ_ENTRY(xdr_ioq) ioq_s;
-    struct {
-        TAILQ_HEAD(vrq_tailq, v_rec) q;
-        struct vpos_t fpos; /* fill position, GET|SETPOS */
-        int size; /* count of buffer segments */
-        uint32_t frag_len;
-    } ioq;
-    u_int def_bsize;
-    u_int max_bsize;
-    u_int flags;
-    uint64_t id;
+struct xdr_ioq {
+	XDR xdrs[1];
+	 TAILQ_ENTRY(xdr_ioq) ioq_s;
+	struct {
+		TAILQ_HEAD(vrq_tailq, v_rec) q;
+		struct vpos_t fpos;	/* fill position, GET|SETPOS */
+		int size;	/* count of buffer segments */
+		uint32_t frag_len;
+	} ioq;
+	u_int def_bsize;
+	u_int max_bsize;
+	u_int flags;
+	uint64_t id;
 };
 
 #define IOQ_FLAG_NONE          0x0000
@@ -74,4 +71,4 @@ struct xdr_ioq
 
 extern XDR *xdr_ioq_create(u_int def_bsize, u_int max_bsize, u_int flags);
 
-#endif /* XDR_IOQ_H */
+#endif				/* XDR_IOQ_H */

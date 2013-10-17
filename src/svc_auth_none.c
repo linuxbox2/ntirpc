@@ -40,50 +40,46 @@
 #include <rpc/svc.h>
 #include <rpc/svc_auth.h>
 
-
 static bool svcauth_none_wrap(SVCAUTH *, struct svc_req *, XDR *, xdrproc_t,
-                              caddr_t);
+			      caddr_t);
 static bool svcauth_none_release(SVCAUTH *, struct svc_req *);
 static bool svcauth_none_destroy(SVCAUTH *);
 
 struct svc_auth_ops svc_auth_none_ops = {
-    svcauth_none_wrap,
-    svcauth_none_wrap,
-    svcauth_none_release,
-    svcauth_none_destroy
+	svcauth_none_wrap,
+	svcauth_none_wrap,
+	svcauth_none_release,
+	svcauth_none_destroy
 };
 
 SVCAUTH svc_auth_none = {
-    &svc_auth_none_ops,
-    NULL,
+	&svc_auth_none_ops,
+	NULL,
 };
 
 /* aka, unwrap */
-static bool
-svcauth_none_wrap(SVCAUTH * __attribute__((unused)) auth,
-                  struct svc_req *__attribute__((unused)) req, XDR *xdrs,
-                  xdrproc_t xdr_func, caddr_t xdr_ptr)
+static bool svcauth_none_wrap(SVCAUTH * __attribute__ ((unused)) auth,
+			      struct svc_req *
+			      __attribute__ ((unused)) req, XDR * xdrs,
+			      xdrproc_t xdr_func, caddr_t xdr_ptr)
 {
-    return ((*xdr_func)(xdrs, xdr_ptr));
+	return ((*xdr_func) (xdrs, xdr_ptr));
 }
 
-static bool
-svcauth_none_release(SVCAUTH * __attribute__((unused)) auth,
-                     struct svc_req *__attribute__((unused)) req)
+static bool svcauth_none_release(SVCAUTH * __attribute__ ((unused)) auth,
+				 struct svc_req * __attribute__ ((unused)) req)
 {
-    return (TRUE);
+	return (TRUE);
 }
 
-static bool
-svcauth_none_destroy(SVCAUTH *auth)
+static bool svcauth_none_destroy(SVCAUTH * auth)
 {
-    return (TRUE);
+	return (TRUE);
 }
 
-enum auth_stat
-_svcauth_none(struct svc_req *req, struct rpc_msg *msg)
+enum auth_stat _svcauth_none(struct svc_req *req, struct rpc_msg *msg)
 {
-    req->rq_auth = &svc_auth_none;
+	req->rq_auth = &svc_auth_none;
 
-    return (AUTH_OK);
+	return (AUTH_OK);
 }
