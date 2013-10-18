@@ -33,7 +33,7 @@
 extern void xdr_inrec_create(XDR *, u_int, void *,
 			     int (*)(XDR * xdrs, void *, void *, int));
 
-extern bool xdr_inrec_readahead(XDR * xdrs, u_int maxfraglen);
+extern bool xdr_inrec_readahead(XDR *xdrs, u_int maxfraglen);
 
 /* make end of xdr record */
 extern bool xdr_inrec_endofrecord(XDR *, bool);

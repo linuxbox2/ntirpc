@@ -49,7 +49,8 @@ int getrpcport(char *host, int prognum, int versnum, int proto)
 
 	assert(host != NULL);
 
-	if ((hp = gethostbyname(host)) == NULL)
+	hp = gethostbyname(host);
+	if (!hp)
 		return (0);
 	memset(&addr, 0, sizeof(addr));
 	addr.sin_family = AF_INET;

@@ -1,5 +1,3 @@
-//#include <sys/cdefs.h>
-
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
  * All rights reserved.
@@ -52,7 +50,8 @@ static char partab[128] = {
 /*
  * Add odd parity to low bit of 8 byte key
  */
-void des_setparity(char *p)
+void
+des_setparity(char *p)
 {
 	int i;
 

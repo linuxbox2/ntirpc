@@ -47,9 +47,10 @@
 
 #define tv_to_ms(tv) (1000 * ((tv)->tv_sec) + (tv)->tv_usec/1000)
 
-rpc_ctx_t *alloc_rpc_call_ctx(CLIENT * clnt, rpcproc_t proc, xdrproc_t xdr_args,
-			      void *args_ptr, xdrproc_t xdr_results,
-			      void *results_ptr, struct timeval timeout)
+rpc_ctx_t *
+alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
+		   void *args_ptr, xdrproc_t xdr_results,
+		   void *results_ptr, struct timeval timeout)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;
@@ -95,7 +96,8 @@ rpc_ctx_t *alloc_rpc_call_ctx(CLIENT * clnt, rpcproc_t proc, xdrproc_t xdr_args,
 	return (ctx);
 }
 
-void rpc_ctx_next_xid(rpc_ctx_t * ctx, uint32_t flags)
+void
+rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)ctx->ctx_u.clnt.clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;
@@ -117,7 +119,8 @@ void rpc_ctx_next_xid(rpc_ctx_t * ctx, uint32_t flags)
 	return;
 }
 
-bool rpc_ctx_xfer_replymsg(struct x_vc_data * xd, struct rpc_msg * msg)
+bool
+rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg)
 {
 	rpc_ctx_t ctx_k, *ctx;
 	struct opr_rbtree_node *nv;
@@ -145,13 +148,14 @@ bool rpc_ctx_xfer_replymsg(struct x_vc_data * xd, struct rpc_msg * msg)
 		cond_signal(&ctx->we.cv);
 		mutex_unlock(&ctx->we.mtx);
 
-		return (TRUE);
+		return (true);
 	}
 	REC_UNLOCK(xd->rec);
-	return (FALSE);
+	return (false);
 }
 
-int rpc_ctx_wait_reply(rpc_ctx_t * ctx, uint32_t flags)
+int
+rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)ctx->ctx_u.clnt.clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;
@@ -165,7 +169,8 @@ int rpc_ctx_wait_reply(rpc_ctx_t * ctx, uint32_t flags)
 		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
 		timespecadd(&ts, &ctx->ctx_u.clnt.timeout);
 		code = cond_timedwait(&lk->we.cv, &lk->we.mtx, &ts);
-		/* if we timed out, check for xprt destroyed (no more receives) */
+		/* if we timed out, check for xprt destroyed (no more
+		 * receives) */
 		if (code == ETIMEDOUT) {
 			SVCXPRT *xprt = rec->hdl.xprt;
 			uint32_t xp_flags;
@@ -180,8 +185,8 @@ int rpc_ctx_wait_reply(rpc_ctx_t * ctx, uint32_t flags)
 			mutex_unlock(&xprt->xp_lock);
 
 			if (xp_flags & SVC_XPRT_FLAG_DESTROYED) {
-				/* XXX should also set error.re_why, but the facility is not
-				 * well developed. */
+				/* XXX should also set error.re_why, but the
+				 * facility is not well developed. */
 				ctx->error.re_status = RPC_TIMEDOUT;
 			}
 			ctx->flags &= ~RPC_CTX_FLAG_WAITSYNC;
@@ -208,7 +213,8 @@ int rpc_ctx_wait_reply(rpc_ctx_t * ctx, uint32_t flags)
 	return (code);
 }
 
-void rpc_ctx_ack_xfer(rpc_ctx_t * ctx)
+void
+rpc_ctx_ack_xfer(rpc_ctx_t *ctx)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)ctx->ctx_u.clnt.clnt->cl_p1;
 	rpc_dplx_lock_t *lk = &xd->rec->recv.lock;
@@ -217,7 +223,8 @@ void rpc_ctx_ack_xfer(rpc_ctx_t * ctx)
 	cond_signal(&lk->we.cv);	/* XXX we hold lk->we.mtx */
 }
 
-void free_rpc_call_ctx(rpc_ctx_t * ctx, uint32_t flags)
+void
+free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)ctx->ctx_u.clnt.clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;

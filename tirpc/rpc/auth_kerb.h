@@ -1,4 +1,5 @@
-/* $FreeBSD: src/include/rpc/auth_kerb.h,v 1.2 2002/09/04 23:58:23 alfred Exp $ */
+/* $FreeBSD: src/include/rpc/auth_kerb.h,v 1.2 2002/09/04 23:58:23
+ * alfred Exp $ */
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
  * All rights reserved.

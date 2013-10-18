@@ -45,18 +45,18 @@ struct svc_xprt_set {
 #define SVC_XPRT_FLAG_UNLOCK       0x0004
 #define SVC_XPRT_FLAG_MUTEX_LOCKED 0x0008
 
-SVCXPRT *svc_xprt_get(int fd);
-SVCXPRT *svc_xprt_set(SVCXPRT * xprt, uint32_t flags);
-SVCXPRT *svc_xprt_clear(SVCXPRT * xprt, uint32_t flags);
+SVCXPRT *svc_xprt_get(int);
+SVCXPRT *svc_xprt_set(SVCXPRT *, uint32_t);
+SVCXPRT *svc_xprt_clear(SVCXPRT *, uint32_t);
 
 /* iterator callback prototype */
 #define SVC_XPRT_FOREACH_NONE    0x0000
 #define SVC_XPRT_FOREACH_CLEAR   0x0001	/* each_f destroyed xprt */
 
-typedef uint32_t(*svc_xprt_each_func_t) (SVCXPRT * xprt, void *arg);
-int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg);
+typedef uint32_t(*svc_xprt_each_func_t) (SVCXPRT *, void *);
+int svc_xprt_foreach(svc_xprt_each_func_t, void *);
 
-void svc_xprt_dump_xprts(const char *tag);
+void svc_xprt_dump_xprts(const char *);
 void svc_xprt_shutdown();
 
 #endif				/* TIRPC_SVC_XPRT_H */

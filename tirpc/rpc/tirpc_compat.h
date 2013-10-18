@@ -32,24 +32,24 @@
 #define clnttcp6_create(a, b, c, d, e, f) clnttcp6_ncreate(a, b, c, d, e, f)
 #define clntudp_create(a, b, c, d, e) clntudp_ncreate(a, b, c, d, e)
 #define clntudp_bufcreate(a, b, c, d, e, f, g) \
-    clntudp_nbufcreate(a, b, c, d, e, f, g)
+	clntudp_nbufcreate(a, b, c, d, e, f, g)
 #define clntudp6_create(a, b, c, d, e) clntudp6_ncreate(a, b, c, d, e)
 #define clntudp6_bufcreate(a, b, c, d, e, f, g) \
-    clntudp6_nbufcreate(a, b, c, d, e, f, g)
+	clntudp6_nbufcreate(a, b, c, d, e, f, g)
 
 /* clnt.h */
 #define clnt_create(a, b, c, d) clnt_ncreate(a, b, c, d)
 #define clnt_create_time(a, b, c, d, e) clnt_ncreate_time(a, b, c, d, e)
 #define clnt_create_vers(a, b, c, d, e, f) clnt_ncreate_vers(a, b, c, d, e, f)
 #define clnt_create_vers_timed(a, b, c, d, e, f, g) \
-    clnt_ncreate_vers_timed(a, b, c, d, e, f, g)
+	clnt_ncreate_vers_timed(a, b, c, d, e, f, g)
 #define clnt_tp_create(a, b, c, d) clnt_tp_ncreate(a, b, c, d)
 #define clnt_tp_create_timed(a, b, c, d, e) clnt_tp_ncreate_timed(a, b, c, d, e)
 #define clnt_tli_create(a, b, c, d, e, f, g) \
-    clnt_tli_ncreate(a, b, c, d, e, f, g)
+	clnt_tli_ncreate(a, b, c, d, e, f, g)
 #define clnt_vc_create(a, b, c, d, e, f) clnt_vc_ncreate(a, b, c, d, e, f)
 #define clnt_vc_create2(a, b, c, d, e, f, g) \
-    clnt_vc_ncreate2(a, b, c, d, e, f, g)
+	clnt_vc_ncreate2(a, b, c, d, e, f, g)
 #define clntunix_create(a, b, c, d, e) clntunix_ncreate(a, b, c, d, e)
 #define clnt_dg_create(a, b, c, d, e, f) clnt_dg_ncreate(a, b, c, d, e, f)
 #define clnt_raw_create(a, b) clnt_raw_ncreate(a, b)
@@ -83,11 +83,13 @@
 #define authnone_create() authnone_ncreate()
 #define authdes_create(a, b, c, d) authdes_ncreate(a, b, c, d)
 #define authdes_seccreate(a, b, c, d) authdes_nseccreate(a, b, c, d)
-#define authsys_create(c,i1,i2,i3,ip) authunix_ncreate((c),(i1),(i2),(i3),(ip))
+#define authsys_create(c, i1, i2, i3, ip) \
+	authunix_ncreate((c), (i1), (i2), (i3), (ip))
 #define authsys_create_default() authunix_ncreate_default()
-#define authkerb_seccreate(a, b, c, d, e, f) authkerb_nseccreate(a, b, c, d, e, f)
+#define authkerb_seccreate(a, b, c, d, e, f) \
+	authkerb_nseccreate(a, b, c, d, e, f)
 #define authkerb_create(a, b, c, d, e, f, g, h, i) \
-    authkerb_ncreate(a, b, c, d, e, f, g, h, i)
+	authkerb_ncreate(a, b, c, d, e, f, g, h, i)
 #define authgss_create(a, b, c) authgss_ncreate(a, b, c)
 #define authgss_create_default(a, b, c) authgss_ncreate_default(a, b, c)
 

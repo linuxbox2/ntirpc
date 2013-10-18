@@ -73,10 +73,10 @@ struct authgss_private_data {
 	u_int pd_seq_win;	/* Sequence window */
 };
 
-#define g_OID_equal(o1, o2)           \
-    (((o1)->length == (o2)->length) &&                \
-     ((o1)->elements != 0) && ((o2)->elements != 0) &&                  \
-     (memcmp((o1)->elements, (o2)->elements, (int) (o1)->length) == 0))
+#define g_OID_equal(o1, o2)						\
+	(((o1)->length == (o2)->length) &&				\
+	 ((o1)->elements != 0) && ((o2)->elements != 0) &&		\
+	 (memcmp((o1)->elements, (o2)->elements, (int) (o1)->length) == 0))
 
 /* from kerberos source, gssapi_krb5.c */
 extern gss_OID_desc krb5oid;
@@ -104,23 +104,24 @@ struct rpc_gss_init_res {
 #define MAXSEQ  0x80000000
 
 /* Prototypes. */
-__BEGIN_DECLS bool xdr_rpc_gss_cred(XDR * xdrs, struct rpc_gss_cred *p);
-bool xdr_rpc_gss_init_args(XDR * xdrs, gss_buffer_desc * p);
-bool xdr_rpc_gss_init_res(XDR * xdrs, struct rpc_gss_init_res *p);
-bool xdr_rpc_gss_data(XDR * xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
+__BEGIN_DECLS
+bool xdr_rpc_gss_cred(XDR *xdrs, struct rpc_gss_cred *p);
+bool xdr_rpc_gss_init_args(XDR *xdrs, gss_buffer_desc *p);
+bool xdr_rpc_gss_init_res(XDR *xdrs, struct rpc_gss_init_res *p);
+bool xdr_rpc_gss_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 		      gss_ctx_id_t ctx, gss_qop_t qop, rpc_gss_svc_t svc,
 		      u_int seq);
 
 AUTH *authgss_ncreate(CLIENT *, gss_name_t, struct rpc_gss_sec *);
 AUTH *authgss_ncreate_default(CLIENT *, char *, struct rpc_gss_sec *);
-bool authgss_service(AUTH * auth, int svc);
-bool authgss_get_private_data(AUTH * auth, struct authgss_private_data *);
+bool authgss_service(AUTH *auth, int svc);
+bool authgss_get_private_data(AUTH *auth, struct authgss_private_data *);
 
 void log_debug(const char *fmt, ...);
 void log_status(char *m, OM_uint32 major, OM_uint32 minor);
-void gss_log_hexdump(const u_char * buf, int len, int offset);
-
+void gss_log_hexdump(const u_char *buf, int len, int offset);
 __END_DECLS
+
 /* for backward compatibility */
 #include <rpc/tirpc_compat.h>
 #endif				/* !_TIRPC_AUTH_GSS_H */

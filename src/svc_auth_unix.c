@@ -51,7 +51,8 @@ extern SVCAUTH svc_auth_none;
 /*
  * Unix longhand authenticator
  */
-enum auth_stat _svcauth_unix(struct svc_req *req, struct rpc_msg *msg)
+enum auth_stat
+_svcauth_unix(struct svc_req *req, struct rpc_msg *msg)
 {
 	enum auth_stat stat;
 	XDR xdrs;
@@ -99,6 +100,7 @@ enum auth_stat _svcauth_unix(struct svc_req *req, struct rpc_msg *msg)
 		}
 		aup->aup_len = gid_len;
 		for (i = 0; i < gid_len; i++) {
+			/* suppress block warning */
 			aup->aup_gids[i] = (int)IXDR_GET_INT32(buf);
 		}
 		/*
@@ -131,6 +133,7 @@ enum auth_stat _svcauth_unix(struct svc_req *req, struct rpc_msg *msg)
 	stat = AUTH_OK;
  done:
 	XDR_DESTROY(&xdrs);
+
 	return (stat);
 }
 
@@ -138,8 +141,9 @@ enum auth_stat _svcauth_unix(struct svc_req *req, struct rpc_msg *msg)
  * Shorthand unix authenticator
  * Looks up longhand in a cache.
  */
- /*ARGSUSED*/ enum auth_stat _svcauth_short(struct svc_req *req,
-					    struct rpc_msg *msg)
+ /*ARGSUSED*/
+enum auth_stat
+_svcauth_short(struct svc_req *req, struct rpc_msg *msg)
 {
 	req->rq_auth = &svc_auth_none;
 	return (AUTH_REJECTEDCRED);

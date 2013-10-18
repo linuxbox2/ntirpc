@@ -1,4 +1,5 @@
-/*	$FreeBSD: src/include/rpc/clnt_stat.h,v 1.2 2001/03/20 08:20:50 alfred Exp $ */
+/*	$FreeBSD: src/include/rpc/clnt_stat.h,v 1.2 2001/03/20
+ *	08:20:50 alfred Exp $ */
 /*
  * Copyright (c) 1986 - 1991, 1994, 1996, 1997 by Sun Microsystems, Inc.
  * All rights reserved.
@@ -55,7 +56,7 @@ extern "C" {
 		 */
 		RPC_RPCBFAILURE = 14,	/* the pmapper failed in its call */
 #define	RPC_PMAPFAILURE RPC_RPCBFAILURE
-		RPC_PROGNOTREGISTERED = 15,	/* remote program is not registered */
+		RPC_PROGNOTREGISTERED = 15,/* remote program not registered */
 		RPC_N2AXLATEFAILURE = 22,
 		/* Name to address translation failed */
 		/*
@@ -73,7 +74,7 @@ extern "C" {
 		RPC_STALERACHANDLE = 25,
 		RPC_CANTCONNECT = 26,	/* couldn't make connection (cots) */
 		RPC_XPRTFAILED = 27,	/* received discon from remote (cots) */
-		RPC_CANTCREATESTREAM = 28	/* can't push rpc module (cots) */
+		RPC_CANTCREATESTREAM = 28 /* can't push rpc module (cots) */
 	};
 
 #ifdef __cplusplus

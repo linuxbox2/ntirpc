@@ -52,7 +52,7 @@
 extern SVCAUTH svc_auth_none;
 
 #define SVCAUTH_PRIVATE(auth) \
-    ((struct svc_rpc_gss_data *)(auth)->svc_ah_private)
+	((struct svc_rpc_gss_data *)(auth)->svc_ah_private)
 
 /*
  * from mit-krb5-1.2.1 mechglue/mglueP.h:
@@ -94,20 +94,22 @@ struct svc_rpc_gss_data {
 	SVCAUTH *auth;
 };
 
-bool svcauth_gss_destroy(SVCAUTH * auth);
+bool svcauth_gss_destroy(SVCAUTH *auth);
 
-static inline struct svc_rpc_gss_data *alloc_svc_rpc_gss_data(void)
+static inline struct
+svc_rpc_gss_data *alloc_svc_rpc_gss_data(void)
 {
 	struct svc_rpc_gss_data *gd =
-	    mem_zalloc(sizeof(struct svc_rpc_gss_data));
+		mem_zalloc(sizeof(struct svc_rpc_gss_data));
 	mutex_init(&gd->lock, NULL);
 	TAILQ_INIT_ENTRY(gd, lru_q);
 	gd->refcnt = 1;
 	return (gd);
 }
 
-static inline void unref_svc_rpc_gss_data(struct svc_rpc_gss_data *gd,
-					  uint32_t flags)
+static inline void
+unref_svc_rpc_gss_data(struct svc_rpc_gss_data *gd,
+		       uint32_t flags)
 {
 	u_int refcnt;
 	bool gd_locked = flags & SVC_RPC_GSS_FLAG_LOCKED;

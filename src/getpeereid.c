@@ -35,7 +35,8 @@
 /*
  * BSD-style getpeereid() for platforms that lack it.
  */
-int getpeereid(int sock, uid_t * uid, gid_t * gid)
+int
+getpeereid(int sock, uid_t *uid, gid_t *gid)
 {
 #if defined(SO_PEERCRED)
 	/* Linux: use getsockopt(SO_PEERCRED) */

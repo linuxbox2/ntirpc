@@ -143,7 +143,7 @@ struct call_body {
 	rpcvers_t cb_vers;
 	rpcproc_t cb_proc;
 	struct opaque_auth cb_cred;
-	struct opaque_auth cb_verf;	/* protocol specific - provided by client */
+	struct opaque_auth cb_verf; /* protocol specific - provided by client */
 };
 
 /*

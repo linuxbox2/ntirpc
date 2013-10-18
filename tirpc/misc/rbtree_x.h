@@ -40,21 +40,18 @@ struct rbtree_x {
 #define RBT_X_FLAG_CACHE_RT   0x0002
 #define RBT_X_FLAG_CACHE_WT   0x0004
 
-#define rbtx_idx_of_scalar(xt,k) ((k)%((xt)->npart))
-#define rbtx_partition_of_ix(xt,ix) ((xt)->tree+(ix))
-#define rbtx_partition_of_scalar(xt,k) \
-    (rbtx_partition_of_ix((xt),rbtx_idx_of_scalar((xt),(k))))
+#define rbtx_idx_of_scalar(xt, k) ((k)%((xt)->npart))
+#define rbtx_partition_of_ix(xt, ix) ((xt)->tree+(ix))
+#define rbtx_partition_of_scalar(xt, k) \
+	(rbtx_partition_of_ix((xt), rbtx_idx_of_scalar((xt), (k))))
 
 extern int rbtx_init(struct rbtree_x *xt, opr_rbtree_cmpf_t cmpf,
 		     uint32_t npart, uint32_t flags);
 
-static inline struct opr_rbtree_node *rbtree_x_cached_lookup(struct rbtree_x
-							     *xt,
-							     struct
-							     rbtree_x_part *t,
-							     struct
-							     opr_rbtree_node
-							     *nk, uint64_t hk)
+static inline struct opr_rbtree_node *rbtree_x_cached_lookup(
+	struct rbtree_x *xt,
+	struct rbtree_x_part *t,
+	struct opr_rbtree_node *nk, uint64_t hk)
 {
 	struct opr_rbtree_node *nv_cached, *nv = NULL;
 	uint32_t offset;
@@ -72,9 +69,8 @@ static inline struct opr_rbtree_node *rbtree_x_cached_lookup(struct rbtree_x
 	}
 
 	nv = opr_rbtree_lookup(&t->t, nk);
-	if (nv && (xt->flags & RBT_X_FLAG_CACHE_RT)) {
+	if (nv && (xt->flags & RBT_X_FLAG_CACHE_RT))
 		t->cache[offset] = nv;
-	}
 
 	__warnx(TIRPC_DEBUG_FLAG_RBTREE,
 		"rbtree_x_cached_lookup: t %p nk %p nv %p" "(%s hk %" PRIx64
@@ -85,13 +81,10 @@ static inline struct opr_rbtree_node *rbtree_x_cached_lookup(struct rbtree_x
 	return (nv);
 }
 
-static inline struct opr_rbtree_node *rbtree_x_cached_insert(struct rbtree_x
-							     *xt,
-							     struct
-							     rbtree_x_part *t,
-							     struct
-							     opr_rbtree_node
-							     *nk, uint64_t hk)
+static inline struct opr_rbtree_node *rbtree_x_cached_insert(
+	struct rbtree_x *xt,
+	struct rbtree_x_part *t,
+	struct opr_rbtree_node *nk, uint64_t hk)
 {
 	struct opr_rbtree_node *v_cached, *nv = NULL;
 	uint32_t offset;
@@ -150,11 +143,10 @@ static inline void rbtree_x_cached_remove(struct rbtree_x *xt,
 		(v_cached) ? "cache" : "rbt", hk, offset, xt->flags);
 
 	if (xt->flags & RBT_X_FLAG_CACHE_WT) {
-		if (v_cached && (t->t.cmpf(nk, v_cached) == 0)) {
+		if (v_cached && (t->t.cmpf(nk, v_cached) == 0))
 			t->cache[offset] = NULL;
-		} else {
+		else
 			return (opr_rbtree_remove(&t->t, nk));
-		}
 	} else {
 		/* RBT_X_FLAG_CACHE_RT */
 		if (v_cached && (t->t.cmpf(nk, v_cached) == 0))

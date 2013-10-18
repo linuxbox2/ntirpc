@@ -81,7 +81,7 @@ extern tirpc_pkg_params __pkg_params;
 
 struct svc_params __svc_params[1] = {
 	{
-	 FALSE /* !initialized */ ,
+	 false /* !initialized */ ,
 	 MUTEX_INITIALIZER}
 };
 
@@ -110,7 +110,8 @@ static struct svc_callout *svc_find(rpcprog_t, rpcvers_t, struct svc_callout **,
  * will call svc_init() before accessing such state and before executing
  * any svc exported functions.   Traditional TI-RPC programs need not
  * call the function as presently integrated. */
-void svc_init(svc_init_params * params)
+void
+svc_init(svc_init_params *params)
 {
 	mutex_lock(&__svc_params->mtx);
 	if (__svc_params->initialized) {
@@ -173,14 +174,15 @@ void svc_init(svc_init_params * params)
 	else
 		__svc_params->gss.max_gc = 200;
 
-	__svc_params->initialized = TRUE;
+	__svc_params->initialized = true;
 
 	mutex_unlock(&__svc_params->mtx);
 
 	return;
 }
 
-struct rpc_msg *alloc_rpc_msg(void)
+struct rpc_msg *
+alloc_rpc_msg(void)
 {
 	struct rpc_msg *msg = mem_alloc(sizeof(struct rpc_msg));
 	if (!msg)
@@ -209,7 +211,8 @@ struct rpc_msg *alloc_rpc_msg(void)
 	return (msg);
 }
 
-void free_rpc_msg(struct rpc_msg *msg)
+void
+free_rpc_msg(struct rpc_msg *msg)
 {
 	mem_free(msg->fr_vec[0], 2 * MAX_AUTH_BYTES + RQCRED_SIZE);
 	mem_free(msg, sizeof(struct rpc_msg));
@@ -221,7 +224,8 @@ void free_rpc_msg(struct rpc_msg *msg)
  * This is used to set xprt->xp_raddr in a way legacy
  * apps can deal with
  */
-void __xprt_set_raddr(SVCXPRT * xprt, const struct sockaddr_storage *ss)
+void
+__xprt_set_raddr(SVCXPRT *xprt, const struct sockaddr_storage *ss)
 {
 	switch (ss->ss_family) {
 	case AF_INET6:
@@ -244,9 +248,10 @@ void __xprt_set_raddr(SVCXPRT * xprt, const struct sockaddr_storage *ss)
  * The dispatch routine will be called when a rpc request for this
  * program number comes in.
  */
-bool svc_reg(SVCXPRT * xprt, const rpcprog_t prog, const rpcvers_t vers,
-	     void (*dispatch) (struct svc_req *, SVCXPRT *),
-	     const struct netconfig *nconf)
+bool
+svc_reg(SVCXPRT *xprt, const rpcprog_t prog, const rpcvers_t vers,
+	void (*dispatch) (struct svc_req *req, SVCXPRT *xprt),
+	const struct netconfig *nconf)
 {
 	bool dummy;
 	struct svc_callout *prev;
@@ -255,37 +260,40 @@ bool svc_reg(SVCXPRT * xprt, const rpcprog_t prog, const rpcvers_t vers,
 	char *netid = NULL;
 	int flag = 0;
 
-/* VARIABLES PROTECTED BY svc_lock: s, prev, svc_head */
+	/* VARIABLES PROTECTED BY svc_lock: s, prev, svc_head */
 	if (xprt->xp_netid) {
 		netid = rpc_strdup(xprt->xp_netid);
 		flag = 1;
 	} else if (nconf && nconf->nc_netid) {
 		netid = rpc_strdup(nconf->nc_netid);
 		flag = 1;
-	} else if ((tnconf = __rpcgettp(xprt->xp_fd)) != NULL) {
-		netid = rpc_strdup(tnconf->nc_netid);
-		flag = 1;
-		freenetconfigent(tnconf);
-	}			/* must have been created with svc_raw_create */
-	if ((netid == NULL) && (flag == 1)) {
-		return (FALSE);
-	}
+	} else {
+		tnconf = __rpcgettp(xprt->xp_fd);
+		if (tnconf) {
+			netid = rpc_strdup(tnconf->nc_netid);
+			flag = 1;
+			freenetconfigent(tnconf);
+		}
+	} /* must have been created with svc_raw_create */
+	if ((netid == NULL) && (flag == 1))
+		return (false);
 
 	rwlock_wrlock(&svc_lock);
-	if ((s = svc_find(prog, vers, &prev, netid)) != NULL) {
+	s = svc_find(prog, vers, &prev, netid);
+	if (s) {
 		if (netid)
 			mem_free(netid, 0);
 		if (s->rec.sc_dispatch == dispatch)
 			goto rpcb_it;	/* he is registering another xptr */
 		rwlock_unlock(&svc_lock);
-		return (FALSE);
+		return (false);
 	}
 	s = mem_alloc(sizeof(struct svc_callout));
 	if (s == NULL) {
 		if (netid)
 			mem_free(netid, 0);
 		rwlock_unlock(&svc_lock);
-		return (FALSE);
+		return (false);
 	}
 
 	s->rec.sc_prog = prog;
@@ -308,13 +316,14 @@ bool svc_reg(SVCXPRT * xprt, const rpcprog_t prog, const rpcvers_t vers,
 			     &((SVCXPRT *) xprt)->xp_ltaddr);
 		return (dummy);
 	}
-	return (TRUE);
+	return (true);
 }
 
 /*
  * Remove a service program from the callout list.
  */
-void svc_unreg(const rpcprog_t prog, const rpcvers_t vers)
+void
+svc_unreg(const rpcprog_t prog, const rpcvers_t vers)
 {
 	struct svc_callout *prev;
 	struct svc_callout *s;
@@ -323,11 +332,10 @@ void svc_unreg(const rpcprog_t prog, const rpcvers_t vers)
 	(void)rpcb_unset(prog, vers, NULL);
 	rwlock_wrlock(&svc_lock);
 	while ((s = svc_find(prog, vers, &prev, NULL)) != NULL) {
-		if (prev == NULL) {
+		if (prev == NULL)
 			svc_head = s->sc_next;
-		} else {
+		else
 			prev->sc_next = s->sc_next;
-		}
 		s->sc_next = NULL;
 		if (s->rec.sc_netid)
 			mem_free(s->rec.sc_netid, sizeof(s->rec.sc_netid) + 1);
@@ -344,8 +352,10 @@ void svc_unreg(const rpcprog_t prog, const rpcvers_t vers)
  * The dispatch routine will be called when a rpc request for this
  * program number comes in.
  */
-bool svc_register(SVCXPRT * xprt, u_long prog, u_long vers,
-		  void (*dispatch) (struct svc_req *, SVCXPRT *), int protocol)
+bool
+svc_register(SVCXPRT *xprt, u_long prog, u_long vers,
+	     void (*dispatch) (struct svc_req *req, SVCXPRT *xprt),
+	     int protocol)
 {
 	struct svc_callout *prev;
 	struct svc_callout *s;
@@ -353,46 +363,45 @@ bool svc_register(SVCXPRT * xprt, u_long prog, u_long vers,
 	assert(xprt != NULL);
 	assert(dispatch != NULL);
 
-	if ((s =
-	     svc_find((rpcprog_t) prog, (rpcvers_t) vers, &prev,
-		      NULL)) != NULL) {
+	s = svc_find((rpcprog_t) prog, (rpcvers_t) vers, &prev, NULL);
+	if (s) {
 		if (s->rec.sc_dispatch == dispatch)
 			goto pmap_it;	/* he is registering another xprt */
-		return (FALSE);
+		return (false);
 	}
 	s = mem_alloc(sizeof(struct svc_callout));
-	if (s == NULL) {
-		return (FALSE);
-	}
+	if (!s)
+		return (false);
 	s->rec.sc_prog = (rpcprog_t) prog;
 	s->rec.sc_vers = (rpcvers_t) vers;
 	s->rec.sc_dispatch = dispatch;
 	s->sc_next = svc_head;
 	svc_head = s;
+
  pmap_it:
 	/* now register the information with the local binder service */
-	if (protocol) {
+	if (protocol)
 		return (pmap_set(prog, vers, protocol, xprt->xp_port));
-	}
-	return (TRUE);
+
+	return (true);
 }
 
 /*
  * Remove a service program from the callout list.
  */
-void svc_unregister(u_long prog, u_long vers)
+void
+svc_unregister(u_long prog, u_long vers)
 {
 	struct svc_callout *prev;
 	struct svc_callout *s;
 
-	if ((s =
-	     svc_find((rpcprog_t) prog, (rpcvers_t) vers, &prev, NULL)) == NULL)
+	s = svc_find((rpcprog_t) prog, (rpcvers_t) vers, &prev, NULL);
+	if (!s)
 		return;
-	if (prev == NULL) {
+	if (prev == NULL)
 		svc_head = s->sc_next;
-	} else {
+	else
 		prev->sc_next = s->sc_next;
-	}
 	s->sc_next = NULL;
 	mem_free(s, sizeof(struct svc_callout));
 	/* now unregister the information with the local binder service */
@@ -404,8 +413,9 @@ void svc_unregister(u_long prog, u_long vers)
  * Search the callout list for a program number, return the callout
  * struct.
  */
-static struct svc_callout *svc_find(rpcprog_t prog, rpcvers_t vers,
-				    struct svc_callout **prev, char *netid)
+static struct svc_callout *
+svc_find(rpcprog_t prog, rpcvers_t vers,
+	 struct svc_callout **prev, char *netid)
 {
 	struct svc_callout *s, *p;
 
@@ -425,21 +435,22 @@ static struct svc_callout *svc_find(rpcprog_t prog, rpcvers_t vers,
 
 /* An exported search routing similar to svc_find, but with error reporting
  * needed by svc_getreq routines. */
-svc_lookup_result_t svc_lookup(svc_rec_t ** rec, svc_vers_range_t * vrange,
-			       rpcprog_t prog, rpcvers_t vers, char *netid,
-			       u_int flags)
+svc_lookup_result_t
+svc_lookup(svc_rec_t **rec, svc_vers_range_t *vrange,
+	   rpcprog_t prog, rpcvers_t vers, char *netid,
+	   u_int flags)
 {
 	struct svc_callout *s, *p;
 	svc_lookup_result_t code = SVC_LKP_ERR;
 	bool prog_found, vers_found, netid_found;
 
 	p = NULL;
-	prog_found = vers_found = netid_found = FALSE;
+	prog_found = vers_found = netid_found = false;
 	vrange->lowvers = vrange->highvers = 0;
 
 	for (s = svc_head; s != NULL; s = s->sc_next) {
 		if (s->rec.sc_prog == prog) {
-			prog_found = TRUE;
+			prog_found = true;
 			/* track supported versions for SVC_LKP_VERS_NOTFOUND */
 			if (s->rec.sc_vers > vrange->highvers)
 				vrange->highvers = s->rec.sc_vers;
@@ -447,11 +458,11 @@ svc_lookup_result_t svc_lookup(svc_rec_t ** rec, svc_vers_range_t * vrange,
 				vrange->lowvers = s->rec.sc_vers;
 			/* vers match */
 			if (s->rec.sc_vers == vers) {
-				vers_found = TRUE;
+				vers_found = true;
 				/* the following semantics are unchanged */
 				if ((netid == NULL) || (s->rec.sc_netid == NULL)
 				    || (strcmp(netid, s->rec.sc_netid) == 0)) {
-					netid_found = TRUE;
+					netid_found = true;
 					p = s;
 				}	/* netid */
 			}	/* vers */
@@ -493,8 +504,9 @@ svc_lookup_result_t svc_lookup(svc_rec_t ** rec, svc_vers_range_t * vrange,
  * a reply cache (e.g., CITI Windows NFS client).
  *
  */
-bool svc_sendreply(SVCXPRT * xprt, struct svc_req * req, xdrproc_t xdr_results,
-		   void *xdr_location)
+bool
+svc_sendreply(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_results,
+	      void *xdr_location)
 {
 	struct rpc_msg rply;
 
@@ -513,7 +525,8 @@ bool svc_sendreply(SVCXPRT * xprt, struct svc_req * req, xdrproc_t xdr_results,
 /*
  * No procedure error reply (MT-SAFE)
  */
-void svcerr_noproc(SVCXPRT * xprt, struct svc_req *req)
+void
+svcerr_noproc(SVCXPRT *xprt, struct svc_req *req)
 {
 	struct rpc_msg rply;
 
@@ -530,7 +543,8 @@ void svcerr_noproc(SVCXPRT * xprt, struct svc_req *req)
 /*
  * Can't decode args error reply (MT-SAFE)
  */
-void svcerr_decode(SVCXPRT * xprt, struct svc_req *req)
+void
+svcerr_decode(SVCXPRT *xprt, struct svc_req *req)
 {
 	struct rpc_msg rply;
 
@@ -547,7 +561,8 @@ void svcerr_decode(SVCXPRT * xprt, struct svc_req *req)
 /*
  * Some system error (MT-SAFE)
  */
-void svcerr_systemerr(SVCXPRT * xprt, struct svc_req *req)
+void
+svcerr_systemerr(SVCXPRT *xprt, struct svc_req *req)
 {
 	struct rpc_msg rply;
 
@@ -568,8 +583,8 @@ void svcerr_systemerr(SVCXPRT * xprt, struct svc_req *req)
  * There is really one (or should be only one) example of this kind of
  * protocol: the portmapper (or rpc binder).
  */
-void __svc_versquiet_on(xprt)
-SVCXPRT *xprt;
+void
+__svc_versquiet_on(SVCXPRT *xprt)
 {
 	u_long tmp;
 
@@ -577,8 +592,8 @@ SVCXPRT *xprt;
 	xprt->xp_p3 = tmp;
 }
 
-void __svc_versquiet_off(xprt)
-SVCXPRT *xprt;
+void
+__svc_versquiet_off(SVCXPRT *xprt)
 {
 	u_long tmp;
 
@@ -592,8 +607,8 @@ SVCXPRT *xprt;
 	__svc_versquiet_on(xprt);
 }
 
-int __svc_versquiet_get(xprt)
-SVCXPRT *xprt;
+int
+__svc_versquiet_get(SVCXPRT *xprt)
 {
 	return ((int)xprt->xp_p3) & SVC_VERSQUIET;
 }
@@ -602,7 +617,8 @@ SVCXPRT *xprt;
 /*
  * Authentication error reply (MT-SAFE)
  */
-void svcerr_auth(SVCXPRT * xprt, struct svc_req *req, enum auth_stat why)
+void
+svcerr_auth(SVCXPRT *xprt, struct svc_req *req, enum auth_stat why)
 {
 	struct rpc_msg rply;
 
@@ -619,7 +635,8 @@ void svcerr_auth(SVCXPRT * xprt, struct svc_req *req, enum auth_stat why)
 /*
  * Auth too weak error reply (MT-SAFE)
  */
-void svcerr_weakauth(SVCXPRT * xprt, struct svc_req *req)
+void
+svcerr_weakauth(SVCXPRT *xprt, struct svc_req *req)
 {
 	assert(xprt != NULL);
 
@@ -629,7 +646,8 @@ void svcerr_weakauth(SVCXPRT * xprt, struct svc_req *req)
 /*
  * Program unavailable error reply (MT-SAFE)
  */
-void svcerr_noprog(SVCXPRT * xprt, struct svc_req *req)
+void
+svcerr_noprog(SVCXPRT *xprt, struct svc_req *req)
 {
 	struct rpc_msg rply;
 
@@ -646,8 +664,9 @@ void svcerr_noprog(SVCXPRT * xprt, struct svc_req *req)
 /*
  * Program version mismatch error reply
  */
-void svcerr_progvers(SVCXPRT * xprt, struct svc_req *req, rpcvers_t low_vers,
-		     rpcvers_t high_vers)
+void
+svcerr_progvers(SVCXPRT *xprt, struct svc_req *req, rpcvers_t low_vers,
+		rpcvers_t high_vers)
 {
 	struct rpc_msg rply;
 
@@ -670,7 +689,8 @@ void svcerr_progvers(SVCXPRT * xprt, struct svc_req *req, rpcvers_t low_vers,
  */
 
 #if !defined(_WIN32)		/* XXX */
-void svc_getreq(int rdfds)
+void
+svc_getreq(int rdfds)
 {
 	fd_set readfds;
 
@@ -679,7 +699,8 @@ void svc_getreq(int rdfds)
 	svc_getreqset(&readfds);
 }
 
-void svc_getreqset(fd_set * readfds)
+void
+svc_getreqset(fd_set *readfds)
 {
 	int bit, fd;
 	fd_mask mask, *maskp;
@@ -698,7 +719,8 @@ void svc_getreqset(fd_set * readfds)
 	}
 }
 
-void svc_getreq_poll(struct pollfd *pfdp, int pollretval)
+void
+svc_getreq_poll(struct pollfd *pfdp, int pollretval)
 {
 	int i;
 	int fds_found;
@@ -728,7 +750,8 @@ void svc_getreq_poll(struct pollfd *pfdp, int pollretval)
 #endif				/* _WIN32 */
 
 #if defined(TIRPC_EPOLL)
-void svc_getreqset_epoll(struct epoll_event *events, int nfds)
+void
+svc_getreqset_epoll(struct epoll_event *events, int nfds)
 {
 	int ix, code __attribute__ ((unused)) = 0;
 	SVCXPRT *xprt;
@@ -743,7 +766,8 @@ void svc_getreqset_epoll(struct epoll_event *events, int nfds)
 }
 #endif				/* TIRPC_EPOLL */
 
-void svc_getreq_common(int fd)
+void
+svc_getreq_common(int fd)
 {
 	SVCXPRT *xprt;
 	bool code __attribute__ ((unused));
@@ -761,7 +785,8 @@ void svc_getreq_common(int fd)
 /* Allow internal or external getreq routines to validate xprt
  * has not been recursively disconnected.  (I don't completely buy the
  * logic, but it should be unchanged (Matt)) */
-bool svc_validate_xprt_list(SVCXPRT * xprt)
+bool
+svc_validate_xprt_list(SVCXPRT *xprt)
 {
 	bool code;
 
@@ -770,10 +795,11 @@ bool svc_validate_xprt_list(SVCXPRT * xprt)
 	return (code);
 }
 
-extern enum auth_stat svc_auth_authenticate(struct svc_req *, struct rpc_msg *,
-					    bool *);
+extern enum auth_stat
+svc_auth_authenticate(struct svc_req *, struct rpc_msg *, bool *);
 
-void svc_dispatch_default(SVCXPRT * xprt, struct rpc_msg **ind_msg)
+void
+svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg)
 {
 	struct svc_req r;
 	struct rpc_msg *msg = *ind_msg;
@@ -781,7 +807,7 @@ void svc_dispatch_default(SVCXPRT * xprt, struct rpc_msg **ind_msg)
 	svc_lookup_result_t lkp_res;
 	svc_rec_t *svc_rec;
 	enum auth_stat why;
-	bool no_dispatch = FALSE;
+	bool no_dispatch = false;
 
 	r.rq_xprt = xprt;
 	r.rq_prog = msg->rm_call.cb_prog;
@@ -811,11 +837,12 @@ void svc_dispatch_default(SVCXPRT * xprt, struct rpc_msg **ind_msg)
 	}
 }
 
-bool svc_getreq_default(SVCXPRT * xprt)
+bool
+svc_getreq_default(SVCXPRT *xprt)
 {
 	enum xprt_stat stat;
 	struct svc_req req = {.rq_xprt = xprt };
-	bool no_dispatch = FALSE;
+	bool no_dispatch = false;
 
 	/* XXX !MT-SAFE */
 
@@ -870,16 +897,10 @@ bool svc_getreq_default(SVCXPRT * xprt)
 		/* dispose RPC header */
 		(void)free_rpc_msg(req.rq_msg);
 
-		if ((stat = SVC_STAT(xprt)) == XPRT_DIED) {
-
-			/* XXX the xp_destroy methods call the new svc_rqst_xprt_unregister
-			 * routine, so there shouldn't be internal references to xprt.  The
-			 * API client could also override this routine.  Still, there may
-			 * be a motivation for adding a lifecycle callback, since the API
-			 * client can get a new-xprt callback, and could have kept the
-			 * address (and should now be notified we are disposing it). */
+		stat = SVC_STAT(xprt);
+		if (stat == XPRT_DIED) {
 			__warnx(TIRPC_DEBUG_FLAG_SVC,
-				"%s: stat == XPRT_DIED (%p) \n", __func__,
+				"%s: stat == XPRT_DIED (%p)\n", __func__,
 				xprt);
 			SVC_DESTROY(xprt);
 			break;
@@ -899,7 +920,8 @@ bool svc_getreq_default(SVCXPRT * xprt)
 	return (stat);
 }
 
-bool rpc_control(int what, void *arg)
+bool
+rpc_control(int what, void *arg)
 {
 	int val;
 
@@ -907,20 +929,21 @@ bool rpc_control(int what, void *arg)
 	case RPC_SVC_CONNMAXREC_SET:
 		val = *(int *)arg;
 		if (val <= 0)
-			return FALSE;
+			return false;
 		__svc_maxrec = val;
 		break;
 	case RPC_SVC_CONNMAXREC_GET:
 		*(int *)arg = __svc_maxrec;
 		break;
 	default:
-		return (FALSE);
+		return (false);
 	}
 
-	return (TRUE);
+	return (true);
 }
 
-int svc_shutdown(u_long flags)
+int
+svc_shutdown(u_long flags)
 {
 	int code = 0;
 

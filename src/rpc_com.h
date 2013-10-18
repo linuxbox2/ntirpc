@@ -55,10 +55,11 @@
 
 #ifndef __RPC_GETXID
 #define __RPC_GETXID(now) ((u_int32_t)getpid() ^ (u_int32_t)(now)->tv_sec ^ \
-                           (u_int32_t)((now)->tv_nsec))
+			   (u_int32_t)((now)->tv_nsec))
 #endif				/* !__RPC_GETXID */
 
-__BEGIN_DECLS extern u_int __rpc_get_a_size(int);
+__BEGIN_DECLS
+extern u_int __rpc_get_a_size(int);
 extern int __rpc_dtbsize(void);
 extern struct netconfig *__rpcgettp(int);
 extern int __rpc_get_default_domain(char **);
@@ -76,8 +77,8 @@ int __rpc_sockisbound(int);
 struct netbuf *__rpcb_findaddr(rpcprog_t, rpcvers_t, const struct netconfig *,
 			       const char *, CLIENT **);
 struct netbuf *__rpcb_findaddr_timed(rpcprog_t, rpcvers_t,
-				     const struct netconfig *, const char *host,
-				     CLIENT ** clpp, struct timeval *tp);
+				     const struct netconfig *, const char *,
+				     CLIENT **, struct timeval *);
 
 bool __rpc_control(int, void *);
 
@@ -95,7 +96,8 @@ void __xprt_set_raddr(SVCXPRT *, const struct sockaddr_storage *);
 
 #include <string.h>
 
-static inline char *rpc_strdup(const char *s)
+static inline char *
+rpc_strdup(const char *s)
 {
 	char *t = mem_alloc(strlen(s) + 1);
 	if (t)

@@ -36,8 +36,8 @@
 #ifndef _RPC_DES_H_
 #define _RPC_DES_H_
 
-#define DES_MAXLEN 	65536	/* maximum # of bytes to encrypt  */
-#define DES_QUICKLEN	16	/* maximum # of bytes to encrypt quickly */
+#define DES_MAXLEN	65536	/* maximum # of bytes to encrypt  */
+#define DES_QUICKLEN	16 /* maximum # of bytes to encrypt quickly */
 
 enum desdir { ENCRYPT, DECRYPT };
 enum desmode { CBC, ECB };
@@ -72,7 +72,7 @@ struct desparams {
  */
 #define	DESIOCBLOCK	_IOWR('d', 6, struct desparams)
 
-/* 
+/*
  * Encrypt of small amount of data, quickly
  */
 #define DESIOCQUICK	_IOWR('d', 7, struct desparams)

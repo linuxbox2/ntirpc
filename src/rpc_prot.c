@@ -59,24 +59,24 @@ extern struct opaque_auth _null_auth;
  * XDR an opaque authentication struct
  * (see auth.h)
  */
-bool xdr_opaque_auth(XDR * xdrs, struct opaque_auth *ap)
+bool
+xdr_opaque_auth(XDR *xdrs, struct opaque_auth *ap)
 {
-
 	assert(xdrs != NULL);
 	assert(ap != NULL);
 
 	if (inline_xdr_enum(xdrs, &(ap->oa_flavor)))
 		return (inline_xdr_bytes
 			(xdrs, &ap->oa_base, &ap->oa_length, MAX_AUTH_BYTES));
-	return (FALSE);
+	return (false);
 }
 
 /*
  * XDR a DES block
  */
-bool xdr_des_block(XDR * xdrs, des_block * blkp)
+bool
+xdr_des_block(XDR *xdrs, des_block *blkp)
 {
-
 	assert(xdrs != NULL);
 	assert(blkp != NULL);
 
@@ -89,17 +89,17 @@ bool xdr_des_block(XDR * xdrs, des_block * blkp)
 /*
  * XDR the MSG_ACCEPTED part of a reply message union
  */
-bool xdr_naccepted_reply(XDR * xdrs, struct accepted_reply *ar)
+bool
+xdr_naccepted_reply(XDR *xdrs, struct accepted_reply *ar)
 {
-
 	assert(xdrs != NULL);
 	assert(ar != NULL);
 
 	/* personalized union, rather than calling xdr_union */
 	if (!inline_xdr_opaque_auth(xdrs, &(ar->ar_verf)))
-		return (FALSE);
-	if (!inline_xdr_enum(xdrs, (enum_t *) & (ar->ar_stat)))
-		return (FALSE);
+		return (false);
+	if (!inline_xdr_enum(xdrs, (enum_t *) &(ar->ar_stat)))
+		return (false);
 	switch (ar->ar_stat) {
 
 	case SUCCESS:
@@ -107,7 +107,7 @@ bool xdr_naccepted_reply(XDR * xdrs, struct accepted_reply *ar)
 
 	case PROG_MISMATCH:
 		if (!inline_xdr_u_int32_t(xdrs, &(ar->ar_vers.low)))
-			return (FALSE);
+			return (false);
 		return (inline_xdr_u_int32_t(xdrs, &(ar->ar_vers.high)));
 
 	case GARBAGE_ARGS:
@@ -116,34 +116,34 @@ bool xdr_naccepted_reply(XDR * xdrs, struct accepted_reply *ar)
 	case PROG_UNAVAIL:
 		break;
 	}
-	return (TRUE);		/* TRUE => open ended set of problems */
+	return (true);		/* true => open ended set of problems */
 }
 
 /*
  * XDR the MSG_DENIED part of a reply message union
  */
-bool xdr_nrejected_reply(XDR * xdrs, struct rejected_reply * rr)
+bool
+xdr_nrejected_reply(XDR *xdrs, struct rejected_reply *rr)
 {
-
 	assert(xdrs != NULL);
 	assert(rr != NULL);
 
 	/* personalized union, rather than calling xdr_union */
-	if (!inline_xdr_enum(xdrs, (enum_t *) & (rr->rj_stat)))
-		return (FALSE);
+	if (!inline_xdr_enum(xdrs, (enum_t *) &(rr->rj_stat)))
+		return (false);
 	switch (rr->rj_stat) {
 
 	case RPC_MISMATCH:
 		if (!inline_xdr_u_int32_t(xdrs, &(rr->rj_vers.low)))
-			return (FALSE);
+			return (false);
 		return (inline_xdr_u_int32_t(xdrs, &(rr->rj_vers.high)));
 
 	case AUTH_ERROR:
-		return (inline_xdr_enum(xdrs, (enum_t *) & (rr->rj_why)));
+		return (inline_xdr_enum(xdrs, (enum_t *) &(rr->rj_why)));
 	}
 	/* NOTREACHED */
 	assert(0);
-	return (FALSE);
+	return (false);
 }
 
 static const struct xdr_discrim reply_dscrm[3] = {
@@ -155,19 +155,20 @@ static const struct xdr_discrim reply_dscrm[3] = {
 /*
  * XDR a reply message
  */
-bool xdr_nreplymsg(XDR * xdrs, struct rpc_msg *rmsg)
+bool
+xdr_nreplymsg(XDR *xdrs, struct rpc_msg *rmsg)
 {
 	assert(xdrs != NULL);
 	assert(rmsg != NULL);
 
 	if (inline_xdr_u_int32_t(xdrs, &(rmsg->rm_xid))
-	    && inline_xdr_enum(xdrs, (enum_t *) & (rmsg->rm_direction))
+	    && inline_xdr_enum(xdrs, (enum_t *) &(rmsg->rm_direction))
 	    && (rmsg->rm_direction == REPLY))
 		return (inline_xdr_union
-			(xdrs, (enum_t *) & (rmsg->rm_reply.rp_stat),
+			(xdrs, (enum_t *) &(rmsg->rm_reply.rp_stat),
 			 (caddr_t) (void *)&(rmsg->rm_reply.ru), reply_dscrm,
 			 NULL_xdrproc_t));
-	return (FALSE);
+	return (false);
 }
 
 /*
@@ -175,9 +176,9 @@ bool xdr_nreplymsg(XDR * xdrs, struct rpc_msg *rmsg)
  * The fields include: rm_xid, rm_direction, rpcvers, prog, and vers.
  * The rm_xid is not really static, but the user can easily munge on the fly.
  */
-bool xdr_ncallhdr(XDR * xdrs, struct rpc_msg * cmsg)
+bool
+xdr_ncallhdr(XDR *xdrs, struct rpc_msg *cmsg)
 {
-
 	assert(xdrs != NULL);
 	assert(cmsg != NULL);
 
@@ -185,18 +186,18 @@ bool xdr_ncallhdr(XDR * xdrs, struct rpc_msg * cmsg)
 	cmsg->rm_call.cb_rpcvers = RPC_MSG_VERSION;
 	if ((xdrs->x_op == XDR_ENCODE)
 	    && inline_xdr_u_int32_t(xdrs, &(cmsg->rm_xid))
-	    && inline_xdr_enum(xdrs, (enum_t *) & (cmsg->rm_direction))
+	    && inline_xdr_enum(xdrs, (enum_t *) &(cmsg->rm_direction))
 	    && inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_rpcvers))
 	    && inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_prog)))
 		return (inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_vers)));
-	return (FALSE);
+	return (false);
 }
 
 /* ************************** Client utility routine ************* */
 
-static void accepted(enum accept_stat acpt_stat, struct rpc_err *error)
+static void
+accepted(enum accept_stat acpt_stat, struct rpc_err *error)
 {
-
 	assert(error != NULL);
 
 	switch (acpt_stat) {
@@ -232,9 +233,9 @@ static void accepted(enum accept_stat acpt_stat, struct rpc_err *error)
 	error->re_lb.s2 = (int32_t) acpt_stat;
 }
 
-static void rejected(enum reject_stat rjct_stat, struct rpc_err *error)
+static void
+rejected(enum reject_stat rjct_stat, struct rpc_err *error)
 {
-
 	assert(error != NULL);
 
 	switch (rjct_stat) {
@@ -256,9 +257,9 @@ static void rejected(enum reject_stat rjct_stat, struct rpc_err *error)
 /*
  * given a reply message, fills in the error
  */
-void _seterr_reply(struct rpc_msg *msg, struct rpc_err *error)
+void
+_seterr_reply(struct rpc_msg *msg, struct rpc_err *error)
 {
-
 	assert(msg != NULL);
 	assert(error != NULL);
 

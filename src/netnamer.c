@@ -61,8 +61,9 @@ static int _getgroups(char *, gid_t *);
 /*
  * Convert network-name into unix credential
  */
-int netname2user(char netname[MAXNETNAMELEN + 1], uid_t * uidp, gid_t * gidp,
-		 int *gidlenp, gid_t * gidlist)
+int
+netname2user(char netname[MAXNETNAMELEN + 1], uid_t *uidp, gid_t *gidp,
+	     int *gidlenp, gid_t *gidlist)
 {
 	char *p;
 	int gidlen;
@@ -83,9 +84,8 @@ int netname2user(char netname[MAXNETNAMELEN + 1], uid_t * uidp, gid_t * gidp,
 			return (0);
 		*uidp = (uid_t) atol(p);
 		p = strsep(&res, "\n,");
-		if (p == NULL) {
+		if (p == NULL)
 			return (0);
-		}
 		*gidp = (gid_t) atol(p);
 		gidlen = 0;
 		for (gidlen = 0; gidlen < NGROUPS; gidlen++) {
@@ -222,17 +222,23 @@ int netname2host(char netname[MAXNETNAMELEN + 1], char *hostname, int hostlen)
  * reads the file /etc/netid looking for a + to optionally go to the
  * network information service.
  */
-int getnetid(char *key, char *ret; {
+int
+getnetid(char *key, char *ret) {
 	     char buf[1024];	/* big enough */
-	     char *res; char *mkey; char *mval; FILE * fd;
+	     char *res;
+	     char *mkey;
+	     char *mval;
+	     FILE *fd;
 #ifdef YP
 	     char *domain; int err; char *lookup; int len;
 #endif
-	     fd = fopen(NETIDFILE, "r"); if (fd == NULL) {
+	     fd = fopen(NETIDFILE, "r");
+	     if (fd == NULL) {
 #ifdef YP
-	     res = "+"; goto getnetidyp;
+		     res = "+";
+		     goto getnetidyp;
 #else
-	     return (0);
+		     return (0);
 #endif
 	     }
 	     for (;;) {

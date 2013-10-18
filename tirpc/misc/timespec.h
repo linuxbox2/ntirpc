@@ -35,40 +35,40 @@
 /* Operations on timespecs */
 #define timespecclear(tvp)      ((tvp)->tv_sec = (tvp)->tv_nsec = 0)
 #define timespecisset(tvp)      ((tvp)->tv_sec || (tvp)->tv_nsec)
-#define timespeccmp(tvp, uvp, cmp)                                      \
-    (((tvp)->tv_sec == (uvp)->tv_sec) ?                                 \
-     ((tvp)->tv_nsec cmp (uvp)->tv_nsec) :                              \
-     ((tvp)->tv_sec cmp (uvp)->tv_sec))
-#define timespecadd(vvp, uvp)                                           \
-    do {                                                                \
-        (vvp)->tv_sec += (uvp)->tv_sec;                                 \
-        (vvp)->tv_nsec += (uvp)->tv_nsec;                               \
-        if ((vvp)->tv_nsec >= 1000000000) {                             \
-            (vvp)->tv_sec++;                                            \
-            (vvp)->tv_nsec -= 1000000000;                               \
-        }                                                               \
-    } while (0)
-#define timespec_adds(vvp, s)                                           \
-    do {                                                                \
-        (vvp)->tv_sec += s;                                             \
-    } while (0)
+#define timespeccmp(tvp, uvp, cmp)		\
+	(((tvp)->tv_sec == (uvp)->tv_sec) ?	\
+	 ((tvp)->tv_nsec cmp(uvp)->tv_nsec) :	\
+	 ((tvp)->tv_sec cmp(uvp)->tv_sec))
+#define timespecadd(vvp, uvp)				\
+	do {						\
+		(vvp)->tv_sec += (uvp)->tv_sec;		\
+		(vvp)->tv_nsec += (uvp)->tv_nsec;	\
+		if ((vvp)->tv_nsec >= 1000000000) {	\
+			(vvp)->tv_sec++;		\
+			(vvp)->tv_nsec -= 1000000000;	\
+		}					\
+	} while (0)
+#define timespec_adds(vvp, s)			\
+	do {					\
+		(vvp)->tv_sec += s;		\
+	} while (0)
 
-#define timespec_addms(vvp, ms)                                         \
-    do {                                                                \
-        (vvp)->tv_sec += (ms) / 1000;                                   \
-        (vvp)->tv_nsec += (((ms) % 1000) * 1000000);                    \
-        if ((vvp)->tv_nsec >= 1000000000) {                             \
-            (vvp)->tv_sec++;                                            \
-            (vvp)->tv_nsec -= 1000000000;                               \
-        }                                                               \
-    } while (0)
-#define timespecsub(vvp, uvp)                                           \
-    do {                                                                \
-        (vvp)->tv_sec -= (uvp)->tv_sec;                                 \
-        (vvp)->tv_nsec -= (uvp)->tv_nsec;                               \
-        if ((vvp)->tv_nsec < 0) {                                       \
-            (vvp)->tv_sec--;                                            \
-            (vvp)->tv_nsec += 1000000000;                               \
-        }                                                               \
-    } while (0)
+#define timespec_addms(vvp, ms)					\
+	do {							\
+		(vvp)->tv_sec += (ms) / 1000;			\
+		(vvp)->tv_nsec += (((ms) % 1000) * 1000000);	\
+		if ((vvp)->tv_nsec >= 1000000000) {		\
+			(vvp)->tv_sec++;			\
+			(vvp)->tv_nsec -= 1000000000;		\
+		}						\
+	} while (0)
+#define timespecsub(vvp, uvp)				\
+	do {						\
+		(vvp)->tv_sec -= (uvp)->tv_sec;		\
+		(vvp)->tv_nsec -= (uvp)->tv_nsec;	\
+		if ((vvp)->tv_nsec < 0) {		\
+			(vvp)->tv_sec--;		\
+			(vvp)->tv_nsec += 1000000000;	\
+		}					\
+	} while (0)
 #endif				/* TIMESPEC_H */

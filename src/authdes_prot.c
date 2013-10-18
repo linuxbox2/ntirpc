@@ -42,43 +42,45 @@
 #include <rpc/auth.h>
 #include <rpc/auth_des.h>
 
-#define ATTEMPT(xdr_op) if (!(xdr_op)) return (FALSE)
+#define ATTEMPT(xdr_op) if (!(xdr_op)) return (false)
 
-bool xdr_authdes_cred(XDR * xdrs, struct authdes_cred * cred)
+bool
+xdr_authdes_cred(XDR *xdrs, struct authdes_cred *cred)
 {
 	/*
 	 * Unrolled xdr
 	 */
-	ATTEMPT(inline_xdr_enum(xdrs, (enum_t *) & cred->adc_namekind));
+	ATTEMPT(inline_xdr_enum(xdrs, (enum_t *) &cred->adc_namekind));
 	switch (cred->adc_namekind) {
 	case ADN_FULLNAME:
 		ATTEMPT(inline_xdr_string
 			(xdrs, &cred->adc_fullname.name, MAXNETNAMELEN));
 		ATTEMPT(inline_xdr_opaque
-			(xdrs, (caddr_t) & cred->adc_fullname.key,
+			(xdrs, (caddr_t) &cred->adc_fullname.key,
 			 sizeof(des_block)));
 		ATTEMPT(inline_xdr_opaque
-			(xdrs, (caddr_t) & cred->adc_fullname.window,
+			(xdrs, (caddr_t) &cred->adc_fullname.window,
 			 sizeof(cred->adc_fullname.window)));
-		return (TRUE);
+		return (true);
 	case ADN_NICKNAME:
 		ATTEMPT(inline_xdr_opaque
-			(xdrs, (caddr_t) & cred->adc_nickname,
+			(xdrs, (caddr_t) &cred->adc_nickname,
 			 sizeof(cred->adc_nickname)));
-		return (TRUE);
+		return (true);
 	default:
-		return (FALSE);
+		return (false);
 	}
 }
 
-bool xdr_authdes_verf(XDR * xdrs, struct authdes_verf * verf)
+bool
+xdr_authdes_verf(XDR *xdrs, struct authdes_verf *verf)
 {
 	/*
 	 * Unrolled xdr
 	 */
 	ATTEMPT(inline_xdr_opaque
-		(xdrs, (caddr_t) & verf->adv_xtimestamp, sizeof(des_block)));
+		(xdrs, (caddr_t) &verf->adv_xtimestamp, sizeof(des_block)));
 	ATTEMPT(inline_xdr_opaque
-		(xdrs, (caddr_t) & verf->adv_int_u, sizeof(verf->adv_int_u)));
-	return (TRUE);
+		(xdrs, (caddr_t) &verf->adv_int_u, sizeof(verf->adv_int_u)));
+	return (true);
 }

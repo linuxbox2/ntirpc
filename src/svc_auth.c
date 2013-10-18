@@ -27,7 +27,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 /*
- * Copyright (c) 1986-1991 by Sun Microsystems Inc. 
+ * Copyright (c) 1986-1991 by Sun Microsystems Inc.
  */
 
 /*
@@ -63,7 +63,7 @@ struct authsvc {
 	enum auth_stat (*handler) (struct svc_req *, struct rpc_msg *);
 	struct authsvc *next;
 };
-static struct authsvc *Auths = NULL;
+static struct authsvc *Auths;
 
 /*
  * The call rpc message, msg has been obtained from the wire.  The msg contains
@@ -81,25 +81,23 @@ static struct authsvc *Auths = NULL;
  *
  * There is an assumption that any flavour less than AUTH_NULL is invalid.
  */
-enum auth_stat svc_auth_authenticate(struct svc_req *req, struct rpc_msg *msg,
-				     bool * no_dispatch)
+enum auth_stat
+svc_auth_authenticate(struct svc_req *req, struct rpc_msg *msg,
+		      bool *no_dispatch)
 {
 	int cred_flavor;
 	struct authsvc *asp;
 	enum auth_stat rslt;
 	extern mutex_t authsvc_lock;
 
-/* VARIABLES PROTECTED BY authsvc_lock: asp, Auths */
-
+	/* VARIABLES PROTECTED BY authsvc_lock: asp, Auths */
 	req->rq_cred = msg->rm_call.cb_cred;
 	req->rq_verf.oa_flavor = _null_auth.oa_flavor;
 	req->rq_verf.oa_length = 0;
 	cred_flavor = req->rq_cred.oa_flavor;
 	switch (cred_flavor) {
 	case RPCSEC_GSS:
-		{
-			rslt = _svcauth_gss(req, msg, no_dispatch);
-		}
+		rslt = _svcauth_gss(req, msg, no_dispatch);
 		return (rslt);
 	case AUTH_NONE:
 		rslt = _svcauth_none(req, msg);

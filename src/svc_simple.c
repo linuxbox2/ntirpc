@@ -88,12 +88,13 @@ static const char __no_mem_str[] = "out of memory";
  * should not use the simplified interfaces like this.
  */
 
-int rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
-	    char *(*progname) (char *), xdrproc_t inproc, xdrproc_t outproc,
-	    char *nettype)
+int
+rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
+	char *(*progname) (char *), xdrproc_t inproc, xdrproc_t outproc,
+	char *nettype)
 {
 	struct netconfig *nconf;
-	int done = FALSE;
+	int done = false;
 	void *handle;
 	extern mutex_t proglst_lock;
 
@@ -106,12 +107,13 @@ int rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 
 	if (nettype == NULL)
 		nettype = "netpath";	/* The default behavior */
-	if ((handle = __rpc_setconf(nettype)) == NULL) {
+	handle = __rpc_setconf(nettype);
+	if (!handle) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC, rpc_reg_err, rpc_reg_msg,
 			__reg_err1);
 		return (-1);
 	}
-/* VARIABLES PROTECTED BY proglst_lock: proglst */
+	/* VARIABLES PROTECTED BY proglst_lock: proglst */
 	mutex_lock(&proglst_lock);
 	while ((nconf = __rpc_getconf(handle)) != NULL) {
 		struct proglst *pl;
@@ -121,7 +123,7 @@ int rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 		char *xdrbuf;
 		char *netid;
 
-		madenow = FALSE;
+		madenow = false;
 		svcxprt = NULL;
 		recvsz = 0;
 		xdrbuf = netid = NULL;
@@ -154,14 +156,19 @@ int rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 				SVC_DESTROY(svcxprt);
 				continue;
 			}
-			if (((xdrbuf = mem_alloc((unsigned)recvsz)) == NULL)
-			    || ((netid = rpc_strdup(nconf->nc_netid)) == NULL)) {
+			xdrbuf = mem_alloc((unsigned)recvsz);
+			if (xdrbuf)
+				netid = rpc_strdup(nconf->nc_netid);
+			if ((!xdrbuf) ||
+			    (!netid)) {
+				if (xdrbuf)
+					mem_free(xdrbuf, (unsigned)recvsz);
 				__warnx(TIRPC_DEBUG_FLAG_SVC, rpc_reg_err,
 					rpc_reg_msg, __no_mem_str);
 				SVC_DESTROY(svcxprt);
 				break;
 			}
-			madenow = TRUE;
+			madenow = true;
 		}
 		/*
 		 * Check if this (program, version, netid) had already been
@@ -215,12 +222,12 @@ int rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 		pl->p_netid = netid;
 		pl->p_nxt = proglst;
 		proglst = pl;
-		done = TRUE;
+		done = true;
 	}
 	__rpc_endconf(handle);
 	mutex_unlock(&proglst_lock);
 
-	if (done == FALSE) {
+	if (done == false) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC,
 			"%s cant find suitable transport for %s", rpc_reg_msg,
 			nettype);
@@ -234,7 +241,8 @@ int rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
  * It handles both the connectionless and the connection oriented cases.
  */
 
-static void universal(struct svc_req *req, SVCXPRT * transp)
+static void
+universal(struct svc_req *req, SVCXPRT *transp)
 {
 	rpcprog_t prog;
 	rpcvers_t vers;
@@ -249,7 +257,7 @@ static void universal(struct svc_req *req, SVCXPRT * transp)
 	 */
 	if (req->rq_proc == NULLPROC) {
 		if (svc_sendreply(transp, req, (xdrproc_t) xdr_void, NULL) ==
-		    FALSE) {
+		    false) {
 			__warnx(TIRPC_DEBUG_FLAG_SVC, "svc_sendreply failed");
 		}
 		return;
@@ -284,7 +292,8 @@ static void universal(struct svc_req *req, SVCXPRT * transp)
 				mutex_unlock(&proglst_lock);
 				return;
 			}
-			if (!svc_sendreply(transp, req, pl->p_outproc, outdata)) {
+			if (!svc_sendreply(transp, req, pl->p_outproc,
+					   outdata)) {
 				__warnx(TIRPC_DEBUG_FLAG_SVC,
 					"rpc: rpc_reg trouble replying to prog %u vers %u",
 					(unsigned)prog, (unsigned)vers);

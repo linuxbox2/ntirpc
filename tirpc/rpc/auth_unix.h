@@ -67,14 +67,15 @@ struct authunix_parms {
 
 #define authsys_parms authunix_parms
 
-__BEGIN_DECLS extern bool xdr_authunix_parms(XDR *, struct authunix_parms *);
+__BEGIN_DECLS
+extern bool xdr_authunix_parms(XDR *, struct authunix_parms *);
 __END_DECLS
 /*
  * If a response verifier has flavor AUTH_SHORT,
  * then the body of the response verifier encapsulates the following structure;
  * again it is serialized in the obvious fashion.
  */
-    struct short_hand_verf {
+struct short_hand_verf {
 	struct opaque_auth new_cred;
 };
 

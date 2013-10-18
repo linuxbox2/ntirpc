@@ -8,7 +8,7 @@
 
 /* from opr.h */
 #define opr_containerof(ptr, structure, member) \
-   ((structure *)((char *)(ptr)-(char *)(&((structure *)NULL)->member)))
+	((structure *)((char *)(ptr)-(char *)(&((structure *)NULL)->member)))
 
 struct opr_rbtree_node {
 	struct opr_rbtree_node *left;
@@ -17,8 +17,8 @@ struct opr_rbtree_node {
 	int red;
 };
 
-typedef int (*opr_rbtree_cmpf_t) (const struct opr_rbtree_node * lhs,
-				  const struct opr_rbtree_node * rhs);
+typedef int (*opr_rbtree_cmpf_t) (const struct opr_rbtree_node *lhs,
+				  const struct opr_rbtree_node *rhs);
 
 struct opr_rbtree {
 	struct opr_rbtree_node *root;

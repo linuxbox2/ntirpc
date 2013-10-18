@@ -235,14 +235,12 @@ static uint64 HashLen33to64(const char *s, size_t len)
 uint64 CityHash64(const char *s, size_t len)
 {
 	if (len <= 32) {
-		if (len <= 16) {
+		if (len <= 16)
 			return HashLen0to16(s, len);
-		} else {
+		else
 			return HashLen17to32(s, len);
-		}
-	} else if (len <= 64) {
+	} else if (len <= 64)
 		return HashLen33to64(s, len);
-	}
 
 	/* For strings over 64 bytes we hash the end first, and then as we
 	 * loop we keep 56 bytes of state: v, w, x, y, and z. */
@@ -255,8 +253,8 @@ uint64 CityHash64(const char *s, size_t len)
 	uint128 w = WeakHashLen32WithSeeds(s + len - 32, y + k1, x);
 	x = x * k1 + Fetch64(s);
 
-	/* Decrease len to the nearest multiple of 64, and operate on 64-byte chunks.
-	 */
+	/* Decrease len to the nearest multiple of 64, and operate on 64-byte
+	 * chunks. */
 	len = (len - 1) & ~(size_t) (63);
 	do {
 		x = Rotate(x + y + v.first + Fetch64(s + 8), 37) * k1;
@@ -297,11 +295,11 @@ static uint128 CityMurmur(const char *s, size_t len, uint128 seed)
 	uint64 c = 0;
 	uint64 d = 0;
 	signed long l = len - 16;
-	if (l <= 0) {		// len <= 16
+	if (l <= 0) {		/* len <= 16 */
 		a = ShiftMix(a * k1) * k1;
 		c = b * k1 + HashLen0to16(s, len);
 		d = ShiftMix(a + (len >= 8 ? Fetch64(s) : c));
-	} else {		// len > 16
+	} else {		/* len > 16 */
 		c = HashLen16(Fetch64(s + len - 8) + k1, a);
 		d = HashLen16(b + len, c + Fetch64(s + len - 16));
 		a += d;
@@ -327,9 +325,8 @@ static uint128 CityMurmur(const char *s, size_t len, uint128 seed)
 
 uint128 CityHash128WithSeed(const char *s, size_t len, uint128 seed)
 {
-	if (len < 128) {
+	if (len < 128)
 		return CityMurmur(s, len, seed);
-	}
 
 	/* We expect len >= 128 to be the common case.  Keep 56 bytes of state:
 	 * v, w, x, y, and z. */
@@ -373,8 +370,8 @@ uint128 CityHash128WithSeed(const char *s, size_t len, uint128 seed)
 	} while (LIKELY(len >= 128));
 	x += Rotate(v.first + z, 49) * k0;
 	z += Rotate(w.first, 37) * k0;
-	/* If 0 < len < 128, hash up to 4 chunks of 32 bytes each from the end of s.
-	 */
+	/* If 0 < len < 128, hash up to 4 chunks of 32 bytes each from the end
+	 * of s. */
 	size_t tail_done;
 	for (tail_done = 0; tail_done < len;) {
 		tail_done += 32;
@@ -497,7 +494,7 @@ static void CityHashCrc256Long(const char *s, size_t len, uint32 seed,
 }
 
 /* Requires len < 240. */
-static void CityHashCrc256Short(const char *s, size_t len, uint64 * result)
+static void CityHashCrc256Short(const char *s, size_t len, uint64 *result)
 {
 	char buf[240];
 	memcpy(buf, s, len);
@@ -505,13 +502,12 @@ static void CityHashCrc256Short(const char *s, size_t len, uint64 * result)
 	CityHashCrc256Long(buf, 240, ~(uint32) (len), result);
 }
 
-void CityHashCrc256(const char *s, size_t len, uint64 * result)
+void CityHashCrc256(const char *s, size_t len, uint64 *result)
 {
-	if (LIKELY(len >= 240)) {
+	if (LIKELY(len >= 240))
 		CityHashCrc256Long(s, len, 0, result);
-	} else {
+	else
 		CityHashCrc256Short(s, len, result);
-	}
 }
 
 uint128 CityHashCrc128WithSeed(const char *s, size_t len, uint128 seed)

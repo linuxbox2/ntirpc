@@ -63,17 +63,19 @@ static struct authgss_hash_st authgss_hash_st = {
 	 255,			/* cachesz */
 	 NULL			/* tree */
 	 },			/* xt */
-	FALSE			/* initialized */
+	false			/* initialized */
 };
 
-static inline uint64_t gss_ctx_hash(gss_union_ctx_id_desc * gss_ctx)
+static inline uint64_t
+gss_ctx_hash(gss_union_ctx_id_desc *gss_ctx)
 {
 	return ((uint64_t) gss_ctx->mech_type +
 		(uint64_t) gss_ctx->internal_ctx_id);
 }
 
-static int svc_rpc_gss_cmpf(const struct opr_rbtree_node *lhs,
-			    const struct opr_rbtree_node *rhs)
+static int
+svc_rpc_gss_cmpf(const struct opr_rbtree_node *lhs,
+		 const struct opr_rbtree_node *rhs)
 {
 	struct svc_rpc_gss_data *lk, *rk;
 
@@ -89,7 +91,8 @@ static int svc_rpc_gss_cmpf(const struct opr_rbtree_node *lhs,
 	return (1);
 }
 
-void authgss_hash_init()
+void
+authgss_hash_init()
 {
 	int ix, code = 0;
 
@@ -131,20 +134,21 @@ void authgss_hash_init()
 	authgss_hash_st.size = 0;
 	authgss_hash_st.max_part =
 	    __svc_params->gss.max_gc / authgss_hash_st.xt.npart;
-	authgss_hash_st.initialized = TRUE;
+	authgss_hash_st.initialized = true;
 
  unlock:
 	mutex_unlock(&authgss_hash_st.lock);
 }
 
 #define cond_init_authgss_hash() { \
-        do { \
-            if (! authgss_hash_st.initialized) \
-                authgss_hash_init(); \
-        } while (0); \
-    }
+		do { \
+			if (!authgss_hash_st.initialized) \
+				authgss_hash_init(); \
+		} while (0); \
+	}
 
-struct svc_rpc_gss_data *authgss_ctx_hash_get(struct rpc_gss_cred *gc)
+struct svc_rpc_gss_data *
+authgss_ctx_hash_get(struct rpc_gss_cred *gc)
 {
 	struct svc_rpc_gss_data gk, *gd = NULL;
 	gss_union_ctx_id_desc *gss_ctx;
@@ -176,7 +180,8 @@ struct svc_rpc_gss_data *authgss_ctx_hash_get(struct rpc_gss_cred *gc)
 	return (gd);
 }
 
-bool authgss_ctx_hash_set(struct svc_rpc_gss_data * gd)
+bool
+authgss_ctx_hash_set(struct svc_rpc_gss_data *gd)
 {
 	struct rbtree_x_part *t;
 	struct authgss_x_part *axp;
@@ -205,7 +210,8 @@ bool authgss_ctx_hash_set(struct svc_rpc_gss_data * gd)
 	return (rslt);
 }
 
-bool authgss_ctx_hash_del(struct svc_rpc_gss_data * gd)
+bool
+authgss_ctx_hash_del(struct svc_rpc_gss_data *gd)
 {
 	struct rbtree_x_part *t;
 	struct authgss_x_part *axp;
@@ -225,10 +231,11 @@ bool authgss_ctx_hash_del(struct svc_rpc_gss_data * gd)
 	/* release gd */
 	unref_svc_rpc_gss_data(gd, SVC_RPC_GSS_FLAG_NONE);
 
-	return (TRUE);
+	return (true);
 }
 
-static inline bool authgss_ctx_expired(struct svc_rpc_gss_data *gd)
+static inline bool
+authgss_ctx_expired(struct svc_rpc_gss_data *gd)
 {
 	OM_uint32 maj_stat, min_stat;
 	maj_stat =
@@ -237,7 +244,7 @@ static inline bool authgss_ctx_expired(struct svc_rpc_gss_data *gd)
 	return (maj_stat == GSS_S_CONTEXT_EXPIRED);
 }
 
-static uint32_t idle_next = 0;	/* by definition */
+static uint32_t idle_next;
 
 #define IDLE_NEXT() \
 	(atomic_inc_uint32_t(&(idle_next)) % authgss_hash_st.xt.npart)

@@ -82,8 +82,8 @@ struct cache_entry {
 	struct timeval laststamp;	/* detect replays of creds */
 	char *localcred;	/* generic local credential */
 };
-static struct cache_entry *authdes_cache /* [AUTHDES_CACHESZ] */ ;
-static short *authdes_lru /* [AUTHDES_CACHESZ] */ ;
+static struct cache_entry *authdes_cache /* [AUTHDES_CACHESZ] */;
+static short *authdes_lru /* [AUTHDES_CACHESZ] */;
 
 static void cache_init(void);	/* initialize the cache */
 static short cache_spot(void);	/* find an entry in the cache */
@@ -92,7 +92,7 @@ static void cache_ref(short sid);	/* note that sid was ref'd */
 static void invalidate(void);	/* invalidate entry in cache */
 
 /*
- * cache statistics 
+ * cache statistics
  */
 static struct {
 	u_long ncachehits;	/* times cache hit, and is not replay */
@@ -103,9 +103,9 @@ static struct {
 /*
  * Service side authenticator for AUTH_DES
  */
-enum auth_stat _svcauth_des(struct svc_req *req, struct rpc_msg *msg)
+enum auth_stat
+_svcauth_des(struct svc_req *req, struct rpc_msg *msg)
 {
-
 	long *ixdr;
 	des_block cryptbuf[2];
 	struct authdes_cred *cred;
@@ -126,9 +126,8 @@ enum auth_stat _svcauth_des(struct svc_req *req, struct rpc_msg *msg)
 	/* Initialize reply. */
 	req->rq_verf = _null_auth;
 
-	if (authdes_cache == NULL) {
+	if (!authdes_cache)
 		cache_init();
-	}
 
 	area = (struct area *)req->rq_clntcred;
 	cred = (struct authdes_cred *)&area->area_cred;
@@ -141,19 +140,18 @@ enum auth_stat _svcauth_des(struct svc_req *req, struct rpc_msg *msg)
 	switch (cred->adc_namekind) {
 	case ADN_FULLNAME:
 		namelen = IXDR_GET_U_LONG(ixdr);
-		if (namelen > MAXNETNAMELEN) {
+		if (namelen > MAXNETNAMELEN)
 			return (AUTH_BADCRED);
-		}
 		cred->adc_fullname.name = area->area_netname;
 		bcopy((char *)ixdr, cred->adc_fullname.name, (u_int) namelen);
 		cred->adc_fullname.name[namelen] = 0;
 		ixdr += (RNDUP(namelen) / BYTES_PER_XDR_UNIT);
-		cred->adc_fullname.key.key.high = (u_long) * ixdr++;
-		cred->adc_fullname.key.key.low = (u_long) * ixdr++;
-		cred->adc_fullname.window = (u_long) * ixdr++;
+		cred->adc_fullname.key.key.high = (u_long) *ixdr++;
+		cred->adc_fullname.key.key.low = (u_long) *ixdr++;
+		cred->adc_fullname.window = (u_long) *ixdr++;
 		break;
 	case ADN_NICKNAME:
-		cred->adc_nickname = (u_long) * ixdr++;
+		cred->adc_nickname = (u_long) *ixdr++;
 		break;
 	default:
 		return (AUTH_BADCRED);
@@ -163,9 +161,9 @@ enum auth_stat _svcauth_des(struct svc_req *req, struct rpc_msg *msg)
 	 * Get the verifier
 	 */
 	ixdr = (long *)msg->rm_call.cb_verf.oa_base;
-	verf.adv_xtimestamp.key.high = (u_long) * ixdr++;
-	verf.adv_xtimestamp.key.low = (u_long) * ixdr++;
-	verf.adv_int_u = (u_long) * ixdr++;
+	verf.adv_xtimestamp.key.high = (u_long) *ixdr++;
+	verf.adv_xtimestamp.key.low = (u_long) *ixdr++;
+	verf.adv_int_u = (u_long) *ixdr++;
 
 	/*
 	 * Get the conversation key
@@ -285,7 +283,7 @@ enum auth_stat _svcauth_des(struct svc_req *req, struct rpc_msg *msg)
 	IXDR_PUT_LONG(ixdr, timestamp.tv_sec - 1);
 	IXDR_PUT_LONG(ixdr, timestamp.tv_usec);
 
-	/*       
+	/*
 	 * encrypt the timestamp
 	 */
 	status =
@@ -319,20 +317,18 @@ enum auth_stat _svcauth_des(struct svc_req *req, struct rpc_msg *msg)
 	if (cred->adc_namekind == ADN_FULLNAME) {
 		cred->adc_fullname.window = window;
 		cred->adc_nickname = (u_long) sid;	/* save nickname */
-		if (entry->rname != NULL) {
+		if (entry->rname != NULL)
 			mem_free(entry->rname, strlen(entry->rname) + 1);
-		}
 		entry->rname =
 		    (char *)mem_alloc((u_int) strlen(cred->adc_fullname.name)
 				      + 1);
-		if (entry->rname != NULL) {
+		if (entry->rname != NULL)
 			(void)strcpy(entry->rname, cred->adc_fullname.name);
-		} else {
+		else
 			debug("out of memory");
-		}
 		entry->key = *sessionkey;
 		entry->window = window;
-		invalidate(entry->localcred);	/* mark any cached cred invalid */
+		invalidate(entry->localcred); /* mark any cached cred invalid */
 	} else {		/* ADN_NICKNAME */
 		/*
 		 * nicknames are cooked into fullnames
@@ -348,7 +344,8 @@ enum auth_stat _svcauth_des(struct svc_req *req, struct rpc_msg *msg)
 /*
  * Initialize the cache
  */
-static void cache_init(void)
+static
+void cache_init(void)
 {
 	int i;
 
@@ -362,6 +359,7 @@ static void cache_init(void)
 	 * Initialize the lru list
 	 */
 	for (i = 0; i < AUTHDES_CACHESZ; i++) {
+		/* suppress block warning */
 		authdes_lru[i] = i;
 	}
 }
@@ -369,7 +367,9 @@ static void cache_init(void)
 /*
  * Find the lru victim
  */
-static short cache_victim(void)
+static
+short
+cache_victim(void)
 {
 	return (authdes_lru[AUTHDES_CACHESZ - 1]);
 }
@@ -377,7 +377,9 @@ static short cache_victim(void)
 /*
  * Note that sid was referenced
  */
-static void cache_ref(short sid)
+static
+void
+cache_ref(short sid)
 {
 	int i;
 	short curr;
@@ -397,7 +399,9 @@ static void cache_ref(short sid)
  * the items given.  Return -1 if a replay is detected, otherwise
  * return the spot in the cache.
  */
-static short cache_spot(des_block * key, char *name, struct timeval *timestamp)
+static
+short
+cache_spot(des_block *key, char *name, struct timeval *timestamp)
 {
 	struct cache_entry *cp;
 	int i;
@@ -426,8 +430,8 @@ static short cache_spot(des_block * key, char *name, struct timeval *timestamp)
  * NOTE: bsd unix dependent.
  * Other operating systems should put something else here.
  */
-#define UNKNOWN 	-2	/* grouplen, if cached cred is unknown user */
-#define INVALID		-1	/* grouplen, if cache entry is invalid */
+#define UNKNOWN -2 /* grouplen, if cached cred is unknown user */
+#define INVALID	-1 /* grouplen, if cache entry is invalid */
 
 struct bsdcred {
 	short uid;		/* cached uid */
@@ -442,8 +446,9 @@ struct bsdcred {
  * not have to make an rpc call every time to interpret
  * the credential.
  */
-int authdes_getucred(struct authdes_cred *adc, uid_t * uid, gid_t * gid,
-		     int *grouplen, gid_t * groups)
+int
+authdes_getucred(struct authdes_cred *adc, uid_t *uid, gid_t *gid,
+		 int *grouplen, gid_t *groups)
 {
 	unsigned sid;
 	int i;
@@ -471,7 +476,8 @@ int authdes_getucred(struct authdes_cred *adc, uid_t * uid, gid_t * gid,
 		    (adc->adc_fullname.name, &i_uid, &i_gid, &i_grouplen,
 		     groups)) {
 			debug("unknown netname");
-			cred->grouplen = UNKNOWN;	/* mark as lookup up, but not found */
+			cred->grouplen = UNKNOWN; /* mark as lookup up, but
+						   * not found */
 			return (0);
 		}
 		debug("missed ucred cache");
@@ -479,6 +485,7 @@ int authdes_getucred(struct authdes_cred *adc, uid_t * uid, gid_t * gid,
 		*gid = cred->gid = i_gid;
 		*grouplen = cred->grouplen = i_grouplen;
 		for (i = i_grouplen - 1; i >= 0; i--) {
+			/* suppress block warning */
 			cred->groups[i] = groups[i];	/* int to short */
 		}
 		return (1);
@@ -496,16 +503,17 @@ int authdes_getucred(struct authdes_cred *adc, uid_t * uid, gid_t * gid,
 	*gid = cred->gid;
 	*grouplen = cred->grouplen;
 	for (i = cred->grouplen - 1; i >= 0; i--) {
+		/* suppress block warning */
 		groups[i] = cred->groups[i];	/* short to int */
 	}
 	return (1);
 }
 
-static void invalidate(char *cred)
+static void
+invalidate(char *cred)
 {
-	if (cred == NULL) {
+	if (cred == NULL)
 		return;
-	}
 	((struct bsdcred *)cred)->grouplen = INVALID;
 }
 #endif

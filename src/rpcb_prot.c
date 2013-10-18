@@ -43,26 +43,20 @@
 #include <rpc/xdr.h>
 #include <rpc/rpcb_prot.h>
 
-bool xdr_rpcb(xdrs, objp)
-XDR *xdrs;
-RPCB *objp;
+bool
+xdr_rpcb(XDR *xdrs, RPCB *objp)
 {
-	if (!xdr_u_int32_t(xdrs, &objp->r_prog)) {
-		return (FALSE);
-	}
-	if (!xdr_u_int32_t(xdrs, &objp->r_vers)) {
-		return (FALSE);
-	}
-	if (!xdr_string(xdrs, &objp->r_netid, (u_int) ~ 0)) {
-		return (FALSE);
-	}
-	if (!xdr_string(xdrs, &objp->r_addr, (u_int) ~ 0)) {
-		return (FALSE);
-	}
-	if (!xdr_string(xdrs, &objp->r_owner, (u_int) ~ 0)) {
-		return (FALSE);
-	}
-	return (TRUE);
+	if (!xdr_u_int32_t(xdrs, &objp->r_prog))
+		return (false);
+	if (!xdr_u_int32_t(xdrs, &objp->r_vers))
+		return (false);
+	if (!xdr_string(xdrs, &objp->r_netid, (u_int) ~ 0))
+		return (false);
+	if (!xdr_string(xdrs, &objp->r_addr, (u_int) ~ 0))
+		return (false);
+	if (!xdr_string(xdrs, &objp->r_owner, (u_int) ~ 0))
+		return (false);
+	return (true);
 }
 
 /*
@@ -77,8 +71,8 @@ RPCB *objp;
  *
  * Recall that "pointers" in XDR are encoded as a boolean, indicating whether
  * there's any data behind the pointer, followed by the data (if any exists).
- * The boolean can be interpreted as ``more data follows me''; if FALSE then
- * nothing follows the boolean; if TRUE then the boolean is followed by an
+ * The boolean can be interpreted as ``more data follows me''; if false then
+ * nothing follows the boolean; if true then the boolean is followed by an
  * actual struct rpcb, and another rpcblist_ptr (declared in RPCL as "struct
  * rpcblist *").
  *
@@ -88,9 +82,8 @@ RPCB *objp;
  * serialize the rpcb elements.
  */
 
-bool xdr_rpcblist_ptr(xdrs, rp)
-XDR *xdrs;
-rpcblist_ptr *rp;
+bool
+xdr_rpcblist_ptr(XDR *xdrs, rpcblist_ptr *rp)
 {
 	/*
 	 * more_elements is pre-computed in case the direction is
@@ -106,10 +99,10 @@ rpcblist_ptr *rp;
 	for (;;) {
 		more_elements = (bool_t) (*rp != NULL);
 		if (!xdr_bool(xdrs, &more_elements)) {
-			return (FALSE);
+			return (false);
 		}
 		if (!more_elements) {
-			return (TRUE);	/* we are done */
+			return (true);	/* we are done */
 		}
 		/*
 		 * the unfortunate side effect of non-recursion is that in
@@ -121,7 +114,7 @@ rpcblist_ptr *rp;
 		if (!xdr_reference
 		    (xdrs, (caddr_t *) rp, (u_int) sizeof(rpcblist),
 		     (xdrproc_t) xdr_rpcb)) {
-			return (FALSE);
+			return (false);
 		}
 		if (freeing) {
 			next_copy = next;
@@ -141,9 +134,8 @@ rpcblist_ptr *rp;
  * xdr_rpcblist() is specified to take a RPCBLIST **, but is identical in
  * functionality to xdr_rpcblist_ptr().
  */
-bool xdr_rpcblist(xdrs, rp)
-XDR *xdrs;
-RPCBLIST **rp;
+bool
+xdr_rpcblist(XDR *xdrs, RPCBLIST **rp)
 {
 	bool dummy;
 
@@ -151,31 +143,24 @@ RPCBLIST **rp;
 	return (dummy);
 }
 
-bool xdr_rpcb_entry(xdrs, objp)
-XDR *xdrs;
-rpcb_entry *objp;
+bool
+xdr_rpcb_entry(XDR *xdrs, rpcb_entry *objp)
 {
-	if (!xdr_string(xdrs, &objp->r_maddr, (u_int) ~ 0)) {
-		return (FALSE);
-	}
-	if (!xdr_string(xdrs, &objp->r_nc_netid, (u_int) ~ 0)) {
-		return (FALSE);
-	}
-	if (!xdr_u_int32_t(xdrs, &objp->r_nc_semantics)) {
-		return (FALSE);
-	}
-	if (!xdr_string(xdrs, &objp->r_nc_protofmly, (u_int) ~ 0)) {
-		return (FALSE);
-	}
-	if (!xdr_string(xdrs, &objp->r_nc_proto, (u_int) ~ 0)) {
-		return (FALSE);
-	}
-	return (TRUE);
+	if (!xdr_string(xdrs, &objp->r_maddr, (u_int) ~ 0))
+		return (false);
+	if (!xdr_string(xdrs, &objp->r_nc_netid, (u_int) ~ 0))
+		return (false);
+	if (!xdr_u_int32_t(xdrs, &objp->r_nc_semantics))
+		return (false);
+	if (!xdr_string(xdrs, &objp->r_nc_protofmly, (u_int) ~ 0))
+		return (false);
+	if (!xdr_string(xdrs, &objp->r_nc_proto, (u_int) ~ 0))
+		return (false);
+	return (true);
 }
 
-bool xdr_rpcb_entry_list_ptr(xdrs, rp)
-XDR *xdrs;
-rpcb_entry_list_ptr *rp;
+bool
+xdr_rpcb_entry_list_ptr(XDR *xdrs, rpcb_entry_list_ptr *rp)
 {
 	/*
 	 * more_elements is pre-computed in case the direction is
@@ -191,10 +176,10 @@ rpcb_entry_list_ptr *rp;
 	for (;;) {
 		more_elements = (bool_t) (*rp != NULL);
 		if (!xdr_bool(xdrs, &more_elements)) {
-			return (FALSE);
+			return (false);
 		}
 		if (!more_elements) {
-			return (TRUE);	/* we are done */
+			return (true);	/* we are done */
 		}
 		/*
 		 * the unfortunate side effect of non-recursion is that in
@@ -206,7 +191,7 @@ rpcb_entry_list_ptr *rp;
 		if (!xdr_reference
 		    (xdrs, (caddr_t *) rp, (u_int) sizeof(rpcb_entry_list),
 		     (xdrproc_t) xdr_rpcb_entry)) {
-			return (FALSE);
+			return (false);
 		}
 		if (freeing) {
 			next_copy = next;
@@ -226,9 +211,8 @@ rpcb_entry_list_ptr *rp;
  * XDR remote call arguments
  * written for XDR_ENCODE direction only
  */
-bool xdr_rpcb_rmtcallargs(xdrs, p)
-XDR *xdrs;
-struct rpcb_rmtcallargs *p;
+bool
+xdr_rpcb_rmtcallargs(XDR *xdrs, struct rpcb_rmtcallargs *p)
 {
 	struct r_rpcb_rmtcallargs *objp =
 	    (struct r_rpcb_rmtcallargs *)(void *)p;
@@ -238,13 +222,13 @@ struct rpcb_rmtcallargs *p;
 	buf = XDR_INLINE(xdrs, 3 * BYTES_PER_XDR_UNIT);
 	if (buf == NULL) {
 		if (!xdr_u_int32_t(xdrs, &objp->prog)) {
-			return (FALSE);
+			return (false);
 		}
 		if (!xdr_u_int32_t(xdrs, &objp->vers)) {
-			return (FALSE);
+			return (false);
 		}
 		if (!xdr_u_int32_t(xdrs, &objp->proc)) {
-			return (FALSE);
+			return (false);
 		}
 	} else {
 		IXDR_PUT_U_INT32(buf, objp->prog);
@@ -256,53 +240,46 @@ struct rpcb_rmtcallargs *p;
 	 * All the jugglery for just getting the size of the arguments
 	 */
 	lenposition = XDR_GETPOS(xdrs);
-	if (!xdr_u_int(xdrs, &(objp->args.args_len))) {
-		return (FALSE);
-	}
+	if (!xdr_u_int(xdrs, &(objp->args.args_len)))
+		return (false);
 	argposition = XDR_GETPOS(xdrs);
-	if (!(*objp->xdr_args) (xdrs, objp->args.args_val)) {
-		return (FALSE);
-	}
+	if (!(*objp->xdr_args) (xdrs, objp->args.args_val))
+		return (false);
 	position = XDR_GETPOS(xdrs);
 	objp->args.args_len =
 	    (u_int) ((u_long) position - (u_long) argposition);
 	XDR_SETPOS(xdrs, lenposition);
-	if (!xdr_u_int(xdrs, &(objp->args.args_len))) {
-		return (FALSE);
-	}
+	if (!xdr_u_int(xdrs, &(objp->args.args_len)))
+		return (false);
 	XDR_SETPOS(xdrs, position);
-	return (TRUE);
+	return (true);
 }
 
 /*
  * XDR remote call results
  * written for XDR_DECODE direction only
  */
-bool xdr_rpcb_rmtcallres(xdrs, p)
-XDR *xdrs;
-struct rpcb_rmtcallres *p;
+bool
+xdr_rpcb_rmtcallres(XDR *xdrs, struct rpcb_rmtcallres *p)
 {
 	bool dummy;
 	struct r_rpcb_rmtcallres *objp = (struct r_rpcb_rmtcallres *)(void *)p;
 
-	if (!xdr_string(xdrs, &objp->addr, (u_int) ~ 0)) {
-		return (FALSE);
-	}
-	if (!xdr_u_int(xdrs, &objp->results.results_len)) {
-		return (FALSE);
-	}
+	if (!xdr_string(xdrs, &objp->addr, (u_int) ~ 0))
+		return (false);
+	if (!xdr_u_int(xdrs, &objp->results.results_len))
+		return (false);
 	dummy = (*(objp->xdr_res)) (xdrs, objp->results.results_val);
 	return (dummy);
 }
 
-bool xdr_netbuf(xdrs, objp)
-XDR *xdrs;
-struct netbuf *objp;
+bool
+xdr_netbuf(XDR *xdrs, struct netbuf *objp)
 {
 	bool dummy;
 
 	if (!xdr_u_int32_t(xdrs, (u_int32_t *) & objp->maxlen)) {
-		return (FALSE);
+		return (false);
 	}
 	dummy =
 	    xdr_bytes(xdrs, (char **)&(objp->buf), (u_int *) & (objp->len),

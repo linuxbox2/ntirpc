@@ -80,19 +80,16 @@ extern struct svc_params __svc_params[1];
 
 static bool rendezvous_request(SVCXPRT *, struct svc_req *);
 static enum xprt_stat rendezvous_stat(SVCXPRT *);
-static bool svc_vc_ref(SVCXPRT * xprt, u_int flags, const char *tag,
-		       const int line);
-static void svc_vc_release(SVCXPRT * xprt, u_int flags, const char *tag,
-			   const int line);
+static bool svc_vc_ref(SVCXPRT *, u_int, const char *, const int);
+static void svc_vc_release(SVCXPRT *, u_int, const char *, const int);
 static void svc_vc_destroy(SVCXPRT *);
 int generic_read_vc(XDR *, void *, void *, int);
 int generic_write_vc(XDR *, void *, void *, int);
-static size_t readv_vc(void *xprtp, struct iovec *iov, int iovcnt, u_int flags)
-    __attribute__ ((unused));
-static size_t writev_vc(void *xprtp, struct iovec *iov, int iovcnt, u_int flags)
-    __attribute__ ((unused));
-static size_t writev_vc(void *xprtp, struct iovec *iov, int iovcnt,
-			u_int flags);
+static size_t readv_vc(void *, struct iovec *, int, u_int)
+	__attribute__ ((unused));
+static size_t writev_vc(void *, struct iovec *, int, u_int)
+	__attribute__ ((unused));
+static size_t writev_vc(void *, struct iovec *, int, u_int);
 static enum xprt_stat svc_vc_stat(SVCXPRT *);
 static bool svc_vc_recv(SVCXPRT *, struct svc_req *);
 static bool svc_vc_getargs(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
@@ -103,24 +100,25 @@ static bool svc_vc_freeargs(SVCXPRT *, xdrproc_t, void *);
 static bool svc_vc_reply(SVCXPRT *, struct svc_req *, struct rpc_msg *);
 static void svc_vc_rendezvous_ops(SVCXPRT *);
 static void svc_vc_ops(SVCXPRT *);
-static void svc_vc_override_ops(SVCXPRT * xprt, SVCXPRT * newxprt);
-static bool svc_vc_control(SVCXPRT * xprt, const u_int rq, void *in);
-static bool svc_vc_rendezvous_control(SVCXPRT * xprt, const u_int rq, void *in);
-bool __svc_clean_idle2(int timeout, bool cleanblock);
-static SVCXPRT *makefd_xprt(int fd, u_int sendsz, u_int recvsz,
-			    bool * allocated);
+static void svc_vc_override_ops(SVCXPRT *, SVCXPRT *);
+static bool svc_vc_control(SVCXPRT *, const u_int, void *);
+static bool svc_vc_rendezvous_control(SVCXPRT *, const u_int, void *);
+bool __svc_clean_idle2(int, bool);
+static SVCXPRT *makefd_xprt(int, u_int, u_int, bool *);
 
 extern pthread_mutex_t svc_ctr_lock;
 
-static size_t readv_vc(void *xprtp, struct iovec *iov, int iovcnt, u_int flags)
+static size_t
+readv_vc(void *xprt, struct iovec *iov, int iovcnt, u_int flags)
 {
-	/* To be written */
+	/* To be written (maybe useless) */
 	abort();
 }
 
-static size_t writev_vc(void *xprtp, struct iovec *iov, int iovcnt, u_int flags)
+static size_t
+writev_vc(void *xprt, struct iovec *iov, int iovcnt, u_int flags)
 {
-	/* To be written */
+	/* To be written (maybe useless) */
 	abort();
 }
 
@@ -134,7 +132,7 @@ struct sockaddr_in6 *sin6;
 	sin6->sin6_addr.s6_addr32[0] = 0;
 	sin6->sin6_addr.s6_addr32[1] = 0;
 	sin6->sin6_addr.s6_addr32[2] = htonl(0xffff);
-	sin6->sin6_addr.s6_addr32[3] = *(uint32_t *) & sin->sin_addr;	/* XXX strict */
+	sin6->sin6_addr.s6_addr32[3] = *(uint32_t *) &sin->sin_addr;
 #endif
 }
 
@@ -155,7 +153,8 @@ struct sockaddr_in6 *sin6;
  * original function if flags are SVC_VC_FLAG_NONE (0).
  *
  */
-SVCXPRT *svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
+SVCXPRT *
+svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 {
 	SVCXPRT *xprt = NULL;
 	struct cf_rendezvous *rdvs = NULL;
@@ -216,14 +215,6 @@ SVCXPRT *svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 		xd->shared.recvsz =
 		    __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsize);
 
-#if XDR_VREC
-		/* duplex streams, plus buffer sharing, readv/writev */
-		xdr_vrec_create(&(cd->xdrs_in), XDR_VREC_IN, xprt, readv_vc,
-				NULL, recvsize, VREC_FLAG_NONE);
-
-		xdr_vrec_create(&(cd->xdrs_out), XDR_VREC_OUT, xprt, NULL,
-				writev_vc, sendsize, VREC_FLAG_NONE);
-#else
 		/* duplex streams */
 		xdr_inrec_create(&(xd->shared.xdrs_in), recvsize, xd,
 				 generic_read_vc);
@@ -232,7 +223,6 @@ SVCXPRT *svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 		xdrrec_create(&(xd->shared.xdrs_out), sendsize, recvsize, xd,
 			      generic_read_vc, generic_write_vc);
 		xd->shared.xdrs_out.x_op = XDR_ENCODE;
-#endif
 	} else {
 		xd = (struct x_vc_data *)rec->hdl.xd;
 		/* dont return destroyed xprts */
@@ -325,7 +315,8 @@ SVCXPRT *svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	return (NULL);
 }
 
-SVCXPRT *svc_vc_ncreate(int fd, u_int sendsize, u_int recvsize)
+SVCXPRT *
+svc_vc_ncreate(int fd, u_int sendsize, u_int recvsize)
 {
 	return (svc_vc_ncreate2(fd, sendsize, recvsize, SVC_VC_CREATE_NONE));
 }
@@ -334,7 +325,8 @@ SVCXPRT *svc_vc_ncreate(int fd, u_int sendsize, u_int recvsize)
  * Like svtcp_ncreate(), except the routine takes any *open* UNIX file
  * descriptor as its first input.
  */
-SVCXPRT *svc_fd_ncreate(int fd, u_int sendsize, u_int recvsize)
+SVCXPRT *
+svc_fd_ncreate(int fd, u_int sendsize, u_int recvsize)
 {
 	struct sockaddr_storage ss;
 	socklen_t slen;
@@ -393,7 +385,8 @@ SVCXPRT *svc_fd_ncreate(int fd, u_int sendsize, u_int recvsize)
  * special handling for AF_INET and AFS_INET6.  Possibly not needed,
  * because no longer called in Ganesha.
  */
-SVCXPRT *svc_fd_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
+SVCXPRT *
+svc_fd_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 {
 	struct sockaddr_storage ss;
 	struct sockaddr_in6 sin6;
@@ -485,8 +478,8 @@ SVCXPRT *svc_fd_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	return (NULL);
 }
 
-static SVCXPRT *makefd_xprt(int fd, u_int sendsz, u_int recvsz,
-			    bool * allocated)
+static SVCXPRT *
+makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 {
 	SVCXPRT *xprt = NULL;
 	struct x_vc_data *xd = NULL;
@@ -615,8 +608,9 @@ static SVCXPRT *makefd_xprt(int fd, u_int sendsz, u_int recvsz,
 	return (xprt);
 }
 
- /*ARGSUSED*/ static bool rendezvous_request(SVCXPRT * xprt,
-					     struct svc_req *req)
+ /*ARGSUSED*/
+static bool
+rendezvous_request(SVCXPRT *xprt, struct svc_req *req)
 {
 	int fd;
 	socklen_t len;
@@ -631,9 +625,9 @@ static SVCXPRT *makefd_xprt(int fd, u_int sendsz, u_int recvsz,
 
 	rdvs = (struct cf_rendezvous *)xprt->xp_p1;
  again:
-	len = sizeof addr;
-	if ((fd =
-	     accept(xprt->xp_fd, (struct sockaddr *)(void *)&addr, &len)) < 0) {
+	len = sizeof(addr);
+	fd = accept(xprt->xp_fd, (struct sockaddr *)(void *)&addr, &len);
+	if (fd < 0) {
 		if (errno == EINTR)
 			goto again;
 		/*
@@ -644,13 +638,9 @@ static SVCXPRT *makefd_xprt(int fd, u_int sendsz, u_int recvsz,
 			switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
 			case SVC_EVENT_EPOLL:
-				/* XXX we did implement a plug-out strategy for this--check
-				 * whether svc_clean_idle2 should be called */
 				break;
 #endif
 			default:
-				/* XXX formerly select/fd_set case, now placeholder
-				 * for new event systems, reworked select, etc. */
 				abort();	/* XXX */
 				break;
 			}	/* switch */
@@ -665,7 +655,7 @@ static SVCXPRT *makefd_xprt(int fd, u_int sendsz, u_int recvsz,
 	 * make a new transport (re-uses xprt)
 	 */
 	newxprt = makefd_xprt(fd, rdvs->sendsize, rdvs->recvsize, &xprt_allocd);
-	if ((!newxprt) || (!xprt_allocd))	/* ref'd existing xprt handle */
+	if ((!newxprt) || (!xprt_allocd)) /* ref'd existing xprt handle */
 		return (FALSE);
 
 	/*
@@ -682,7 +672,6 @@ static SVCXPRT *makefd_xprt(int fd, u_int sendsz, u_int recvsz,
 	}
 
 	__xprt_set_raddr(newxprt, &addr);
-
 	XPRT_TRACE_RADDR(newxprt, __func__, __func__, __LINE__);
 
 	/* XXX fvdl - is this useful? (Yes.  Matt) */
@@ -696,7 +685,8 @@ static SVCXPRT *makefd_xprt(int fd, u_int sendsz, u_int recvsz,
 		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 			"%s: could not retrieve local addr", __func__);
 	} else {
-		if (!__rpc_set_netbuf(&newxprt->xp_ltaddr, &addr, sizeof(addr))) {
+		if (!__rpc_set_netbuf(&newxprt->xp_ltaddr, &addr,
+				      sizeof(addr))) {
 			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 				"%s: no mem for local addr", __func__);
 		}
@@ -707,7 +697,7 @@ static SVCXPRT *makefd_xprt(int fd, u_int sendsz, u_int recvsz,
 	xd->shared.sendsz = rdvs->sendsize;
 	xd->sx.maxrec = rdvs->maxrec;
 
-#if 0				/* XXX vrec wont support atm (and it seems to need work) */
+#if 0  /* XXX vrec wont support atm (and it seems to need work) */
 	if (cd->maxrec != 0) {
 		flags = fcntl(fd, F_GETFL, 0);
 		if (flags == -1)
@@ -730,16 +720,18 @@ static SVCXPRT *makefd_xprt(int fd, u_int sendsz, u_int recvsz,
 	if (xprt->xp_ops2->xp_rdvs)
 		xprt->xp_ops2->xp_rdvs(xprt, newxprt, SVC_RQST_FLAG_NONE, NULL);
 
-	return (FALSE);		/* there is never an rpc msg to be processed */
+	return (FALSE);	/* there is never an rpc msg to be processed */
 }
 
- /*ARGSUSED*/ static enum xprt_stat rendezvous_stat(SVCXPRT * xprt)
+ /*ARGSUSED*/
+static enum xprt_stat
+rendezvous_stat(SVCXPRT *xprt)
 {
 	return (XPRT_IDLE);
 }
 
-static bool svc_vc_ref(SVCXPRT * xprt, u_int flags, const char *tag,
-		       const int line)
+static bool
+svc_vc_ref(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
 	uint32_t refcnt;
 
@@ -764,14 +756,15 @@ static bool svc_vc_ref(SVCXPRT * xprt, u_int flags, const char *tag,
 	return (true);
 }
 
-/* XXX pending further unification 
+/* XXX pending further unification
  *
  * note:  currently, rdvs xprt handles have a rec structure,
  * but no xd structure, etc.
  *
  */
 
-static inline void rdvs_dodestroy(SVCXPRT * xprt)
+static inline void
+rdvs_dodestroy(SVCXPRT *xprt)
 {
 	struct cf_rendezvous *rdvs = (struct cf_rendezvous *)xprt->xp_p1;
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)xprt->xp_p5;
@@ -802,8 +795,8 @@ static inline void rdvs_dodestroy(SVCXPRT * xprt)
 	rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
 }
 
-static void svc_rdvs_release(SVCXPRT * xprt, u_int flags, const char *tag,
-			     const int line)
+static void
+svc_rdvs_release(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
 	uint32_t xp_refcnt;
 
@@ -825,7 +818,8 @@ static void svc_rdvs_release(SVCXPRT * xprt, u_int flags, const char *tag,
 	}
 }
 
-static void svc_rdvs_destroy(SVCXPRT * xprt)
+static void
+svc_rdvs_destroy(SVCXPRT *xprt)
 {
 	uint32_t xp_refcnt = 0;
 	uint32_t drefcnt = 0;	/* debugging only */
@@ -870,8 +864,9 @@ static void svc_rdvs_destroy(SVCXPRT * xprt)
 	return;
 }
 
-void xprt_trace_raddr(SVCXPRT * xprt, const char *func, const char *tag,
-		      const int line)
+void
+xprt_trace_raddr(SVCXPRT *xprt, const char *func, const char *tag,
+		 const int line)
 {
 	struct sockaddr_storage *ss = (struct sockaddr_storage *)
 	    &(xprt->xp_raddr);
@@ -893,8 +888,8 @@ void xprt_trace_raddr(SVCXPRT * xprt, const char *func, const char *tag,
 		tag, line, xprt, xprt->xp_fd, port, xprt->xp_refcnt);
 }
 
-static void svc_vc_release(SVCXPRT * xprt, u_int flags, const char *tag,
-			   const int line)
+static void
+svc_vc_release(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
 	uint32_t xp_refcnt;
 
@@ -937,7 +932,8 @@ static void svc_vc_release(SVCXPRT * xprt, u_int flags, const char *tag,
 		mutex_unlock(&xprt->xp_lock);
 }
 
-static void svc_vc_destroy(SVCXPRT * xprt)
+static void
+svc_vc_destroy(SVCXPRT *xprt)
 {
 	struct rpc_dplx_rec *rec;
 	struct x_vc_data *xd;
@@ -981,7 +977,7 @@ static void svc_vc_destroy(SVCXPRT * xprt)
 
 	/* bidirectional */
 	REC_LOCK(rec);
-	xd->flags |= X_VC_DATA_FLAG_SVC_DESTROYED;	/* destroyed handle is dead */
+	xd->flags |= X_VC_DATA_FLAG_SVC_DESTROYED;
 	xd_refcnt = --(xd->refcnt);
 
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
@@ -1003,8 +999,9 @@ static void svc_vc_destroy(SVCXPRT * xprt)
 
 extern mutex_t ops_lock;
 
- /*ARGSUSED*/ static bool svc_vc_control(SVCXPRT * xprt, const u_int rq,
-					 void *in)
+ /*ARGSUSED*/
+static bool
+svc_vc_control(SVCXPRT *xprt, const u_int rq, void *in)
 {
 	switch (rq) {
 	case SVCGET_XP_FLAGS:
@@ -1069,7 +1066,8 @@ extern mutex_t ops_lock;
 	return (TRUE);
 }
 
-static bool svc_vc_rendezvous_control(SVCXPRT * xprt, const u_int rq, void *in)
+static bool
+svc_vc_rendezvous_control(SVCXPRT *xprt, const u_int rq, void *in)
 {
 	struct cf_rendezvous *cfp;
 
@@ -1135,7 +1133,8 @@ static bool svc_vc_rendezvous_control(SVCXPRT * xprt, const u_int rq, void *in)
 	return (TRUE);
 }
 
-static enum xprt_stat svc_vc_stat(SVCXPRT * xprt)
+static enum xprt_stat
+svc_vc_stat(SVCXPRT *xprt)
 {
 	struct x_vc_data *xd;
 	uint32_t xp_flags;
@@ -1159,7 +1158,8 @@ static enum xprt_stat svc_vc_stat(SVCXPRT * xprt)
 	return (XPRT_IDLE);
 }
 
-static bool svc_vc_recv(SVCXPRT * xprt, struct svc_req *req)
+static bool
+svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
 	XDR *xdrs = &(xd->shared.xdrs_in);	/* recv queue */
@@ -1214,8 +1214,9 @@ static bool svc_vc_recv(SVCXPRT * xprt, struct svc_req *req)
 	return (FALSE);
 }
 
-static bool svc_vc_getargs(SVCXPRT * xprt, struct svc_req *req,
-			   xdrproc_t xdr_args, void *args_ptr, void *u_data)
+static bool
+svc_vc_getargs(SVCXPRT *xprt, struct svc_req *req,
+	       xdrproc_t xdr_args, void *args_ptr, void *u_data)
 {
 	bool rslt = TRUE;
 	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
@@ -1237,7 +1238,8 @@ static bool svc_vc_getargs(SVCXPRT * xprt, struct svc_req *req,
 	return (rslt);
 }
 
-static bool svc_vc_freeargs(SVCXPRT * xprt, xdrproc_t xdr_args, void *args_ptr)
+static bool
+svc_vc_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
 	XDR xdrs = {
 		.x_public = NULL,
@@ -1247,8 +1249,8 @@ static bool svc_vc_freeargs(SVCXPRT * xprt, xdrproc_t xdr_args, void *args_ptr)
 	return ((*xdr_args) (&xdrs, args_ptr));
 }
 
-static bool svc_vc_reply(SVCXPRT * xprt, struct svc_req *req,
-			 struct rpc_msg *msg)
+static bool
+svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
 	XDR *xdrs_2;
@@ -1294,8 +1296,8 @@ static bool svc_vc_reply(SVCXPRT * xprt, struct svc_req *req,
 	return (rstat);
 }
 
-static void svc_vc_lock(SVCXPRT * xprt, uint32_t flags, const char *func,
-			int line)
+static void
+svc_vc_lock(SVCXPRT *xprt, uint32_t flags, const char *func, int line)
 {
 	if (flags & XP_LOCK_RECV)
 		rpc_dplx_rlxi(xprt, func, line);
@@ -1304,8 +1306,8 @@ static void svc_vc_lock(SVCXPRT * xprt, uint32_t flags, const char *func,
 		rpc_dplx_slxi(xprt, func, line);
 }
 
-static void svc_vc_unlock(SVCXPRT * xprt, uint32_t flags, const char *func,
-			  int line)
+static void
+svc_vc_unlock(SVCXPRT *xprt, uint32_t flags, const char *func, int line)
 {
 	if (flags & XP_LOCK_RECV)
 		rpc_dplx_rux(xprt);
@@ -1314,13 +1316,13 @@ static void svc_vc_unlock(SVCXPRT * xprt, uint32_t flags, const char *func,
 		rpc_dplx_sux(xprt);
 }
 
-static void svc_vc_ops(SVCXPRT * xprt)
+static void
+svc_vc_ops(SVCXPRT *xprt)
 {
 	static struct xp_ops ops;
 	static struct xp_ops2 ops2;
 
-/* VARIABLES PROTECTED BY ops_lock: ops, ops2, xp_type */
-
+	/* VARIABLES PROTECTED BY ops_lock: ops, ops2, xp_type */
 	mutex_lock(&ops_lock);
 	xprt->xp_type = XPRT_TCP;
 	if (ops.xp_recv == NULL) {
@@ -1344,7 +1346,8 @@ static void svc_vc_ops(SVCXPRT * xprt)
 	mutex_unlock(&ops_lock);
 }
 
-static void svc_vc_override_ops(SVCXPRT * xprt, SVCXPRT * newxprt)
+static void
+svc_vc_override_ops(SVCXPRT *xprt, SVCXPRT *newxprt)
 {
 	if (xprt->xp_ops2->xp_getreq)
 		newxprt->xp_ops2->xp_getreq = xprt->xp_ops2->xp_getreq;
@@ -1356,7 +1359,8 @@ static void svc_vc_override_ops(SVCXPRT * xprt, SVCXPRT * newxprt)
 		newxprt->xp_ops2->xp_free_xprt = xprt->xp_ops2->xp_free_xprt;
 }
 
-static void svc_vc_rendezvous_ops(SVCXPRT * xprt)
+static void
+svc_vc_rendezvous_ops(SVCXPRT *xprt)
 {
 	static struct xp_ops ops;
 	static struct xp_ops2 ops2;
@@ -1374,7 +1378,7 @@ static void svc_vc_rendezvous_ops(SVCXPRT * xprt)
 				  (SVCXPRT *, struct svc_req *, xdrproc_t,
 				   void *, void *))abort;
 		ops.xp_reply = (bool(*)
-				(SVCXPRT *, struct svc_req * req,
+				(SVCXPRT *, struct svc_req *req,
 				 struct rpc_msg *))abort;
 		ops.xp_freeargs = (bool(*)(SVCXPRT *, xdrproc_t, void *))abort;
 		ops.xp_ref = svc_vc_ref;
@@ -1393,7 +1397,8 @@ static void svc_vc_rendezvous_ops(SVCXPRT * xprt)
  * Get the effective UID of the sending process. Used by rpcbind, keyserv
  * and rpc.yppasswdd on AF_LOCAL.
  */
-int __rpc_get_local_uid(SVCXPRT * transp, uid_t * uid)
+int
+__rpc_get_local_uid(SVCXPRT *transp, uid_t *uid)
 {
 	int sock, ret;
 	gid_t egid;
@@ -1421,7 +1426,8 @@ int __rpc_get_local_uid(SVCXPRT * transp, uid_t * uid)
  * API without changing the library's sonum.
  */
 
-bool __svc_clean_idle(fd_set * fds, int timeout, bool cleanblock)
+bool
+__svc_clean_idle(fd_set *fds, int timeout, bool cleanblock)
 {
 	return (__svc_clean_idle2(timeout, cleanblock));
 
@@ -1437,7 +1443,8 @@ struct svc_clean_idle_arg {
 	int cleanblock, ncleaned, timeout;
 };
 
-static uint32_t svc_clean_idle2_func(SVCXPRT * xprt, void *arg)
+static uint32_t
+svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
 {
 	struct timespec tdiff;
 	struct svc_clean_idle_arg *acc = (struct svc_clean_idle_arg *)arg;
@@ -1497,11 +1504,12 @@ static uint32_t svc_clean_idle2_func(SVCXPRT * xprt, void *arg)
 /* XXX move to svc_run */
 void authgss_ctx_gc_idle(void);
 
-bool __svc_clean_idle2(int timeout, bool cleanblock)
+bool
+__svc_clean_idle2(int timeout, bool cleanblock)
 {
 	struct svc_clean_idle_arg acc;
 	static mutex_t active_mtx = MUTEX_INITIALIZER;
-	static uint32_t active = 0;
+	static uint32_t active;
 	bool_t rslt = FALSE;
 
 	if (mutex_trylock(&active_mtx) != 0)
@@ -1544,8 +1552,9 @@ bool __svc_clean_idle2(int timeout, bool cleanblock)
  * If flags & SVC_VC_CLNT_CREATE_DEDICATED, the supplied xprt will be
  * unregistered and disposed inline.
  */
-CLIENT *clnt_vc_ncreate_svc(SVCXPRT * xprt, const rpcprog_t prog,
-			    const rpcvers_t vers, const uint32_t flags)
+CLIENT *
+clnt_vc_ncreate_svc(SVCXPRT *xprt, const rpcprog_t prog,
+		    const rpcvers_t vers, const uint32_t flags)
 {
 	struct x_vc_data *xd;
 	CLIENT *clnt;
@@ -1584,8 +1593,9 @@ CLIENT *clnt_vc_ncreate_svc(SVCXPRT * xprt, const rpcprog_t prog,
  * If flags & SVC_VC_CREATE_CL_FLAG_DEDICATED, then clnt is also
  * deallocated without closing cl->cl_p1->ct_fd.
  */
-SVCXPRT *svc_vc_ncreate_clnt(CLIENT * clnt, const u_int sendsz,
-			     const u_int recvsz, const uint32_t flags)
+SVCXPRT *
+svc_vc_ncreate_clnt(CLIENT *clnt, const u_int sendsz,
+		    const u_int recvsz, const uint32_t flags)
 {
 	int fd;
 	socklen_t len;

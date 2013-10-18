@@ -56,7 +56,8 @@ struct rmtcallres {
 	xdrproc_t xdr_results;
 };
 
-__BEGIN_DECLS extern bool xdr_rmtcall_args(XDR *, struct rmtcallargs *);
+__BEGIN_DECLS
+extern bool xdr_rmtcall_args(XDR *, struct rmtcallargs *);
 extern bool xdr_rmtcallres(XDR *, struct rmtcallres *);
 __END_DECLS
 #endif				/* !_RPC_PMAP_RMT_H */

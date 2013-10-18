@@ -57,9 +57,10 @@
 #define msg(x)
 #endif
 
-static int saw_alarm = 0;
+static int saw_alarm;
 
-static void alarm_hndler(int s)
+static void
+alarm_hndler(int s)
 {
 	saw_alarm = 1;
 	return;
@@ -79,7 +80,8 @@ static void alarm_hndler(int s)
  * Turn a 'universal address' into a struct sockaddr_in.
  * Bletch.
  */
-static int uaddr_to_sockaddr(char *uaddr, struct sockaddr_in *sin)
+static int
+uaddr_to_sockaddr(char *uaddr, struct sockaddr_in *sin)
 {
 	unsigned char p_bytes[2];
 	int i;
@@ -108,7 +110,8 @@ static int uaddr_to_sockaddr(char *uaddr, struct sockaddr_in *sin)
  *
  * Free the strings that were rpc_strduped into the eps structure.
  */
-static void free_eps(endpoint eps[], int num)
+static void
+free_eps(endpoint eps[], int num)
 {
 	int i;
 
@@ -131,10 +134,11 @@ static void free_eps(endpoint eps[], int num)
  * NIS+ server will call __rpc_get_time_offset() with the nis_server
  * structure already populated.
  */
-static nis_server *get_server(struct sockaddr_in *sin, char *host,	/* name of the time host */
-			      nis_server * srv,	/* nis_server struct to use. */
-			      endpoint eps[],	/* array of endpoints */
-			      int maxep /* max array size */ )
+static nis_server *
+get_server(struct sockaddr_in *sin, char *host,	/* name of the time host */
+	   nis_server *srv,	/* nis_server struct to use. */
+	   endpoint eps[],	/* array of endpoints */
+	   int maxep /* max array size */)
 {
 	char hname[256];
 	int num_ep = 0, i;
@@ -213,12 +217,13 @@ static nis_server *get_server(struct sockaddr_in *sin, char *host,	/* name of th
  *
  * td = "server" - "client"
  */
-int __rpc_get_time_offset(struct timeval *td,	/* Time difference */
-			  nis_server * srv,	/* NIS Server description */
-			  char *thost,	/* if no server, this is the timehost */
-			  char **uaddr,	/* known universal address */
-			  struct sockaddr_in *netid
-			  /* known network identifier */ )
+int
+__rpc_get_time_offset(struct timeval *td,	/* Time difference */
+		      nis_server *srv,	/* NIS Server description */
+		      char *thost,	/* if no server, this is the timehost */
+		      char **uaddr,	/* known universal address */
+		      struct sockaddr_in *netid
+		      /* known network identifier */)
 {
 	CLIENT *clnt;		/* Client handle  */
 	AUTH *auth;
@@ -444,7 +449,7 @@ int __rpc_get_time_offset(struct timeval *td,	/* Time difference */
 
 		if (time_valid) {
 			thetime = ntohl(thetime);
-			thetime = thetime - TOFFSET;	/* adjust to UNIX time */
+			thetime = thetime - TOFFSET; /* adjust to UNIX time */
 		} else
 			thetime = 0;
 	}
@@ -466,9 +471,8 @@ int __rpc_get_time_offset(struct timeval *td,	/* Time difference */
 		clnt_destroy(clnt);
 
 	alarm(0);		/* reset that alarm if its outstanding */
-	if (oldsig) {
+	if (oldsig)
 		signal(SIGALRM, oldsig);
-	}
 
 	/*
 	 * note, don't free uaddr strings until after we've made a

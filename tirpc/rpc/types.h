@@ -173,13 +173,13 @@ extern tirpc_pkg_params __pkg_params;
 #include <misc/abstract_atomic.h>
 
 #define __warnx(flags, ...) \
-    do { \
-        if (__pkg_params.debug_flags & (flags)) {  \
-            __pkg_params.warnx(__VA_ARGS__); \
-        } \
-    } while (0)
+	do {					   \
+		if (__pkg_params.debug_flags & (flags)) {	\
+			__pkg_params.warnx(__VA_ARGS__);	\
+		}						\
+	} while (0)
 
-#define __debug_flag(flags) (__pkg_params.debug_flags & (flags)))
+#define __debug_flag(flags) (__pkg_params.debug_flags & (flags))
 
 #define mem_alloc(size) malloc((size))
 #define mem_zalloc(size) calloc(1, (size))

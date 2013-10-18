@@ -144,7 +144,7 @@ static bool fill_input_buf(RECSTREAM *, int32_t);
 static bool get_input_bytes(RECSTREAM *, char *, int32_t, int32_t);
 static bool set_input_fragment(RECSTREAM *, int32_t);
 static bool skip_input_bytes(RECSTREAM *, long);
-static void compute_buffer_cksum(RECSTREAM * rstrm);
+static void compute_buffer_cksum(RECSTREAM *);
 
 /*
  * Create an xdr handle for xdrrec
@@ -155,9 +155,10 @@ static void compute_buffer_cksum(RECSTREAM * rstrm);
  * write respectively.   They are like the system
  * calls expect that they take an opaque handle rather than an fd.
  */
-void xdr_inrec_create(XDR * xdrs, u_int recvsize, void *tcp_handle,
-		      /* like read, but pass it a tcp_handle, not sock */
-		      int (*readit) (XDR *, void *, void *, int))
+void
+xdr_inrec_create(XDR *xdrs, u_int recvsize, void *tcp_handle,
+		 /* like read, but pass it a tcp_handle, not sock */
+		 int (*readit) (XDR *, void *, void *, int))
 {
 	RECSTREAM *rstrm = mem_alloc(sizeof(RECSTREAM));
 
@@ -194,8 +195,8 @@ void xdr_inrec_create(XDR * xdrs, u_int recvsize, void *tcp_handle,
 	rstrm->in_boundry = rstrm->in_base;
 	rstrm->in_finger = (rstrm->in_boundry += recvsize);
 	rstrm->fbtbc = 0;
-	rstrm->last_frag = TRUE;
-	rstrm->in_haveheader = FALSE;
+	rstrm->last_frag = true;
+	rstrm->in_haveheader = false;
 	rstrm->offset = 0;
 	rstrm->cksum = 0;
 	rstrm->cklen = 256;
@@ -204,16 +205,16 @@ void xdr_inrec_create(XDR * xdrs, u_int recvsize, void *tcp_handle,
 /* Compute 64-bit checksum of the first cnt bytes (or offset, whichever is
  * less) in the receive buffer.  Use only as directed.
  */
-uint64_t xdr_inrec_cksum(XDR * xdrs)
+uint64_t
+xdr_inrec_cksum(XDR *xdrs)
 {
 	RECSTREAM *rstrm = (RECSTREAM *) (xdrs->x_private);
 
 	/* handle checksumming if requested (short request case) */
 	if (xdrs->x_flags & XDR_FLAG_CKSUM) {
 		if (!(rstrm->cksum)) {
-			if (rstrm->cklen) {
+			if (rstrm->cklen)
 				compute_buffer_cksum(rstrm);
-			}
 		}
 	}
 
@@ -224,7 +225,8 @@ uint64_t xdr_inrec_cksum(XDR * xdrs)
  * The routines defined below are the xdr ops which will go into the
  * xdr handle filled in by xdr_inrec_create.
  */
-static bool xdr_inrec_getlong(XDR * xdrs, long *lp)
+static bool
+xdr_inrec_getlong(XDR *xdrs, long *lp)
 {
 	RECSTREAM *rstrm = (RECSTREAM *) (xdrs->x_private);
 	int32_t *buflp = (int32_t *) (void *)(rstrm->in_finger);
@@ -240,19 +242,20 @@ static bool xdr_inrec_getlong(XDR * xdrs, long *lp)
 	} else {
 		if (!xdr_inrec_getbytes
 		    (xdrs, (char *)(void *)&mylong, sizeof(int32_t)))
-			return (FALSE);
+			return (false);
 		*lp = (long)ntohl((u_int32_t) mylong);
 	}
-	return (TRUE);
+	return (true);
 }
 
-static bool xdr_inrec_putlong(XDR * xdrs, const long *lp)
+static bool
+xdr_inrec_putlong(XDR *xdrs, const long *lp)
 {
-	return (FALSE);
+	return (false);
 }
 
-static bool			/* must manage buffers, fragments, and records */
-xdr_inrec_getbytes(XDR * xdrs, char *addr, u_int len)
+static bool
+xdr_inrec_getbytes(XDR *xdrs, char *addr, u_int len)
 {
 	RECSTREAM *rstrm = (RECSTREAM *) (xdrs->x_private);
 	int current;
@@ -261,14 +264,14 @@ xdr_inrec_getbytes(XDR * xdrs, char *addr, u_int len)
 		current = (int)rstrm->fbtbc;
 		if (current == 0) {
 			if (rstrm->last_frag)
-				return (FALSE);
+				return (false);
 			if (!set_input_fragment(rstrm, INT_MAX))
-				return (FALSE);
+				return (false);
 			continue;
 		}
 		current = (len < current) ? len : current;
 		if (!get_input_bytes(rstrm, addr, current, INT_MAX))
-			return (FALSE);
+			return (false);
 		addr += current;
 		rstrm->fbtbc -= current;
 		len -= current;
@@ -276,22 +279,23 @@ xdr_inrec_getbytes(XDR * xdrs, char *addr, u_int len)
 		if (xdrs->x_flags & XDR_FLAG_CKSUM) {
 			if (rstrm->cklen) {
 				if (!(rstrm->cksum)) {
-					if (rstrm->offset >= rstrm->cklen) {
+					if (rstrm->offset >= rstrm->cklen)
 						compute_buffer_cksum(rstrm);
-					}
 				}
 			}
 		}
 	}
-	return (TRUE);
+	return (true);
 }
 
-static bool xdr_inrec_putbytes(XDR * xdrs, const char *addr, u_int len)
+static bool
+xdr_inrec_putbytes(XDR *xdrs, const char *addr, u_int len)
 {
-	return (FALSE);
+	return (false);
 }
 
-static u_int xdr_inrec_getpos(XDR * xdrs)
+static u_int
+xdr_inrec_getpos(XDR *xdrs)
 {
 	RECSTREAM *rstrm = (RECSTREAM *) xdrs->x_private;
 	off_t pos;
@@ -303,13 +307,14 @@ static u_int xdr_inrec_getpos(XDR * xdrs)
 		break;
 
 	default:
-		pos = (off_t) - 1;
+		pos = (off_t) -1;
 		break;
 	}
 	return ((u_int) pos);
 }
 
-static bool xdr_inrec_setpos(XDR * xdrs, u_int pos)
+static bool
+xdr_inrec_setpos(XDR *xdrs, u_int pos)
 {
 	RECSTREAM *rstrm = (RECSTREAM *) xdrs->x_private;
 	u_int currpos = xdr_inrec_getpos(xdrs);
@@ -326,7 +331,7 @@ static bool xdr_inrec_setpos(XDR * xdrs, u_int pos)
 			    && (newpos >= rstrm->in_base)) {
 				rstrm->in_finger = newpos;
 				rstrm->fbtbc -= delta;
-				return (TRUE);
+				return (true);
 			}
 			break;
 
@@ -334,10 +339,11 @@ static bool xdr_inrec_setpos(XDR * xdrs, u_int pos)
 		case XDR_FREE:
 			break;
 		}
-	return (FALSE);
+	return (false);
 }
 
-bool xdr_inrec_readahead(XDR * xdrs, u_int maxfraglen)
+bool
+xdr_inrec_readahead(XDR *xdrs, u_int maxfraglen)
 {
 	RECSTREAM *rstrm;
 	int current;
@@ -346,16 +352,16 @@ bool xdr_inrec_readahead(XDR * xdrs, u_int maxfraglen)
 
 	current = (int)rstrm->fbtbc;
 	if (current == 0) {
-		if (rstrm->last_frag) {
-			return (FALSE);
-		}
+		if (rstrm->last_frag)
+			return (false);
 		if (!set_input_fragment(rstrm, maxfraglen))
-			return (FALSE);
+			return (false);
 	}
-	return (TRUE);
+	return (true);
 }
 
-static int32_t *xdr_inrec_inline(XDR * xdrs, u_int len)
+static int32_t *
+xdr_inrec_inline(XDR *xdrs, u_int len)
 {
 	RECSTREAM *rstrm = (RECSTREAM *) xdrs->x_private;
 	int32_t *buf = NULL;
@@ -378,7 +384,8 @@ static int32_t *xdr_inrec_inline(XDR * xdrs, u_int len)
 	return (buf);
 }
 
-static void xdr_inrec_destroy(XDR * xdrs)
+static void
+xdr_inrec_destroy(XDR *xdrs)
 {
 	RECSTREAM *rstrm = (RECSTREAM *) xdrs->x_private;
 
@@ -394,48 +401,50 @@ static void xdr_inrec_destroy(XDR * xdrs)
  * Before reading (deserializing from the stream), one should always call
  * this procedure to guarantee proper record alignment.
  */
-bool xdr_inrec_skiprecord(XDR * xdrs)
+bool
+xdr_inrec_skiprecord(XDR *xdrs)
 {
 	RECSTREAM *rstrm = (RECSTREAM *) (xdrs->x_private);
 
 	while (rstrm->fbtbc > 0 || (!rstrm->last_frag)) {
 		if (!skip_input_bytes(rstrm, rstrm->fbtbc))
-			return (FALSE);
+			return (false);
 		rstrm->fbtbc = 0;
 		if ((!rstrm->last_frag)
 		    && (!set_input_fragment(rstrm, INT_MAX)))
-			return (FALSE);
+			return (false);
 	}
-	rstrm->last_frag = FALSE;
+	rstrm->last_frag = false;
 	rstrm->offset = 0;
 	rstrm->cksum = 0;
-	return (TRUE);
+	return (true);
 }
 
 /*
  * Look ahead function.
- * Returns TRUE iff there is no more input in the buffer
+ * Returns true iff there is no more input in the buffer
  * after consuming the rest of the current record.
  */
-bool xdr_inrec_eof(XDR * xdrs)
+bool
+xdr_inrec_eof(XDR *xdrs)
 {
 	RECSTREAM *rstrm = (RECSTREAM *) (xdrs->x_private);
 
 	while (rstrm->fbtbc > 0 || (!rstrm->last_frag)) {
 		if (!skip_input_bytes(rstrm, rstrm->fbtbc))
-			return (TRUE);
+			return (true);
 		rstrm->fbtbc = 0;
 		if ((!rstrm->last_frag)
 		    && (!set_input_fragment(rstrm, INT_MAX)))
-			return (TRUE);
+			return (true);
 	}
 	if (rstrm->in_finger == rstrm->in_boundry)
-		return (TRUE);
-	return (FALSE);
+		return (true);
+	return (false);
 }
 
-static bool			/* knows nothing about records!  Only about input buffers */
-fill_input_buf(RECSTREAM * rstrm, int32_t maxreadahead)
+static bool
+fill_input_buf(RECSTREAM *rstrm, int32_t maxreadahead)
 {
 	char *where;
 	u_int32_t i;
@@ -445,20 +454,19 @@ fill_input_buf(RECSTREAM * rstrm, int32_t maxreadahead)
 	i = (u_int32_t) (PtrToUlong(rstrm->in_boundry) % BYTES_PER_XDR_UNIT);
 	where += i;
 	len = MIN(((u_int32_t) (rstrm->in_size - i)), maxreadahead);
-	if ((len =
-	     (*(rstrm->readit)) (rstrm->xdrs, rstrm->tcp_handle, where,
-				 len)) == -1)
-		return (FALSE);
+	len = (*(rstrm->readit)) (rstrm->xdrs, rstrm->tcp_handle, where, len);
+	if (len == -1)
+		return (false);
 	rstrm->in_finger = where;
 	where += len;
 	rstrm->in_boundry = where;
 	/* cksum lookahead */
 	rstrm->offset += len;
-	return (TRUE);
+	return (true);
 }
 
-static bool			/* knows nothing about records!  Only about input buffers */
-get_input_bytes(RECSTREAM * rstrm, char *addr, int32_t len,
+static bool
+get_input_bytes(RECSTREAM *rstrm, char *addr, int32_t len,
 		int32_t maxreadahead)
 {
 	int32_t current;
@@ -469,7 +477,7 @@ get_input_bytes(RECSTREAM * rstrm, char *addr, int32_t len,
 		     PtrToUlong(rstrm->in_finger));
 		if (current == 0) {
 			if (!fill_input_buf(rstrm, maxreadahead))
-				return (FALSE);
+				return (false);
 			continue;
 		}
 		current = (len < current) ? len : current;
@@ -478,19 +486,19 @@ get_input_bytes(RECSTREAM * rstrm, char *addr, int32_t len,
 		addr += current;
 		len -= current;
 	}
-	return (TRUE);
+	return (true);
 }
 
-static bool			/* next two bytes of the input stream are treated as a header */
-set_input_fragment(RECSTREAM * rstrm, int32_t maxreadahead)
+static bool
+set_input_fragment(RECSTREAM *rstrm, int32_t maxreadahead)
 {
 	u_int32_t header;
 
 	if (!get_input_bytes
 	    (rstrm, (char *)(void *)&header, sizeof(header), maxreadahead))
-		return (FALSE);
+		return (false);
 	header = ntohl(header);
-	rstrm->last_frag = ((header & LAST_FRAG) == 0) ? FALSE : TRUE;
+	rstrm->last_frag = ((header & LAST_FRAG) == 0) ? false : true;
 	/*
 	 * Sanity check. Try not to accept wildly incorrect
 	 * record sizes. Unfortunately, the only record size
@@ -500,13 +508,13 @@ set_input_fragment(RECSTREAM * rstrm, int32_t maxreadahead)
 	 * what the client actually intended to send us.
 	 */
 	if (header == 0)
-		return (FALSE);
+		return (false);
 	rstrm->fbtbc = header & (~LAST_FRAG);
-	return (TRUE);
+	return (true);
 }
 
-static bool			/* consumes input bytes; knows nothing about records! */
-skip_input_bytes(RECSTREAM * rstrm, long cnt)
+static bool
+skip_input_bytes(RECSTREAM *rstrm, long cnt)
 {
 	u_int32_t current;
 
@@ -516,25 +524,26 @@ skip_input_bytes(RECSTREAM * rstrm, long cnt)
 			      PtrToUlong(rstrm->in_finger));
 		if (current == 0) {
 			if (!fill_input_buf(rstrm, INT_MAX))
-				return (FALSE);
+				return (false);
 			continue;
 		}
 		current = (u_int32_t) ((cnt < current) ? cnt : current);
 		rstrm->in_finger += current;
 		cnt -= current;
 	}
-	return (TRUE);
+	return (true);
 }
 
-static u_int fix_buf_size(u_int s)
+static u_int
+fix_buf_size(u_int s)
 {
-
 	if (s < 100)
 		s = 4000;
 	return (RNDUP(s));
 }
 
-static void compute_buffer_cksum(RECSTREAM * rstrm)
+static void
+compute_buffer_cksum(RECSTREAM *rstrm)
 {
 #if 1
 	/* CithHash64 is -substantially- faster than crc32c from FreeBSD
@@ -549,7 +558,8 @@ static void compute_buffer_cksum(RECSTREAM * rstrm)
 #endif
 }
 
-static bool xdr_inrec_noop(void)
+static bool
+xdr_inrec_noop(void)
 {
-	return (FALSE);
+	return (false);
 }

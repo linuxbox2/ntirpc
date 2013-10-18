@@ -42,9 +42,9 @@ struct v_rec {
 
 struct vpos_t {
 	struct v_rec *vrec;
-	int32_t loff;		/* logical byte offset  */
-	int32_t bpos;		/* buffer index (offset) in the current stream */
-	int32_t boff;		/* byte offset in buffer */
+	int32_t loff;	     /* logical byte offset  */
+	int32_t bpos;	     /* buffer index (offset) in the current stream */
+	int32_t boff;	     /* byte offset in buffer */
 };
 
 struct xdr_ioq {

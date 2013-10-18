@@ -116,9 +116,9 @@ bool __rpc_control(int request, void *info)
 		*(int *)info = __rpc_lowvers;
 		break;
 	default:
-		return (FALSE);
+		return (false);
 	}
-	return (TRUE);
+	return (true);
 }
 
 /*
@@ -139,12 +139,12 @@ extern rwlock_t rpcbaddr_cache_lock;
  * cache of rpcbind addresses for (host, netid).
  */
 
-static struct address_cache *check_cache(const char *host, const char *netid)
+static struct address_cache *
+check_cache(const char *host, const char *netid)
 {
 	struct address_cache *cptr;
 
 	/* READ LOCK HELD ON ENTRY: rpcbaddr_cache_lock */
-
 	for (cptr = front; cptr != NULL; cptr = cptr->ac_next) {
 		if (!strcmp(cptr->ac_host, host)
 		    && !strcmp(cptr->ac_netid, netid)) {
@@ -158,7 +158,8 @@ static struct address_cache *check_cache(const char *host, const char *netid)
 	return ((struct address_cache *)NULL);
 }
 
-static void delete_cache(struct netbuf *addr)
+static void
+delete_cache(struct netbuf *addr)
 {
 	struct address_cache *cptr, *prevptr = NULL;
 
@@ -183,16 +184,16 @@ static void delete_cache(struct netbuf *addr)
 	}
 }
 
-static void add_cache(const char *host, const char *netid, struct netbuf *taddr,
-		      char *uaddr)
+static void
+add_cache(const char *host, const char *netid, struct netbuf *taddr,
+	  char *uaddr)
 {
 	struct address_cache *ad_cache, *cptr, *prevptr;
 
 	ad_cache = (struct address_cache *)
 	    mem_zalloc(sizeof(struct address_cache));
-	if (!ad_cache) {
+	if (!ad_cache)
 		return;
-	}
 	ad_cache->ac_host = rpc_strdup(host);
 	ad_cache->ac_netid = rpc_strdup(netid);
 	ad_cache->ac_uaddr = uaddr ? rpc_strdup(uaddr) : NULL;
@@ -209,8 +210,7 @@ static void add_cache(const char *host, const char *netid, struct netbuf *taddr,
 	fprintf(stderr, "Added to cache: %s : %s\n", host, netid);
 #endif
 
-/* VARIABLES PROTECTED BY rpcbaddr_cache_lock:  cptr */
-
+	/* VARIABLES PROTECTED BY rpcbaddr_cache_lock:  cptr */
 	rwlock_wrlock(&rpcbaddr_cache_lock);
 	if (cachesize < CACHESIZE) {
 		ad_cache->ac_next = front;
@@ -302,11 +302,10 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 		}
 		addr_to_delete.len = addr->len;
 		addr_to_delete.buf = (char *)mem_zalloc(addr->len);
-		if (addr_to_delete.buf == NULL) {
+		if (addr_to_delete.buf == NULL)
 			addr_to_delete.len = 0;
-		} else {
+		else
 			memcpy(addr_to_delete.buf, addr->buf, addr->len);
-		}
 	}
 	rwlock_unlock(&rpcbaddr_cache_lock);
 	if (addr_to_delete.len != 0) {
@@ -325,7 +324,7 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 		goto out_err;
 	}
 
-	memset(&hints, 0, sizeof hints);
+	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = si.si_af;
 	hints.ai_socktype = si.si_socktype;
 	hints.ai_protocol = si.si_proto;
@@ -392,9 +391,8 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 				     (rpcprog_t) RPCBPROG,
 				     (rpcvers_t) RPCBVERS4, 0, 0);
 #ifdef ND_DEBUG
-		if (!client) {
+		if (!client)
 			clnt_pcreateerror("rpcbind clnt interface");
-		}
 #endif
 
 		if (client) {
@@ -417,28 +415,29 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
  * Set a mapping between program, version and address.
  * Calls the rpcbind service to do the mapping.
  */
-bool rpcb_set(rpcprog_t program, rpcvers_t version, const struct netconfig * nconf,	/* Network structure of transport */
-	      const struct netbuf * address /* Services netconfig address */ )
+bool
+rpcb_set(rpcprog_t program, rpcvers_t version, const struct netconfig *nconf,
+	 /* Network structure of transport */
+	 const struct netbuf *address /* Services netconfig address */)
 {
 	RPCB parms;
 	char uidbuf[32];
-	bool_t rslt = FALSE;	/* yes, bool_t */
+	bool_t rslt = false;	/* yes, bool_t */
 	CLIENT *client;
 	AUTH *auth;
 
 	/* parameter checking */
 	if (nconf == NULL) {
 		rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
-		return (FALSE);
+		return (false);
 	}
 	if (address == NULL) {
 		rpc_createerr.cf_stat = RPC_UNKNOWNADDR;
-		return (FALSE);
+		return (false);
 	}
 	client = local_rpcb();
-	if (!client) {
-		return (FALSE);
-	}
+	if (!client)
+		return (false);
 
 	auth = authnone_ncreate();	/* idempotent */
 
@@ -449,7 +448,7 @@ bool rpcb_set(rpcprog_t program, rpcvers_t version, const struct netconfig * nco
 	if (!parms.r_addr) {
 		CLNT_DESTROY(client);
 		rpc_createerr.cf_stat = RPC_N2AXLATEFAILURE;
-		return (FALSE);	/* no universal address */
+		return (false);	/* no universal address */
 	}
 	parms.r_prog = program;
 	parms.r_vers = version;
@@ -459,7 +458,7 @@ bool rpcb_set(rpcprog_t program, rpcvers_t version, const struct netconfig * nco
 	 * completeness.  For non-unix platforms, perhaps some other
 	 * string or an empty string can be sent.
 	 */
-	(void)snprintf(uidbuf, sizeof uidbuf, "%d", geteuid());
+	(void)snprintf(uidbuf, sizeof(uidbuf), "%d", geteuid());
 	parms.r_owner = uidbuf;
 
 	CLNT_CALL(client, auth, RPCBPROC_SET, (xdrproc_t) xdr_rpcb,
@@ -477,22 +476,20 @@ bool rpcb_set(rpcprog_t program, rpcvers_t version, const struct netconfig * nco
  * If netbuf is NULL, unset for all the transports, otherwise unset
  * only for the given transport.
  */
-bool rpcb_unset(rpcprog_t program, rpcvers_t version,
-		const struct netconfig * nconf)
+bool
+rpcb_unset(rpcprog_t program, rpcvers_t version,
+	   const struct netconfig *nconf)
 {
 	RPCB parms;
 	char uidbuf[32];
-	bool_t rslt = FALSE;	/* yes, bool_t */
+	bool_t rslt = false;	/* yes, bool_t */
 	CLIENT *client;
 	AUTH *auth;
 
 	client = local_rpcb();
-	if (!client) {
-		return (FALSE);
-	}
-
+	if (!client)
+		return (false);
 	auth = authnone_ncreate();	/* idempotent */
-
 	parms.r_prog = program;
 	parms.r_vers = version;
 	if (nconf)
@@ -503,7 +500,7 @@ bool rpcb_unset(rpcprog_t program, rpcvers_t version,
 	}
 	/*LINTED const castaway */
 	parms.r_addr = (char *)&nullstring[0];
-	(void)snprintf(uidbuf, sizeof uidbuf, "%d", geteuid());
+	(void)snprintf(uidbuf, sizeof(uidbuf), "%d", geteuid());
 	parms.r_owner = uidbuf;
 
 	CLNT_CALL(client, auth, RPCBPROC_UNSET, (xdrproc_t) xdr_rpcb,
@@ -518,8 +515,9 @@ bool rpcb_unset(rpcprog_t program, rpcvers_t version,
 /*
  * From the merged list, find the appropriate entry
  */
-static struct netbuf *got_entry(rpcb_entry_list_ptr relp,
-				const struct netconfig *nconf)
+static struct netbuf *
+got_entry(rpcb_entry_list_ptr relp,
+	  const struct netconfig *nconf)
 {
 	struct netbuf *na = NULL;
 	rpcb_entry_list_ptr sp;
@@ -550,7 +548,8 @@ static struct netbuf *got_entry(rpcb_entry_list_ptr relp,
  * Quick check to see if rpcbind is up.  Tries to connect over
  * local transport.
  */
-bool __rpcbind_is_up(void)
+bool
+__rpcbind_is_up(void)
 {
 	struct netconfig *nconf;
 	struct sockaddr_un sun;
@@ -565,24 +564,24 @@ bool __rpcbind_is_up(void)
 			break;
 	}
 	if (nconf == NULL)
-		return (FALSE);
+		return (false);
 
 	endnetconfig(localhandle);
 
-	memset(&sun, 0, sizeof sun);
+	memset(&sun, 0, sizeof(sun));
 	sock = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (sock < 0)
-		return (FALSE);
+		return (false);
 	sun.sun_family = AF_LOCAL;
 	strncpy(sun.sun_path, _PATH_RPCBINDSOCK, sizeof(sun.sun_path));
 
 	if (connect(sock, (struct sockaddr *)&sun, sizeof(sun)) < 0) {
 		close(sock);
-		return (FALSE);
+		return (false);
 	}
 
 	close(sock);
-	return (TRUE);
+	return (true);
 }
 
 /*
@@ -603,13 +602,14 @@ bool __rpcbind_is_up(void)
  * client handle.  This code will change if t_connect() ever
  * starts working properly.  Also look under clnt_vc.c.
  */
-struct netbuf *__rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
-				     const struct netconfig *nconf,
-				     const char *host, CLIENT ** clpp,
-				     struct timeval *tp)
+struct netbuf *
+__rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
+		      const struct netconfig *nconf,
+		      const char *host, CLIENT **clpp,
+		      struct timeval *tp)
 {
 #ifdef NOTUSED
-	static bool check_rpcbind = TRUE;
+	static bool check_rpcbind = true;
 #endif
 	RPCB parms;
 	enum clnt_stat clnt_st;
@@ -653,7 +653,8 @@ struct netbuf *__rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		if (strcmp(nconf->nc_proto, NC_TCP) == 0) {
 			struct netconfig *newnconf;
 
-			if ((newnconf = getnetconfigent("udp")) == NULL) {
+			newnconf = getnetconfigent("udp");
+			if (!newnconf) {
 				rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
 				return (NULL);
 			}
@@ -697,10 +698,11 @@ struct netbuf *__rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		}
 		port = htons(port);
 		CLNT_CONTROL(client, CLGET_SVC_ADDR, (char *)&remote);
-		if (((address = (struct netbuf *)
-		      mem_zalloc(sizeof(struct netbuf))) == NULL)
-		    || ((address->buf = (char *)
-			 mem_zalloc(remote.len)) == NULL)) {
+
+		address = (struct netbuf *)  mem_zalloc(sizeof(struct netbuf));
+		if (address)
+			address->buf = (char *) mem_zalloc(remote.len);
+		if ((!address) || (!address->buf)) {
 			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 			clnt_geterr(client, &rpc_createerr.cf_error);
 			if (address) {
@@ -742,9 +744,8 @@ struct netbuf *__rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 
 	if (client == NULL) {
 		client = getclnthandle(host, nconf, &parms.r_addr);
-		if (client == NULL) {
+		if (client == NULL)
 			goto error;
-		}
 	}
 	if (parms.r_addr == NULL) {
 		/*LINTED const castaway */
@@ -791,7 +792,7 @@ struct netbuf *__rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 			struct rpc_err rpcerr;
 			clnt_geterr(client, &rpcerr);
 			if (rpcerr.re_vers.low > RPCBVERS4)
-				goto error;	/* a new version, can't handle */
+				goto error; /* a new version, can't handle */
 		} else if (clnt_st != RPC_PROGUNAVAIL) {
 			/* Cant handle this error */
 			rpc_createerr.cf_stat = clnt_st;
@@ -818,11 +819,10 @@ struct netbuf *__rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 			client = NULL;
 		}
 	}
-	if (clpp) {
+	if (clpp)
 		*clpp = client;
-	} else if (client) {
+	else if (client)
 		CLNT_DESTROY(client);
-	}
 	if (parms.r_addr != NULL && parms.r_addr != nullstring)
 		mem_free(parms.r_addr, 0);
 	return (address);
@@ -831,8 +831,9 @@ struct netbuf *__rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 /*
  * Helper routine to find mapped address (for NLM).
  */
-extern struct netbuf *rpcb_find_mapped_addr(char *nettype, rpcprog_t prog,
-					    rpcvers_t vers, char *local_addr)
+extern struct netbuf *
+rpcb_find_mapped_addr(char *nettype, rpcprog_t prog,
+		      rpcvers_t vers, char *local_addr)
 {
 	struct netbuf *nbuf;
 	void *handle = __rpc_setconf(nettype);
@@ -846,34 +847,36 @@ extern struct netbuf *rpcb_find_mapped_addr(char *nettype, rpcprog_t prog,
  * Find the mapped address for program, version.
  * Calls the rpcbind service remotely to do the lookup.
  * Uses the transport specified in nconf.
- * Returns FALSE (0) if no map exists, else returns 1.
+ * Returns false (0) if no map exists, else returns 1.
  *
  * Assuming that the address is all properly allocated
  */
-bool rpcb_getaddr(rpcprog_t program, rpcvers_t version,
-		  const struct netconfig * nconf, struct netbuf * address,
-		  const char *host)
+bool
+rpcb_getaddr(rpcprog_t program, rpcvers_t version,
+	     const struct netconfig *nconf, struct netbuf *address,
+	     const char *host)
 {
 	struct netbuf *na;
 
-	if ((na =
-	     __rpcb_findaddr_timed(program, version, (struct netconfig *)nconf,
-				   (char *)host, (CLIENT **) NULL,
-				   (struct timeval *)NULL)) == NULL)
-		return (FALSE);
+	na = __rpcb_findaddr_timed(
+		program, version, (struct netconfig *)nconf,
+		(char *)host, (CLIENT **) NULL,
+		(struct timeval *)NULL);
+	if (!na)
+		return (false);
 
 	if (na->len > address->maxlen) {
 		/* Too long address */
 		mem_free(na->buf, 0);
 		mem_free(na, 0);
 		rpc_createerr.cf_stat = RPC_FAILED;
-		return (FALSE);
+		return (false);
 	}
 	memcpy(address->buf, na->buf, (size_t) na->len);
 	address->len = na->len;
 	mem_free(na->buf, 0);
 	mem_free(na, 0);
-	return (TRUE);
+	return (true);
 }
 
 /*
@@ -883,7 +886,8 @@ bool rpcb_getaddr(rpcprog_t program, rpcvers_t version,
  * It returns only a list of the services
  * It returns NULL on failure.
  */
-rpcblist *rpcb_getmaps(const struct netconfig * nconf, const char *host)
+rpcblist *
+rpcb_getmaps(const struct netconfig *nconf, const char *host)
 {
 	rpcblist_ptr head = NULL;
 	enum clnt_stat clnt_st;
@@ -892,9 +896,8 @@ rpcblist *rpcb_getmaps(const struct netconfig * nconf, const char *host)
 	AUTH *auth;
 
 	client = getclnthandle(host, nconf, NULL);
-	if (client == NULL) {
+	if (client == NULL)
 		return (head);
-	}
 
 	auth = authnone_ncreate();	/* idempotent */
 
@@ -937,14 +940,16 @@ rpcblist *rpcb_getmaps(const struct netconfig * nconf, const char *host)
  * remotely call that routine with the given parameters. This allows
  * programs to do a lookup and call in one step.
  */
-enum clnt_stat rpcb_rmtcall(const struct netconfig *nconf,	/* Netconfig structure */
-			    const char *host,	/* Remote host name */
-			    rpcprog_t prog, rpcvers_t vers, rpcproc_t proc,	/* Remote proc identifiers */
-			    xdrproc_t xdrargs, caddr_t argsp, xdrproc_t xdrres,	/* XDR routines */
-			    caddr_t resp,	/* Argument and Result */
-			    struct timeval tout,	/* Timeout value for this call */
-			    const struct netbuf *addr_ptr
-			    /* Preallocated netbuf address */ )
+enum clnt_stat
+rpcb_rmtcall(const struct netconfig *nconf, /* Netconfig structure */
+	     const char *host, /* Remote host name */
+	     rpcprog_t prog, rpcvers_t vers,
+	     rpcproc_t proc,/* Remote proc identifiers */
+	     xdrproc_t xdrargs, caddr_t argsp, xdrproc_t xdrres,
+	     caddr_t resp,	/* Argument and Result */
+	     struct timeval tout,	/* Timeout value for this call */
+	     const struct netbuf *addr_ptr
+	     /* Preallocated netbuf address */)
 {
 	enum clnt_stat stat;
 	struct r_rpcb_rmtcallargs a;
@@ -955,9 +960,8 @@ enum clnt_stat rpcb_rmtcall(const struct netconfig *nconf,	/* Netconfig structur
 
 	stat = 0;
 	client = getclnthandle(host, nconf, NULL);
-	if (client == NULL) {
+	if (client == NULL)
 		return (RPC_FAILED);
-	}
 
 	auth = authnone_ncreate();	/* idempotent */
 
@@ -992,7 +996,7 @@ enum clnt_stat rpcb_rmtcall(const struct netconfig *nconf,	/* Netconfig structur
 			}
 			if (na->len > addr_ptr->maxlen) {
 				/* Too long address */
-				stat = RPC_FAILED;	/* XXX A better error no */
+				stat = RPC_FAILED; /* XXX A better error no */
 				mem_free(na->buf, 0);	/* XXX */
 				mem_free(na, 0);
 				/*LINTED const castaway */
@@ -1021,7 +1025,8 @@ enum clnt_stat rpcb_rmtcall(const struct netconfig *nconf,	/* Netconfig structur
  * Gets the time on the remote host.
  * Returns 1 if succeeds else 0.
  */
-bool rpcb_gettime(const char *host, time_t * timep)
+int
+boolrpcb_gettime(const char *host, time_t *timep)
 {
 	void *handle;
 	struct netconfig *nconf;
@@ -1032,16 +1037,18 @@ bool rpcb_gettime(const char *host, time_t * timep)
 
 	if ((host == NULL) || (host[0] == 0)) {
 		time(timep);
-		return (TRUE);
+		return (true);
 	}
 
-	if ((handle = __rpc_setconf("netpath")) == NULL) {
+	handle = __rpc_setconf("netpath");
+	if (!handle) {
 		rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
-		return (FALSE);
+		return (false);
 	}
 	rpc_createerr.cf_stat = RPC_SUCCESS;
 	while (client == NULL) {
-		if ((nconf = __rpc_getconf(handle)) == NULL) {
+		nconf = __rpc_getconf(handle);
+		if (!nconf) {
 			if (rpc_createerr.cf_stat == RPC_SUCCESS)
 				rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
 			break;
@@ -1051,9 +1058,8 @@ bool rpcb_gettime(const char *host, time_t * timep)
 			break;
 	}
 	__rpc_endconf(handle);
-	if (client == (CLIENT *) NULL) {
-		return (FALSE);
-	}
+	if (client == (CLIENT *) NULL)
+		return (false);
 
 	auth = authnone_ncreate();	/* idempotent */
 
@@ -1074,7 +1080,7 @@ bool rpcb_gettime(const char *host, time_t * timep)
 		}
 	}
 	CLNT_DESTROY(client);
-	return (st == RPC_SUCCESS ? TRUE : FALSE);
+	return (st == RPC_SUCCESS ? true : false);
 }
 
 /*
@@ -1097,10 +1103,8 @@ char *rpcb_taddr2uaddr(struct netconfig *nconf, struct netbuf *taddr)
 		return (NULL);
 	}
 	client = local_rpcb();
-	if (!client) {
+	if (!client)
 		return (NULL);
-	}
-
 	CLNT_CALL(client, auth, RPCBPROC_TADDR2UADDR, (xdrproc_t) xdr_netbuf,
 		  (char *)(void *)taddr, (xdrproc_t) xdr_wrapstring,
 		  (char *)(void *)&uaddr, tottimeout);
@@ -1128,9 +1132,8 @@ struct netbuf *rpcb_uaddr2taddr(struct netconfig *nconf, char *uaddr)
 		return (NULL);
 	}
 	client = local_rpcb();
-	if (!client) {
+	if (!client)
 		return (NULL);
-	}
 
 	auth = authnone_ncreate();	/* idempotent */
 
@@ -1174,7 +1177,7 @@ static CLIENT *local_rpcb(void)
 	 * first. If this doesn't work, try all transports defined in
 	 * the netconfig file.
 	 */
-	memset(&sun, 0, sizeof sun);
+	memset(&sun, 0, sizeof(sun));
 	sock = socket(AF_LOCAL, SOCK_STREAM, 0);
 	if (sock < 0)
 		goto try_nconf;

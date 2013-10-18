@@ -49,7 +49,7 @@
 
 #define SVC_XPRT_PARTITIONS 7
 
-static bool initialized = FALSE;
+static bool initialized;
 
 static struct svc_xprt_set svc_xprt_set_ = {
 	MUTEX_INITIALIZER /* svc_xprt_lock */ ,
@@ -57,8 +57,9 @@ static struct svc_xprt_set svc_xprt_set_ = {
 	 0, RBT_X_FLAG_NONE, 0, NULL}	/* xt */
 };
 
-static inline int svc_xprt_fd_cmpf(const struct opr_rbtree_node *lhs,
-				   const struct opr_rbtree_node *rhs)
+static inline int
+svc_xprt_fd_cmpf(const struct opr_rbtree_node *lhs,
+		 const struct opr_rbtree_node *rhs)
 {
 	struct svc_xprt_rec *lk, *rk;
 
@@ -92,20 +93,21 @@ void svc_xprt_init()
 		__warnx(TIRPC_DEBUG_FLAG_SVC_XPRT,
 			"svc_xprt_init: rbtx_init failed");
 
-	initialized = TRUE;
+	initialized = true;
 
  unlock:
 	mutex_unlock(&svc_xprt_set_.lock);
 }
 
-#define cond_init_svc_xprt() {                  \
-        do {                                    \
-            if (! initialized)                  \
-                svc_xprt_init();                \
-        } while (0);                            \
-    }
+#define cond_init_svc_xprt() { \
+		do { \
+			if (!initialized) \
+				svc_xprt_init(); \
+		} while (0); \
+	}
 
-static inline struct svc_xprt_rec *svc_xprt_lookup(int fd)
+static inline struct svc_xprt_rec *
+svc_xprt_lookup(int fd)
 {
 	struct rbtree_x_part *t;
 	struct svc_xprt_rec sk, *srec = NULL;
@@ -127,7 +129,8 @@ static inline struct svc_xprt_rec *svc_xprt_lookup(int fd)
 	return (srec);
 }
 
-static inline SVCXPRT *svc_xprt_insert(SVCXPRT * xprt, uint32_t flags)
+static inline SVCXPRT *
+svc_xprt_insert(SVCXPRT *xprt, uint32_t flags)
 {
 	struct rbtree_x_part *t;
 	struct svc_xprt_rec sk, *srec;
@@ -170,7 +173,8 @@ static inline SVCXPRT *svc_xprt_insert(SVCXPRT * xprt, uint32_t flags)
 	return (NULL);
 }
 
-static inline SVCXPRT *svc_xprt_set_impl(SVCXPRT * xprt, uint32_t flags)
+static inline SVCXPRT *
+svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
 {
 	struct rbtree_x_part *t;
 	struct svc_xprt_rec sk, *srec;
@@ -230,17 +234,20 @@ static inline SVCXPRT *svc_xprt_set_impl(SVCXPRT * xprt, uint32_t flags)
 	return (xprt2);
 };
 
-SVCXPRT *svc_xprt_set(SVCXPRT * xprt, uint32_t flags)
+SVCXPRT *
+svc_xprt_set(SVCXPRT *xprt, uint32_t flags)
 {
 	return (svc_xprt_set_impl(xprt, flags));
 }
 
-SVCXPRT *svc_xprt_clear(SVCXPRT * xprt, uint32_t flags)
+SVCXPRT *
+svc_xprt_clear(SVCXPRT *xprt, uint32_t flags)
 {
 	return (svc_xprt_set_impl(xprt, flags | SVC_XPRT_FLAG_CLEAR));
 }
 
-SVCXPRT *svc_xprt_get(int fd)
+SVCXPRT *
+svc_xprt_get(int fd)
 {
 	SVCXPRT *xprt = NULL;
 	struct svc_xprt_rec *srec = svc_xprt_lookup(fd);
@@ -254,7 +261,8 @@ SVCXPRT *svc_xprt_get(int fd)
 	return (xprt);
 }
 
-int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
+int
+svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 {
 	struct rbtree_x_part *t = NULL;
 	struct opr_rbtree_node *n;
@@ -284,14 +292,16 @@ int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 		x_ix = 0;
 		n = opr_rbtree_first(&t->t);
 		while (n != NULL) {
-			++x_ix;	/* diagnostic, index into logical srec sequence */
+			++x_ix;	/* diagnostic, index into logical srec
+				 * sequence */
 			srec = opr_containerof(n, struct svc_xprt_rec, node_k);
 			mutex_lock(&srec->mtx);
 			if (srec->xprt) {
 				sk.fd_k = srec->fd_k;
 				xprt = srec->xprt;
 
-				/* call each_func with t !LOCKED, srec !LOCKED */
+				/* call each_func with t !LOCKED, srec
+				 * !LOCKED */
 				mutex_unlock(&srec->mtx);
 				rwlock_unlock(&t->lock);
 
@@ -308,21 +318,23 @@ int svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 					n = opr_rbtree_lookup(&t->t,
 							      &sk.node_k);
 					if (!n) {
-						rwlock_unlock(&t->lock);	/* t !LOCKED */
+						rwlock_unlock(&t->lock);
+								/* t !LOCKED */
 						goto restart;
 					}
 				}
 			}
 			n = opr_rbtree_next(n);
 		}		/* curr partition */
-		rwlock_unlock(&t->lock);	/* t !LOCKED */
+		rwlock_unlock(&t->lock); /* t !LOCKED */
 		p_ix++;
 	}			/* SVC_XPRT_PARTITIONS */
 
 	return (code);
 }
 
-void svc_xprt_dump_xprts(const char *tag)
+void
+svc_xprt_dump_xprts(const char *tag)
 {
 	struct rbtree_x_part *t = NULL;
 	struct opr_rbtree_node *n;
@@ -354,7 +366,8 @@ void svc_xprt_dump_xprts(const char *tag)
 	return;
 }
 
-void svc_xprt_shutdown()
+void
+svc_xprt_shutdown()
 {
 	struct rbtree_x_part *t = NULL;
 	struct opr_rbtree_node *n;
@@ -372,8 +385,10 @@ void svc_xprt_shutdown()
 		while (n != NULL) {
 			srec = opr_containerof(n, struct svc_xprt_rec, node_k);
 			if (srec->xprt) {
-				/* call each_func with t !LOCKED, srec !LOCKED */
-				SVC_DESTROY(srec->xprt);	/* locks srec, so avoid deadlock */
+				/* call each_func with t !LOCKED, srec !LOCKED
+				 */
+				SVC_DESTROY(srec->xprt); /* locks srec, so
+							  * avoid deadlock */
 				srec->xprt = NULL;
 				mutex_destroy(&srec->mtx);
 			}

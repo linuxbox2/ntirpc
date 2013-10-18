@@ -36,7 +36,7 @@
 #include <unistd.h>
 #include <string.h>
 
-static char *default_domain = 0;
+static char *default_domain;
 
 static char *get_default_domain(void)
 {
@@ -65,7 +65,8 @@ static char *get_default_domain(void)
  */
 int __rpc_get_default_domain(char **domain)
 {
-	if ((*domain = get_default_domain()) != 0)
+	*domain = get_default_domain();
+	if (*domain)
 		return (0);
 	return (-1);
 }

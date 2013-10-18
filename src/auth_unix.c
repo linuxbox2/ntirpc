@@ -84,8 +84,9 @@ struct audata {
  * Create a unix style authenticator.
  * Returns an auth handle with the given stuff in it.
  */
-AUTH *authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
-		       gid_t * aup_gids)
+AUTH *
+authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
+		 gid_t *aup_gids)
 {
 	struct authunix_parms aup;
 	char mymem[MAX_AUTH_BYTES];
@@ -147,7 +148,8 @@ AUTH *authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 #ifdef _KERNEL
 	au->au_origcred.oa_base = mem_alloc((u_int) len);
 #else
-	if ((au->au_origcred.oa_base = mem_alloc((u_int) len)) == NULL) {
+	au->au_origcred.oa_base = mem_alloc((u_int) len);
+	if (au->au_origcred.oa_base == NULL) {
 		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 		rpc_createerr.cf_error.re_errno = ENOMEM;
 		goto cleanup_authunix_create;
@@ -163,7 +165,7 @@ AUTH *authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 	auth_get(auth);		/* Reference for caller */
 	return (auth);
 #ifndef _KERNEL
- cleanup_authunix_create:
+cleanup_authunix_create:
 	if (auth)
 		mem_free(auth, sizeof(*auth));
 	if (au) {
@@ -179,7 +181,8 @@ AUTH *authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
  * Returns an auth handle with parameters determined by doing lots of
  * syscalls.
  */
-AUTH *authunix_ncreate_default(void)
+AUTH *
+authunix_ncreate_default(void)
 {
 	int len;
 	char machname[MAXHOSTNAMELEN + 1];
@@ -189,7 +192,7 @@ AUTH *authunix_ncreate_default(void)
 
 	memset(&rpc_createerr, 0, sizeof(rpc_createerr));
 
-	if (gethostname(machname, sizeof machname) == -1) {
+	if (gethostname(machname, sizeof(machname)) == -1) {
 		rpc_createerr.cf_error.re_errno = errno;
 		goto out_err;
 	}
@@ -200,7 +203,7 @@ AUTH *authunix_ncreate_default(void)
 	/* According to glibc comments, an intervening setgroups(2)
 	 * call can increase the number of supplemental groups between
 	 * these two getgroups(2) calls. */
- retry:
+retry:
 	len = getgroups(0, NULL);
 	if (len == -1) {
 		rpc_createerr.cf_error.re_errno = errno;
@@ -239,7 +242,7 @@ AUTH *authunix_ncreate_default(void)
 	mem_free(gids, 0);	/* XXX */
 	return result;
 
- out_err:
+out_err:
 	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 	return NULL;
 }
@@ -249,12 +252,14 @@ AUTH *authunix_ncreate_default(void)
  */
 
 /* ARGSUSED */
-static void authunix_nextverf(AUTH * auth)
+static void
+authunix_nextverf(AUTH *auth)
 {
 	/* no action necessary */
 }
 
-static bool authunix_marshal(AUTH * auth, XDR * xdrs)
+static bool
+authunix_marshal(AUTH *auth, XDR *xdrs)
 {
 	struct audata *au;
 
@@ -265,7 +270,8 @@ static bool authunix_marshal(AUTH * auth, XDR * xdrs)
 	return (XDR_PUTBYTES(xdrs, au->au_marshed, au->au_mpos));
 }
 
-static bool authunix_validate(AUTH * auth, struct opaque_auth *verf)
+static bool
+authunix_validate(AUTH *auth, struct opaque_auth *verf)
 {
 	struct audata *au;
 	XDR xdrs;
@@ -293,10 +299,11 @@ static bool authunix_validate(AUTH * auth, struct opaque_auth *verf)
 		}
 		marshal_new_auth(auth);
 	}
-	return (TRUE);
+	return (true);
 }
 
-static bool authunix_refresh(AUTH * auth, void *dummy)
+static bool
+authunix_refresh(AUTH *auth, void *dummy)
 {
 	struct audata *au = AUTH_PRIVATE(auth);
 	struct authunix_parms aup;
@@ -308,7 +315,7 @@ static bool authunix_refresh(AUTH * auth, void *dummy)
 
 	if (auth->ah_cred.oa_base == au->au_origcred.oa_base) {
 		/* there is no hope.  Punt */
-		return (FALSE);
+		return (false);
 	}
 	au->au_shfaults++;
 
@@ -339,7 +346,8 @@ static bool authunix_refresh(AUTH * auth, void *dummy)
 	return (stat);
 }
 
-static void authunix_destroy(AUTH * auth)
+static void
+authunix_destroy(AUTH *auth)
 {
 	struct audata *au;
 
@@ -363,7 +371,8 @@ static void authunix_destroy(AUTH * auth)
  * Marshals (pre-serializes) an auth struct.
  * sets private data, au_marshed and au_mpos
  */
-static void marshal_new_auth(AUTH * auth)
+static void
+marshal_new_auth(AUTH *auth)
 {
 	XDR xdr_stream;
 	XDR *xdrs = &xdr_stream;
@@ -382,19 +391,20 @@ static void marshal_new_auth(AUTH * auth)
 	XDR_DESTROY(xdrs);
 }
 
-static bool authunix_wrap(AUTH * auth, XDR * xdrs, xdrproc_t xfunc,
-			  caddr_t xwhere)
+static bool
+authunix_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xfunc,
+	      caddr_t xwhere)
 {
 	return ((*xfunc) (xdrs, xwhere));
 }
 
-static struct auth_ops *authunix_ops(void)
+static struct auth_ops *
+authunix_ops(void)
 {
 	static struct auth_ops ops;
-	extern mutex_t ops_lock;
+	extern mutex_t ops_lock; /* XXXX does it need to be extern? */
 
 	/* VARIABLES PROTECTED BY ops_lock: ops */
-
 	mutex_lock(&ops_lock);
 	if (ops.ah_nextverf == NULL) {
 		ops.ah_nextverf = authunix_nextverf;

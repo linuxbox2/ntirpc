@@ -22,8 +22,7 @@ SOURCES = \
 	xdr_rec.c \
 	xdr_reference.c \
 	xdr_sizeof.c \
-	xdr_stdio.c \
-	xdr_vrec.c 
+	xdr_stdio.c 
 
 OBJECTS = $(SOURCES:%.c=%.o)
 

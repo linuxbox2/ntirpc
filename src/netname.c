@@ -55,9 +55,9 @@
 #define NGROUPS 16
 #endif
 
-#define TYPE_BIT(type)  (sizeof (type) * CHAR_BIT)
+#define TYPE_BIT(type)  (sizeof(type) * CHAR_BIT)
 
-#define TYPE_SIGNED(type) (((type) -1) < 0)
+#define TYPE_SIGNED(type) (((type)-1) < 0)
 
 /*
 ** 302 / 1000 is log10(2.0) rounded up.
@@ -66,37 +66,38 @@
 ** add one more for a minus sign if the type is signed.
 */
 #define INT_STRLEN_MAXIMUM(type) \
-    ((TYPE_BIT(type) - TYPE_SIGNED(type)) * 302 / 1000 + 1 + TYPE_SIGNED(type))
+	((TYPE_BIT(type) - TYPE_SIGNED(type)) * 302 / 1000 + 1 + \
+	 TYPE_SIGNED(type))
 
 static char *OPSYS = "unix";
 
 /*
  * Figure out my fully qualified network name
  */
-int getnetname(char name[MAXNETNAMELEN + 1])
+int
+getnetname(char name[MAXNETNAMELEN + 1])
 {
 	uid_t uid;
 
 	uid = geteuid();
-	if (uid == 0) {
+	if (uid == 0)
 		return (host2netname(name, (char *)NULL, (char *)NULL));
-	} else {
+	else
 		return (user2netname(name, uid, (char *)NULL));
-	}
 }
 
 /*
  * Convert unix cred to network-name
  */
-int user2netname(char netname[MAXNETNAMELEN + 1], const uid_t uid,
-		 const char *domain)
+int
+user2netname(char netname[MAXNETNAMELEN + 1], const uid_t uid,
+	     const char *domain)
 {
 	char *dfltdom;
 
-	if (domain == NULL) {
+	if (domain == NULL)
 		if (__rpc_get_default_domain(&dfltdom) != 0) {
 			return (0);
-		}
 		domain = dfltdom;
 	}
 	if (strlen(domain) + 1 + INT_STRLEN_MAXIMUM(u_long) + 1 +
@@ -110,16 +111,16 @@ int user2netname(char netname[MAXNETNAMELEN + 1], const uid_t uid,
 /*
  * Convert host to network-name
  */
-int host2netname(char netname[MAXNETNAMELEN + 1], const char *host,
+int
+host2netname(char netname[MAXNETNAMELEN + 1], const char *host,
 		 const char *domain)
 {
 	char *dfltdom;
 	char hostname[MAXHOSTNAMELEN + 1];
 
 	if (domain == NULL) {
-		if (__rpc_get_default_domain(&dfltdom) != 0) {
+		if (__rpc_get_default_domain(&dfltdom) != 0)
 			return (0);
-		}
 		domain = dfltdom;
 	}
 	if (host == NULL) {

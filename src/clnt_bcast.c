@@ -115,7 +115,8 @@ int __rpc_broadenable(int, int, struct broadif *);
 
 int __rpc_lowvers = 0;
 
-int __rpc_getbroadifs(int af, int proto, int socktype, broadlist_t * list)
+int
+__rpc_getbroadifs(int af, int proto, int socktype, broadlist_t *list)
 {
 	int count = 0;
 	struct broadif *bip;
@@ -129,7 +130,7 @@ int __rpc_getbroadifs(int af, int proto, int socktype, broadlist_t * list)
 	if (getifaddrs(&ifp) < 0)
 		return 0;
 
-	memset(&hints, 0, sizeof hints);
+	memset(&hints, 0, sizeof(hints));
 
 	hints.ai_family = af;
 	hints.ai_protocol = proto;
@@ -142,7 +143,7 @@ int __rpc_getbroadifs(int af, int proto, int socktype, broadlist_t * list)
 		if (ifap->ifa_addr->sa_family != af
 		    || !(ifap->ifa_flags & IFF_UP))
 			continue;
-		bip = (struct broadif *)mem_alloc(sizeof *bip);
+		bip = (struct broadif *)mem_alloc(sizeof(*bip));
 		if (bip == NULL)
 			break;
 		bip->index = if_nametoindex(ifap->ifa_name);
@@ -183,7 +184,8 @@ int __rpc_getbroadifs(int af, int proto, int socktype, broadlist_t * list)
 	return count;
 }
 
-void __rpc_freebroadifs(broadlist_t * list)
+void
+__rpc_freebroadifs(broadlist_t *list)
 {
 	struct broadif *bip, *next;
 
@@ -196,7 +198,8 @@ void __rpc_freebroadifs(broadlist_t * list)
 	}
 }
 
-int /*ARGSUSED*/ __rpc_broadenable(int af, int s, struct broadif *bip)
+int /*ARGSUSED*/
+__rpc_broadenable(int af, int s, struct broadif *bip)
 {
 	int o = 1;
 
@@ -205,27 +208,28 @@ int /*ARGSUSED*/ __rpc_broadenable(int af, int s, struct broadif *bip)
 		fprintf(stderr, "set v6 multicast if to %d\n", bip->index);
 		if (setsockopt
 		    (s, IPPROTO_IPV6, IPV6_MULTICAST_IF, &bip->index,
-		     sizeof bip->index) < 0)
+		     sizeof(bip->index)) < 0)
 			return -1;
 	} else
 #endif
-	if (setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof o) < 0)
-		return -1;
+		if (setsockopt(s, SOL_SOCKET, SO_BROADCAST, &o, sizeof(o)) < 0)
+			return -1;
 
 	return 0;
 }
 
-enum clnt_stat rpc_broadcast_exp(rpcprog_t prog,	/* program number */
-				 rpcvers_t vers,	/* version number */
-				 rpcproc_t proc,	/* procedure number */
-				 xdrproc_t xargs,	/* xdr routine for args */
-				 caddr_t argsp,	/* pointer to args */
-				 xdrproc_t xresults,	/* xdr routine for results */
-				 caddr_t resultsp,	/* pointer to results */
-				 resultproc_t eachresult,	/* call with each result obtained */
-				 int inittime,	/* how long to wait initially */
-				 int waittime,	/* maximum time to wait */
-				 const char *nettype /* transport type */ )
+enum clnt_stat
+rpc_broadcast_exp(rpcprog_t prog,	/* program number */
+		  rpcvers_t vers,	/* version number */
+		  rpcproc_t proc,	/* procedure number */
+		  xdrproc_t xargs,	/* xdr routine for args */
+		  caddr_t argsp,	/* pointer to args */
+		  xdrproc_t xresults,	/* xdr routine for results */
+		  caddr_t resultsp,	/* pointer to results */
+		  resultproc_t eachresult, /* call with each result obtained */
+		  int inittime,	/* how long to wait initially */
+		  int waittime,	/* maximum time to wait */
+		  const char *nettype /* transport type */)
 {
 	enum clnt_stat stat = RPC_SUCCESS;	/* Return status */
 	XDR xdr_stream;		/* XDR stream */
@@ -273,9 +277,9 @@ enum clnt_stat rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 	u_int udpbufsz = 0;
 #endif				/* PORTMAP */
 
-	if (sys_auth == NULL) {
+	if (sys_auth == NULL)
 		return (RPC_SYSTEMERROR);
-	}
+
 	/*
 	 * initialization: create a fd, a broadcast address, and send the
 	 * request on the broadcast transport.
@@ -285,9 +289,9 @@ enum clnt_stat rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 
 	if (nettype == NULL)
 		nettype = "datagram_n";
-	if ((handle = __rpc_setconf(nettype)) == NULL) {
+	handle = __rpc_setconf(nettype);
+	if (handle == NULL)
 		return (RPC_UNKNOWNPROTO);
-	}
 	while ((nconf = __rpc_getconf(handle)) != NULL) {
 		int fd;
 		struct __rpc_sockinfo si;
@@ -327,7 +331,8 @@ enum clnt_stat rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 #ifdef PORTMAP
 		if (si.si_af == AF_INET && si.si_proto == IPPROTO_UDP) {
 			udpbufsz = fdlist[fdlistno].dsize;
-			if ((outbuf_pmap = mem_alloc(udpbufsz)) == NULL) {
+			outbuf_pmap = mem_alloc(udpbufsz);
+			if (outbuf_pmap == NULL) {
 				close(fd);
 				stat = RPC_SYSTEMERROR;
 				goto done_broad;
@@ -449,8 +454,9 @@ enum clnt_stat rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 						perror("sendto");
 #endif
 						__warnx
-						    (TIRPC_DEBUG_FLAG_CLNT_BCAST,
-						     "clnt_bcast: cannot send broadcast packet");
+						   (TIRPC_DEBUG_FLAG_CLNT_BCAST,
+						    "clnt_bcast: cannot send "
+						    "broadcast packet");
 						stat = RPC_CANTSEND;
 						continue;
 					};
@@ -466,15 +472,17 @@ enum clnt_stat rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 				 * Send the version 2 packet also
 				 * for UDP/IP
 				 */
-				if (pmap_flag && fdlist[i].proto == IPPROTO_UDP) {
+				if (pmap_flag && fdlist[i].proto
+				    == IPPROTO_UDP) {
 					if (sendto
 					    (fdlist[i].fd, outbuf_pmap,
 					     outlen_pmap, 0, addr,
 					     (size_t) fdlist[i].asize) !=
 					    outlen_pmap) {
 						__warnx
-						    (TIRPC_DEBUG_FLAG_CLNT_BCAST,
-						     "clnt_bcast: Cannot send broadcast packet");
+						   (TIRPC_DEBUG_FLAG_CLNT_BCAST,
+						    "clnt_bcast: Cannot send "
+						    "broadcast packet");
 						stat = RPC_CANTSEND;
 						continue;
 					}
@@ -510,7 +518,7 @@ enum clnt_stat rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 
 		for (i = fds_found = 0; i < fdlistno && fds_found < pollretval;
 		     i++) {
-			bool done = FALSE;
+			bool done = false;
 
 			if (pfd[i].revents == 0)
 				continue;
@@ -650,15 +658,16 @@ enum clnt_stat rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 	return (stat);
 }
 
-enum clnt_stat rpc_broadcast(rpcprog_t prog,	/* program number */
-			     rpcvers_t vers,	/* version number */
-			     rpcproc_t proc,	/* procedure number */
-			     xdrproc_t xargs,	/* xdr routine for args */
-			     caddr_t argsp,	/* pointer to args */
-			     xdrproc_t xresults,	/* xdr routine for results */
-			     caddr_t resultsp,	/* pointer to results */
-			     resultproc_t eachresult,	/* call with each result obtained */
-			     const char *nettype /* transport type */ )
+enum clnt_stat
+rpc_broadcast(rpcprog_t prog,	/* program number */
+	      rpcvers_t vers,	/* version number */
+	      rpcproc_t proc,	/* procedure number */
+	      xdrproc_t xargs,	/* xdr routine for args */
+	      caddr_t argsp,	/* pointer to args */
+	      xdrproc_t xresults,	/* xdr routine for results */
+	      caddr_t resultsp,	/* pointer to results */
+	      resultproc_t eachresult,	/* call with each result obtained */
+	      const char *nettype /* transport type */)
 {
 	enum clnt_stat dummy;
 

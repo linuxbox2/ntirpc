@@ -41,39 +41,39 @@ struct opr_queue {
 };
 
 #define opr_queue_Scan(head, cursor) \
-    cursor = (head)->next; cursor != (head); cursor = cursor->next
+	cursor = (head)->next; cursor != (head); cursor = cursor->next
 
 #define opr_queue_ScanSafe(head, cursor, store) \
-    cursor = (head)->next, store = cursor->next; \
-    cursor != (head); \
-    cursor = store, store = store->next
+	cursor = (head)->next, store = cursor->next; \
+	cursor != (head); \
+	cursor = store, store = store->next
 
 #define opr_queue_ScanFrom(head, cursor) \
-    /* nothing */; cursor != (head); cursor = cursor->next
+	/* nothing */; cursor != (head); cursor = cursor->next
 
 #define opr_queue_ScanSafeFrom(head, cursor, store) \
-    /* nothing */, store = cursor->next; \
-    cursor != (head); \
-    cursor = store, store = store->next
+	/* nothing */, store = cursor->next; \
+	cursor != (head); \
+	cursor = store, store = store->next
 
 #define opr_queue_ScanBackwards(head, cursor) \
-    cursor = (head)->prev; cursor != (head); cursor = cursor->prev
+	cursor = (head)->prev; cursor != (head); cursor = cursor->prev
 
 #define opr_queue_ScanBackwards(head, cursor) \
-    cursor = (head)->prev; cursor != (head); cursor = cursor->prev
+	cursor = (head)->prev; cursor != (head); cursor = cursor->prev
 
 #define opr_queue_ScanBackwardsFrom(head, cursor) \
-    /* nothing */; cursor != (head); cursor = cursor->prev
+	/* nothing */; cursor != (head); cursor = cursor->prev
 
 #define opr_queue_ScanBackwardsSafe(head, cursor, store) \
-   cursor = (head)->prev, store = cursor->prev; \
-   cursor != (head); \
-   cursor = store, store = store->prev
+	cursor = (head)->prev, store = cursor->prev; \
+	cursor != (head); \
+	cursor = store, store = store->prev
 
 #define opr_queue_ScanBackwardsSafeFrom(head, cursor, store) \
-    /* nothing */, store = cursor->prev; \
-   cursor != (head); \
-   cursor = store, store = store->prev
+	/* nothing */, store = cursor->prev; \
+	cursor != (head); \
+	cursor = store, store = store->prev
 
 static inline void opr_queue_Zero(struct opr_queue *q)
 {
@@ -183,11 +183,10 @@ static inline void opr_queue_SplitBeforeAppend(struct opr_queue *q1,
 					       struct opr_queue *q2,
 					       struct opr_queue *pivot)
 {
-
 	if (q1 == pivot->prev)
 		return;
 	/* Add ourselves to the end of list 2 */
-	q2->prev->next = q1->next;	/* end of list 2, is now the start of list 1 */
+	q2->prev->next = q1->next; /* end of q 2, is now the start of q 1 */
 	q1->next->prev = q2->prev;
 	pivot->prev->next = q2;	/* entry before the pivot is it at end of q2 */
 	q2->prev = pivot->prev;
@@ -202,7 +201,6 @@ static inline void opr_queue_SplitAfterPrepend(struct opr_queue *q1,
 					       struct opr_queue *q2,
 					       struct opr_queue *pivot)
 {
-
 	if (q1 == pivot->next)
 		return;
 
@@ -221,7 +219,6 @@ static inline void opr_queue_SplitAfterPrepend(struct opr_queue *q1,
 static inline void opr_queue_SpliceAppend(struct opr_queue *target,
 					  struct opr_queue *source)
 {
-
 	if (source->next == source)
 		return;
 
@@ -238,7 +235,6 @@ static inline void opr_queue_SpliceAppend(struct opr_queue *target,
 static inline void opr_queue_SplicePrepend(struct opr_queue *target,
 					   struct opr_queue *source)
 {
-
 	if (source->next == source)
 		return;
 
@@ -253,18 +249,18 @@ static inline void opr_queue_SplicePrepend(struct opr_queue *target,
 }
 
 #define opr_queue_Entry(queue, structure, member) \
-    ((structure *)((char *)(queue)-(char *)(&((structure *)NULL)->member)))
+	((structure *)((char *)(queue)-(char *)(&((structure *)NULL)->member)))
 
 #define opr_queue_First(queue, structure, member) \
-    opr_queue_Entry((queue)->next, structure, member)
+	opr_queue_Entry((queue)->next, structure, member)
 
 #define opr_queue_Last(queue, structure, member) \
-    opr_queue_Entry((queue)->prev, structure, member)
+	opr_queue_Entry((queue)->prev, structure, member)
 
 #define opr_queue_Next(entry, structure, member) \
-    opr_queue_Entry((entry)->next, structure, member)
+	opr_queue_Entry((entry)->next, structure, member)
 
 #define opr_queue_Prev(entry, structure, member) \
-    opr_queue_Entry((entry)->prev, structure, member)
+	opr_queue_Entry((entry)->prev, structure, member)
 
 #endif

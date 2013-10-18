@@ -46,7 +46,8 @@
 /*
  * XDR for unix authentication parameters.
  */
-bool xdr_authunix_parms(XDR * xdrs, struct authunix_parms *p)
+bool
+xdr_authunix_parms(XDR *xdrs, struct authunix_parms *p)
 {
 
 	assert(xdrs != NULL);
@@ -56,9 +57,9 @@ bool xdr_authunix_parms(XDR * xdrs, struct authunix_parms *p)
 	    && inline_xdr_string(xdrs, &(p->aup_machname), MAX_MACHINE_NAME)
 	    && inline_xdr_u_int(xdrs, &(p->aup_uid))
 	    && inline_xdr_u_int(xdrs, &(p->aup_gid))
-	    && xdr_array(xdrs, (caddr_t *) & (p->aup_gids), &(p->aup_len),
+	    && xdr_array(xdrs, (caddr_t *) &(p->aup_gids), &(p->aup_len),
 			 NGRPS, sizeof(int), (xdrproc_t) xdr_int)) {
-		return (TRUE);
+		return (true);
 	}
-	return (FALSE);
+	return (false);
 }

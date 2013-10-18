@@ -59,7 +59,8 @@
 #define RWLOCK_INITIALIZER	PTHREAD_RWLOCK_INITIALIZER
 #define ONCE_INITIALIZER	PTHREAD_ONCE_INIT
 
-static inline int mutex_init(pthread_mutex_t * m, const pthread_mutexattr_t * a
+static inline int
+mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *a
 			     __attribute__ ((unused)))
 {
 	pthread_mutexattr_t attr;

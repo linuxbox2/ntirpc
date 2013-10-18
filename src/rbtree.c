@@ -336,7 +336,8 @@ static void remove_recolour(struct opr_rbtree *head,
 				node = parent;
 				parent = node->parent;
 			} else {
-				if (other->right == NULL || !other->right->red) {
+				if ((other->right == NULL) ||
+				    (!other->right->red)) {
 					other->left->red = 0;
 					other->red = 1;
 					rotateright(head, other);
@@ -414,9 +415,8 @@ void opr_rbtree_remove(struct opr_rbtree *head, struct opr_rbtree_node *node)
 		while ((left = node->left) != NULL)
 			node = left;
 
-		/* Move 'node' into the position occupied by 'old', which is being
-		 * removed */
-
+		/* Move 'node' into the position occupied by 'old', which is
+		 * being removed */
 		update_parent_ptr(head, old, node);
 
 		child = node->right;
@@ -443,7 +443,7 @@ void opr_rbtree_remove(struct opr_rbtree *head, struct opr_rbtree_node *node)
 		node->left = old->left;
 		old->left->parent = node;
 
-		/* If the node being removed was black, then we must recolour the
+		/* If the node being removed was black, then we must recolour
 		 * tree to maintain balance */
 		if (!red)
 			remove_recolour(head, parent, child);

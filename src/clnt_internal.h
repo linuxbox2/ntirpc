@@ -171,11 +171,11 @@ struct rpc_dplx_rec {
 };
 
 #define REC_LOCK(rec) \
-    do { \
-        mutex_lock(&((rec)->locktrace.mtx)); \
-        (rec)->locktrace.func = __func__; \
-        (rec)->locktrace.line = __LINE__; \
-    } while (0)
+	do { \
+		mutex_lock(&((rec)->locktrace.mtx)); \
+		(rec)->locktrace.func = __func__; \
+		(rec)->locktrace.line = __LINE__; \
+	} while (0)
 
 #define REC_UNLOCK(rec) mutex_unlock(&((rec)->locktrace.mtx))
 
@@ -219,24 +219,27 @@ struct x_vc_data {
 	} shared;
 };
 
-#define CU_DATA(cx) (& (cx)->c_u.cu)
-#define CT_DATA(cx) (& (cx)->c_u.ct)
+#define CU_DATA(cx) (&(cx)->c_u.cu)
+#define CT_DATA(cx) (&(cx)->c_u.ct)
 
 /* compartmentalize a bit */
-static inline struct x_vc_data *alloc_x_vc_data(void)
+static inline struct x_vc_data *
+alloc_x_vc_data(void)
 {
 	struct x_vc_data *xd = mem_zalloc(sizeof(struct x_vc_data));
 	TAILQ_INIT(&xd->shared.ioq.q);
 	return (xd);
 }
 
-static inline void free_x_vc_data(struct x_vc_data *xd)
+static inline void
+free_x_vc_data(struct x_vc_data *xd)
 {
 	mem_free(xd, sizeof(struct x_vc_data));
 }
 
-static inline struct cx_data *alloc_cx_data(enum CX_TYPE type, uint32_t sendsz,
-					    uint32_t recvsz)
+static inline struct cx_data *
+alloc_cx_data(enum CX_TYPE type, uint32_t sendsz,
+	      uint32_t recvsz)
 {
 	struct cx_data *cx = mem_zalloc(sizeof(struct cx_data));
 	cx->type = type;
@@ -256,7 +259,8 @@ static inline struct cx_data *alloc_cx_data(enum CX_TYPE type, uint32_t sendsz,
 	return (cx);
 }
 
-static inline void free_cx_data(struct cx_data *cx)
+static inline void
+free_cx_data(struct cx_data *cx)
 {
 	switch (cx->type) {
 	case CX_DG_DATA:

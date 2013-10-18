@@ -61,8 +61,9 @@ int rbtx_init(struct rbtree_x *xt, opr_rbtree_cmpf_t cmpf, uint32_t npart,
 	 * behavior (so have potential for writer starvation) */
 	rwlockattr_init(&rwlock_attr);
 #ifdef GLIBC
-	pthread_rwlockattr_setkind_np(&rwlock_attr,
-				      PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+	pthread_rwlockattr_setkind_np(
+		&rwlock_attr,
+		PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
 #endif
 
 	xt->npart = npart;
@@ -71,7 +72,7 @@ int rbtx_init(struct rbtree_x *xt, opr_rbtree_cmpf_t cmpf, uint32_t npart,
 		t = &(xt->tree[ix]);
 		mutex_init(&t->mtx, NULL);
 		rwlock_init(&t->lock, &rwlock_attr);
-		opr_rbtree_init(&t->t, cmpf /* may be NULL */ );
+		opr_rbtree_init(&t->t, cmpf /* may be NULL */);
 	}
 
 	return (code);

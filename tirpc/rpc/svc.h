@@ -208,32 +208,32 @@ typedef struct rpc_svcxprt {
 		enum xprt_stat (*xp_stat) (struct rpc_svcxprt *);
 
 		/* get arguments, thread u_data in arg4 */
-		 bool(*xp_getargs) (struct rpc_svcxprt *, struct svc_req * req,
+		bool(*xp_getargs) (struct rpc_svcxprt *, struct svc_req *,
 				    xdrproc_t, void *, void *);
 
 		/* send reply */
-		 bool(*xp_reply) (struct rpc_svcxprt *, struct svc_req * req,
+		bool(*xp_reply) (struct rpc_svcxprt *, struct svc_req *,
 				  struct rpc_msg *);
 
 		/* free mem allocated for args */
 		 bool(*xp_freeargs) (struct rpc_svcxprt *, xdrproc_t, void *);
 
 		/* take lifecycle ref */
-		 bool(*xp_ref) (struct rpc_svcxprt *, u_int flags,
-				const char *tag, const int line);
+		bool(*xp_ref) (struct rpc_svcxprt *, u_int,
+			       const char *, const int);
 
 		/* release ref (destroy if no refs) */
-		void (*xp_release) (struct rpc_svcxprt *, u_int flags,
-				    const char *tag, const int line);
+		void (*xp_release) (struct rpc_svcxprt *, u_int,
+				    const char *, const int);
 
 		/* release and mark destroyed */
 		void (*xp_destroy) (struct rpc_svcxprt *);
 
 		/* xprt locking (may be duplex-aware, etc) */
-		void (*xp_lock) (struct rpc_svcxprt *, uint32_t flags,
-				 const char *func, int line);
-		void (*xp_unlock) (struct rpc_svcxprt *, uint32_t flags,
-				   const char *func, int line);
+		void (*xp_lock) (struct rpc_svcxprt *, uint32_t,
+				 const char *, int);
+		void (*xp_unlock) (struct rpc_svcxprt *, uint32_t,
+				   const char *, int);
 
 	} *xp_ops;
 
@@ -366,86 +366,88 @@ struct svc_req {
  * void * argsp;
  */
 #define SVC_RECV(xprt, req) \
-    (*(xprt)->xp_ops->xp_recv)((xprt), (req))
-#define svc_recv(xprt, req) \
-    (*(xprt)->xp_ops->xp_recv)((xprt), (req))
+	(*(xprt)->xp_ops->xp_recv)((xprt), (req))
+#define svc_recv(xprt, req)			\
+	(*(xprt)->xp_ops->xp_recv)((xprt), (req))
 
 #define SVC_STAT(xprt) \
-    (*(xprt)->xp_ops->xp_stat)(xprt)
-#define svc_stat(xprt) \
-    (*(xprt)->xp_ops->xp_stat)(xprt)
+	(*(xprt)->xp_ops->xp_stat)(xprt)
+#define svc_stat(xprt)				\
+	(*(xprt)->xp_ops->xp_stat)(xprt)
 
-#define SVC_GETARGS(xprt, req, xargs, argsp, u_data) \
+#define SVC_GETARGS(xprt, req, xargs, argsp, u_data)			\
+	(*(xprt)->xp_ops->xp_getargs)((xprt), (req), (xargs), (argsp),	\
+				      (u_data))
+#define svc_getargs(xprt, req, xargs, argsp, u_data)		       \
 	(*(xprt)->xp_ops->xp_getargs)((xprt), (req), (xargs), (argsp), \
 				      (u_data))
-#define svc_getargs(xprt, req, xargs, argsp, u_data) \
-	(*(xprt)->xp_ops->xp_getargs)((xprt), (req), (xargs), (argsp), \
-				      (u_data))
 
-#define SVC_REPLY(xprt, req, msg) \
-    (*(xprt)->xp_ops->xp_reply) ((xprt), (req), (msg))
+#define SVC_REPLY(xprt, req, msg)				\
+	(*(xprt)->xp_ops->xp_reply) ((xprt), (req), (msg))
 #define svc_reply(xprt, req, msg) \
-    (*(xprt)->xp_ops->xp_reply) ((xprt), (req), (msg))
+	(*(xprt)->xp_ops->xp_reply) ((xprt), (req), (msg))
 
-#define SVC_FREEARGS(xprt, xargs, argsp) \
-    (*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
-#define svc_freeargs(xprt, xargs, argsp) \
-    (*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
+#define SVC_FREEARGS(xprt, xargs, argsp)			\
+	(*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
+#define svc_freeargs(xprt, xargs, argsp)			\
+	(*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
 
-#define SVC_REF2(xprt, flags, tag, line) \
-    (*(xprt)->xp_ops->xp_ref)(xprt, flags, tag, line)
-#define svc_ref2(xprt, flags, tag, line) \
-    (*(xprt)->xp_ops->xp_ref)(xprt, flags, tag, line)
+#define SVC_REF2(xprt, flags, tag, line)		\
+	(*(xprt)->xp_ops->xp_ref)(xprt, flags, tag, line)
+#define svc_ref2(xprt, flags, tag, line)		\
+	(*(xprt)->xp_ops->xp_ref)(xprt, flags, tag, line)
 
 #define SVC_RELEASE2(xprt, flags, tag, line) \
-    (*(xprt)->xp_ops->xp_release)(xprt, flags, tag, line)
-#define svc_release2(xprt, flags, tag, line) \
-    (*(xprt)->xp_ops->xp_release)(xprt, flags, tag, line)
+	(*(xprt)->xp_ops->xp_release)(xprt, flags, tag, line)
+#define svc_release2(xprt, flags, tag, line)			\
+	(*(xprt)->xp_ops->xp_release)(xprt, flags, tag, line)
 
-#define SVC_REF(xprt, flags) \
-    (*(xprt)->xp_ops->xp_ref)(xprt, flags, __func__, __LINE__)
-#define svc_ref(xprt, flags) \
-    (*(xprt)->xp_ops->xp_ref)(xprt, flags, __func__, __LINE__)
+#define SVC_REF(xprt, flags)					\
+	(*(xprt)->xp_ops->xp_ref)(xprt, flags, __func__, __LINE__)
+#define svc_ref(xprt, flags)					\
+	(*(xprt)->xp_ops->xp_ref)(xprt, flags, __func__, __LINE__)
 
-#define SVC_RELEASE(xprt, flags) \
-    (*(xprt)->xp_ops->xp_release)(xprt, flags, __func__, __LINE__)
-#define svc_release(xprt, flags) \
-    (*(xprt)->xp_ops->xp_release)(xprt, flags, __func__, __LINE__)
+#define SVC_RELEASE(xprt, flags)					\
+	(*(xprt)->xp_ops->xp_release)(xprt, flags, __func__, __LINE__)
+#define svc_release(xprt, flags)					\
+	(*(xprt)->xp_ops->xp_release)(xprt, flags, __func__, __LINE__)
 
-#define SVC_DESTROY(xprt) \
-    (*(xprt)->xp_ops->xp_destroy)(xprt)
-#define svc_destroy(xprt) \
-    (*(xprt)->xp_ops->xp_destroy)(xprt)
+#define SVC_DESTROY(xprt)			\
+	(*(xprt)->xp_ops->xp_destroy)(xprt)
+#define svc_destroy(xprt)			\
+	(*(xprt)->xp_ops->xp_destroy)(xprt)
 
-#define SVC_CONTROL(xprt, rq, in) \
-    (*(xprt)->xp_ops2->xp_control)((xprt), (rq), (in))
+#define SVC_CONTROL(xprt, rq, in)			\
+	(*(xprt)->xp_ops2->xp_control)((xprt), (rq), (in))
 
 #define XP_LOCK_NONE    0x0000
 #define XP_LOCK_SEND    0x0001
 #define XP_LOCK_RECV    0x0002
 
 #define SVC_LOCK(xprt, flags, func, line) \
-    (*(xprt)->xp_ops->xp_lock)((xprt), (flags), (func), (line))
+	(*(xprt)->xp_ops->xp_lock)((xprt), (flags), (func), (line))
 
 #define svc_lock(xprt, flags, func, line) \
-    (*(xprt)->xp_ops->xp_lock)((xprt), (flags), (func), (line))
+	(*(xprt)->xp_ops->xp_lock)((xprt), (flags), (func), (line))
 
 #define SVC_UNLOCK(xprt, flags, func, line) \
-    (*(xprt)->xp_ops->xp_unlock)((xprt), (flags), (func), (line))
+	(*(xprt)->xp_ops->xp_unlock)((xprt), (flags), (func), (line))
 
 #define svc_unlock(xprt, flags, func, line) \
-    (*(xprt)->xp_ops->xp_unlock)((xprt), (flags), (func), (line))
+	(*(xprt)->xp_ops->xp_unlock)((xprt), (flags), (func), (line))
 
 /*
  * Service init (optional).
  */
 
-__BEGIN_DECLS void svc_init(struct svc_init_params *);
+__BEGIN_DECLS
+void svc_init(struct svc_init_params *);
 __END_DECLS
 /*
  * Service shutdown (optional).
  */
-__BEGIN_DECLS int svc_shutdown(u_long flags);
+__BEGIN_DECLS
+int svc_shutdown(u_long flags);
 __END_DECLS
 /*
  * Service registration
@@ -457,9 +459,10 @@ __END_DECLS
  * const void (*dispatch)();
  * const struct netconfig *nconf;
  */
-__BEGIN_DECLS extern bool svc_reg(SVCXPRT *, const rpcprog_t, const rpcvers_t,
-				  void (*)(struct svc_req *, SVCXPRT *),
-				  const struct netconfig *);
+__BEGIN_DECLS
+extern bool svc_reg(SVCXPRT *, const rpcprog_t, const rpcvers_t,
+		    void (*)(struct svc_req *, SVCXPRT *),
+		    const struct netconfig *);
 __END_DECLS
 /*
  * Service un-registration
@@ -468,7 +471,8 @@ __END_DECLS
  * const rpcprog_t prog;
  * const rpcvers_t vers;
  */
-__BEGIN_DECLS extern void svc_unreg(const rpcprog_t, const rpcvers_t);
+__BEGIN_DECLS
+extern void svc_unreg(const rpcprog_t, const rpcvers_t);
 __END_DECLS
 /*
  * Transport registration.
@@ -476,7 +480,8 @@ __END_DECLS
  * xprt_register(xprt)
  * SVCXPRT *xprt;
  */
-__BEGIN_DECLS extern void xprt_register(SVCXPRT *);
+__BEGIN_DECLS
+extern void xprt_register(SVCXPRT *);
 __END_DECLS
 /*
  * Transport un-register
@@ -484,7 +489,8 @@ __END_DECLS
  * xprt_unregister(xprt)
  * SVCXPRT *xprt;
  */
-__BEGIN_DECLS extern void xprt_unregister(SVCXPRT *);
+__BEGIN_DECLS
+extern void xprt_unregister(SVCXPRT *);
 __END_DECLS
 /*
  * This is used to set xprt->xp_raddr in a way legacy
@@ -494,8 +500,9 @@ __END_DECLS
  * SVCXPRT *xprt;
  *      const struct sockaddr_storage *ss;
  */
-__BEGIN_DECLS extern void __xprt_set_raddr(SVCXPRT *,
-					   const struct sockaddr_storage *);
+__BEGIN_DECLS
+extern void __xprt_set_raddr(SVCXPRT *,
+			     const struct sockaddr_storage *);
 __END_DECLS
 /*
  * When the service routine is called, it must first check to see if it
@@ -522,8 +529,9 @@ __END_DECLS
  * batched and which are not.  Warning: responding to batch calls may
  * deadlock the caller and server processes!
  */
-__BEGIN_DECLS extern bool svc_sendreply(SVCXPRT *, struct svc_req *, xdrproc_t,
-					void *);
+__BEGIN_DECLS
+extern bool svc_sendreply(SVCXPRT *, struct svc_req *, xdrproc_t,
+			  void *);
 extern void svcerr_decode(SVCXPRT *, struct svc_req *);
 extern void svcerr_weakauth(SVCXPRT *, struct svc_req *);
 extern void svcerr_noproc(SVCXPRT *, struct svc_req *);
@@ -531,7 +539,6 @@ extern void svcerr_progvers(SVCXPRT *, struct svc_req *, rpcvers_t, rpcvers_t);
 extern void svcerr_auth(SVCXPRT *, struct svc_req *, enum auth_stat);
 extern void svcerr_noprog(SVCXPRT *, struct svc_req *);
 extern void svcerr_systemerr(SVCXPRT *, struct svc_req *);
-
 extern int rpc_reg(rpcprog_t, rpcvers_t, rpcproc_t, char *(*)(char *),
 		   xdrproc_t, xdrproc_t, char *);
 __END_DECLS
@@ -539,13 +546,15 @@ __END_DECLS
  * a small program implemented by the svc_rpc implementation itself;
  * also see clnt.h for protocol numbers.
  */
-__BEGIN_DECLS extern void rpctest_service(void);
-__END_DECLS __BEGIN_DECLS extern void svc_getreq(int);
+__BEGIN_DECLS
+extern void rpctest_service(void);
+__END_DECLS
+__BEGIN_DECLS
+extern void svc_getreq(int);
 extern void svc_getreqset(fd_set *);
 extern void svc_getreq_common(int);
 struct pollfd;
 extern void svc_getreq_poll(struct pollfd *, int);
-
 extern void svc_run(void);
 extern void svc_exit(void);
 __END_DECLS
@@ -557,7 +566,7 @@ __END_DECLS
 /*
  * These are the existing service side transport implementations
  */
-    __BEGIN_DECLS
+__BEGIN_DECLS
 /*
  * Transport independent svc_create routine.
  */
@@ -626,7 +635,8 @@ __END_DECLS
 #define SVC_VC_CREATE_DISPOSE          0x0004	/* !bothways */
 #define SVC_VC_CREATE_XPRT_NOREG       0x0008
 #define SVC_VC_CREATE_LISTEN           0x0010
-    __BEGIN_DECLS
+
+__BEGIN_DECLS
 /*
  * Create a client handle from an active service transport handle.
  */
@@ -638,7 +648,8 @@ extern CLIENT *clnt_vc_ncreate_svc(SVCXPRT *, const rpcprog_t, const rpcvers_t,
  *      const rpcvers_t vers;                   -- RPC program version
  */
 
-__END_DECLS __BEGIN_DECLS
+__END_DECLS
+__BEGIN_DECLS
 /*
  * Create an RPC SVCXPRT handle from an active client transport
  * handle, i.e., to service RPC requests
@@ -655,18 +666,18 @@ extern SVCXPRT *svc_vc_ncreate_clnt(CLIENT *, u_int, u_int, const uint32_t);
 /*
  * Destroy a transport handle.  Do not alter connected transport state.
  */
-extern void svc_vc_destroy_handle(SVCXPRT * xprt);
+extern void svc_vc_destroy_handle(SVCXPRT *);
 
 /*
  * Construct a service transport, unassociated with any transport
  * connection.
  */
-extern SVCXPRT *svc_vc_create_xprt(u_long sendsz, u_long recvsz);
+extern SVCXPRT *svc_vc_create_xprt(u_long, u_long);
 
 /*
  * Destroy a transport handle.  Do not alter connected transport state.
  */
-extern void svc_vc_destroy_xprt(SVCXPRT * xprt);
+extern void svc_vc_destroy_xprt(SVCXPRT *);
 
 /*
  * Added for compatibility to old rpc 4.0. Obsoleted by svc_vc_create().
@@ -704,34 +715,34 @@ extern SVCXPRT *svc_raw_ncreate(void);
 /*
  * Getreq plug-out prototype
  */
-extern bool svc_getreq_default(SVCXPRT * xprt);
+extern bool svc_getreq_default(SVCXPRT *);
 
 /*
  * Dispatch plug-out prototype
  */
-extern void svc_dispatch_default(SVCXPRT * xprt, struct rpc_msg **ind_msg);
+extern void svc_dispatch_default(SVCXPRT *, struct rpc_msg **);
 
 /*
  * Convenience functions for implementing these
  */
-extern bool svc_validate_xprt_list(SVCXPRT * xprt);
+extern bool svc_validate_xprt_list(SVCXPRT *);
 extern struct rpc_msg *alloc_rpc_msg(void);
-extern void free_rpc_msg(struct rpc_msg *msg);
+extern void free_rpc_msg(struct rpc_msg *);
 
 /*
  * svc_dg_enable_cache() enables the cache on dg transports.
  */
 int svc_dg_enablecache(SVCXPRT *, const u_int);
 
-int __rpc_get_local_uid(SVCXPRT * _transp, uid_t * _uid);
+int __rpc_get_local_uid(SVCXPRT *, uid_t *);
 
-#define XPRT_TRACE_RADDR(xprt,func,tag,line) \
-    if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_REFCNT) { \
-        xprt_trace_raddr((xprt), (func), (tag), (line)); \
-    }
+#define XPRT_TRACE_RADDR(xprt, func, tag, line)				\
+	if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_REFCNT) {	\
+		xprt_trace_raddr((xprt), (func), (tag), (line));	\
+	}
 
-void xprt_trace_raddr(SVCXPRT * xprt, const char *func, const char *tag,
-		      const int line);
+void xprt_trace_raddr(SVCXPRT *, const char *, const char *,
+		      const int);
 
 __END_DECLS
 /* for backward compatibility */

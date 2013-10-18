@@ -59,23 +59,24 @@ typedef struct SVCAUTH {
 } SVCAUTH;
 
 #define SVCAUTH_WRAP(auth, req, xdrs, xfunc, xwhere) \
-    ((*((auth)->svc_ah_ops->svc_ah_wrap))(auth, req, xdrs, xfunc, xwhere))
+	((*((auth)->svc_ah_ops->svc_ah_wrap))(auth, req, xdrs, xfunc, xwhere))
 
 #define SVCAUTH_UNWRAP(auth, req, xdrs, xfunc, xwhere) \
-    ((*((auth)->svc_ah_ops->svc_ah_unwrap))(auth, req, xdrs, xfunc, xwhere))
+	((*((auth)->svc_ah_ops->svc_ah_unwrap))(auth, req, xdrs, xfunc, xwhere))
 
 #define SVCAUTH_RELEASE(auth, req) \
-    ((*((auth)->svc_ah_ops->svc_ah_release))(auth, req))
+	((*((auth)->svc_ah_ops->svc_ah_release))(auth, req))
 
 #define SVCAUTH_DESTROY(auth) \
-    ((*((auth)->svc_ah_ops->svc_ah_destroy))(auth))
+	((*((auth)->svc_ah_ops->svc_ah_destroy))(auth))
 
 /*
  * Server side authenticator
  */
-__BEGIN_DECLS extern enum auth_stat svc_auth_authenticate(struct svc_req *,
-							  struct rpc_msg *,
-							  bool *);
+__BEGIN_DECLS
+extern enum auth_stat svc_auth_authenticate(struct svc_req *,
+					    struct rpc_msg *,
+					    bool *);
 extern int svc_auth_reg(int,
 			enum auth_stat (*)(struct svc_req *, struct rpc_msg *));
 __END_DECLS

@@ -72,14 +72,15 @@ static struct rpcdata {
 static struct rpcent *interpret(char *val, size_t len);
 
 #ifdef	YP
-static int __yp_nomap = 0;
+static int __yp_nomap;
 #endif				/* YP */
 
 #define	RPCDB	"/etc/rpc"
 
 static struct rpcdata *_rpcdata(void);
 
-static struct rpcdata *_rpcdata(void)
+static struct rpcdata *
+_rpcdata(void)
 {
 	struct rpcdata *d = rpcdata;
 
@@ -91,7 +92,8 @@ static struct rpcdata *_rpcdata(void)
 }
 
 #ifdef GQ
-struct rpcent *getrpcbynumber(int number)
+struct rpcent *
+getrpcbynumber(int number)
 {
 #ifdef	YP
 	int reason;
@@ -136,7 +138,8 @@ struct rpcent *getrpcbynumber(int number)
 	return (p);
 }
 
-struct rpcent *getrpcbyname(char *name)
+struct rpcent *
+getrpcbyname(char *name)
 {
 	struct rpcent *rpc = NULL;
 	char **rp;
@@ -158,7 +161,8 @@ struct rpcent *getrpcbyname(char *name)
 }
 #endif				/* GQ */
 
-void setrpcent(int f)
+void
+setrpcent(int f)
 {
 	struct rpcdata *d = _rpcdata();
 
@@ -181,7 +185,8 @@ void setrpcent(int f)
 	d->stayopen |= f;
 }
 
-void endrpcent(void)
+void
+endrpcent(void)
 {
 	struct rpcdata *d = _rpcdata();
 
@@ -203,7 +208,8 @@ void endrpcent(void)
 	}
 }
 
-struct rpcent *getrpcent(void)
+struct rpcent *
+getrpcent(void)
 {
 	struct rpcdata *d = _rpcdata();
 #ifdef	YP
@@ -245,15 +251,19 @@ struct rpcent *getrpcent(void)
 	}
  no_yp:
 #endif				/* YP */
-	if (d->rpcf == NULL && (d->rpcf = fopen(RPCDB, "r")) == NULL)
-		return (NULL);
+	if (!d->rpcf) {
+		d->rpcf = fopen(RPCDB, "r");
+		if (!d->rpcf)
+			return (NULL);
+	}
 	/* -1 so there is room to append a \n below */
 	if (fgets(d->line, BUFSIZ - 1, d->rpcf) == NULL)
 		return (NULL);
 	return (interpret(d->line, strlen(d->line)));
 }
 
-static struct rpcent *interpret(char *val, size_t len)
+static struct rpcent *
+interpret(char *val, size_t len)
 {
 	struct rpcdata *d = _rpcdata();
 	char *p;

@@ -68,47 +68,48 @@ struct svc_params {
 
 extern struct svc_params __svc_params[1];
 
-#define svc_cond_init() \
-    do { \
-        if (! __svc_params->initialized) { \
-            svc_init(&(svc_init_params) \
-                     {       .flags = SVC_INIT_EPOLL, \
-                             .max_connections = 8192, \
-                             .max_events = 512, \
-                             .gss_ctx_hash_partitions = 13, \
-                             .gss_max_ctx = 1024, \
-                             .gss_max_idle_gen = 1024, \
-                             .gss_max_gc = 200 \
-                             }); \
-        } \
-    } while (0);
+#define svc_cond_init()	\
+	do { \
+		if (!__svc_params->initialized) { \
+			svc_init(&(svc_init_params) \
+				 {       .flags = SVC_INIT_EPOLL, \
+						 .max_connections = 8192, \
+						 .max_events = 512, \
+						 .gss_ctx_hash_partitions = 13,\
+						 .gss_max_ctx = 1024,	\
+						 .gss_max_idle_gen = 1024, \
+						 .gss_max_gc = 200 \
+						 }); \
+		} \
+	} while (0)
 
-/* XXX */
-static inline bool svc_vc_new_conn_ok(void)
+
+static inline bool
+svc_vc_new_conn_ok(void)
 {
-	bool ok = FALSE;
+	bool ok = false;
 	svc_cond_init();
 	mutex_lock((&__svc_params->xprt_u.vc.mtx));
 	if (__svc_params->xprt_u.vc.nconns < __svc_params->max_connections) {
 		++(__svc_params->xprt_u.vc.nconns);
-		ok = TRUE;
+		ok = true;
 	}
 	mutex_unlock(&(__svc_params->xprt_u.vc.mtx));
 	return (ok);
 }
 
 #define svc_vc_dec_nconns() \
-    do { \
-        mutex_lock((&__svc_params->xprt_u.vc.mtx)); \
-        --(__svc_params->xprt_u.vc.nconns); \
-        mutex_unlock(&(__svc_params->xprt_u.vc.mtx)); \
-    } while (0);
+	do { \
+		mutex_lock((&__svc_params->xprt_u.vc.mtx)); \
+		--(__svc_params->xprt_u.vc.nconns); \
+		mutex_unlock(&(__svc_params->xprt_u.vc.mtx)); \
+	} while (0)
 
 struct __svc_ops {
-	bool(*svc_clean_idle) (fd_set * fds, int timeout, bool cleanblock);
+	bool (*svc_clean_idle) (fd_set *fds, int timeout, bool cleanblock);
 	void (*svc_run) (void);
 	void (*svc_getreq) (int rdfds);	/* XXX */
-	void (*svc_getreqset) (fd_set * readfds);	/* XXX */
+	void (*svc_getreqset) (fd_set *readfds); /* XXX */
 	void (*svc_exit) (void);
 };
 
@@ -129,14 +130,14 @@ extern struct __svc_ops *svc_ops;
 
 #define	SPARSENESS 4		/* 75% sparse */
 
-#define	ALLOC(type, size)	\
-	(type *) mem_alloc((sizeof (type) * (size)))
+#define	ALLOC(type, size) \
+	((type *) mem_alloc((sizeof(type) * (size))))
 
-#define	MEMZERO(addr, type, size)	 \
-	(void) memset((void *) (addr), 0, sizeof (type) * (int) (size))
+#define	MEMZERO(addr, type, size) \
+	((void) memset((void *) (addr), 0, sizeof(type) * (int) (size)))
 
 #define	FREE(addr, type, size)	\
-	mem_free((addr), (sizeof (type) * (size)))
+	(mem_free((addr), (sizeof(type) * (size))))
 
 /*
  * An entry in the cache
@@ -187,12 +188,14 @@ struct cl_cache {
 /* Epoll interface change */
 #ifndef EPOLL_CLOEXEC
 #define EPOLL_CLOEXEC 02000000
-static inline int epoll_create_wr(size_t size, int flags)
+static inline int
+epoll_create_wr(size_t size, int flags)
 {
 	return (epoll_create(size));
 }
 #else
-static inline int epoll_create_wr(size_t size, int flags)
+static inline int
+epoll_create_wr(size_t size, int flags)
 {
 	return (epoll_create1(flags));
 }

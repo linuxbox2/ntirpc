@@ -60,9 +60,10 @@
 #include <rpc/types.h>
 #include <rpc/rpcb_prot.h>
 
-__BEGIN_DECLS extern bool rpcb_set(const rpcprog_t, const rpcvers_t,
-				   const struct netconfig *,
-				   const struct netbuf *);
+__BEGIN_DECLS
+extern bool rpcb_set(const rpcprog_t, const rpcvers_t,
+		     const struct netconfig *,
+		     const struct netbuf *);
 extern bool rpcb_unset(const rpcprog_t, const rpcvers_t,
 		       const struct netconfig *);
 extern rpcblist *rpcb_getmaps(const struct netconfig *, const char *);

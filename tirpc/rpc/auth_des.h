@@ -57,7 +57,7 @@ enum authdes_namekind {
  * a conversation key and the window
  */
 struct authdes_fullname {
-	char *name;		/* network name of client, up to MAXNETNAMELEN */
+	char *name;	   /* network name of client, up to MAXNETNAMELEN */
 	union des_block key;	/* conversation key */
 	/* u_long window; */
 	u_int32_t window;	/* associated window */
@@ -111,10 +111,12 @@ struct authdes_verf {
  * Map a des credential into a unix cred.
  *
  */
-__BEGIN_DECLS extern int authdes_getucred(struct authdes_cred *, uid_t *,
-					  gid_t *, int *, gid_t *);
-__END_DECLS __BEGIN_DECLS extern bool xdr_authdes_cred(XDR *,
-						       struct authdes_cred *);
+__BEGIN_DECLS
+extern int authdes_getucred(struct authdes_cred *, uid_t *,
+			    gid_t *, int *, gid_t *);
+__END_DECLS
+__BEGIN_DECLS
+extern bool xdr_authdes_cred(XDR *, struct authdes_cred *);
 extern bool xdr_authdes_verf(XDR *, struct authdes_verf *);
 extern int rtime(dev_t, struct netbuf *, int, struct timeval *,
 		 struct timeval *);

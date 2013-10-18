@@ -52,7 +52,8 @@
 #include "rpc_dplx_internal.h"
 #include "rpc_ctx.h"
 
-static inline int clnt_read_vc(XDR * xdrs, void *ctp, void *buf, int len)
+static inline int
+clnt_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)ctp;
 	struct ct_data *ct = &xd->cx.data;
@@ -100,7 +101,8 @@ static inline int clnt_read_vc(XDR * xdrs, void *ctp, void *buf, int len)
 	return (len);
 }
 
-static inline int clnt_write_vc(XDR * xdrs, void *ctp, void *buf, int len)
+static inline int
+clnt_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)ctp;
 	rpc_ctx_t *ctx = (rpc_ctx_t *) xdrs->x_lib[1];
@@ -108,7 +110,8 @@ static inline int clnt_write_vc(XDR * xdrs, void *ctp, void *buf, int len)
 	int i = 0, cnt;
 
 	for (cnt = len; cnt > 0; cnt -= i, buf += i) {
-		if ((i = write(xd->cx.data.ct_fd, buf, (size_t) cnt)) == -1) {
+		i = write(xd->cx.data.ct_fd, buf, (size_t) cnt);
+		if (i == -1) {
 			ctx->error.re_errno = errno;
 			ctx->error.re_status = RPC_CANTSEND;
 			return (-1);
@@ -117,7 +120,8 @@ static inline int clnt_write_vc(XDR * xdrs, void *ctp, void *buf, int len)
 	return (len);
 }
 
-static inline void cfconn_set_dead(SVCXPRT * xprt, struct x_vc_data *xd)
+static inline void
+cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
 {
 	mutex_lock(&xprt->xp_lock);
 	xd->sx.strm_stat = XPRT_DIED;
@@ -133,10 +137,11 @@ static inline void cfconn_set_dead(SVCXPRT * xprt, struct x_vc_data *xd)
  */
 #define EARLY_DEATH_DEBUG 1
 
-static inline int svc_read_vc(XDR * xdrs, void *ctp, void *buf, int len)
+static inline int
+svc_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
 	SVCXPRT *xprt;
-	int milliseconds = 35 * 1000;	/* XXX shouldn't this be configurable? */
+	int milliseconds = 35 * 1000;	/* XXX configurable? */
 	struct pollfd pollfd;
 	struct x_vc_data *xd;
 
@@ -175,8 +180,9 @@ static inline int svc_read_vc(XDR * xdrs, void *ctp, void *buf, int len)
 		}
 	} while ((pollfd.revents & POLLIN) == 0);
 
-	if ((len = read(xprt->xp_fd, buf, (size_t) len)) > 0) {
-		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
+	len = read(xprt->xp_fd, buf, (size_t) len);
+	if (len > 0) {
+		(void) clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
 		return (len);
 	}
 
@@ -189,7 +195,8 @@ static inline int svc_read_vc(XDR * xdrs, void *ctp, void *buf, int len)
  * writes data to the tcp connection.
  * Any error is fatal and the connection is closed.
  */
-static inline int svc_write_vc(XDR * xdrs, void *ctp, void *buf, int len)
+static inline int
+svc_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
 	SVCXPRT *xprt;
 	struct x_vc_data *xd;
@@ -244,11 +251,12 @@ static inline int svc_write_vc(XDR * xdrs, void *ctp, void *buf, int len)
  * All read operations timeout after 35 seconds.  A timeout is
  * fatal for the connection.
  */
-static inline size_t svc_readv_vc(XDR * xdrs, void *ctp, struct iovec *iov,
-				  int iovcnt, u_int flags)
+static inline size_t
+svc_readv_vc(XDR *xdrs, void *ctp, struct iovec *iov,
+	     int iovcnt, u_int flags)
 {
 	SVCXPRT *xprt;
-	int milliseconds = 35 * 1000;	/* XXX shouldn't this be configurable? */
+	int milliseconds = 35 * 1000;	/* XXX configurable? */
 	struct pollfd pollfd;
 	struct x_vc_data *xd;
 	size_t nbytes = -1;
@@ -273,7 +281,8 @@ static inline size_t svc_readv_vc(XDR * xdrs, void *ctp, struct iovec *iov,
 		}
 	} while ((pollfd.revents & POLLIN) == 0);
 
-	if ((nbytes = readv(xprt->xp_fd, iov, iovcnt)) > 0) {
+	nbytes = readv(xprt->xp_fd, iov, iovcnt);
+	if (nbytes > 0) {
 		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
 		goto out;
 	}
@@ -288,8 +297,9 @@ static inline size_t svc_readv_vc(XDR * xdrs, void *ctp, struct iovec *iov,
  * writes data to the tcp connection.
  * Any error is fatal and the connection is closed.
  */
-static size_t svc_writev_vc(XDR * xdrs, void *ctp, struct iovec *iov,
-			    int iovcnt, u_int flags)
+static size_t
+svc_writev_vc(XDR *xdrs, void *ctp, struct iovec *iov,
+	      int iovcnt, u_int flags)
 {
 	SVCXPRT *xprt;
 	struct x_vc_data *xd;
@@ -310,7 +320,8 @@ static size_t svc_writev_vc(XDR * xdrs, void *ctp, struct iovec *iov,
 }
 
 /* generic read and write callbacks */
-int generic_read_vc(XDR * xdrs, void *ctp, void *buf, int len)
+int
+generic_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
 	switch ((enum rpc_duplex_callpath)xdrs->x_lib[0]) {
 	case RPC_DPLX_CLNT:
@@ -325,7 +336,8 @@ int generic_read_vc(XDR * xdrs, void *ctp, void *buf, int len)
 	}
 }
 
-int generic_write_vc(XDR * xdrs, void *ctp, void *buf, int len)
+int
+generic_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
 	switch ((enum rpc_duplex_callpath)xdrs->x_lib[0]) {
 	case RPC_DPLX_CLNT:
@@ -340,8 +352,9 @@ int generic_write_vc(XDR * xdrs, void *ctp, void *buf, int len)
 	}
 }
 
-size_t generic_readv_vc(XDR * xdrs, void *xprtp, struct iovec *iov, int iovcnt,
-			u_int flags)
+size_t
+generic_readv_vc(XDR *xdrs, void *xprtp, struct iovec *iov, int iovcnt,
+		 u_int flags)
 {
 	switch ((enum rpc_duplex_callpath)xdrs->x_lib[0]) {
 #if 0				/* XXX implmenent */
@@ -358,8 +371,9 @@ size_t generic_readv_vc(XDR * xdrs, void *xprtp, struct iovec *iov, int iovcnt,
 	}
 }
 
-size_t generic_writev_vc(XDR * xdrs, void *xprtp, struct iovec *iov, int iovcnt,
-			 u_int flags)
+size_t
+generic_writev_vc(XDR *xdrs, void *xprtp, struct iovec *iov, int iovcnt,
+		  u_int flags)
 {
 	switch ((enum rpc_duplex_callpath)xdrs->x_lib[0]) {
 #if 0				/* XXX implement */
@@ -376,25 +390,26 @@ size_t generic_writev_vc(XDR * xdrs, void *xprtp, struct iovec *iov, int iovcnt,
 	}
 }
 
-void vc_shared_destroy(struct x_vc_data *xd)
+void
+vc_shared_destroy(struct x_vc_data *xd)
 {
 	struct rpc_dplx_rec *rec = xd->rec;
 	struct ct_data *ct = &xd->cx.data;
 	SVCXPRT *xprt;
-	bool closed = FALSE;
-	bool xdrs_destroyed = FALSE;
+	bool closed = false;
+	bool xdrs_destroyed = false;
 
 	/* RECLOCKED */
 
 	if (ct->ct_closeit && ct->ct_fd != RPC_ANYFD) {
 		(void)close(ct->ct_fd);
-		closed = TRUE;
+		closed = true;
 	}
 
 	/* destroy shared XDR record streams (once) */
 	XDR_DESTROY(&xd->shared.xdrs_in);
 	XDR_DESTROY(&xd->shared.xdrs_out);
-	xdrs_destroyed = TRUE;
+	xdrs_destroyed = true;
 
 	if (ct->ct_addr.buf)
 		mem_free(ct->ct_addr.buf, 0);	/* XXX */

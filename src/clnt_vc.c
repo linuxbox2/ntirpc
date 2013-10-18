@@ -139,25 +139,27 @@ static const char __no_mem_str[] = "out of memory";
  *
  * fd should be an open socket
  */
-CLIENT *clnt_vc_ncreate(int fd,	/* open file descriptor */
-			const struct netbuf *raddr,	/* servers address */
-			const rpcprog_t prog,	/* program number */
-			const rpcvers_t vers,	/* version number */
-			u_int sendsz,	/* buffer recv size */
-			u_int recvsz /* buffer send size */ )
+CLIENT *
+clnt_vc_ncreate(int fd,	/* open file descriptor */
+		const struct netbuf *raddr,	/* servers address */
+		const rpcprog_t prog,	/* program number */
+		const rpcvers_t vers,	/* version number */
+		u_int sendsz,	/* buffer recv size */
+		u_int recvsz /* buffer send size */)
 {
 	return (clnt_vc_ncreate2
 		(fd, raddr, prog, vers, sendsz, recvsz,
 		 CLNT_CREATE_FLAG_CONNECT));
 }
 
-CLIENT *clnt_vc_ncreate2(int fd,	/* open file descriptor */
-			 const struct netbuf * raddr,	/* servers address */
-			 const rpcprog_t prog,	/* program number */
-			 const rpcvers_t vers,	/* version number */
-			 u_int sendsz,	/* buffer recv size */
-			 u_int recvsz,	/* buffer send size */
-			 u_int flags)
+CLIENT *
+clnt_vc_ncreate2(int fd,	/* open file descriptor */
+		 const struct netbuf *raddr,	/* servers address */
+		 const rpcprog_t prog,	/* program number */
+		 const rpcvers_t vers,	/* version number */
+		 u_int sendsz,	/* buffer recv size */
+		 u_int recvsz,	/* buffer send size */
+		 u_int flags)
 {
 	CLIENT *clnt = NULL;
 	struct rpc_dplx_rec *rec = NULL;
@@ -176,7 +178,7 @@ CLIENT *clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 
 	if (flags & CLNT_CREATE_FLAG_CONNECT) {
-		slen = sizeof ss;
+		slen = sizeof(ss);
 		if (getpeername(fd, (struct sockaddr *)&ss, &slen) < 0) {
 			if (errno != ENOTCONN) {
 				rpc_createerr.cf_stat = RPC_SYSTEMERROR;
@@ -255,9 +257,9 @@ CLIENT *clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	xd->cx.data.ct_fd = fd;
 	cs = mem_alloc(sizeof(struct ct_serialized));
 	ct = &xd->cx.data;
-	ct->ct_closeit = FALSE;
+	ct->ct_closeit = false;
 	ct->ct_wait.tv_usec = 0;
-	ct->ct_waitset = FALSE;
+	ct->ct_waitset = false;
 	ct->ct_addr.buf = mem_alloc(raddr->maxlen);
 	if (ct->ct_addr.buf == NULL)
 		goto err;
@@ -281,9 +283,8 @@ CLIENT *clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	 */
 	xdrmem_create(ct_xdrs, cs->ct_u.ct_mcallc, MCALL_MSG_SIZE, XDR_ENCODE);
 	if (!xdr_callhdr(ct_xdrs, &call_msg)) {
-		if (ct->ct_closeit) {
+		if (ct->ct_closeit)
 			(void)close(fd);
-		}
 		goto err;
 	}
 	cs->ct_mpos = XDR_GETPOS(ct_xdrs);
@@ -322,31 +323,32 @@ CLIENT *clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	return (NULL);
 }
 
-#define vc_call_return(r) \
-    do { \
-	result=(r); \
-        goto out; \
-    } while (0)
+#define vc_call_return(r)			\
+	do {					\
+		result = (r);			\
+		goto out;			\
+	} while (0)
 
-#define vc_call_return_slocked(r) \
-    do { \
-	result=(r); \
-	if (! bidi) \
-            rpc_dplx_suc(clnt); \
-        goto out; \
-    } while (0)
+#define vc_call_return_slocked(r)		\
+	do {					\
+		result = (r);			\
+		if (!bidi)			\
+			rpc_dplx_suc(clnt);	\
+		goto out;			\
+	} while (0)
 
-#define vc_call_return_rlocked(r) \
-    do { \
-        result=(r); \
-        rpc_dplx_ruc(clnt); \
-        goto out; \
-    } while (0)
+#define vc_call_return_rlocked(r)		\
+	do {					\
+		result = (r);			\
+		rpc_dplx_ruc(clnt);		\
+		goto out;			\
+	} while (0)
 
-static enum clnt_stat clnt_vc_call(CLIENT * clnt, AUTH * auth, rpcproc_t proc,
-				   xdrproc_t xdr_args, void *args_ptr,
-				   xdrproc_t xdr_results, void *results_ptr,
-				   struct timeval timeout)
+static enum clnt_stat
+clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
+	     xdrproc_t xdr_args, void *args_ptr,
+	     xdrproc_t xdr_results, void *results_ptr,
+	     struct timeval timeout)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
 	struct ct_data *ct = &(xd->cx.data);
@@ -368,8 +370,8 @@ static enum clnt_stat clnt_vc_call(CLIENT * clnt, AUTH * auth, rpcproc_t proc,
 	 * as the xid is adjusted.
 	 *
 	 * 2. the last xid used is now saved in handle shared private data, it
-	 * will be incremented by rpc_call_create (successive calls).  There's no
-	 * more reason to use the old time-dependent xid logic.  It should be
+	 * will be incremented by rpc_call_create (successive calls).  There's
+	 * no more reason to use the old time-dependent xid logic.  It should be
 	 * preferable to count atomically from 1.
 	 *
 	 * 3. the client has an XDR structure, which contains the initialied
@@ -377,20 +379,21 @@ static enum clnt_stat clnt_vc_call(CLIENT * clnt, AUTH * auth, rpcproc_t proc,
 	 * would potentially be worse to do anything else?  The main issue which
 	 * will arise is the need to transition the stream between calls--which
 	 * may require adjustment to xdrrec code.  But on review it seems to
-	 * follow that one xdrrec stream would be parameterized by different call
-	 * contexts.  We'll keep the call parameters, control transfer machinery,
-	 * etc, in an rpc_ctx_t, to permit this.
+	 * follow that one xdrrec stream would be parameterized by different
+	 * call contexts.  We'll keep the call parameters, control transfer
+	 * machinery, etc, in an rpc_ctx_t, to permit this.
 	 */
-	ctx = alloc_rpc_call_ctx(clnt, proc, xdr_args, args_ptr, xdr_results, results_ptr, timeout);	/*add total timeout? */
+	ctx = alloc_rpc_call_ctx(clnt, proc, xdr_args, args_ptr, xdr_results,
+				 results_ptr, timeout);	/*add total timeout? */
 
 	if (!ct->ct_waitset) {
 		/* If time is not within limits, we ignore it. */
-		if (time_not_ok(&timeout) == FALSE)
+		if (time_not_ok(&timeout) == false)
 			ct->ct_wait = timeout;
 	}
 
 	shipnow = (xdr_results == NULL && timeout.tv_sec == 0
-		   && timeout.tv_usec == 0) ? FALSE : TRUE;
+		   && timeout.tv_usec == 0) ? false : true;
 
  call_again:
 	if (bidi) {
@@ -416,14 +419,14 @@ static enum clnt_stat clnt_vc_call(CLIENT * clnt, AUTH * auth, rpcproc_t proc,
 	cs->ct_u.ct_mcalli = ntohl(ctx->xid);
 
 	if ((!XDR_PUTBYTES(xdrs, cs->ct_u.ct_mcallc, cs->ct_mpos))
-	    || (!XDR_PUTINT32(xdrs, (int32_t *) & proc))
+	    || (!XDR_PUTINT32(xdrs, (int32_t *) &proc))
 	    || (!AUTH_MARSHALL(auth, xdrs))
 	    || (!AUTH_WRAP(auth, xdrs, xdr_args, args_ptr))) {
 		if (ctx->error.re_status == RPC_SUCCESS)
 			ctx->error.re_status = RPC_CANTENCODEARGS;
 		/* error case */
 		if (!bidi) {
-			(void)xdrrec_endofrecord(xdrs, TRUE);
+			(void)xdrrec_endofrecord(xdrs, true);
 			vc_call_return_slocked(ctx->error.re_status);
 		} else
 			vc_call_return(ctx->error.re_status);
@@ -460,10 +463,10 @@ static enum clnt_stat clnt_vc_call(CLIENT * clnt, AUTH * auth, rpcproc_t proc,
 	xdrs->x_lib[1] = (void *)ctx;	/* transiently thread call ctx */
 
 	if (bidi) {
-		code = rpc_ctx_wait_reply(ctx, RPC_DPLX_FLAG_LOCKED);	/* RECV! */
+		code = rpc_ctx_wait_reply(ctx, RPC_DPLX_FLAG_LOCKED);/* RECV! */
 		if (code == ETIMEDOUT) {
-			/* UL can retry, we dont.  This CAN indicate xprt destroyed
-			 * (error status already set). */
+			/* UL can retry, we dont.  This CAN indicate xprt
+			 * destroyed (error status already set). */
 			goto unlock;
 		}
 		/* switch on direction */
@@ -484,7 +487,7 @@ static enum clnt_stat clnt_vc_call(CLIENT * clnt, AUTH * auth, rpcproc_t proc,
 		/*
 		 * Keep receiving until we get a valid transaction id.
 		 */
-		while (TRUE) {
+		while (true) {
 
 			/* skiprecord */
 			if (!xdr_inrec_skiprecord(xdrs)) {
@@ -508,12 +511,13 @@ static enum clnt_stat clnt_vc_call(CLIENT * clnt, AUTH * auth, rpcproc_t proc,
 					goto replied;
 				break;
 			case CALL:
-				/* in this configuration, we do not expect calls */
+				/* in this configuration, we do not expect
+				 * calls */
 				break;
 			default:
 				break;
 			}
-		}		/* while (TRUE) */
+		}		/* while (true) */
 	}			/* ! bi-directional */
 
 	/*
@@ -561,7 +565,8 @@ static enum clnt_stat clnt_vc_call(CLIENT * clnt, AUTH * auth, rpcproc_t proc,
 	return (result);
 }
 
-static void clnt_vc_geterr(CLIENT * clnt, struct rpc_err *errp)
+static void
+clnt_vc_geterr(CLIENT *clnt, struct rpc_err *errp)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
 	XDR *xdrs;
@@ -579,7 +584,8 @@ static void clnt_vc_geterr(CLIENT * clnt, struct rpc_err *errp)
 	}
 }
 
-static bool clnt_vc_freeres(CLIENT * clnt, xdrproc_t xdr_res, void *res_ptr)
+static bool
+clnt_vc_freeres(CLIENT *clnt, xdrproc_t xdr_res, void *res_ptr)
 {
 	XDR xdrs = {
 		.x_public = NULL,
@@ -609,17 +615,20 @@ static bool clnt_vc_freeres(CLIENT * clnt, xdrproc_t xdr_res, void *res_ptr)
 	return (rslt);
 }
 
- /*ARGSUSED*/ static void clnt_vc_abort(CLIENT * clnt)
+ /*ARGSUSED*/
+static void
+clnt_vc_abort(CLIENT *clnt)
 {
 }
 
-static bool clnt_vc_control(CLIENT * clnt, u_int request, void *info)
+static bool
+clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
 	struct ct_data *ct = &(xd->cx.data);
 	struct ct_serialized *cs = (struct ct_serialized *)clnt->cl_p3;
 	void *infop = info;
-	bool rslt = TRUE;
+	bool rslt = true;
 
 	/* always take recv lock first if taking together */
 	rpc_dplx_rlc(clnt);
@@ -627,30 +636,30 @@ static bool clnt_vc_control(CLIENT * clnt, u_int request, void *info)
 
 	switch (request) {
 	case CLSET_FD_CLOSE:
-		ct->ct_closeit = TRUE;
+		ct->ct_closeit = true;
 		goto unlock;
-		return (TRUE);
+		return (true);
 	case CLSET_FD_NCLOSE:
-		ct->ct_closeit = FALSE;
+		ct->ct_closeit = false;
 		goto unlock;
-		return (TRUE);
+		return (true);
 	default:
 		break;
 	}
 
 	/* for other requests which use info */
 	if (info == NULL) {
-		rslt = FALSE;
+		rslt = false;
 		goto unlock;
 	}
 	switch (request) {
 	case CLSET_TIMEOUT:
 		if (time_not_ok((struct timeval *)info)) {
-			rslt = FALSE;
+			rslt = false;
 			goto unlock;
 		}
 		ct->ct_wait = *(struct timeval *)infop;
-		ct->ct_waitset = TRUE;
+		ct->ct_waitset = true;
 		break;
 	case CLGET_TIMEOUT:
 		*(struct timeval *)infop = ct->ct_wait;
@@ -666,7 +675,7 @@ static bool clnt_vc_control(CLIENT * clnt, u_int request, void *info)
 		*(struct netbuf *)info = ct->ct_addr;
 		break;
 	case CLSET_SVC_ADDR:	/* set to new address */
-		rslt = FALSE;
+		rslt = false;
 		goto unlock;
 	case CLGET_XID:
 		/*
@@ -728,7 +737,7 @@ static bool clnt_vc_control(CLIENT * clnt, u_int request, void *info)
 		break;
 
 	default:
-		rslt = FALSE;
+		rslt = false;
 		goto unlock;
 		break;
 	}
@@ -740,7 +749,8 @@ static bool clnt_vc_control(CLIENT * clnt, u_int request, void *info)
 	return (rslt);
 }
 
-static bool clnt_vc_ref(CLIENT * clnt, u_int flags)
+static bool
+clnt_vc_ref(CLIENT *clnt, u_int flags)
 {
 	uint32_t refcnt;
 
@@ -760,7 +770,8 @@ static bool clnt_vc_ref(CLIENT * clnt, u_int flags)
 	return (true);
 }
 
-static void clnt_vc_release(CLIENT * clnt, u_int flags)
+static void
+clnt_vc_release(CLIENT *clnt, u_int flags)
 {
 	uint32_t cl_refcnt;
 
@@ -809,7 +820,8 @@ static void clnt_vc_release(CLIENT * clnt, u_int flags)
 		mutex_unlock(&clnt->cl_lock);
 }
 
-static void clnt_vc_destroy(CLIENT * clnt)
+static void
+clnt_vc_destroy(CLIENT *clnt)
 {
 	struct rpc_dplx_rec *rec;
 	struct x_vc_data *xd;
@@ -867,7 +879,8 @@ static void clnt_vc_destroy(CLIENT * clnt)
 	return;
 }
 
-static struct clnt_ops *clnt_vc_ops(void)
+static struct clnt_ops *
+clnt_vc_ops(void)
 {
 	static struct clnt_ops ops;
 	extern mutex_t ops_lock;

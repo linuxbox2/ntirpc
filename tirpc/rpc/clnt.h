@@ -59,13 +59,13 @@
  * should give up rather than retry.
  */
 #define IS_UNRECOVERABLE_RPC(s) (((s) == RPC_AUTHERROR) ||      \
-                                 ((s) == RPC_CANTENCODEARGS) || \
-                                 ((s) == RPC_CANTDECODERES) ||  \
-                                 ((s) == RPC_VERSMISMATCH) ||   \
-                                 ((s) == RPC_PROCUNAVAIL) ||    \
-                                 ((s) == RPC_PROGUNAVAIL) ||    \
-                                 ((s) == RPC_PROGVERSMISMATCH) ||       \
-                                 ((s) == RPC_CANTDECODEARGS))
+				 ((s) == RPC_CANTENCODEARGS) || \
+				 ((s) == RPC_CANTDECODERES) ||  \
+				 ((s) == RPC_VERSMISMATCH) ||   \
+				 ((s) == RPC_PROCUNAVAIL) ||		\
+				 ((s) == RPC_PROGUNAVAIL) ||		\
+				 ((s) == RPC_PROGVERSMISMATCH) ||       \
+				 ((s) == RPC_CANTDECODEARGS))
 
 /*
  * Error info.
@@ -204,10 +204,10 @@ struct rpc_timers {
  * struct timeval timeout;
  */
 #define CLNT_CALL(rh, ah, proc, xargs, argsp, xres, resp, secs) \
-    ((*(rh)->cl_ops->cl_call)(rh, ah, proc, xargs, argsp, xres, resp, secs))
+	((*(rh)->cl_ops->cl_call)(rh, ah, proc, xargs, argsp, xres, resp, secs))
 
 #define clnt_call(rh, ah, proc, xargs, argsp, xres, resp, secs) \
-    ((*(rh)->cl_ops->cl_call)(rh, ah, proc, xargs, argsp, xres, resp, secs))
+	((*(rh)->cl_ops->cl_call)(rh, ah, proc, xargs, argsp, xres, resp, secs))
 
 /*
  * void
@@ -222,24 +222,24 @@ struct rpc_timers {
  * CLNT_GETERR(rh);
  *  CLIENT *rh;
  */
-#define CLNT_GETERR(rh,errp) ((*(rh)->cl_ops->cl_geterr)(rh, errp))
-#define clnt_geterr(rh,errp) ((*(rh)->cl_ops->cl_geterr)(rh, errp))
+#define CLNT_GETERR(rh, errp) ((*(rh)->cl_ops->cl_geterr)(rh, errp))
+#define clnt_geterr(rh, errp) ((*(rh)->cl_ops->cl_geterr)(rh, errp))
 
 /*
  * uint32_t flags
  * CLNT_REF(rh);
  *  CLIENT *rh;
  */
-#define CLNT_REF(rh,flags) ((*(rh)->cl_ops->cl_ref)(rh, flags))
-#define clnt_ref(rh,flags) ((*(rh)->cl_ops->cl_ref)(rh, flags))
+#define CLNT_REF(rh, flags) ((*(rh)->cl_ops->cl_ref)(rh, flags))
+#define clnt_ref(rh, flags) ((*(rh)->cl_ops->cl_ref)(rh, flags))
 
 /*
  * uint32_t flags
  * CLNT_RELEASE(rh);
  *  CLIENT *rh;
  */
-#define CLNT_RELEASE(rh,flags) ((*(rh)->cl_ops->cl_release)(rh, flags))
-#define clnt_release(rh,flags) ((*(rh)->cl_ops->cl_release)(rh, flags))
+#define CLNT_RELEASE(rh, flags) ((*(rh)->cl_ops->cl_release)(rh, flags))
+#define clnt_release(rh, flags) ((*(rh)->cl_ops->cl_release)(rh, flags))
 
 /*
  * bool
@@ -248,8 +248,10 @@ struct rpc_timers {
  * xdrproc_t xres;
  * void *resp;
  */
-#define CLNT_FREERES(rh,xres,resp) ((*(rh)->cl_ops->cl_freeres)(rh,xres,resp))
-#define clnt_freeres(rh,xres,resp) ((*(rh)->cl_ops->cl_freeres)(rh,xres,resp))
+#define CLNT_FREERES(rh, xres, resp) \
+	((*(rh)->cl_ops->cl_freeres)(rh, xres, resp))
+#define clnt_freeres(rh, xres, resp) \
+	((*(rh)->cl_ops->cl_freeres)(rh, xres, resp))
 
 /*
  * bool
@@ -258,8 +260,10 @@ struct rpc_timers {
  *      u_int request;
  *      char *info;
  */
-#define CLNT_CONTROL(cl,rq,in) ((*(cl)->cl_ops->cl_control)(cl,rq,in))
-#define clnt_control(cl,rq,in) ((*(cl)->cl_ops->cl_control)(cl,rq,in))
+#define CLNT_CONTROL(cl, rq, in) \
+	((*(cl)->cl_ops->cl_control)(cl, rq, in))
+#define clnt_control(cl, rq, in) \
+	((*(cl)->cl_ops->cl_control)(cl, rq, in))
 
 /*
  * control operations that apply to both udp and tcp transports
@@ -323,8 +327,9 @@ struct rpc_timers {
  * Generic client creation routine. Supported protocols are those that
  * belong to the nettype namespace (/etc/netconfig).
  */
-__BEGIN_DECLS extern CLIENT *clnt_ncreate(const char *, const rpcprog_t,
-					  const rpcvers_t, const char *);
+__BEGIN_DECLS
+extern CLIENT * clnt_ncreate(const char *, const rpcprog_t,
+			     const rpcvers_t, const char *);
 /*
  *
  * const char *hostname;   -- hostname
@@ -488,30 +493,34 @@ __END_DECLS
 /*
  * Print why creation failed
  */
-__BEGIN_DECLS extern void clnt_pcreateerror(const char *);	/* stderr */
+__BEGIN_DECLS
+extern void clnt_pcreateerror(const char *);	/* stderr */
 extern char *clnt_spcreateerror(const char *);	/* string */
 __END_DECLS
 /*
  * Like clnt_perror(), but is more verbose in its output
  */
-__BEGIN_DECLS extern void clnt_perrno(enum clnt_stat);	/* stderr */
+__BEGIN_DECLS
+extern void clnt_perrno(enum clnt_stat);	/* stderr */
 extern char *clnt_sperrno(enum clnt_stat);	/* string */
 __END_DECLS
 /*
  * Print an English error message, given the client error code
  */
-__BEGIN_DECLS extern void clnt_perror(CLIENT *, const char *);	/* stderr */
+__BEGIN_DECLS
+extern void clnt_perror(CLIENT *, const char *);	/* stderr */
 extern char *clnt_sperror(CLIENT *, const char *);	/* string */
 __END_DECLS
 /*
  * If a creation fails, the following allows the user to figure out why.
  */
-    struct rpc_createerr {
+struct rpc_createerr {
 	enum clnt_stat cf_stat;
-	struct rpc_err cf_error;	/* useful when cf_stat == RPC_PMAPFAILURE */
+	struct rpc_err cf_error; /* useful when cf_stat == RPC_PMAPFAILURE */
 };
 
-__BEGIN_DECLS extern struct rpc_createerr *__rpc_createerr(void);
+__BEGIN_DECLS
+extern struct rpc_createerr *__rpc_createerr(void);
 __END_DECLS
 #define get_rpc_createerr() (*(__rpc_createerr()))
 #define rpc_createerr  (*(__rpc_createerr()))
@@ -528,11 +537,12 @@ __END_DECLS
  * char *out;
  * const char *nettype;
  */
-__BEGIN_DECLS extern enum clnt_stat rpc_call(const char *, const rpcprog_t,
-					     const rpcvers_t, const rpcproc_t,
-					     const xdrproc_t, const char *,
-					     const xdrproc_t, char *,
-					     const char *);
+__BEGIN_DECLS
+extern enum clnt_stat rpc_call(const char *, const rpcprog_t,
+			       const rpcvers_t, const rpcproc_t,
+			       const xdrproc_t, const char *,
+			       const xdrproc_t, char *,
+			       const char *);
 __END_DECLS
 /*
  * RPC broadcast interface
@@ -579,13 +589,14 @@ __END_DECLS
  */
 typedef bool(*resultproc_t) (caddr_t, ...);
 
-__BEGIN_DECLS extern enum clnt_stat rpc_broadcast(const rpcprog_t,
-						  const rpcvers_t,
-						  const rpcproc_t,
-						  const xdrproc_t, caddr_t,
-						  const xdrproc_t, caddr_t,
-						  const resultproc_t,
-						  const char *);
+__BEGIN_DECLS
+extern enum clnt_stat rpc_broadcast(const rpcprog_t,
+				    const rpcvers_t,
+				    const rpcproc_t,
+				    const xdrproc_t, caddr_t,
+				    const xdrproc_t, caddr_t,
+				    const resultproc_t,
+				    const char *);
 extern enum clnt_stat rpc_broadcast_exp(const rpcprog_t, const rpcvers_t,
 					const rpcproc_t, const xdrproc_t,
 					caddr_t, const xdrproc_t, caddr_t,

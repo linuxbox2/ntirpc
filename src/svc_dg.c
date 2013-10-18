@@ -79,16 +79,16 @@ static void svc_dg_ops(SVCXPRT *);
 static enum xprt_stat svc_dg_stat(SVCXPRT *);
 static bool svc_dg_recv(SVCXPRT *, struct svc_req *);
 
-static bool svc_dg_reply(SVCXPRT *, struct svc_req *req, struct rpc_msg *);
+static bool svc_dg_reply(SVCXPRT *, struct svc_req *, struct rpc_msg *);
 static bool svc_dg_getargs(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
 			   void *);
 static void svc_dg_lock(SVCXPRT *, uint32_t, const char *, int);
 static void svc_dg_unlock(SVCXPRT *, uint32_t, const char *, int);
 static bool svc_dg_freeargs(SVCXPRT *, xdrproc_t, void *);
-static bool svc_dg_ref(SVCXPRT * xprt, u_int flags, const char *tag,
-		       const int line);
-static void svc_dg_release(SVCXPRT * xprt, u_int flags, const char *tag,
-			   const int line);
+static bool svc_dg_ref(SVCXPRT *, u_int, const char *,
+		       const int);
+static void svc_dg_release(SVCXPRT *, u_int, const char *,
+			   const int);
 static void svc_dg_destroy(SVCXPRT *);
 static bool svc_dg_control(SVCXPRT *, const u_int, void *);
 static int svc_dg_cache_get(SVCXPRT *, struct rpc_msg *, char **, size_t *);
@@ -111,7 +111,8 @@ static const char svc_dg_err1[] = "could not get transport information";
 static const char svc_dg_err2[] = " transport does not support data transfer";
 static const char __no_mem_str[] = "out of memory";
 
-SVCXPRT *svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
+SVCXPRT *
+svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 {
 	SVCXPRT *xprt;
 	struct svc_dg_data *su = NULL;
@@ -147,7 +148,8 @@ SVCXPRT *svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 	if (su == NULL)
 		goto freedata;
 	su->su_iosz = ((MAX(sendsize, recvsize) + 3) / 4) * 4;
-	if ((rpc_buffer(xprt) = mem_alloc(su->su_iosz)) == NULL)
+	rpc_buffer(xprt) = mem_alloc(su->su_iosz);
+	if (!rpc_buffer(xprt))
 		goto freedata;
 	xdrmem_create(&(su->su_xdrs), rpc_buffer(xprt), su->su_iosz,
 		      XDR_DECODE);
@@ -160,7 +162,7 @@ SVCXPRT *svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 	svc_dg_ops(xprt);
 	xprt->xp_rtaddr.maxlen = sizeof(struct sockaddr_storage);
 
-	slen = sizeof ss;
+	slen = sizeof(ss);
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0)
 		goto freedata;
 
@@ -186,7 +188,8 @@ SVCXPRT *svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 	svc_dg_enable_pktinfo(fd, &si);
 
 	/* Make reachable */
-	xprt->xp_p5 = rpc_dplx_lookup_rec(xprt->xp_fd, RPC_DPLX_FLAG_NONE, &oflags);	/* ref+1 */
+	xprt->xp_p5 = rpc_dplx_lookup_rec(
+		xprt->xp_fd, RPC_DPLX_FLAG_NONE, &oflags); /* ref+1 */
 	svc_rqst_init_xprt(xprt);
 
 	/* Conditional xprt_register */
@@ -205,13 +208,15 @@ SVCXPRT *svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 	return (NULL);
 }
 
- /*ARGSUSED*/ static enum xprt_stat svc_dg_stat(xprt)
-SVCXPRT *xprt;
+ /*ARGSUSED*/
+static enum xprt_stat
+svc_dg_stat(SVCXPRT *xprt)
 {
 	return (XPRT_IDLE);
 }
 
-static bool svc_dg_recv(SVCXPRT * xprt, struct svc_req *req)
+static bool
+svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 {
 	struct svc_dg_data *su = su_data(xprt);
 	XDR *xdrs = &(su->su_xdrs);
@@ -245,14 +250,13 @@ static bool svc_dg_recv(SVCXPRT * xprt, struct svc_req *req)
 
 	rlen = recvmsg(xprt->xp_fd, mesgp, 0);
 
-	if (sp->sa_family == (sa_family_t) 0xffff) {
-		return FALSE;
-	}
+	if (sp->sa_family == (sa_family_t) 0xffff)
+		return false;
 
 	if (rlen == -1 && errno == EINTR)
 		goto again;
 	if (rlen == -1 || (rlen < (ssize_t) (4 * sizeof(u_int32_t))))
-		return (FALSE);
+		return (false);
 
 	__rpc_set_netbuf(&xprt->xp_rtaddr, &ss, mesgp->msg_namelen);
 
@@ -267,9 +271,8 @@ static bool svc_dg_recv(SVCXPRT * xprt, struct svc_req *req)
 
 	xdrs->x_op = XDR_DECODE;
 	XDR_SETPOS(xdrs, 0);
-	if (!xdr_callmsg(xdrs, req->rq_msg)) {
-		return (FALSE);
-	}
+	if (!xdr_callmsg(xdrs, req->rq_msg))
+		return (false);
 
 	req->rq_xprt = xprt;
 	req->rq_prog = req->rq_msg->rm_call.cb_prog;
@@ -286,7 +289,7 @@ static bool svc_dg_recv(SVCXPRT * xprt, struct svc_req *req)
 		req->rq_rtaddr.maxlen = req->rq_rtaddr.len = alen;
 		memcpy(req->rq_rtaddr.buf, xprt->xp_rtaddr.buf, alen);
 	} else
-		return (FALSE);
+		return (false);
 
 	/* the checksum */
 	req->rq_cksum =
@@ -303,18 +306,18 @@ static bool svc_dg_recv(SVCXPRT * xprt, struct svc_req *req)
 			iov.iov_base = reply;
 			iov.iov_len = replylen;
 			(void)sendmsg(xprt->xp_fd, mesgp, 0);
-			return (FALSE);
+			return (false);
 		}
 	}
-	return (TRUE);
+	return (true);
 }
 
-static bool svc_dg_reply(SVCXPRT * xprt, struct svc_req *req,
-			 struct rpc_msg *msg)
+static bool
+svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 {
 	struct svc_dg_data *su = su_data(xprt);
 	XDR *xdrs = &(su->su_xdrs);
-	bool stat = FALSE;
+	bool stat = false;
 	size_t slen;
 
 	xdrproc_t xdr_results;
@@ -323,7 +326,7 @@ static bool svc_dg_reply(SVCXPRT * xprt, struct svc_req *req,
 
 	if (msg->rm_reply.rp_stat == MSG_ACCEPTED
 	    && msg->rm_reply.rp_acpt.ar_stat == SUCCESS) {
-		has_args = TRUE;
+		has_args = true;
 		xdr_results = msg->acpted_rply.ar_results.proc;
 		xdr_location = msg->acpted_rply.ar_results.where;
 		msg->acpted_rply.ar_results.proc = (xdrproc_t) xdr_void;
@@ -331,7 +334,7 @@ static bool svc_dg_reply(SVCXPRT * xprt, struct svc_req *req,
 	} else {
 		xdr_results = NULL;
 		xdr_location = NULL;
-		has_args = FALSE;
+		has_args = false;
 	}
 
 	xdrs->x_op = XDR_ENCODE;
@@ -354,7 +357,7 @@ static bool svc_dg_reply(SVCXPRT * xprt, struct svc_req *req,
 		/* cmsg already set in svc_dg_recv */
 
 		if (sendmsg(xprt->xp_fd, msg, 0) == (ssize_t) slen) {
-			stat = TRUE;
+			stat = true;
 			if (su->su_cache)
 				svc_dg_cache_set(xprt, slen);
 		}
@@ -362,8 +365,9 @@ static bool svc_dg_reply(SVCXPRT * xprt, struct svc_req *req,
 	return (stat);
 }
 
-static bool svc_dg_getargs(SVCXPRT * xprt, struct svc_req *req,
-			   xdrproc_t xdr_args, void *args_ptr, void *u_data)
+static bool
+svc_dg_getargs(SVCXPRT *xprt, struct svc_req *req,
+	       xdrproc_t xdr_args, void *args_ptr, void *u_data)
 {
 	struct svc_dg_data *su = su_data(xprt);
 	XDR *xdrs = &(su->su_xdrs);
@@ -375,26 +379,30 @@ static bool svc_dg_getargs(SVCXPRT * xprt, struct svc_req *req,
 	    (req->rq_auth, req, &(su_data(xprt)->su_xdrs), xdr_args,
 	     args_ptr)) {
 		(void)svc_freeargs(xprt, xdr_args, args_ptr);
-		return FALSE;
+		return false;
 	}
-	return TRUE;
+
+	return (true);
 }
 
-static void svc_dg_lock(SVCXPRT * xprt, uint32_t flags, const char *file,
-			int line)
+static void
+svc_dg_lock(SVCXPRT *xprt, uint32_t flags, const char *file,
+	    int line)
 {
 	rpc_dplx_rlxi(xprt, file, line);
 	rpc_dplx_slxi(xprt, file, line);
 }
 
-static void svc_dg_unlock(SVCXPRT * xprt, uint32_t flags, const char *file,
-			  int line)
+static void
+svc_dg_unlock(SVCXPRT *xprt, uint32_t flags, const char *file,
+	      int line)
 {
 	rpc_dplx_rux(xprt);
 	rpc_dplx_sux(xprt);
 }
 
-static bool svc_dg_freeargs(SVCXPRT * xprt, xdrproc_t xdr_args, void *args_ptr)
+static bool
+svc_dg_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
 	XDR xdrs = {
 		.x_public = NULL,
@@ -404,7 +412,8 @@ static bool svc_dg_freeargs(SVCXPRT * xprt, xdrproc_t xdr_args, void *args_ptr)
 	return (*xdr_args) (&xdrs, args_ptr);
 }
 
-static void svc_dg_dodestroy(SVCXPRT * xprt)
+static void
+svc_dg_dodestroy(SVCXPRT *xprt)
 {
 	struct svc_dg_data *su = su_data(xprt);
 
@@ -427,8 +436,9 @@ static void svc_dg_dodestroy(SVCXPRT * xprt)
 	(void)mem_free(xprt, sizeof(SVCXPRT));
 }
 
-static bool svc_dg_ref(SVCXPRT * xprt, u_int flags, const char *tag,
-		       const int line)
+static bool
+svc_dg_ref(SVCXPRT *xprt, u_int flags, const char *tag,
+	   const int line)
 {
 	if (!(flags & SVC_REF_FLAG_LOCKED))
 		mutex_lock(&xprt->xp_lock);
@@ -442,8 +452,9 @@ static bool svc_dg_ref(SVCXPRT * xprt, u_int flags, const char *tag,
 	return (true);
 }
 
-static void svc_dg_release(SVCXPRT * xprt, u_int flags, const char *tag,
-			   const int line)
+static void
+svc_dg_release(SVCXPRT *xprt, u_int flags, const char *tag,
+	       const int line)
 {
 	uint32_t refcnt;
 
@@ -453,12 +464,12 @@ static void svc_dg_release(SVCXPRT * xprt, u_int flags, const char *tag,
 	refcnt = --(xprt->xp_refcnt);
 	mutex_unlock(&xprt->xp_lock);
 
-	if (refcnt == 0) {
+	if (refcnt == 0)
 		svc_dg_dodestroy(xprt);
-	}
 }
 
-static void svc_dg_destroy(SVCXPRT * xprt)
+static void
+svc_dg_destroy(SVCXPRT *xprt)
 {
 	uint32_t refcnt = 0;
 
@@ -477,9 +488,8 @@ static void svc_dg_destroy(SVCXPRT * xprt)
 	svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
 
 	/* XXX prefer LOCKED? (would require lock order change) */
-	if (refcnt == 0) {
+	if (refcnt == 0)
 		svc_dg_dodestroy(xprt);
-	}
 
  out:
 	return;
@@ -487,8 +497,9 @@ static void svc_dg_destroy(SVCXPRT * xprt)
 
 extern mutex_t ops_lock;
 
- /*ARGSUSED*/ static bool svc_dg_control(SVCXPRT * xprt, const u_int rq,
-					 void *in)
+ /*ARGSUSED*/
+static bool
+svc_dg_control(SVCXPRT *xprt, const u_int rq, void *in)
 {
 	switch (rq) {
 	case SVCGET_XP_FLAGS:
@@ -538,18 +549,18 @@ extern mutex_t ops_lock;
 		mutex_unlock(&ops_lock);
 		break;
 	default:
-		return (FALSE);
+		return (false);
 	}
-	return (TRUE);
+	return (true);
 }
 
-static void svc_dg_ops(SVCXPRT * xprt)
+static void
+svc_dg_ops(SVCXPRT *xprt)
 {
 	static struct xp_ops ops;
 	static struct xp_ops2 ops2;
 
 	/* VARIABLES PROTECTED BY ops_lock: ops, xp_type */
-
 	mutex_lock(&ops_lock);
 
 	/* Fill in type of service */
@@ -585,7 +596,8 @@ static const char cache_enable_str[] = "svc_enablecache: %s %s";
 static const char alloc_err[] = "could not allocate cache ";
 static const char enable_err[] = "cache already enabled";
 
-int svc_dg_enablecache(SVCXPRT * transp, u_int size)
+int
+svc_dg_enablecache(SVCXPRT *transp, u_int size)
 {
 	struct svc_dg_data *su = su_data(transp);
 	struct cl_cache *uc;
@@ -643,7 +655,8 @@ static const char cache_set_err1[] = "victim not found";
 static const char cache_set_err2[] = "victim alloc failed";
 static const char cache_set_err3[] = "could not allocate new rpc buffer";
 
-static void svc_dg_cache_set(SVCXPRT * xprt, size_t replylen)
+static void
+svc_dg_cache_set(SVCXPRT *xprt, size_t replylen)
 {
 	cache_ptr victim;
 	cache_ptr *vicp;
@@ -663,8 +676,8 @@ static void svc_dg_cache_set(SVCXPRT * xprt, size_t replylen)
 	if (victim != NULL) {
 		loc = CACHE_LOC(xprt, victim->cache_xid);
 		for (vicp = &uc->uc_entries[loc];
-		     *vicp != NULL && *vicp != victim;
-		     vicp = &(*vicp)->cache_next) ;
+		     *vicp != NULL && *vicp != victim; 
+		     vicp = &(*vicp)->cache_next);
 		if (*vicp == NULL) {
 			__warnx(TIRPC_DEBUG_FLAG_SVC_DG, cache_set_str,
 				cache_set_err1);
@@ -731,8 +744,9 @@ static void svc_dg_cache_set(SVCXPRT * xprt, size_t replylen)
  * Try to get an entry from the cache
  * return 1 if found, 0 if not found and set the stage for svc_dg_cache_set()
  */
-static int svc_dg_cache_get(SVCXPRT * xprt, struct rpc_msg *msg, char **replyp,
-			    size_t * replylenp)
+static int
+svc_dg_cache_get(SVCXPRT *xprt, struct rpc_msg *msg, char **replyp,
+		 size_t *replylenp)
 {
 	u_int loc;
 	cache_ptr ent;
@@ -791,7 +805,8 @@ static int svc_dg_cache_get(SVCXPRT * xprt, struct rpc_msg *msg, char **replyp,
 /*
  * Enable reception of PKTINFO control messages
  */
-void svc_dg_enable_pktinfo(int fd, const struct __rpc_sockinfo *si)
+void
+svc_dg_enable_pktinfo(int fd, const struct __rpc_sockinfo *si)
 {
 	int val = 1;
 
@@ -815,7 +830,8 @@ void svc_dg_enable_pktinfo(int fd, const struct __rpc_sockinfo *si)
  * layer, check whether it contains valid PKTINFO data matching
  * the address family of the peer address.
  */
-int svc_dg_valid_pktinfo(struct msghdr *msg)
+int
+svc_dg_valid_pktinfo(struct msghdr *msg)
 {
 	struct cmsghdr *cmsg;
 

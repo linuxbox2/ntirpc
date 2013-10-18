@@ -1,5 +1,6 @@
 /*	$NetBSD: rpcent.h,v 1.1 2000/06/02 22:57:56 fvdl Exp $	*/
-/*	$FreeBSD: src/include/rpc/rpcent.h,v 1.2 2002/03/23 17:24:55 imp Exp $ */
+/*	$FreeBSD: src/include/rpc/rpcent.h,v 1.2 2002/03/23 17:24:55
+ *	imp Exp $ */
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
@@ -47,7 +48,7 @@
 __BEGIN_DECLS
 /* These are defined in /usr/include/rpc/netdb.h */
 #if defined(__FreeBSD__)
-    struct rpcent {
+struct rpcent {
 	char *r_name;		/* name of server for this rpc program */
 	char **r_aliases;	/* alias list */
 	int r_number;		/* rpc program number */

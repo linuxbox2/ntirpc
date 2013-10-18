@@ -103,9 +103,9 @@ enum xdr_op {
  */
 #if 1
 #define RNDUP(x)  (((x) + BYTES_PER_XDR_UNIT - 1) & ~(BYTES_PER_XDR_UNIT - 1))
-#else				/* this is the old routine */
+#else /* this is the old routine */
 #define RNDUP(x)  ((((x) + BYTES_PER_XDR_UNIT - 1) / BYTES_PER_XDR_UNIT) \
-                   * BYTES_PER_XDR_UNIT)
+		   * BYTES_PER_XDR_UNIT)
 #endif
 
 #define XBS_FLAG_NONE   0x0000
@@ -201,27 +201,29 @@ typedef bool(*xdrproc_t) (XDR *, ...);
  * u_int  len;
  * u_int  pos;
  */
-#define XDR_GETLONG(xdrs, longp)   \
-    (*(xdrs)->x_ops->x_getlong)(xdrs, longp)
-#define xdr_getlong(xdrs, longp)   \
-    (*(xdrs)->x_ops->x_getlong)(xdrs, longp)
+#define XDR_GETLONG(xdrs, longp)		\
+	(*(xdrs)->x_ops->x_getlong)(xdrs, longp)
+#define xdr_getlong(xdrs, longp)		\
+	(*(xdrs)->x_ops->x_getlong)(xdrs, longp)
 
-#define XDR_PUTLONG(xdrs, longp)   \
-    (*(xdrs)->x_ops->x_putlong)(xdrs, longp)
-#define xdr_putlong(xdrs, longp)   \
-    (*(xdrs)->x_ops->x_putlong)(xdrs, longp)
+#define XDR_PUTLONG(xdrs, longp)		\
+	(*(xdrs)->x_ops->x_putlong)(xdrs, longp)
+#define xdr_putlong(xdrs, longp)		\
+	(*(xdrs)->x_ops->x_putlong)(xdrs, longp)
 
-static __inline int xdr_getint32(XDR * xdrs, int32_t * ip)
+static inline int
+xdr_getint32(XDR *xdrs, int32_t *ip)
 {
 	long l;
 
 	if (!xdr_getlong(xdrs, &l))
-		return (FALSE);
+		return (false);
 	*ip = (int32_t) l;
-	return (TRUE);
+	return (true);
 }
 
-static __inline int xdr_putint32(XDR * xdrs, int32_t * ip)
+static inline int
+xdr_putint32(XDR *xdrs, int32_t *ip)
 {
 	long l;
 
@@ -233,50 +235,50 @@ static __inline int xdr_putint32(XDR * xdrs, int32_t * ip)
 #define XDR_PUTINT32(xdrs, int32p) xdr_putint32(xdrs, int32p)
 
 #define XDR_GETBYTES(xdrs, addr, len)   \
-    (*(xdrs)->x_ops->x_getbytes)(xdrs, addr, len)
-#define xdr_getbytes(xdrs, addr, len)   \
-    (*(xdrs)->x_ops->x_getbytes)(xdrs, addr, len)
+	(*(xdrs)->x_ops->x_getbytes)(xdrs, addr, len)
+#define xdr_getbytes(xdrs, addr, len)			\
+	(*(xdrs)->x_ops->x_getbytes)(xdrs, addr, len)
 
-#define XDR_PUTBYTES(xdrs, addr, len)   \
-    (*(xdrs)->x_ops->x_putbytes)(xdrs, addr, len)
-#define xdr_putbytes(xdrs, addr, len)   \
-    (*(xdrs)->x_ops->x_putbytes)(xdrs, addr, len)
+#define XDR_PUTBYTES(xdrs, addr, len)			\
+	(*(xdrs)->x_ops->x_putbytes)(xdrs, addr, len)
+#define xdr_putbytes(xdrs, addr, len)			\
+	(*(xdrs)->x_ops->x_putbytes)(xdrs, addr, len)
 
-#define XDR_GETBUFS(xdrs, uio, len, flags) \
-    (*(xdrs)->x_ops->x_getbufs)(xdrs, uio, len, flags)
-#define xdr_getbufs(xdrs, uio, len, flags) \
-    (*(xdrs)->x_ops->x_getbufs)(xdrs, uio, len, flags)
+#define XDR_GETBUFS(xdrs, uio, len, flags)		\
+	(*(xdrs)->x_ops->x_getbufs)(xdrs, uio, len, flags)
+#define xdr_getbufs(xdrs, uio, len, flags)		\
+	(*(xdrs)->x_ops->x_getbufs)(xdrs, uio, len, flags)
 
-#define XDR_PUTBUFS(xdrs, uio, len, flags) \
-    (*(xdrs)->x_ops->x_putbufs)(xdrs, uio, len, flags)
-#define xdr_putbufs(xdrs, uio, len, flags) \
-    (*(xdrs)->x_ops->x_putbufs)(xdrs, uio, len, flags)
+#define XDR_PUTBUFS(xdrs, uio, len, flags)		\
+	(*(xdrs)->x_ops->x_putbufs)(xdrs, uio, len, flags)
+#define xdr_putbufs(xdrs, uio, len, flags)		\
+	(*(xdrs)->x_ops->x_putbufs)(xdrs, uio, len, flags)
 
 #define XDR_GETPOS(xdrs)                        \
-    (*(xdrs)->x_ops->x_getpostn)(xdrs)
+	(*(xdrs)->x_ops->x_getpostn)(xdrs)
 #define xdr_getpos(xdrs)                        \
-    (*(xdrs)->x_ops->x_getpostn)(xdrs)
+	(*(xdrs)->x_ops->x_getpostn)(xdrs)
 
 #define XDR_SETPOS(xdrs, pos)                   \
-    (*(xdrs)->x_ops->x_setpostn)(xdrs, pos)
+	(*(xdrs)->x_ops->x_setpostn)(xdrs, pos)
 #define xdr_setpos(xdrs, pos)                   \
-    (*(xdrs)->x_ops->x_setpostn)(xdrs, pos)
+	(*(xdrs)->x_ops->x_setpostn)(xdrs, pos)
 
 #define XDR_INLINE(xdrs, len)                   \
-    (*(xdrs)->x_ops->x_inline)(xdrs, len)
+	(*(xdrs)->x_ops->x_inline)(xdrs, len)
 #define xdr_inline(xdrs, len)                   \
-    (*(xdrs)->x_ops->x_inline)(xdrs, len)
+	(*(xdrs)->x_ops->x_inline)(xdrs, len)
 
-#define XDR_DESTROY(xdrs)    \
-    if ((xdrs)->x_ops->x_destroy)    \
-        (*(xdrs)->x_ops->x_destroy)(xdrs)
-#define xdr_destroy(xdrs)    \
-    if ((xdrs)->x_ops->x_destroy)    \
-        (*(xdrs)->x_ops->x_destroy)(xdrs)
+#define XDR_DESTROY(xdrs)	     \
+	if ((xdrs)->x_ops->x_destroy)			\
+		(*(xdrs)->x_ops->x_destroy)(xdrs)
+#define xdr_destroy(xdrs)	     \
+	if ((xdrs)->x_ops->x_destroy)			\
+		(*(xdrs)->x_ops->x_destroy)(xdrs)
 
-#define XDR_CONTROL(xdrs, req, op)   \
-    if ((xdrs)->x_ops->x_control)                               \
-        (*(xdrs)->x_ops->x_control)(xdrs, req, op)
+#define XDR_CONTROL(xdrs, req, op)				\
+	if ((xdrs)->x_ops->x_control)				\
+		(*(xdrs)->x_ops->x_control)(xdrs, req, op)
 #define xdr_control(xdrs, req, op) XDR_CONTROL(xdrs, req, op)
 
 /*
@@ -312,7 +314,7 @@ struct xdr_discrim {
  * properly if the data is not aligned.  The standard way to use these
  * is to say:
  * if ((buf = XDR_INLINE(xdrs, count)) == NULL)
- *  return (FALSE);
+ *  return (false);
  * <<< macro calls >>>
  * where ``count'' is the number of bytes of data occupied
  * by the primitive data types.
@@ -321,12 +323,12 @@ struct xdr_discrim {
  * of external representation.
  */
 #define IXDR_GET_INT32(buf)  ((int32_t)ntohl((u_int32_t)*(buf)++))
-#define IXDR_PUT_INT32(buf, v)  (*(buf)++ =(int32_t)htonl((u_int32_t)v))
+#define IXDR_PUT_INT32(buf, v)  (*(buf)++ = (int32_t)htonl((u_int32_t)v))
 #define IXDR_GET_U_INT32(buf)  ((u_int32_t)IXDR_GET_INT32(buf))
 #define IXDR_PUT_U_INT32(buf, v) IXDR_PUT_INT32((buf), ((int32_t)(v)))
 
 #define IXDR_GET_LONG(buf)  ((long)ntohl((u_int32_t)*(buf)++))
-#define IXDR_PUT_LONG(buf, v)  (*(buf)++ =(int32_t)htonl((u_int32_t)v))
+#define IXDR_PUT_LONG(buf, v)  (*(buf)++ = (int32_t)htonl((u_int32_t)v))
 
 #define IXDR_GET_BOOL(buf)  ((bool)IXDR_GET_LONG(buf))
 #define IXDR_GET_ENUM(buf, t)  ((t)IXDR_GET_LONG(buf))
@@ -343,7 +345,8 @@ struct xdr_discrim {
 /*
  * These are the "generic" xdr routines.
  */
-__BEGIN_DECLS extern bool xdr_void(void);
+__BEGIN_DECLS
+extern bool xdr_void(void);
 extern bool xdr_int(XDR *, int *);
 extern bool xdr_u_int(XDR *, u_int *);
 extern bool xdr_long(XDR *, long *);
@@ -390,7 +393,7 @@ __END_DECLS
  * declared here due to commonality.
  */
 #define MAX_NETOBJ_SZ 1024
-    struct netobj {
+struct netobj {
 	u_int n_len;
 	char *n_bytes;
 };
@@ -413,8 +416,8 @@ extern void xdrstdio_create(XDR *, FILE *, enum xdr_op);
 
 /* XDR pseudo records for tcp */
 extern void xdrrec_create(XDR *, u_int, u_int, void *,
-			  int (*)(XDR * xdrs, void *, void *, int),
-			  int (*)(XDR * xdrs, void *, void *, int));
+			  int (*)(XDR *, void *, void *, int),
+			  int (*)(XDR *, void *, void *, int));
 
 /* make end of xdr record */
 extern bool xdrrec_endofrecord(XDR *, bool);

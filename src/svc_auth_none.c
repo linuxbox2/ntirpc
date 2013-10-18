@@ -58,26 +58,29 @@ SVCAUTH svc_auth_none = {
 };
 
 /* aka, unwrap */
-static bool svcauth_none_wrap(SVCAUTH * __attribute__ ((unused)) auth,
-			      struct svc_req *
-			      __attribute__ ((unused)) req, XDR * xdrs,
-			      xdrproc_t xdr_func, caddr_t xdr_ptr)
+static bool
+svcauth_none_wrap(SVCAUTH * __attribute__ ((unused)) auth,
+		  struct svc_req * __attribute__ ((unused)) req, XDR *xdrs,
+		  xdrproc_t xdr_func, caddr_t xdr_ptr)
 {
 	return ((*xdr_func) (xdrs, xdr_ptr));
 }
 
-static bool svcauth_none_release(SVCAUTH * __attribute__ ((unused)) auth,
-				 struct svc_req * __attribute__ ((unused)) req)
+static bool
+svcauth_none_release(SVCAUTH * __attribute__ ((unused)) auth,
+		     struct svc_req * __attribute__ ((unused)) req)
 {
-	return (TRUE);
+	return (true);
 }
 
-static bool svcauth_none_destroy(SVCAUTH * auth)
+static bool
+svcauth_none_destroy(SVCAUTH *auth)
 {
-	return (TRUE);
+	return (true);
 }
 
-enum auth_stat _svcauth_none(struct svc_req *req, struct rpc_msg *msg)
+enum auth_stat
+_svcauth_none(struct svc_req *req, struct rpc_msg *msg)
 {
 	req->rq_auth = &svc_auth_none;
 

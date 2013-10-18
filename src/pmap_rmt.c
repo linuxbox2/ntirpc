@@ -68,10 +68,11 @@ static const struct timeval timeout = { 3, 0 };
  * remotely call that routine with the given parameters.  This allows
  * programs to do a lookup and call in one step.
  */
-enum clnt_stat pmap_rmtcall(struct sockaddr_in *addr, u_long prog, u_long vers,
-			    u_long proc, xdrproc_t xdrargs, caddr_t argsp,
-			    xdrproc_t xdrres, caddr_t resp, struct timeval tout,
-			    u_long * port_ptr)
+enum clnt_stat
+pmap_rmtcall(struct sockaddr_in *addr, u_long prog, u_long vers,
+	     u_long proc, xdrproc_t xdrargs, caddr_t argsp,
+	     xdrproc_t xdrres, caddr_t resp, struct timeval tout,
+	     u_long *port_ptr)
 {
 	int sock = -1;
 	CLIENT *client;
@@ -111,7 +112,8 @@ enum clnt_stat pmap_rmtcall(struct sockaddr_in *addr, u_long prog, u_long vers,
  * XDR remote call arguments
  * written for XDR_ENCODE direction only
  */
-bool xdr_rmtcall_args(XDR * xdrs, struct rmtcallargs * cap)
+bool
+xdr_rmtcall_args(XDR *xdrs, struct rmtcallargs *cap)
 {
 	u_int lenposition, argposition, position;
 
@@ -122,26 +124,27 @@ bool xdr_rmtcall_args(XDR * xdrs, struct rmtcallargs * cap)
 	    && xdr_u_long(xdrs, &(cap->proc))) {
 		lenposition = XDR_GETPOS(xdrs);
 		if (!xdr_u_long(xdrs, &(cap->arglen)))
-			return (FALSE);
+			return (false);
 		argposition = XDR_GETPOS(xdrs);
 		if (!(*(cap->xdr_args)) (xdrs, cap->args_ptr))
-			return (FALSE);
+			return (false);
 		position = XDR_GETPOS(xdrs);
 		cap->arglen = (u_long) position - (u_long) argposition;
 		XDR_SETPOS(xdrs, lenposition);
 		if (!xdr_u_long(xdrs, &(cap->arglen)))
-			return (FALSE);
+			return (false);
 		XDR_SETPOS(xdrs, position);
-		return (TRUE);
+		return (true);
 	}
-	return (FALSE);
+	return (false);
 }
 
 /*
  * XDR remote call results
  * written for XDR_DECODE direction only
  */
-bool xdr_rmtcallres(XDR * xdrs, struct rmtcallres * crp)
+bool
+xdr_rmtcallres(XDR *xdrs, struct rmtcallres *crp)
 {
 	caddr_t port_ptr;
 
@@ -155,5 +158,5 @@ bool xdr_rmtcallres(XDR * xdrs, struct rmtcallres * crp)
 		crp->port_ptr = (u_long *) (void *)port_ptr;
 		return ((*(crp->xdr_results)) (xdrs, crp->results_ptr));
 	}
-	return (FALSE);
+	return (false);
 }

@@ -58,15 +58,16 @@ bool __svc_clean_idle2(int timeout, bool cleanblock);
 #if defined(TIRPC_EPOLL)
 void svc_getreqset_epoll(struct epoll_event *events, int nfds);
 
-/* static */ void svc_run_epoll(void)
+/* static */ void
+svc_run_epoll(void)
 {
-	/* TODO: rename */
 	(void)svc_rqst_thrd_run(__svc_params->ev_u.evchan.id,
 				SVC_RQST_FLAG_NONE);
 }
 #endif				/* TIRPC_EPOLL */
 
-void svc_run(void)
+void
+svc_run(void)
 {
 	switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
@@ -87,13 +88,14 @@ void svc_run(void)
  *      This function causes svc_run() to exit by telling it that it has no
  *      more work to do.
  */
-void svc_exit()
+void
+svc_exit()
 {
 	switch (__svc_params->ev_type) {
 #if defined(TIRPC_EPOLL)
 	case SVC_EVENT_EPOLL:
 		/* signal shutdown backchannel */
-		(void)svc_rqst_thrd_signal(__svc_params->ev_u.evchan.id,
+		(void) svc_rqst_thrd_signal(__svc_params->ev_u.evchan.id,
 					   SVC_RQST_SIGNAL_SHUTDOWN);
 		break;
 #endif

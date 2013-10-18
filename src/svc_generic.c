@@ -64,9 +64,11 @@ extern int __svc_vc_setflag(SVCXPRT *, int);
  * If svc_ncreate() is called multiple times, it uses the handle
  * created earlier instead of creating a new handle every time.
  */
-int svc_ncreate(void (*dispatch) (struct svc_req *, SVCXPRT *), rpcprog_t prognum,	/* Program number */
-		rpcvers_t versnum,	/* Version number */
-		const char *nettype /* Networktype token */ )
+int
+svc_ncreate(void (*dispatch) (struct svc_req *req, SVCXPRT *xprt),
+	    rpcprog_t prognum,
+	    rpcvers_t versnum,	/* Version number */
+	    const char *nettype /* Networktype token */)
 {
 	struct xlist {
 		SVCXPRT *xprt;	/* Server handle */
@@ -79,9 +81,9 @@ int svc_ncreate(void (*dispatch) (struct svc_req *, SVCXPRT *), rpcprog_t prognu
 	void *handle;
 	extern mutex_t xprtlist_lock;
 
-/* VARIABLES PROTECTED BY xprtlist_lock: xprtlist */
-
-	if ((handle = __rpc_setconf(nettype)) == NULL) {
+	/* VARIABLES PROTECTED BY xprtlist_lock: xprtlist */
+	handle = __rpc_setconf(nettype);
+	if (!handle) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC, "svc_ncreate: unknown protocol");
 		return (0);
 	}
@@ -93,7 +95,7 @@ int svc_ncreate(void (*dispatch) (struct svc_req *, SVCXPRT *), rpcprog_t prognu
 				(void)rpcb_unset(prognum, versnum, nconf);
 				if (svc_reg
 				    (l->xprt, prognum, versnum, dispatch,
-				     nconf) == FALSE)
+				     nconf) == false)
 					__warnx(TIRPC_DEBUG_FLAG_SVC,
 						"svc_ncreate: could not register "
 						"prog %u vers %u on %s",
@@ -138,10 +140,11 @@ int svc_ncreate(void (*dispatch) (struct svc_req *, SVCXPRT *), rpcprog_t prognu
  * It tries to create a server for "nconf" and registers the service
  * with the rpcbind. It calls svc_tli_ncreate();
  */
-SVCXPRT *svc_tp_ncreate(void (*dispatch) (struct svc_req *, SVCXPRT *), rpcprog_t prognum,	/* Program number */
-			rpcvers_t versnum,	/* Version number */
-			const struct netconfig *
-			nconf /* Netconfig structure for the network */ )
+SVCXPRT *
+svc_tp_ncreate(void (*dispatch) (struct svc_req *req, SVCXPRT *xprt),
+	       rpcprog_t prognum,	/* Program number */
+	       rpcvers_t versnum,	/* Version number */
+	       const struct netconfig *nconf /* Network */)
 {
 	SVCXPRT *xprt;
 
@@ -152,18 +155,18 @@ SVCXPRT *svc_tp_ncreate(void (*dispatch) (struct svc_req *, SVCXPRT *), rpcprog_
 		return (NULL);
 	}
 	xprt = svc_tli_ncreate(RPC_ANYFD, nconf, NULL, 0, 0);
-	if (xprt == NULL) {
+	if (xprt == NULL)
 		return (NULL);
-	}
 	/*LINTED const castaway */
 	(void)rpcb_unset(prognum, versnum, (struct netconfig *)nconf);
-	if (svc_reg(xprt, prognum, versnum, dispatch, nconf) == FALSE) {
+	if (svc_reg(xprt, prognum, versnum, dispatch, nconf) == false) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC,
 			"svc_tp_ncreate: Could not register prog %u vers %u on %s",
 			(unsigned)prognum, (unsigned)versnum, nconf->nc_netid);
 		SVC_DESTROY(xprt);
 		return (NULL);
 	}
+
 	return (xprt);
 }
 
@@ -176,14 +179,15 @@ SVCXPRT *svc_tp_ncreate(void (*dispatch) (struct svc_req *, SVCXPRT *), rpcprog_
  *
  * If sendsz or recvsz are zero, their default values are chosen.
  */
-SVCXPRT *svc_tli_ncreate(int fd,	/* Connection end point */
-			 const struct netconfig * nconf,	/* Netconfig struct for nettoken */
-			 const struct t_bind * bindaddr,	/* Local bind address */
-			 u_int sendsz,	/* Max sendsize */
-			 u_int recvsz /* Max recvsize */ )
+SVCXPRT *
+svc_tli_ncreate(int fd,	/* Connection end point */
+		const struct netconfig *nconf,	/* Nettoken */
+		const struct t_bind *bindaddr,	/* Local bind address */
+		u_int sendsz,	/* Max sendsize */
+		u_int recvsz /* Max recvsize */)
 {
 	SVCXPRT *xprt = NULL;	/* service handle */
-	bool madefd = FALSE;	/* whether fd opened here  */
+	bool madefd = false;	/* whether fd opened here  */
 	struct __rpc_sockinfo si;
 	struct sockaddr_storage ss;
 	socklen_t slen;
@@ -202,7 +206,7 @@ SVCXPRT *svc_tli_ncreate(int fd,	/* Connection end point */
 			return (NULL);
 		}
 		__rpc_nconf2sockinfo(nconf, &si);
-		madefd = TRUE;
+		madefd = true;
 	} else {
 		/*
 		 * It is an open descriptor. Get the transport info.
@@ -220,7 +224,7 @@ SVCXPRT *svc_tli_ncreate(int fd,	/* Connection end point */
 	if (madefd || !__rpc_sockisbound(fd)) {
 		if (bindaddr == NULL) {
 			if (bindresvport(fd, NULL) < 0) {
-				memset(&ss, 0, sizeof ss);
+				memset(&ss, 0, sizeof(ss));
 				ss.ss_family = si.si_af;
 				if (bind
 				    (fd, (struct sockaddr *)(void *)&ss,
@@ -250,8 +254,9 @@ SVCXPRT *svc_tli_ncreate(int fd,	/* Connection end point */
 	 */
 	switch (si.si_socktype) {
 	case SOCK_STREAM:
-		slen = sizeof ss;
-		if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) == 0) {
+		slen = sizeof(ss);
+		if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen)
+		    == 0) {
 			/* accepted socket */
 			xprt = svc_fd_ncreate(fd, sendsz, recvsz);
 		} else
@@ -262,7 +267,7 @@ SVCXPRT *svc_tli_ncreate(int fd,	/* Connection end point */
 		/* XXX fvdl *//* XXXX check matt */
 		if (strcmp(nconf->nc_protofmly, "inet") == 0
 		    || strcmp(nconf->nc_protofmly, "inet6") == 0)
-			(void)__svc_vc_setflag(xprt, TRUE);
+			(void)__svc_vc_setflag(xprt, true);
 #endif
 		break;
 	case SOCK_DGRAM:

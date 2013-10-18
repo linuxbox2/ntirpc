@@ -48,7 +48,7 @@
 	(kevp)->fflags = (d);			\
 	(kevp)->data = (e);			\
 	(kevp)->udata = (f);			\
-} while(0)
+} while (0)
 
 #include <stdint.h>
 
@@ -130,7 +130,7 @@ SLIST_HEAD(klist, knote);
 MALLOC_DECLARE(M_KQUEUE);
 #endif
 
-#define KNOTE(list, hint)	if ((list) != NULL) knote(list, hint)
+#define KNOTE(list, hint) if ((list) != NULL) knote(list, hint)
 
 /*
  * Flag indicating hint is a signal.  Used by EVFILT_SIGNAL, and also
@@ -140,9 +140,9 @@ MALLOC_DECLARE(M_KQUEUE);
 
 struct filterops {
 	int f_isfd;		/* true if ident == filedescriptor */
-	int (*f_attach) (struct knote * kn);
-	void (*f_detach) (struct knote * kn);
-	int (*f_event) (struct knote * kn, long hint);
+	int (*f_attach) (struct knote *kn);
+	void (*f_detach) (struct knote *kn);
+	int (*f_event) (struct knote *kn, long hint);
 };
 
 struct knote {

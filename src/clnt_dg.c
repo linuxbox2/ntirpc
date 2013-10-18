@@ -98,12 +98,13 @@ static const char mem_err_clnt_dg[] = "clnt_dg_create: out of memory";
  *
  * If svcaddr is NULL, returns NULL.
  */
-CLIENT *clnt_dg_ncreate(int fd,	/* open file descriptor */
-			const struct netbuf *svcaddr,	/* servers address */
-			rpcprog_t program,	/* program number */
-			rpcvers_t version,	/* version number */
-			u_int sendsz,	/* buffer recv size */
-			u_int recvsz /* buffer send size */ )
+CLIENT *
+clnt_dg_ncreate(int fd,	/* open file descriptor */
+		const struct netbuf *svcaddr,	/* servers address */
+		rpcprog_t program,	/* program number */
+		rpcvers_t version,	/* version number */
+		u_int sendsz,	/* buffer recv size */
+		u_int recvsz /* buffer send size */)
 {
 	CLIENT *clnt = NULL;	/* client handle */
 	struct cx_data *cx = NULL;	/* private data */
@@ -135,7 +136,8 @@ CLIENT *clnt_dg_ncreate(int fd,	/* open file descriptor */
 		return (NULL);
 	}
 
-	if ((clnt = mem_alloc(sizeof(CLIENT))) == NULL)
+	clnt = mem_alloc(sizeof(CLIENT));
+	if (clnt == NULL)
 		goto err1;
 
 	mutex_init(&clnt->cl_lock, NULL);
@@ -159,9 +161,9 @@ CLIENT *clnt_dg_ncreate(int fd,	/* open file descriptor */
 	cu->cu_total.tv_usec = -1;
 	cu->cu_sendsz = sendsz;
 	cu->cu_recvsz = recvsz;
-	cu->cu_async = FALSE;
-	cu->cu_connect = FALSE;
-	cu->cu_connected = FALSE;
+	cu->cu_async = false;
+	cu->cu_connect = false;
+	cu->cu_connected = false;
 	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &now);
 	call_msg.rm_xid = __RPC_GETXID(&now);	/* XXX? */
 	call_msg.rm_call.cb_prog = program;
@@ -186,15 +188,16 @@ CLIENT *clnt_dg_ncreate(int fd,	/* open file descriptor */
 #endif
 	ioctl(fd, FIONBIO, (char *)(void *)&one);
 	/*
-	 * By default, closeit is always FALSE. It is users responsibility
+	 * By default, closeit is always false. It is users responsibility
 	 * to do a close on it, else the user may use clnt_control
 	 * to let clnt_destroy do it for him/her.
 	 */
-	cu->cu_closeit = FALSE;
+	cu->cu_closeit = false;
 	cu->cu_fd = fd;
 	clnt->cl_ops = clnt_dg_ops();
 	clnt->cl_p1 = cx;
-	clnt->cl_p2 = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_FLAG_NONE, &oflags);	/* ref+1 */
+	clnt->cl_p2 = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_FLAG_NONE,
+					  &oflags); /* ref+1 */
 	clnt->cl_tp = NULL;
 	clnt->cl_netid = NULL;
 
@@ -212,15 +215,16 @@ CLIENT *clnt_dg_ncreate(int fd,	/* open file descriptor */
 	return (NULL);
 }
 
-static enum clnt_stat clnt_dg_call(CLIENT * clnt,	/* client handle */
-				   AUTH * auth,	/* auth handle */
-				   rpcproc_t proc,	/* procedure number */
-				   xdrproc_t xargs,	/* xdr routine for args */
-				   void *argsp,	/* pointer to args */
-				   xdrproc_t xresults,	/* xdr routine for results */
-				   void *resultsp,	/* pointer to results */
-				   struct timeval utimeout
-				   /* seconds to wait before giving up */ )
+static enum clnt_stat
+clnt_dg_call(CLIENT *clnt,	/* client handle */
+	     AUTH *auth,	/* auth handle */
+	     rpcproc_t proc,	/* procedure number */
+	     xdrproc_t xargs,	/* xdr routine for args */
+	     void *argsp,	/* pointer to args */
+	     xdrproc_t xresults,	/* xdr routine for results */
+	     void *resultsp,	/* pointer to results */
+	     struct timeval utimeout
+	     /* seconds to wait before giving up */)
 {
 	struct cu_data *cu = CU_DATA((struct cx_data *)clnt->cl_p1);
 	XDR *xdrs;
@@ -236,17 +240,16 @@ static enum clnt_stat clnt_dg_call(CLIENT * clnt,	/* client handle */
 	socklen_t __attribute__ ((unused)) inlen, salen;
 	ssize_t recvlen = 0;
 	u_int32_t xid, inval, outval;
-	bool slocked = FALSE;
-	bool rlocked = FALSE;
+	bool slocked = false;
+	bool rlocked = false;
 
 	outlen = 0;
 	rpc_dplx_slc(clnt);
-	slocked = TRUE;
-	if (cu->cu_total.tv_usec == -1) {
+	slocked = true;
+	if (cu->cu_total.tv_usec == -1)
 		timeout = utimeout;	/* use supplied timeout */
-	} else {
+	else
 		timeout = cu->cu_total;	/* use default timeout */
-	}
 	total_time = timeout.tv_sec * 1000 + timeout.tv_usec / 1000;
 	nextsend_time = cu->cu_wait.tv_sec * 1000 + cu->cu_wait.tv_usec / 1000;
 
@@ -272,10 +275,10 @@ static enum clnt_stat clnt_dg_call(CLIENT * clnt,	/* client handle */
  call_again:
 	if (!slocked) {
 		rpc_dplx_slc(clnt);
-		slocked = TRUE;
+		slocked = true;
 	}
 	xdrs = &(cu->cu_outxdrs);
-	if (cu->cu_async == TRUE && xargs == NULL)
+	if (cu->cu_async == true && xargs == NULL)
 		goto get_reply;
 	xdrs->x_op = XDR_ENCODE;
 	XDR_SETPOS(xdrs, cu->cu_xdrpos);
@@ -288,7 +291,7 @@ static enum clnt_stat clnt_dg_call(CLIENT * clnt,	/* client handle */
 	xid++;
 	*(u_int32_t *) (void *)(cu->cu_outbuf) = htonl(xid);
 
-	if ((!XDR_PUTINT32(xdrs, (int32_t *) & proc))
+	if ((!XDR_PUTINT32(xdrs, (int32_t *) &proc))
 	    || (!AUTH_MARSHALL(auth, xdrs))
 	    || (!AUTH_WRAP(auth, xdrs, xargs, argsp))) {
 		cu->cu_error.re_status = RPC_CANTENCODEARGS;
@@ -323,10 +326,10 @@ static enum clnt_stat clnt_dg_call(CLIENT * clnt,	/* client handle */
 	 * (We assume that this is actually only executed once.)
 	 */
 	rpc_dplx_suc(clnt);
-	slocked = FALSE;
+	slocked = false;
 
 	rpc_dplx_rlc(clnt);
-	rlocked = TRUE;
+	rlocked = true;
 
 	reply_msg.acpted_rply.ar_verf = _null_auth;
 	reply_msg.acpted_rply.ar_results.where = NULL;
@@ -341,7 +344,7 @@ static enum clnt_stat clnt_dg_call(CLIENT * clnt,	/* client handle */
 		case 0:
 			total_time -= tv;
 			rpc_dplx_ruc(clnt);
-			rlocked = FALSE;
+			rlocked = false;
 			goto send_again;
 		case -1:
 			if (errno == EINTR)
@@ -408,11 +411,11 @@ static enum clnt_stat clnt_dg_call(CLIENT * clnt,	/* client handle */
 	if (recvlen < sizeof(u_int32_t)) {
 		total_time -= tv;
 		rpc_dplx_ruc(clnt);
-		rlocked = FALSE;
+		rlocked = false;
 		goto send_again;
 	}
 
-	if (cu->cu_async == TRUE)
+	if (cu->cu_async == true)
 		inlen = (socklen_t) recvlen;
 	else {
 		memcpy(&inval, cu->cu_inbuf, sizeof(u_int32_t));
@@ -420,7 +423,7 @@ static enum clnt_stat clnt_dg_call(CLIENT * clnt,	/* client handle */
 		if (inval != outval) {
 			total_time -= tv;
 			rpc_dplx_ruc(clnt);
-			rlocked = FALSE;
+			rlocked = false;
 			goto send_again;
 		}
 		inlen = (socklen_t) recvlen;
@@ -469,16 +472,15 @@ static enum clnt_stat clnt_dg_call(CLIENT * clnt,	/* client handle */
 			if (nrefreshes > 0 && AUTH_REFRESH(auth, &reply_msg)) {
 				nrefreshes--;
 				rpc_dplx_ruc(clnt);
-				rlocked = FALSE;
+				rlocked = false;
 				goto call_again;
 			}
 		/* end of unsuccessful completion */
 	} /* end of valid reply message */
-	else {
+	else
 		cu->cu_error.re_status = RPC_CANTDECODERES;
 
-	}
- out:
+out:
 	if (slocked)
 		rpc_dplx_suc(clnt);
 	if (rlocked)
@@ -487,13 +489,15 @@ static enum clnt_stat clnt_dg_call(CLIENT * clnt,	/* client handle */
 	return (cu->cu_error.re_status);
 }
 
-static void clnt_dg_geterr(CLIENT * clnt, struct rpc_err *errp)
+static void
+clnt_dg_geterr(CLIENT *clnt, struct rpc_err *errp)
 {
 	struct cu_data *cu = CU_DATA((struct cx_data *)clnt->cl_p1);
 	*errp = cu->cu_error;
 }
 
-static bool clnt_dg_freeres(CLIENT * clnt, xdrproc_t xdr_res, void *res_ptr)
+static bool
+clnt_dg_freeres(CLIENT *clnt, xdrproc_t xdr_res, void *res_ptr)
 {
 	struct cu_data *cu = CU_DATA((struct cx_data *)clnt->cl_p1);
 	XDR *xdrs;
@@ -527,24 +531,29 @@ static bool clnt_dg_freeres(CLIENT * clnt, xdrproc_t xdr_res, void *res_ptr)
 	return (dummy);
 }
 
-static bool clnt_dg_ref(CLIENT * clnt, u_int flags)
+static bool
+clnt_dg_ref(CLIENT *clnt, u_int flags)
 {
-	return (TRUE);
+	return (true);
 }
 
-static void clnt_dg_release(CLIENT * clnt, u_int flags)
-{
-}
-
- /*ARGSUSED*/ static void clnt_dg_abort(CLIENT * h)
+static void
+clnt_dg_release(CLIENT *clnt, u_int flags)
 {
 }
 
-static bool clnt_dg_control(CLIENT * clnt, u_int request, void *info)
+ /*ARGSUSED*/
+static void
+clnt_dg_abort(CLIENT *h)
+{
+}
+
+static bool
+clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 {
 	struct cu_data *cu = CU_DATA((struct cx_data *)clnt->cl_p1);
 	struct netbuf *addr;
-	bool rslt = TRUE;
+	bool rslt = true;
 
 	/* always take recv lock first, if taking both locks together */
 	rpc_dplx_rlc(clnt);
@@ -552,24 +561,24 @@ static bool clnt_dg_control(CLIENT * clnt, u_int request, void *info)
 
 	switch (request) {
 	case CLSET_FD_CLOSE:
-		cu->cu_closeit = TRUE;
-		rslt = TRUE;
+		cu->cu_closeit = true;
+		rslt = true;
 		goto unlock;
 	case CLSET_FD_NCLOSE:
-		cu->cu_closeit = FALSE;
-		rslt = TRUE;
+		cu->cu_closeit = false;
+		rslt = true;
 		goto unlock;
 	}
 
 	/* for other requests which use info */
 	if (info == NULL) {
-		rslt = FALSE;
+		rslt = false;
 		goto unlock;
 	}
 	switch (request) {
 	case CLSET_TIMEOUT:
 		if (time_not_ok((struct timeval *)info)) {
-			rslt = FALSE;
+			rslt = false;
 			goto unlock;
 		}
 		cu->cu_total = *(struct timeval *)info;
@@ -583,7 +592,7 @@ static bool clnt_dg_control(CLIENT * clnt, u_int request, void *info)
 		break;
 	case CLSET_RETRY_TIMEOUT:
 		if (time_not_ok((struct timeval *)info)) {
-			rslt = FALSE;
+			rslt = false;
 			goto unlock;
 		}
 		cu->cu_wait = *(struct timeval *)info;
@@ -598,12 +607,12 @@ static bool clnt_dg_control(CLIENT * clnt, u_int request, void *info)
 		addr = (struct netbuf *)info;
 		addr->buf = &cu->cu_raddr;
 		addr->len = cu->cu_rlen;
-		addr->maxlen = sizeof cu->cu_raddr;
+		addr->maxlen = sizeof(cu->cu_raddr);
 		break;
 	case CLSET_SVC_ADDR:	/* set to new address */
 		addr = (struct netbuf *)info;
-		if (addr->len < sizeof cu->cu_raddr) {
-			rslt = FALSE;
+		if (addr->len < sizeof(cu->cu_raddr)) {
+			rslt = false;
 			goto unlock;
 
 		}
@@ -677,7 +686,8 @@ static bool clnt_dg_control(CLIENT * clnt, u_int request, void *info)
 	return (rslt);
 }
 
-static void clnt_dg_destroy(CLIENT * clnt)
+static void
+clnt_dg_destroy(CLIENT *clnt)
 {
 	struct cx_data *cx = (struct cx_data *)clnt->cl_p1;
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)clnt->cl_p2;
@@ -713,15 +723,15 @@ static void clnt_dg_destroy(CLIENT * clnt)
 	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
 }
 
-static struct clnt_ops *clnt_dg_ops(void)
+static struct clnt_ops *
+clnt_dg_ops(void)
 {
 	static struct clnt_ops ops;
-	extern mutex_t ops_lock;
+	extern mutex_t ops_lock; /* XXXX does it need to be extern? */
 	sigset_t mask;
 	sigset_t newmask;
 
-/* VARIABLES PROTECTED BY ops_lock: ops */
-
+	/* VARIABLES PROTECTED BY ops_lock: ops */
 	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 	mutex_lock(&ops_lock);
@@ -743,7 +753,8 @@ static struct clnt_ops *clnt_dg_ops(void)
 /*
  * Make sure that the time is not garbage.  -1 value is allowed.
  */
-static bool time_not_ok(struct timeval *t)
+static bool
+time_not_ok(struct timeval *t)
 {
 	return (t->tv_sec < -1 || t->tv_sec > 100000000 || t->tv_usec < -1
 		|| t->tv_usec > 1000000);

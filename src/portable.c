@@ -54,7 +54,8 @@ int clock_gettime(clockid_t clock, struct timespec *ts)
 		mutex_lock(&clock_mtx);
 		if (!initialized) {
 			QueryPerformanceCounter(&start);
-			(void)QueryPerformanceFrequency(&freq);	/* XXXX can be 0, would need to fall back */
+			(void)QueryPerformanceFrequency(&freq);
+				/* XXXX can be 0, would need to fall back */
 			ftom = (double)freq.QuadPart / 1000000.;
 		}
 		mutex_unlock(&clock_mtx);

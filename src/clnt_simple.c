@@ -88,14 +88,15 @@ static void rpc_call_destroy(void *vp)
  *
  * The total time available is 25 seconds.
  */
-enum clnt_stat rpc_call(const char *host,	/* host name */
-			rpcprog_t prognum,	/* program number */
-			rpcvers_t versnum,	/* version number */
-			rpcproc_t procnum,	/* procedure number */
-			xdrproc_t inproc,	/* in XDR procedure */
-			const char *in, xdrproc_t outproc,	/* out XDR procedure */
-			char *out,	/* recv/send data */
-			const char *nettype /* nettype */ )
+enum clnt_stat
+rpc_call(const char *host,	/* host name */
+	 rpcprog_t prognum,	/* program number */
+	 rpcvers_t versnum,	/* version number */
+	 rpcproc_t procnum,	/* procedure number */
+	 xdrproc_t inproc,	/* in XDR procedure */
+	 const char *in, xdrproc_t outproc,	/* out XDR procedure */
+	 char *out,	/* recv/send data */
+	 const char *nettype /* nettype */)
 {
 	struct rpc_call_private *rcp = (struct rpc_call_private *)0;
 	enum clnt_stat clnt_stat;
@@ -136,9 +137,8 @@ enum clnt_stat rpc_call(const char *host,	/* host name */
 		 */
 		rcp->client = clnt_ncreate(host, prognum, versnum, nettype);
 		rcp->pid = getpid();
-		if (rcp->client == NULL) {
+		if (rcp->client == NULL)
 			return (rpc_createerr.cf_stat);
-		}
 
 		/* Create null auth handle--idempotent */
 		rcp->auth = authnone_create();

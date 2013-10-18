@@ -58,24 +58,22 @@ bool pmap_set(u_long program, u_long version, int protocol, int port)
 	struct netconfig *nconf;
 	char buf[32];
 
-	if ((protocol != IPPROTO_UDP) && (protocol != IPPROTO_TCP)) {
-		return (FALSE);
-	}
+	if ((protocol != IPPROTO_UDP) && (protocol != IPPROTO_TCP))
+		return (false);
 	nconf = __rpc_getconfip(protocol == IPPROTO_UDP ? "udp" : "tcp");
-	if (nconf == NULL) {
-		return (FALSE);
-	}
+	if (nconf == NULL)
+		return (false);
 	if (strcmp(nconf->nc_protofmly, NC_INET) == 0) {
-		snprintf(buf, sizeof buf, "0.0.0.0.%d.%d",
+		snprintf(buf, sizeof(buf), "0.0.0.0.%d.%d",
 			 (((u_int32_t) port) >> 8) & 0xff, port & 0xff);
 	} else if (strcmp(nconf->nc_protofmly, NC_INET6) == 0) {
-		snprintf(buf, sizeof buf, "::.%d.%d",
+		snprintf(buf, sizeof(buf), "::.%d.%d",
 			 (((u_int32_t) port) >> 8) & 0xff, port & 0xff);
 	}
 	na = uaddr2taddr(nconf, buf);
 	if (na == NULL) {
 		freenetconfigent(nconf);
-		return (FALSE);
+		return (false);
 	}
 	rslt = rpcb_set((rpcprog_t) program, (rpcvers_t) version, nconf, na);
 	mem_free(na, 0);
@@ -90,8 +88,8 @@ bool pmap_set(u_long program, u_long version, int protocol, int port)
 bool pmap_unset(u_long program, u_long version)
 {
 	struct netconfig *nconf;
-	bool udp_rslt = FALSE;
-	bool tcp_rslt = FALSE;
+	bool udp_rslt = false;
+	bool tcp_rslt = false;
 
 	nconf = __rpc_getconfip("udp");
 	if (nconf != NULL) {

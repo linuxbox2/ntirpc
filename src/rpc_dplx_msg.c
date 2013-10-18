@@ -54,7 +54,8 @@ static const struct xdr_discrim reply_dscrm[3] = {
 /*
  * XDR a duplex call message
  */
-bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
+bool
+xdr_dplx_msg(XDR *xdrs, struct rpc_msg *dmsg)
 {
 	int32_t *buf;
 	struct opaque_auth *oa;
@@ -63,12 +64,10 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 	assert(dmsg != NULL);
 
 	if (xdrs->x_op == XDR_ENCODE) {
-		if (dmsg->rm_call.cb_cred.oa_length > MAX_AUTH_BYTES) {
-			return (FALSE);
-		}
-		if (dmsg->rm_call.cb_verf.oa_length > MAX_AUTH_BYTES) {
-			return (FALSE);
-		}
+		if (dmsg->rm_call.cb_cred.oa_length > MAX_AUTH_BYTES)
+			return (false);
+		if (dmsg->rm_call.cb_verf.oa_length > MAX_AUTH_BYTES)
+			return (false);
 		buf =
 		    XDR_INLINE(xdrs,
 			       8 * BYTES_PER_XDR_UNIT +
@@ -84,8 +83,9 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 					"%s 1: XDR_ENCODE INLINE CALL",
 					__func__);
 				IXDR_PUT_INT32(buf, dmsg->rm_call.cb_rpcvers);
-				if (dmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION) {
-					return (FALSE);
+				if (dmsg->rm_call.cb_rpcvers !=
+				    RPC_MSG_VERSION) {
+					return (false);
 				}
 				IXDR_PUT_INT32(buf, dmsg->rm_call.cb_prog);
 				IXDR_PUT_INT32(buf, dmsg->rm_call.cb_vers);
@@ -106,12 +106,13 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 				if (oa->oa_length) {
 					memmove(buf, oa->oa_base,
 						oa->oa_length);
-					/* no real need.... XXX next line uncommented (matt) */
+					/* no real need.... XXX next line
+					 * uncommented (matt) */
 					buf +=
 					    RNDUP(oa->oa_length) /
 					    sizeof(int32_t);
 				}
-				return (TRUE);
+				return (true);
 				break;
 			case REPLY:
 				__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
@@ -119,19 +120,19 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 					__func__);
 				return (inline_xdr_union
 					(xdrs,
-					 (enum_t *) & (dmsg->rm_reply.rp_stat),
+					 (enum_t *) &(dmsg->rm_reply.rp_stat),
 					 (caddr_t) (void *)&(dmsg->rm_reply.ru),
 					 reply_dscrm, NULL_xdrproc_t));
 				break;
 			default:
 				/* unlikely */
-				return (FALSE);
+				return (false);
 			}
 		} else {
 			/* ! inline */
 			if (inline_xdr_u_int32_t(xdrs, &(dmsg->rm_xid))
 			    && inline_xdr_enum(xdrs,
-					       (enum_t *) & (dmsg->
+					       (enum_t *) &(dmsg->
 							     rm_direction))) {
 				switch (dmsg->rm_direction) {
 				case CALL:
@@ -154,10 +155,9 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 								    &(dmsg->
 								      rm_call.
 								      cb_proc))
-					    && inline_xdr_opaque_auth(xdrs,
-								      &(dmsg->
-									rm_call.
-									cb_cred)))
+					    && inline_xdr_opaque_auth(
+						    xdrs,
+						    &(dmsg->rm_call.cb_cred)))
 						return (inline_xdr_opaque_auth
 							(xdrs,
 							 &(dmsg->rm_call.
@@ -169,14 +169,14 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 						"XDR_ENCODE REPLY", __func__);
 					return (inline_xdr_union
 						(xdrs,
-						 (enum_t *) & (dmsg->rm_reply.
+						 (enum_t *) &(dmsg->rm_reply.
 							       rp_stat),
 						 (caddr_t) (void *)
 						 &(dmsg->rm_reply.ru),
 						 reply_dscrm, NULL_xdrproc_t));
 				default:
 					/* unlikely */
-					return (FALSE);
+					return (false);
 				}
 			}
 		}
@@ -193,8 +193,9 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 					__func__);
 				dmsg->rm_call.cb_rpcvers =
 				    IXDR_GET_U_INT32(buf);
-				if (dmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION) {
-					return (FALSE);
+				if (dmsg->rm_call.cb_rpcvers !=
+				    RPC_MSG_VERSION) {
+					return (false);
 				}
 				dmsg->rm_call.cb_prog = IXDR_GET_U_INT32(buf);
 				dmsg->rm_call.cb_vers = IXDR_GET_U_INT32(buf);
@@ -203,14 +204,13 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 				oa->oa_flavor = IXDR_GET_ENUM(buf, enum_t);
 				oa->oa_length = (u_int) IXDR_GET_U_INT32(buf);
 				if (oa->oa_length) {
-					if (oa->oa_length > MAX_AUTH_BYTES) {
-						return (FALSE);
-					}
+					if (oa->oa_length > MAX_AUTH_BYTES)
+						return (false);
 					if (oa->oa_base == NULL) {
 						oa->oa_base = (caddr_t)
 						    mem_alloc(oa->oa_length);
 						if (oa->oa_base == NULL)
-							return (FALSE);
+							return (false);
 					}
 					buf =
 					    XDR_INLINE(xdrs,
@@ -218,13 +218,14 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 					if (buf == NULL) {
 						if (inline_xdr_opaque
 						    (xdrs, oa->oa_base,
-						     oa->oa_length) == FALSE) {
-							return (FALSE);
+						     oa->oa_length) == false) {
+							return (false);
 						}
 					} else {
 						memmove(oa->oa_base, buf,
 							oa->oa_length);
-						/* no real need... XXX uncommented (matt) */
+						/* no real need...
+						 * XXX uncommented (matt) */
 						buf +=
 						    RNDUP(oa->oa_length) /
 						    sizeof(int32_t);
@@ -234,11 +235,11 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 				buf = XDR_INLINE(xdrs, 2 * BYTES_PER_XDR_UNIT);
 				if (buf == NULL) {
 					if (inline_xdr_enum
-					    (xdrs, &oa->oa_flavor) == FALSE
+					    (xdrs, &oa->oa_flavor) == false
 					    || inline_xdr_u_int(xdrs,
 								&oa->oa_length)
-					    == FALSE) {
-						return (FALSE);
+					    == false) {
+						return (false);
 					}
 				} else {
 					oa->oa_flavor =
@@ -247,14 +248,13 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 					    (u_int) IXDR_GET_U_INT32(buf);
 				}
 				if (oa->oa_length) {
-					if (oa->oa_length > MAX_AUTH_BYTES) {
-						return (FALSE);
-					}
+					if (oa->oa_length > MAX_AUTH_BYTES)
+						return (false);
 					if (oa->oa_base == NULL) {
 						oa->oa_base = (caddr_t)
 						    mem_alloc(oa->oa_length);
 						if (oa->oa_base == NULL)
-							return (FALSE);
+							return (false);
 					}
 					buf =
 					    XDR_INLINE(xdrs,
@@ -262,8 +262,8 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 					if (buf == NULL) {
 						if (inline_xdr_opaque
 						    (xdrs, oa->oa_base,
-						     oa->oa_length) == FALSE) {
-							return (FALSE);
+						     oa->oa_length) == false) {
+							return (false);
 						}
 					} else {
 						memmove(oa->oa_base, buf,
@@ -274,7 +274,7 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 						    sizeof(int32_t);
 					}
 				}
-				return (TRUE);
+				return (true);
 				break;
 			case REPLY:
 				__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
@@ -282,7 +282,7 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 					"INLINE, not reached?)", __func__);
 				return (inline_xdr_union
 					(xdrs,
-					 (enum_t *) & (dmsg->rm_reply.rp_stat),
+					 (enum_t *) &(dmsg->rm_reply.rp_stat),
 					 (caddr_t) (void *)&(dmsg->rm_reply.ru),
 					 reply_dscrm, NULL_xdrproc_t));
 
@@ -292,13 +292,13 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 				__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
 					"%s: dmsg->rm_xid %u", __func__,
 					dmsg->rm_xid);
-				return (FALSE);
+				return (false);
 			}
 		} else {
 			/* ! inline */
 			if (inline_xdr_u_int32_t(xdrs, &(dmsg->rm_xid))
 			    && inline_xdr_enum(xdrs,
-					       (enum_t *) & (dmsg->
+					       (enum_t *) &(dmsg->
 							     rm_direction))) {
 				switch (dmsg->rm_direction) {
 				case CALL:
@@ -321,10 +321,9 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 								    &(dmsg->
 								      rm_call.
 								      cb_proc))
-					    && inline_xdr_opaque_auth(xdrs,
-								      &(dmsg->
-									rm_call.
-									cb_cred)))
+					    && inline_xdr_opaque_auth(
+						    xdrs,
+						    &(dmsg->rm_call.cb_cred)))
 						return (inline_xdr_opaque_auth
 							(xdrs,
 							 &(dmsg->rm_call.
@@ -336,9 +335,9 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 						__func__);
 					if (!inline_xdr_enum
 					    (xdrs,
-					     (enum_t *) & (dmsg->rm_reply.
-							   rp_stat)))
-						return (FALSE);
+					     (enum_t *) &(dmsg->rm_reply.
+							  rp_stat)))
+						return (false);
 					switch (dmsg->rm_reply.rp_stat) {
 					case MSG_ACCEPTED:
 						{
@@ -349,12 +348,12 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 							    &(dmsg->rm_reply.
 							      ru);
 							if (!inline_xdr_opaque_auth(xdrs, &(ar->ar_verf)))
-								return (FALSE);
+								return (false);
 							if (!inline_xdr_enum
 							    (xdrs,
 							     (enum_t *) & (ar->
 									   ar_stat)))
-								return (FALSE);
+								return (false);
 							switch (ar->ar_stat) {
 							case SUCCESS:
 								return ((*
@@ -369,7 +368,7 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 							case PROG_MISMATCH:
 								if (!inline_xdr_u_int32_t(xdrs, &(ar->ar_vers.low)))
 									return
-									    (FALSE);
+									    (false);
 								return
 								    (inline_xdr_u_int32_t
 								     (xdrs,
@@ -381,12 +380,12 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 							case SYSTEM_ERR:
 							case PROC_UNAVAIL:
 							case PROG_UNAVAIL:
-								/* TRUE */
+								/* true */
 								break;
 							default:
 								break;
 							}	/* ar_stat */
-							return (TRUE);
+							return (true);
 						}	/* MSG_ACCEPTED */
 						break;
 					case MSG_DENIED:
@@ -405,13 +404,13 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 							    (xdrs,
 							     (enum_t *) & (rr->
 									   rj_stat)))
-								return (FALSE);
+								return (false);
 							switch (rr->rj_stat) {
 
 							case RPC_MISMATCH:
 								if (!inline_xdr_u_int32_t(xdrs, &(rr->rj_vers.low)))
 									return
-									    (FALSE);
+									    (false);
 								return
 								    (inline_xdr_u_int32_t
 								     (xdrs,
@@ -424,22 +423,22 @@ bool xdr_dplx_msg(XDR * xdrs, struct rpc_msg *dmsg)
 								    (inline_xdr_enum
 								     (xdrs,
 								      (enum_t *)
-								      & (rr->
-									 rj_why)));
+								      &(rr->
+									rj_why)));
 							}
-							return (TRUE);
+							return (true);
 						}
 						break;
 					default:
-						return (FALSE);
+						return (false);
 						break;
 					}	/* rm_reply.rp_stat */
 				default:
 					/* unlikely */
-					return (FALSE);
+					return (false);
 				}
 			}
 		}
 	}			/* XDR_DECODE */
-	return (FALSE);
+	return (false);
 }				/* new */

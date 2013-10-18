@@ -49,7 +49,8 @@
 
 /* public */
 
-void rpc_dplx_slxi(SVCXPRT * xprt, const char *func, int line)
+void
+rpc_dplx_slxi(SVCXPRT *xprt, const char *func, int line)
 {
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)xprt->xp_p5;
 	rpc_dplx_lock_t *lk = &rec->send.lock;
@@ -60,13 +61,15 @@ void rpc_dplx_slxi(SVCXPRT * xprt, const char *func, int line)
 	}
 }
 
-void rpc_dplx_sux(SVCXPRT * xprt)
+void
+rpc_dplx_sux(SVCXPRT *xprt)
 {
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)xprt->xp_p5;
 	mutex_unlock(&rec->send.lock.we.mtx);
 }
 
-void rpc_dplx_rlxi(SVCXPRT * xprt, const char *func, int line)
+void
+rpc_dplx_rlxi(SVCXPRT *xprt, const char *func, int line)
 {
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)xprt->xp_p5;
 	rpc_dplx_lock_t *lk = &rec->recv.lock;
@@ -77,13 +80,15 @@ void rpc_dplx_rlxi(SVCXPRT * xprt, const char *func, int line)
 	}
 }
 
-void rpc_dplx_rux(SVCXPRT * xprt)
+void
+rpc_dplx_rux(SVCXPRT *xprt)
 {
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)xprt->xp_p5;
 	mutex_unlock(&rec->recv.lock.we.mtx);
 }
 
-void rpc_dplx_slci(CLIENT * clnt, const char *func, int line)
+void
+rpc_dplx_slci(CLIENT *clnt, const char *func, int line)
 {
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)clnt->cl_p2;
 	rpc_dplx_lock_t *lk = &rec->send.lock;
@@ -95,13 +100,15 @@ void rpc_dplx_slci(CLIENT * clnt, const char *func, int line)
 	}
 }
 
-void rpc_dplx_suc(CLIENT * clnt)
+void
+rpc_dplx_suc(CLIENT *clnt)
 {
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)clnt->cl_p2;
 	mutex_unlock(&rec->send.lock.we.mtx);
 }
 
-void rpc_dplx_rlci(CLIENT * clnt, const char *func, int line)
+void
+rpc_dplx_rlci(CLIENT *clnt, const char *func, int line)
 {
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)clnt->cl_p2;
 	rpc_dplx_lock_t *lk = &rec->recv.lock;
@@ -113,7 +120,8 @@ void rpc_dplx_rlci(CLIENT * clnt, const char *func, int line)
 	}
 }
 
-void rpc_dplx_ruc(CLIENT * clnt)
+void
+rpc_dplx_ruc(CLIENT *clnt)
 {
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)clnt->cl_p2;
 	mutex_unlock(&rec->recv.lock.we.mtx);
@@ -123,7 +131,7 @@ void rpc_dplx_ruc(CLIENT * clnt)
 
 #define RPC_DPLX_PARTITIONS 17
 
-static bool initialized = FALSE;
+static bool initialized = false;
 
 static struct rpc_dplx_rec_set rpc_dplx_rec_set = {
 	MUTEX_INITIALIZER,	/* clnt_fd_lock */
@@ -135,8 +143,9 @@ static struct rpc_dplx_rec_set rpc_dplx_rec_set = {
 	 }			/* xt */
 };
 
-static inline int rpc_dplx_cmpf(const struct opr_rbtree_node *lhs,
-				const struct opr_rbtree_node *rhs)
+static inline int
+rpc_dplx_cmpf(const struct opr_rbtree_node *lhs,
+	      const struct opr_rbtree_node *rhs)
 {
 	struct rpc_dplx_rec *lk, *rk;
 
@@ -152,7 +161,8 @@ static inline int rpc_dplx_cmpf(const struct opr_rbtree_node *lhs,
 	return (1);
 }
 
-void rpc_dplx_init()
+void
+rpc_dplx_init()
 {
 	int code = 0;
 
@@ -171,24 +181,25 @@ void rpc_dplx_init()
 		__warnx(TIRPC_DEBUG_FLAG_LOCK,
 			"rpc_dplx_init: rbtx_init failed");
 
-	initialized = TRUE;
+	initialized = true;
 
  unlock:
 	mutex_unlock(&rpc_dplx_rec_set.clnt_fd_lock);
 }
 
 #define cond_init_rpc_dplx() { \
-        do { \
-            if (! initialized) \
-                rpc_dplx_init(); \
-        } while (0); \
-    }
+		do { \
+			if (!initialized) \
+				rpc_dplx_init(); \
+		} while (0); \
+	}
 
 /* CLNT/SVCXPRT structures keep a reference to their associated rpc_dplx_rec
  * structures in private data.  this way we can make the lock/unlock ops
  * inline, and the amortized cost of this change for locks is 0. */
 
-static inline struct rpc_dplx_rec *alloc_dplx_rec(void)
+static inline struct rpc_dplx_rec *
+alloc_dplx_rec(void)
 {
 	struct rpc_dplx_rec *rec = mem_alloc(sizeof(struct rpc_dplx_rec));
 	if (rec) {
@@ -203,7 +214,8 @@ static inline struct rpc_dplx_rec *alloc_dplx_rec(void)
 	return (rec);
 }
 
-static inline void free_dplx_rec(struct rpc_dplx_rec *rec)
+static inline void
+free_dplx_rec(struct rpc_dplx_rec *rec)
 {
 	mutex_destroy(&rec->locktrace.mtx);
 	rpc_dplx_lock_destroy(&rec->send.lock);
@@ -211,8 +223,8 @@ static inline void free_dplx_rec(struct rpc_dplx_rec *rec)
 	mem_free(rec, sizeof(struct rpc_dplx_rec));
 }
 
-struct rpc_dplx_rec *rpc_dplx_lookup_rec(int fd, uint32_t iflags,
-					 uint32_t * oflags)
+struct rpc_dplx_rec *
+rpc_dplx_lookup_rec(int fd, uint32_t iflags, uint32_t *oflags)
 {
 	struct rbtree_x_part *t;
 	struct rpc_dplx_rec rk, *rec = NULL;
@@ -270,7 +282,8 @@ struct rpc_dplx_rec *rpc_dplx_lookup_rec(int fd, uint32_t iflags,
 	return (rec);
 }
 
-void rpc_dplx_slfi(int fd, const char *func, int line)
+void
+rpc_dplx_slfi(int fd, const char *func, int line)
 {
 	uint32_t oflags;
 	struct rpc_dplx_rec *rec =
@@ -285,7 +298,8 @@ void rpc_dplx_slfi(int fd, const char *func, int line)
 
 }
 
-void rpc_dplx_suf(int fd)
+void
+rpc_dplx_suf(int fd)
 {
 	uint32_t oflags;
 	struct rpc_dplx_rec *rec =
@@ -294,7 +308,8 @@ void rpc_dplx_suf(int fd)
 	mutex_unlock(&rec->send.lock.we.mtx);
 }
 
-void rpc_dplx_rlfi(int fd, const char *func, int line)
+void
+rpc_dplx_rlfi(int fd, const char *func, int line)
 {
 	uint32_t oflags;
 	struct rpc_dplx_rec *rec =
@@ -306,10 +321,10 @@ void rpc_dplx_rlfi(int fd, const char *func, int line)
 		lk->locktrace.func = (char *)func;
 		lk->locktrace.line = line;
 	}
-
 }
 
-void rpc_dplx_ruf(int fd)
+void
+rpc_dplx_ruf(int fd)
 {
 	uint32_t oflags;
 	struct rpc_dplx_rec *rec =
@@ -318,7 +333,8 @@ void rpc_dplx_ruf(int fd)
 	mutex_unlock(&rec->recv.lock.we.mtx);
 }
 
-int32_t rpc_dplx_unref(struct rpc_dplx_rec *rec, u_int flags)
+int32_t
+rpc_dplx_unref(struct rpc_dplx_rec *rec, u_int flags)
 {
 	struct rbtree_x_part *t;
 	struct opr_rbtree_node *nv;
@@ -366,7 +382,8 @@ int32_t rpc_dplx_unref(struct rpc_dplx_rec *rec, u_int flags)
 	return (refcnt);
 }
 
-void rpc_dplx_shutdown()
+void
+rpc_dplx_shutdown()
 {
 	struct rbtree_x_part *t = NULL;
 	struct opr_rbtree_node *n;
@@ -396,5 +413,5 @@ void rpc_dplx_shutdown()
 	mem_free(rpc_dplx_rec_set.xt.tree,
 		 RPC_DPLX_PARTITIONS * sizeof(struct rbtree_x_part));
 
-	/* set initialized = FALSE? */
+	/* set initialized = false? */
 }

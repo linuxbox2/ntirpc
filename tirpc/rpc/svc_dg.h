@@ -1,5 +1,6 @@
 /*	$NetBSD: svc_dg.h,v 1.1 2000/06/02 23:11:16 fvdl Exp $	*/
-/*	$FreeBSD: src/include/rpc/svc_dg.h,v 1.1 2001/03/19 12:49:47 alfred Exp $ */
+/*	$FreeBSD: src/include/rpc/svc_dg.h,v 1.1 2001/03/19 12:49:47
+ *	alfred Exp $ */
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
@@ -53,6 +54,6 @@ struct svc_dg_data {
 	unsigned char su_cmsg[64];	/* cmsghdr received from clnt */
 };
 
-#define __rpcb_get_dg_xidp(x)	(&((struct svc_dg_data *)(x)->xp_p2)->su_xid)
+#define __rpcb_get_dg_xidp(x) (&((struct svc_dg_data *)(x)->xp_p2)->su_xid)
 
 #endif

@@ -36,8 +36,8 @@
 #include <rpc/des.h>
 #if 0
 #ifndef lint
-static char sccsid[] =
-    "@(#)des_crypt.c	2.2 88/08/10 4.0 RPCSRC; from 1.13 88/02/08 SMI";
+static const char sccsid[] = "@(#)des_crypt.c	2.2 88/08/10 4.0 RPCSRC; "
+	"from 1.13 88/02/08 SMI";
 #endif
 #endif
 #include <sys/cdefs.h>
@@ -112,25 +112,23 @@ static int common_crypt(char *key, char *buf, unsigned len, unsigned mode,
 {
 	int desdev;
 
-	if ((len % 8) != 0 || len > DES_MAXDATA) {
+	if ((len % 8) != 0 || len > DES_MAXDATA)
 		return (DESERR_BADPARAM);
-	}
+
 	desp->des_dir =
 	    ((mode & DES_DIRMASK) == DES_ENCRYPT) ? ENCRYPT : DECRYPT;
 
 	desdev = mode & DES_DEVMASK;
 	COPY8(key, desp->des_key);
-	/* 
+	/*
 	 * software
 	 */
 	if (__des_crypt_LOCAL != NULL) {
-		if (!__des_crypt_LOCAL(buf, len, desp)) {
+		if (!__des_crypt_LOCAL(buf, len, desp))
 			return (DESERR_HWERROR);
-		}
 	} else {
-		if (!_des_crypt_call(buf, len, desp)) {
+		if (!_des_crypt_call(buf, len, desp))
 			return (DESERR_HWERROR);
-		}
 	}
 	return (desdev == DES_SW ? DESERR_NONE : DESERR_NOHWDEVICE);
 }

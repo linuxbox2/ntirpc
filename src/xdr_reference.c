@@ -63,9 +63,10 @@
  * size is the sizeof the referneced structure.
  * proc is the routine to handle the referenced structure.
  */
-bool xdr_reference(XDR * xdrs, caddr_t * pp,	/* the pointer to work on */
-		   u_int size,	/* size of the object pointed to */
-		   xdrproc_t proc /* xdr routine to handle the object */ )
+bool
+xdr_reference(XDR *xdrs, caddr_t *pp,	/* the pointer to work on */
+	      u_int size,	/* size of the object pointed to */
+	      xdrproc_t proc /* xdr routine to handle the object */)
 {
 	caddr_t loc = *pp;
 	bool stat;
@@ -73,14 +74,14 @@ bool xdr_reference(XDR * xdrs, caddr_t * pp,	/* the pointer to work on */
 	if (loc == NULL)
 		switch (xdrs->x_op) {
 		case XDR_FREE:
-			return (TRUE);
+			return (true);
 
 		case XDR_DECODE:
 			*pp = loc = (caddr_t) mem_alloc(size);
 			if (loc == NULL) {
 				__warnx(TIRPC_DEBUG_FLAG_XDR,
 					"xdr_reference: out of memory");
-				return (FALSE);
+				return (false);
 			}
 			memset(loc, 0, size);
 			break;
@@ -108,8 +109,8 @@ bool xdr_reference(XDR * xdrs, caddr_t * pp,	/* the pointer to work on */
  *  What's sent is actually a union:
  *
  *  union object_pointer switch (boolean b) {
- *  case TRUE: object_data data;
- *  case FALSE: void nothing;
+ *  case true: object_data data;
+ *  case false: void nothing;
  *  }
  *
  * > objpp: Pointer to the pointer to the object.
@@ -117,18 +118,17 @@ bool xdr_reference(XDR * xdrs, caddr_t * pp,	/* the pointer to work on */
  * > xdr_obj: routine to XDR an object.
  *
  */
-bool xdr_pointer(XDR * xdrs, char **objpp, u_int obj_size, xdrproc_t xdr_obj)
+bool xdr_pointer(XDR *xdrs, char **objpp, u_int obj_size, xdrproc_t xdr_obj)
 {
 
 	bool_t more_data;
 
 	more_data = (*objpp != NULL);
-	if (!inline_xdr_bool(xdrs, &more_data)) {
-		return (FALSE);
-	}
+	if (!inline_xdr_bool(xdrs, &more_data))
+		return (false);
 	if (!more_data) {
 		*objpp = NULL;
-		return (TRUE);
+		return (true);
 	}
 	return (xdr_reference(xdrs, objpp, obj_size, xdr_obj));
 }

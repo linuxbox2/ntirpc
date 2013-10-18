@@ -65,7 +65,8 @@ tirpc_pkg_params __pkg_params = {
 	warnx
 };
 
-bool tirpc_control(const u_int rq, void *in)
+bool
+tirpc_control(const u_int rq, void *in)
 {
 	switch (rq) {
 	case TIRPC_GET_FLAGS:
@@ -87,9 +88,9 @@ bool tirpc_control(const u_int rq, void *in)
 		__pkg_params.warnx = *(warnx_t) in;
 		break;
 	default:
-		return (FALSE);
+		return (false);
 	}
-	return (TRUE);
+	return (true);
 }
 
 struct handle {
@@ -139,17 +140,16 @@ static int getnettype(const char *);
  * Cache the result of getrlimit(), so we don't have to do an
  * expensive call every time.
  */
-int __rpc_dtbsize(void)
+int
+__rpc_dtbsize(void)
 {
 	static int tbsize;
 	struct rlimit rl;
 
-	if (tbsize) {
+	if (tbsize)
 		return (tbsize);
-	}
-	if (getrlimit(RLIMIT_NOFILE, &rl) == 0) {
+	if (getrlimit(RLIMIT_NOFILE, &rl) == 0)
 		return (tbsize = (int)rl.rlim_max);
-	}
 	/*
 	 * Something wrong.  I'll try to save face by returning a
 	 * pessimistic number.
@@ -160,7 +160,8 @@ int __rpc_dtbsize(void)
 /*
  * Find the appropriate buffer size
  */
-u_int /*ARGSUSED*/ __rpc_get_t_size(int af, int proto, int size)
+u_int /*ARGSUSED*/
+__rpc_get_t_size(int af, int proto, int size)
 {
 	int maxsize, defsize;
 
@@ -186,7 +187,8 @@ u_int /*ARGSUSED*/ __rpc_get_t_size(int af, int proto, int size)
 /*
  * Find the appropriate address buffer size
  */
-u_int __rpc_get_a_size(int af)
+u_int
+__rpc_get_a_size(int af)
 {
 	switch (af) {
 	case AF_INET:
@@ -200,11 +202,13 @@ u_int __rpc_get_a_size(int af)
 	default:
 		break;
 	}
+
 	return ((u_int) RPC_MAXADDRSIZE);
 }
 
 #if 0
-static char *strlocase(char *p)
+static char *
+strlocase(char *p)
 {
 	char *t = p;
 
@@ -219,20 +223,21 @@ static char *strlocase(char *p)
  * Returns the type of the network as defined in <rpc/nettype.h>
  * If nettype is NULL, it defaults to NETPATH.
  */
-static int getnettype(const char *nettype)
+static int
+getnettype(const char *nettype)
 {
 	int i;
 
-	if ((nettype == NULL) || (nettype[0] == 0)) {
+	if ((nettype == NULL) || (nettype[0] == 0))
 		return (_RPC_NETPATH);	/* Default */
-	}
 #if 0
 	nettype = strlocase(nettype);
 #endif
-	for (i = 0; _rpctypelist[i].name; i++)
-		if (strcasecmp(nettype, _rpctypelist[i].name) == 0) {
+	for (i = 0; _rpctypelist[i].name; i++) {
+		if (strcasecmp(nettype, _rpctypelist[i].name) == 0)
 			return (_rpctypelist[i].type);
-		}
+	}
+
 	return (_rpctypelist[i].type);
 }
 
@@ -240,7 +245,8 @@ static int getnettype(const char *nettype)
  * For the given nettype (tcp or udp only), return the first structure found.
  * This should be freed by calling freenetconfigent()
  */
-struct netconfig *__rpc_getconfip(const char *nettype)
+struct netconfig *
+__rpc_getconfip(const char *nettype)
 {
 	char *netid;
 	char *netid_tcp = (char *)NULL;
@@ -267,7 +273,8 @@ struct netconfig *__rpc_getconfip(const char *nettype)
 		struct netconfig *nconf;
 		void *confighandle;
 
-		if (!(confighandle = setnetconfig())) {
+		confighandle = setnetconfig();
+		if (!confighandle) {
 			__warnx(TIRPC_DEBUG_FLAG_DEFAULT,
 				"rpc: failed to open %s", NETCONFIG);
 			return (NULL);
@@ -294,13 +301,12 @@ struct netconfig *__rpc_getconfip(const char *nettype)
 		netid = netid_udp;
 	else if (strcmp(nettype, "tcp") == 0)
 		netid = netid_tcp;
-	else {
+	else
 		return (NULL);
-	}
-	if ((netid == NULL) || (netid[0] == 0)) {
+	if ((netid == NULL) || (netid[0] == 0))
 		return (NULL);
-	}
 	dummy = getnetconfigent(netid);
+
 	return (dummy);
 }
 
@@ -308,36 +314,38 @@ struct netconfig *__rpc_getconfip(const char *nettype)
  * Returns the type of the nettype, which should then be used with
  * __rpc_getconf().
  */
-void *__rpc_setconf(const char *nettype)
+void *
+__rpc_setconf(const char *nettype)
 {
 	struct handle *handle;
 
 	handle = (struct handle *)mem_zalloc(sizeof(struct handle));
-	if (handle == NULL) {
+	if (handle == NULL)
 		return (NULL);
-	}
 	switch (handle->nettype = getnettype(nettype)) {
 	case _RPC_NETPATH:
 	case _RPC_CIRCUIT_N:
 	case _RPC_DATAGRAM_N:
-		if (!(handle->nhandle = setnetpath())) {
+		handle->nhandle = setnetpath();
+		if (!handle->nhandle) {
 			mem_free(handle, 0);	/* XXX */
 			return (NULL);
 		}
-		handle->nflag = TRUE;
+		handle->nflag = true;
 		break;
 	case _RPC_VISIBLE:
 	case _RPC_CIRCUIT_V:
 	case _RPC_DATAGRAM_V:
 	case _RPC_TCP:
 	case _RPC_UDP:
-		if (!(handle->nhandle = setnetconfig())) {
+		handle->nhandle = setnetconfig();
+		if (!handle->nhandle) {
 			__warnx(TIRPC_DEBUG_FLAG_DEFAULT,
 				"rpc: failed to open %s", NETCONFIG);
 			mem_free(handle, 0);
 			return (NULL);
 		}
-		handle->nflag = FALSE;
+		handle->nflag = false;
 		break;
 	default:
 		return (NULL);
@@ -350,15 +358,15 @@ void *__rpc_setconf(const char *nettype)
  * Returns the next netconfig struct for the given "net" type.
  * __rpc_setconf() should have been called previously.
  */
-struct netconfig *__rpc_getconf(void *vhandle)
+struct netconfig *
+__rpc_getconf(void *vhandle)
 {
 	struct handle *handle;
 	struct netconfig *nconf;
 
 	handle = (struct handle *)vhandle;
-	if (handle == NULL) {
+	if (handle == NULL)
 		return (NULL);
-	}
 	for (;;) {
 		if (handle->nflag)
 			nconf = getnetpath(handle->nhandle);
@@ -423,20 +431,18 @@ struct netconfig *__rpc_getconf(void *vhandle)
 	return (nconf);
 }
 
-void __rpc_endconf(vhandle)
-void *vhandle;
+void
+__rpc_endconf(void *vhandle)
 {
 	struct handle *handle;
 
 	handle = (struct handle *)vhandle;
-	if (handle == NULL) {
+	if (handle == NULL)
 		return;
-	}
-	if (handle->nflag) {
+	if (handle->nflag)
 		endnetpath(handle->nhandle);
-	} else {
+	else
 		endnetconfig(handle->nhandle);
-	}
 	mem_free(handle, 0);
 }
 
@@ -444,7 +450,8 @@ void *vhandle;
  * Used to ping the NULL procedure for clnt handle.
  * Returns NULL if fails, else a non-NULL pointer.
  */
-void *rpc_nullproc(CLIENT * clnt)
+void *
+rpc_nullproc(CLIENT *clnt)
 {
 	struct timeval TIMEOUT = { 25, 0 };
 	AUTH *auth;
@@ -455,6 +462,7 @@ void *rpc_nullproc(CLIENT * clnt)
 	     (xdrproc_t) xdr_void, NULL, TIMEOUT) != RPC_SUCCESS) {
 		return (NULL);
 	}
+
 	return ((void *)clnt);
 }
 
@@ -462,7 +470,8 @@ void *rpc_nullproc(CLIENT * clnt)
  * Try all possible transports until
  * one succeeds in finding the netconf for the given fd.
  */
-struct netconfig *__rpcgettp(int fd)
+struct netconfig *
+__rpcgettp(int fd)
 {
 	const char *netid;
 	struct __rpc_sockinfo si;
@@ -477,18 +486,19 @@ struct netconfig *__rpcgettp(int fd)
 	return getnetconfigent((char *)netid);
 }
 
-int __rpc_fd2sockinfo(int fd, struct __rpc_sockinfo *sip)
+int
+__rpc_fd2sockinfo(int fd, struct __rpc_sockinfo *sip)
 {
 	socklen_t len;
 	int type, proto;
 	struct sockaddr_storage ss;
 
-	len = sizeof ss;
+	len = sizeof(ss);
 	if (getsockname(fd, (struct sockaddr *)&ss, &len) < 0)
 		return 0;
 	sip->si_alen = len;
 
-	len = sizeof type;
+	len = sizeof(type);
 	if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &len) < 0)
 		return 0;
 
@@ -513,12 +523,13 @@ int __rpc_fd2sockinfo(int fd, struct __rpc_sockinfo *sip)
 /*
  * Linear search, but the number of entries is small.
  */
-int __rpc_nconf2sockinfo(const struct netconfig *nconf,
-			 struct __rpc_sockinfo *sip)
+int
+__rpc_nconf2sockinfo(const struct netconfig *nconf,
+		     struct __rpc_sockinfo *sip)
 {
 	int i;
 
-	for (i = 0; i < (sizeof na_cvt) / (sizeof(struct netid_af)); i++)
+	for (i = 0; i < (sizeof(na_cvt)) / (sizeof(struct netid_af)); i++)
 		if (strcmp(na_cvt[i].netid, nconf->nc_netid) == 0
 		    || (strcmp(nconf->nc_netid, "unix") == 0
 			&& strcmp(na_cvt[i].netid, "local") == 0)) {
@@ -535,7 +546,8 @@ int __rpc_nconf2sockinfo(const struct netconfig *nconf,
 	return 0;
 }
 
-int __rpc_nconf2fd_flags(const struct netconfig *nconf, int flags)
+int
+__rpc_nconf2fd_flags(const struct netconfig *nconf, int flags)
 {
 	struct __rpc_sockinfo si;
 	int fd;
@@ -543,29 +555,33 @@ int __rpc_nconf2fd_flags(const struct netconfig *nconf, int flags)
 	if (!__rpc_nconf2sockinfo(nconf, &si))
 		return 0;
 
-	if ((fd = socket(si.si_af, si.si_socktype | flags, si.si_proto)) >= 0
-	    && si.si_af == AF_INET6) {
+	fd = socket(si.si_af, si.si_socktype | flags, si.si_proto);
+	if ((fd >= 0) &&
+	    (si.si_af == AF_INET6)) {
 #ifdef SOL_IPV6
 		int val = 1;
 		setsockopt(fd, SOL_IPV6, IPV6_V6ONLY, &val, sizeof(val));
 #endif
 	}
+
 	return fd;
 }
 
-int __rpc_nconf2fd(const struct netconfig *nconf)
+int
+__rpc_nconf2fd(const struct netconfig *nconf)
 {
 	return __rpc_nconf2fd_flags(nconf, 0);
 }
 
-int __rpc_sockinfo2netid(struct __rpc_sockinfo *sip, const char **netid)
+int
+__rpc_sockinfo2netid(struct __rpc_sockinfo *sip, const char **netid)
 {
 	int i;
 	struct netconfig *nconf;
 
 	nconf = getnetconfigent("local");
 
-	for (i = 0; i < (sizeof na_cvt) / (sizeof(struct netid_af)); i++) {
+	for (i = 0; i < (sizeof(na_cvt)) / (sizeof(struct netid_af)); i++) {
 		if (na_cvt[i].af == sip->si_af
 		    && na_cvt[i].protocol == sip->si_proto) {
 			if (strcmp(na_cvt[i].netid, "local") == 0
@@ -587,7 +603,8 @@ int __rpc_sockinfo2netid(struct __rpc_sockinfo *sip, const char **netid)
 	return 0;
 }
 
-char *taddr2uaddr(const struct netconfig *nconf, const struct netbuf *nbuf)
+char *
+taddr2uaddr(const struct netconfig *nconf, const struct netbuf *nbuf)
 {
 	struct __rpc_sockinfo si;
 
@@ -596,7 +613,8 @@ char *taddr2uaddr(const struct netconfig *nconf, const struct netbuf *nbuf)
 	return __rpc_taddr2uaddr_af(si.si_af, nbuf);
 }
 
-struct netbuf *uaddr2taddr(const struct netconfig *nconf, const char *uaddr)
+struct netbuf *
+uaddr2taddr(const struct netconfig *nconf, const char *uaddr)
 {
 	struct __rpc_sockinfo si;
 
@@ -605,7 +623,8 @@ struct netbuf *uaddr2taddr(const struct netconfig *nconf, const char *uaddr)
 	return __rpc_uaddr2taddr_af(si.si_af, uaddr);
 }
 
-char *__rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
+char *
+__rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 {
 	char *ret = NULL;
 	struct sockaddr_in *sin;
@@ -626,7 +645,7 @@ char *__rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 	switch (af) {
 	case AF_INET:
 		sin = nbuf->buf;
-		if (inet_ntop(af, &sin->sin_addr, namebuf, sizeof namebuf)
+		if (inet_ntop(af, &sin->sin_addr, namebuf, sizeof(namebuf))
 		    == NULL)
 			return NULL;
 		port = ntohs(sin->sin_port);
@@ -638,7 +657,7 @@ char *__rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 #ifdef INET6
 	case AF_INET6:
 		sin6 = nbuf->buf;
-		if (inet_ntop(af, &sin6->sin6_addr, namebuf6, sizeof namebuf6)
+		if (inet_ntop(af, &sin6->sin6_addr, namebuf6, sizeof(namebuf6))
 		    == NULL)
 			return NULL;
 		port = ntohs(sin6->sin6_port);
@@ -653,13 +672,11 @@ char *__rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 		/* if (asprintf(&ret, "%.*s", (int)(sun->sun_len -
 		   offsetof(struct sockaddr_un, sun_path)),
 		   sun->sun_path) < 0) */
-		if (sprintf
-		    (ret, "%.*s",
-		     (int)(sizeof(*sun) -
-			   offsetof(struct sockaddr_un, sun_path)),
-		     sun->sun_path) < 0)
-
-			 return (NULL);
+		if (sprintf(ret, "%.*s",
+			    (int)(sizeof(*sun) -
+				  offsetof(struct sockaddr_un, sun_path)),
+			    sun->sun_path) < 0)
+			return (NULL);
 		break;
 	default:
 		return NULL;
@@ -669,7 +686,8 @@ char *__rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 	return ret;
 }
 
-struct netbuf *__rpc_uaddr2taddr_af(int af, const char *uaddr)
+struct netbuf *
+__rpc_uaddr2taddr_af(int af, const char *uaddr)
 {
 	struct netbuf *ret = NULL;
 	char *addrstr, *p;
@@ -705,16 +723,16 @@ struct netbuf *__rpc_uaddr2taddr_af(int af, const char *uaddr)
 		port = (porthi << 8) | portlo;
 	}
 
-	ret = (struct netbuf *)mem_zalloc(sizeof *ret);
+	ret = (struct netbuf *)mem_zalloc(sizeof(*ret));
 	if (ret == NULL)
 		goto out;
 
 	switch (af) {
 	case AF_INET:
-		sin = (struct sockaddr_in *)mem_zalloc(sizeof *sin);
+		sin = (struct sockaddr_in *)mem_zalloc(sizeof(*sin));
 		if (sin == NULL)
 			goto out;
-		memset(sin, 0, sizeof *sin);
+		memset(sin, 0, sizeof(*sin));
 		sin->sin_family = AF_INET;
 		sin->sin_port = htons(port);
 		if (inet_pton(AF_INET, addrstr, &sin->sin_addr) <= 0) {
@@ -723,15 +741,15 @@ struct netbuf *__rpc_uaddr2taddr_af(int af, const char *uaddr)
 			ret = NULL;
 			goto out;
 		}
-		ret->maxlen = ret->len = sizeof *sin;
+		ret->maxlen = ret->len = sizeof(*sin);
 		ret->buf = sin;
 		break;
 #ifdef INET6
 	case AF_INET6:
-		sin6 = (struct sockaddr_in6 *)mem_zalloc(sizeof *sin6);
+		sin6 = (struct sockaddr_in6 *)mem_zalloc(sizeof(*sin6));
 		if (sin6 == NULL)
 			goto out;
-		memset(sin6, 0, sizeof *sin6);
+		memset(sin6, 0, sizeof(*sin6));
 		sin6->sin6_family = AF_INET6;
 		sin6->sin6_port = htons(port);
 		if (inet_pton(AF_INET6, addrstr, &sin6->sin6_addr) <= 0) {
@@ -740,15 +758,15 @@ struct netbuf *__rpc_uaddr2taddr_af(int af, const char *uaddr)
 			ret = NULL;
 			goto out;
 		}
-		ret->maxlen = ret->len = sizeof *sin6;
+		ret->maxlen = ret->len = sizeof(*sin6);
 		ret->buf = sin6;
 		break;
 #endif
 	case AF_LOCAL:
-		sun = (struct sockaddr_un *)mem_zalloc(sizeof *sun);
+		sun = (struct sockaddr_un *)mem_zalloc(sizeof(*sun));
 		if (sun == NULL)
 			goto out;
-		memset(sun, 0, sizeof *sun);
+		memset(sun, 0, sizeof(*sun));
 		sun->sun_family = AF_LOCAL;
 		strncpy(sun->sun_path, addrstr, sizeof(sun->sun_path) - 1);
 		ret->len = SUN_LEN(sun);
@@ -763,7 +781,8 @@ struct netbuf *__rpc_uaddr2taddr_af(int af, const char *uaddr)
 	return ret;
 }
 
-int __rpc_seman2socktype(int semantics)
+int
+__rpc_seman2socktype(int semantics)
 {
 	switch (semantics) {
 	case NC_TPI_CLTS:
@@ -779,7 +798,8 @@ int __rpc_seman2socktype(int semantics)
 	return -1;
 }
 
-int __rpc_socktype2seman(int socktype)
+int
+__rpc_socktype2seman(int socktype)
 {
 	switch (socktype) {
 	case SOCK_DGRAM:
@@ -802,7 +822,8 @@ int __rpc_socktype2seman(int socktype)
  * machine. If they are both "link local" or "site local", copy
  * the scope id of the server address over to the service address.
  */
-int __rpc_fixup_addr(struct netbuf *new, const struct netbuf *svc)
+int
+__rpc_fixup_addr(struct netbuf *new, const struct netbuf *svc)
 {
 #ifdef INET6
 	struct sockaddr *sa_new, *sa_svc;
@@ -864,7 +885,8 @@ int __rpc_sockisbound(int fd)
 /*
  * Helper function to set up a netbuf
  */
-struct netbuf *__rpc_set_netbuf(struct netbuf *nb, const void *ptr, size_t len)
+struct netbuf *
+__rpc_set_netbuf(struct netbuf *nb, const void *ptr, size_t len)
 {
 	if (nb->len != len) {
 		if (nb->len)

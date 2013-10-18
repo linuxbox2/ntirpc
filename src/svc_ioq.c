@@ -68,9 +68,10 @@
 #include "svc_ioq.h"
 
 static struct thrdpool pool;
-static uint32_t ioq_shutdown = false;
+static uint32_t ioq_shutdown;
 
-void svc_ioq_init()
+void
+svc_ioq_init()
 {
 	struct thrdpool_params params = {
 		.thrd_max = 200,
@@ -80,7 +81,8 @@ void svc_ioq_init()
 	(void)thrdpool_init(&pool, "svc_ioq", &params);
 }
 
-static inline void cfconn_set_dead(SVCXPRT * xprt, struct x_vc_data *xd)
+static inline void
+cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
 {
 	mutex_lock(&xprt->xp_lock);
 	xd->sx.strm_stat = XPRT_DIED;
@@ -89,8 +91,9 @@ static inline void cfconn_set_dead(SVCXPRT * xprt, struct x_vc_data *xd)
 
 #define LAST_FRAG ((u_int32_t)(1 << 31))
 
-static inline void ioq_flushv(SVCXPRT * xprt, struct x_vc_data *xd,
-			      struct xdr_ioq *xioq)
+static inline void
+ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd,
+	   struct xdr_ioq *xioq)
 {
 	struct iovec *iov, *tiov;
 	ssize_t nbytes = 0, resid = xioq->ioq.frag_len + sizeof(u_int32_t);
@@ -115,7 +118,8 @@ static inline void ioq_flushv(SVCXPRT * xprt, struct x_vc_data *xd,
 	iovcnt = ix;
 	while (resid > 0) {
 		/* advance iov */
-		for (ix = 0, tiov = iov; ((nbytes > 0) && (ix < iovcnt)); ++ix) {
+		for (ix = 0, tiov = iov; ((nbytes > 0) && (ix < iovcnt));
+		     ++ix) {
 			tiov = iov + ix;
 			if (tiov->iov_len > nbytes) {
 				tiov->iov_base += nbytes;
@@ -137,7 +141,8 @@ static inline void ioq_flushv(SVCXPRT * xprt, struct x_vc_data *xd,
 	}
 }
 
-void svc_ioq(struct thrd_context *thr_ctx)
+void
+svc_ioq(struct thrd_context *thr_ctx)
 {
 	struct svc_ioq_args *arg = (struct svc_ioq_args *)thr_ctx->arg;
 	struct thrd *thrd = opr_containerof(thr_ctx, struct thrd, ctx);
@@ -170,7 +175,8 @@ void svc_ioq(struct thrd_context *thr_ctx)
 	return;
 }
 
-void svc_ioq_append(SVCXPRT * xprt, struct x_vc_data *xd, XDR * xdrs)
+void
+svc_ioq_append(SVCXPRT *xprt, struct x_vc_data *xd, XDR *xdrs)
 {
 	struct xdr_ioq *xioq = xdrs->x_private;
 	bool qdrain = atomic_fetch_uint32_t(&ioq_shutdown);
@@ -197,7 +203,8 @@ void svc_ioq_append(SVCXPRT * xprt, struct x_vc_data *xd, XDR * xdrs)
 		mutex_unlock(&xprt->xp_lock);
 }
 
-void svc_ioq_shutdown()
+void
+svc_ioq_shutdown()
 {
 	atomic_store_uint32_t(&ioq_shutdown, true);
 	thrdpool_shutdown(&pool);

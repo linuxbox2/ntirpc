@@ -75,11 +75,12 @@ struct authnone_private {
 };
 
 static struct authnone_private auth_none_priv;
-static struct authnone_private *ap = NULL;	/* already */
+static struct authnone_private *ap;
 
 static pthread_mutex_t init_lock = MUTEX_INITIALIZER;
 
-AUTH *authnone_ncreate(void)
+AUTH *
+authnone_ncreate(void)
 {
 	XDR xdr_stream;
 	XDR *xdrs;
@@ -87,7 +88,7 @@ AUTH *authnone_ncreate(void)
 	if (!ap) {
 		mutex_lock(&init_lock);
 		if (!ap) {
-			ap = &auth_none_priv;	/* many clients shall point to this */
+			ap = &auth_none_priv; /* shared */
 			ap->no_client.ah_cred = ap->no_client.ah_verf =
 			    _null_auth;
 			ap->no_client.ah_ops = authnone_ops();
@@ -107,7 +108,8 @@ AUTH *authnone_ncreate(void)
 	return (&ap->no_client);
 }
 
- /*ARGSUSED*/ static bool authnone_marshal(AUTH * client, XDR * xdrs)
+ /*ARGSUSED*/
+static bool authnone_marshal(AUTH *client, XDR *xdrs)
 {
 	struct authnone_private *ap =
 	    opr_containerof(client, struct authnone_private, no_client);
@@ -117,43 +119,48 @@ AUTH *authnone_ncreate(void)
 }
 
 /* All these unused parameters are required to keep ANSI-C from grumbling */
- /*ARGSUSED*/ static void authnone_verf( __attribute__ ((unused)) AUTH * client)
+ /*ARGSUSED*/
+static void authnone_verf(__attribute__ ((unused)) AUTH *client)
 {
 	/* do nothing */
 }
 
- /*ARGSUSED*/ static bool authnone_validate( __attribute__ ((unused)) AUTH *
-					    client, __attribute__ ((unused))
-					    struct opaque_auth *opaque)
+ /*ARGSUSED*/
+static bool authnone_validate(
+	__attribute__ ((unused)) AUTH *client,
+	__attribute__ ((unused)) struct opaque_auth *opaque)
 {
-	return (TRUE);
+	return (true);
 }
 
- /*ARGSUSED*/ static bool authnone_refresh( __attribute__ ((unused)) AUTH *
-					   client, __attribute__ ((unused))
-					   void *dummy)
+ /*ARGSUSED*/
+static bool
+authnone_refresh(__attribute__ ((unused)) AUTH *client,
+		 __attribute__ ((unused)) void *dummy)
 {
-	return (FALSE);
+	return (false);
 }
 
- /*ARGSUSED*/ static void authnone_destroy(AUTH * client)
+ /*ARGSUSED*/
+static void authnone_destroy(__attribute__ ((unused)) AUTH *client)
 {
 	/* do nothing */
 }
 
-static bool authnone_wrap(AUTH * auth, XDR * xdrs, xdrproc_t xfunc,
-			  caddr_t xwhere)
+static bool
+authnone_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xfunc,
+	      caddr_t xwhere)
 {
 	return ((*xfunc) (xdrs, xwhere));
 }
 
-static struct auth_ops *authnone_ops(void)
+static struct auth_ops *
+authnone_ops(void)
 {
 	static struct auth_ops ops;
-	extern mutex_t ops_lock;
+	extern mutex_t ops_lock; /* XXXX does this need to be extern? */
 
-/* VARIABLES PROTECTED BY ops_lock: ops */
-
+       /* VARIABLES PROTECTED BY ops_lock: ops */
 	mutex_lock(&ops_lock);
 	if (ops.ah_nextverf == NULL) {
 		ops.ah_nextverf = authnone_verf;

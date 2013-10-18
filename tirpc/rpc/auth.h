@@ -165,12 +165,13 @@ union des_block {
 	char c[8];
 };
 typedef union des_block des_block;
-__BEGIN_DECLS extern bool xdr_des_block(XDR *, des_block *);
+__BEGIN_DECLS
+extern bool xdr_des_block(XDR *, des_block *);
 __END_DECLS
 /*
  * Authentication info.  Opaque to client.
  */
-    struct opaque_auth {
+struct opaque_auth {
 	enum_t oa_flavor;	/* flavor of auth */
 	caddr_t oa_base;	/* address of more auth stuff */
 	u_int oa_length;	/* not to exceed MAX_AUTH_BYTES */
@@ -203,12 +204,12 @@ typedef struct __auth {
 	int ah_refcnt;
 } AUTH;
 
-static __inline int auth_get(AUTH * auth)
+static inline int auth_get(AUTH *auth)
 {
 	return atomic_add_int32_t(&auth->ah_refcnt, 1);
 }
 
-static __inline int auth_put(AUTH * auth)
+static inline int auth_put(AUTH *auth)
 {
 	return atomic_sub_int32_t(&auth->ah_refcnt, 1);
 }
@@ -222,60 +223,61 @@ static __inline int auth_put(AUTH * auth)
  * struct opaque_auth verf;
  */
 #define AUTH_NEXTVERF(auth)                     \
-    ((*((auth)->ah_ops->ah_nextverf))(auth))
+	((*((auth)->ah_ops->ah_nextverf))(auth))
 #define auth_nextverf(auth)                     \
-    ((*((auth)->ah_ops->ah_nextverf))(auth))
+	((*((auth)->ah_ops->ah_nextverf))(auth))
 
-#define AUTH_MARSHALL(auth, xdrs)               \
-    ((*((auth)->ah_ops->ah_marshal))(auth, xdrs))
-#define auth_marshall(auth, xdrs)               \
-    ((*((auth)->ah_ops->ah_marshal))(auth, xdrs))
+#define AUTH_MARSHALL(auth, xdrs)			\
+	((*((auth)->ah_ops->ah_marshal))(auth, xdrs))
+#define auth_marshall(auth, xdrs)			\
+	((*((auth)->ah_ops->ah_marshal))(auth, xdrs))
 
 #define AUTH_VALIDATE(auth, verfp)                      \
-    ((*((auth)->ah_ops->ah_validate))((auth), verfp))
+	((*((auth)->ah_ops->ah_validate))((auth), verfp))
 #define auth_validate(auth, verfp)                      \
-    ((*((auth)->ah_ops->ah_validate))((auth), verfp))
+	((*((auth)->ah_ops->ah_validate))((auth), verfp))
 
-#define AUTH_REFRESH(auth, msg)                 \
-    ((*((auth)->ah_ops->ah_refresh))(auth, msg))
-#define auth_refresh(auth, msg)                 \
-    ((*((auth)->ah_ops->ah_refresh))(auth, msg))
+#define AUTH_REFRESH(auth, msg)				\
+	((*((auth)->ah_ops->ah_refresh))(auth, msg))
+#define auth_refresh(auth, msg)				\
+	((*((auth)->ah_ops->ah_refresh))(auth, msg))
 
 #define AUTH_DESTROY(auth)                      \
-    do {                                        \
-        int refs;                               \
-        if ((refs = auth_put((auth))) == 0)     \
-            ((*((auth)->ah_ops->ah_destroy))(auth));                    \
-        __warnx(TIRPC_DEBUG_FLAG_AUTH,                                  \
-                "%s: auth_put(), refs %d\n",                            \
-                __func__, refs);                                        \
-    } while (0)
+	do {					\
+		int refs = auth_put((auth));				\
+		if (refs == 0)						\
+			((*((auth)->ah_ops->ah_destroy))(auth));	\
+		__warnx(TIRPC_DEBUG_FLAG_AUTH,				\
+			"%s: auth_put(), refs %d\n",			\
+			__func__, refs);				\
+	} while (0)
 
-#define auth_destroy(auth)                      \
-    do {                                        \
-        int refs;                               \
-        if ((refs = auth_put((auth))) == 0)     \
-            ((*((auth)->ah_ops->ah_destroy))(auth));                    \
-        __warnx(TIRPC_DEBUG_FLAG_AUTH,                                  \
-                "%s: auth_put(), refs %d\n",                            \
-                __func__, refs);                                        \
-    } while (0)
+#define auth_destroy(auth)						\
+	do {								\
+		int refs = auth_put((auth));				\
+		if (refs == 0)						\
+			((*((auth)->ah_ops->ah_destroy))(auth));	\
+		__warnx(TIRPC_DEBUG_FLAG_AUTH,				\
+			"%s: auth_put(), refs %d\n",			\
+			__func__, refs);				\
+	} while (0)
 
 #define AUTH_WRAP(auth, xdrs, xfunc, xwhere)    \
-    ((*((auth)->ah_ops->ah_wrap))(auth, xdrs,   \
-                                  xfunc, xwhere))
+	((*((auth)->ah_ops->ah_wrap))(auth, xdrs,	\
+				      xfunc, xwhere))
 #define auth_wrap(auth, xdrs, xfunc, xwhere)    \
-    ((*((auth)->ah_ops->ah_wrap))(auth, xdrs,   \
-                                  xfunc, xwhere))
+	((*((auth)->ah_ops->ah_wrap))(auth, xdrs,	\
+				      xfunc, xwhere))
 
 #define AUTH_UNWRAP(auth, xdrs, xfunc, xwhere)  \
-    ((*((auth)->ah_ops->ah_unwrap))(auth, xdrs, \
-                                    xfunc, xwhere))
+	((*((auth)->ah_ops->ah_unwrap))(auth, xdrs,	\
+					xfunc, xwhere))
 #define auth_unwrap(auth, xdrs, xfunc, xwhere)  \
-    ((*((auth)->ah_ops->ah_unwrap))(auth, xdrs, \
-                                    xfunc, xwhere))
+	((*((auth)->ah_ops->ah_unwrap))(auth, xdrs,	\
+					xfunc, xwhere))
 
-__BEGIN_DECLS extern struct opaque_auth _null_auth;
+__BEGIN_DECLS
+extern struct opaque_auth _null_auth;
 __END_DECLS
 /*
  * Any style authentication.  These routines can be used by any
@@ -296,7 +298,8 @@ int authany_wrap(void), authany_unwrap(void);
  * int len;
  * int *aup_gids;
  */
-__BEGIN_DECLS extern AUTH *authunix_ncreate(char *, uid_t, uid_t, int, uid_t *);
+__BEGIN_DECLS
+extern AUTH *authunix_ncreate(char *, uid_t, uid_t, int, uid_t *);
 extern AUTH *authunix_ncreate_default(void);	/* takes no parameters */
 extern AUTH *authnone_ncreate(void);	/* takes no parameters */
 __END_DECLS
@@ -308,17 +311,19 @@ __END_DECLS
  *  const char *timehost;   - optional hostname to sync with
  *  des_block *ckey;  - optional conversation key to use
  */
-__BEGIN_DECLS extern AUTH *authdes_ncreate(char *, u_int, struct sockaddr *,
-					   des_block *);
+__BEGIN_DECLS
+extern AUTH *authdes_ncreate(char *, u_int, struct sockaddr *,
+			     des_block *);
 extern AUTH *authdes_nseccreate(const char *, const u_int, const char *,
 				const des_block *);
-__END_DECLS __BEGIN_DECLS extern bool xdr_opaque_auth(XDR *,
-						      struct opaque_auth *);
+__END_DECLS __BEGIN_DECLS
+extern bool xdr_opaque_auth(XDR *, struct opaque_auth *);
 __END_DECLS
 /*
  * Netname manipulation routines.
  */
-__BEGIN_DECLS extern int getnetname(char *);
+__BEGIN_DECLS
+extern int getnetname(char *);
 extern int host2netname(char *, const char *, const char *);
 extern int user2netname(char *, const uid_t, const char *);
 extern int netname2user(char *, uid_t *, gid_t *, int *, gid_t *);
@@ -330,7 +335,8 @@ __END_DECLS
  * These routines interface to the keyserv daemon
  *
  */
-__BEGIN_DECLS extern int key_decryptsession(const char *, des_block *);
+__BEGIN_DECLS
+extern int key_decryptsession(const char *, des_block *);
 extern int key_encryptsession(const char *, des_block *);
 extern int key_gendes(des_block *);
 extern int key_setsecret(const char *);
@@ -340,7 +346,8 @@ __END_DECLS
 /*
  * Publickey routines.
  */
-__BEGIN_DECLS extern int getpublickey(const char *, char *);
+__BEGIN_DECLS
+extern int getpublickey(const char *, char *);
 extern int getpublicandprivatekey(char *, char *);
 extern int getsecretkey(char *, char *, char *);
 __END_DECLS
@@ -355,9 +362,10 @@ __END_DECLS
  * const char *timehost;   - optional hostname to sync with
  * int *status;    - kerberos status returned
  */
-__BEGIN_DECLS extern AUTH *authkerb_nseccreate(const char *, const char *,
-					       const char *, const u_int,
-					       const char *, int *);
+__BEGIN_DECLS
+extern AUTH *authkerb_nseccreate(const char *, const char *,
+				 const char *, const u_int,
+				 const char *, int *);
 __END_DECLS
 /*
  * Map a kerberos credential into a unix cred.
@@ -370,17 +378,21 @@ __END_DECLS
  * int *groups;
  *
  */
-__BEGIN_DECLS extern int authkerb_getucred(	/* struct svc_req *, uid_t *, gid_t *,
-						   short *, int * */ );
+__BEGIN_DECLS
+extern int authkerb_getucred(/* struct svc_req *, uid_t *, gid_t *,
+				short *, int * */);
 __END_DECLS
 #endif				/* KERBEROS */
-    __BEGIN_DECLS struct svc_req;
+
+__BEGIN_DECLS
+struct svc_req;
 struct rpc_msg;
 enum auth_stat _svcauth_none(struct svc_req *, struct rpc_msg *);
 enum auth_stat _svcauth_short(struct svc_req *, struct rpc_msg *);
 enum auth_stat _svcauth_unix(struct svc_req *, struct rpc_msg *);
 enum auth_stat _svcauth_gss(struct svc_req *, struct rpc_msg *, bool *);
 __END_DECLS
+
 #define AUTH_NONE 0		/* no authentication */
 #define AUTH_NULL 0		/* backward compatibility */
 #define AUTH_SYS 1		/* unix style (uid, gids) */
@@ -390,6 +402,7 @@ __END_DECLS
 #define AUTH_DES AUTH_DH	/* for backward compatibility */
 #define AUTH_KERB 4		/* kerberos style */
 #define RPCSEC_GSS 6		/* RPCSEC_GSS */
+
 /* for backward compatibility */
 #include <rpc/tirpc_compat.h>
 #endif				/* !_TIRPC_AUTH_H */

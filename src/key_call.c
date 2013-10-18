@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 /*
- * Copyright (c) 1986-1991 by Sun Microsystems Inc. 
+ * Copyright (c) 1986-1991 by Sun Microsystems Inc.
  */
 
 #include <sys/cdefs.h>
@@ -62,7 +62,9 @@
 #define	KEY_NRETRY	12	/* number of retries */
 
 #ifdef DEBUG
-#define	debug(msg)	(void) fprintf(stderr, "%s\n", msg);
+#define	debug(msg) \
+	((void) fprintf(stderr, "%s\n", msg))
+
 #else
 #define	debug(msg)
 #endif				/* DEBUG */
@@ -82,7 +84,8 @@ des_block *(*__key_gendes_LOCAL) () = 0;
 
 static int key_call(u_long, xdrproc_t, void *, xdrproc_t, void *);
 
-int key_setsecret(const char *secretkey)
+int
+key_setsecret(const char *secretkey)
 {
 	keystatus status;
 
@@ -105,7 +108,8 @@ int key_setsecret(const char *secretkey)
  * be using it, because it allows them to get the user's secret key.
  */
 
-int key_secretkey_is_set(void)
+int
+key_secretkey_is_set(void)
 {
 	struct key_netstres kres;
 
@@ -122,8 +126,9 @@ int key_secretkey_is_set(void)
 	return (0);
 }
 
-int key_encryptsession_pk(char *remotename, netobj * remotekey,
-			  des_block * deskey)
+int
+key_encryptsession_pk(char *remotename, netobj *remotekey,
+		      des_block *deskey)
 {
 	cryptkeyarg2 arg;
 	cryptkeyres res;
@@ -144,8 +149,9 @@ int key_encryptsession_pk(char *remotename, netobj * remotekey,
 	return (0);
 }
 
-int key_decryptsession_pk(char *remotename, netobj * remotekey,
-			  des_block * deskey)
+int
+key_decryptsession_pk(char *remotename, netobj *remotekey,
+		      des_block *deskey)
 {
 	cryptkeyarg2 arg;
 	cryptkeyres res;
@@ -166,7 +172,8 @@ int key_decryptsession_pk(char *remotename, netobj * remotekey,
 	return (0);
 }
 
-int key_encryptsession(const char *remotename, des_block * deskey)
+int
+key_encryptsession(const char *remotename, des_block *deskey)
 {
 	cryptkeyarg arg;
 	cryptkeyres res;
@@ -186,7 +193,8 @@ int key_encryptsession(const char *remotename, des_block * deskey)
 	return (0);
 }
 
-int key_decryptsession(const char *remotename, des_block * deskey)
+int
+key_decryptsession(const char *remotename, des_block *deskey)
 {
 	cryptkeyarg arg;
 	cryptkeyres res;
@@ -206,7 +214,8 @@ int key_decryptsession(const char *remotename, des_block * deskey)
 	return (0);
 }
 
-int key_gendes(des_block * key)
+int
+key_gendes(des_block *key)
 {
 	if (!key_call
 	    ((u_long) KEY_GEN, (xdrproc_t) xdr_void, NULL,
@@ -216,7 +225,8 @@ int key_gendes(des_block * key)
 	return (0);
 }
 
-int key_setnet(struct key_netstarg *arg)
+int
+key_setnet(struct key_netstarg *arg)
 {
 	keystatus status;
 
@@ -233,7 +243,8 @@ int key_setnet(struct key_netstarg *arg)
 	return (1);
 }
 
-int key_get_conv(char *pkey, des_block * deskey)
+int
+key_get_conv(char *pkey, des_block *deskey)
 {
 	cryptkeyres res;
 
@@ -255,9 +266,10 @@ struct key_call_private {
 	pid_t pid;		/* process-id at moment of creation */
 	uid_t uid;		/* user-id at last authorization */
 };
-static struct key_call_private *key_call_private_main = NULL;
+static struct key_call_private *key_call_private_mainL;
 
-static void key_call_destroy(void *vp)
+static void
+key_call_destroy(void *vp)
 {
 	struct key_call_private *kcp = (struct key_call_private *)vp;
 
@@ -271,7 +283,8 @@ static void key_call_destroy(void *vp)
 /*
  * Keep the handle cached.  This call may be made quite often.
  */
-static CLIENT *getkeyserv_handle(int vers)
+static CLIENT *
+getkeyserv_handle(int vers)
 {
 	void *localhandle;
 	struct netconfig *nconf;
@@ -295,9 +308,8 @@ static CLIENT *getkeyserv_handle(int vers)
 	kcp = (struct key_call_private *)thr_getspecific(key_call_key);
 	if (kcp == (struct key_call_private *)NULL) {
 		kcp = (struct key_call_private *)mem_alloc(sizeof(*kcp));
-		if (kcp == (struct key_call_private *)NULL) {
+		if (kcp == (struct key_call_private *)NULL)
 			return ((CLIENT *) NULL);
-		}
 		thr_setspecific(key_call_key, (void *)kcp);
 		kcp->client = NULL;
 	}
@@ -325,9 +337,9 @@ static CLIENT *getkeyserv_handle(int vers)
 		clnt_control(kcp->client, CLSET_VERS, (void *)&vers);
 		return (kcp->client);
 	}
-	if (!(localhandle = setnetconfig())) {
+	localhandle = setnetconfig();
+	if (!localhandle)
 		return ((CLIENT *) NULL);
-	}
 	tpconf = NULL;
 #if defined(__FreeBSD__)
 	if (uname(&u) == -1)
@@ -367,9 +379,8 @@ static CLIENT *getkeyserv_handle(int vers)
 		    clnt_tp_create(u.nodename, KEY_PROG, vers, tpconf);
 	endnetconfig(localhandle);
 
-	if (kcp->client == (CLIENT *) NULL) {
+	if (kcp->client == (CLIENT *) NULL)
 		return ((CLIENT *) NULL);
-	}
 	kcp->uid = geteuid();
 	kcp->pid = getpid();
 	kcp->client->cl_auth = authsys_create("", kcp->uid, 0, 0, NULL);
@@ -391,8 +402,9 @@ static CLIENT *getkeyserv_handle(int vers)
 
 /* returns  0 on failure, 1 on success */
 
-static int key_call(u_long proc, xdrproc_t xdr_arg, void *arg,
-		    xdrproc_t xdr_rslt, void *rslt)
+static int
+key_call(u_long proc, xdrproc_t xdr_arg, void *arg,
+	 xdrproc_t xdr_rslt, void *rslt)
 {
 	CLIENT *clnt;
 	struct timeval wait_time;
@@ -421,17 +433,15 @@ static int key_call(u_long proc, xdrproc_t xdr_arg, void *arg,
 	else
 		clnt = getkeyserv_handle(1);	/* talk to version 1 */
 
-	if (clnt == NULL) {
+	if (clnt == NULL)
 		return (0);
-	}
 
 	wait_time.tv_sec = TOTAL_TIMEOUT;
 	wait_time.tv_usec = 0;
 
 	if (clnt_call(clnt, proc, xdr_arg, arg, xdr_rslt, rslt, wait_time) ==
-	    RPC_SUCCESS) {
+	    RPC_SUCCESS)
 		return (1);
-	} else {
+	else
 		return (0);
-	}
 }

@@ -51,19 +51,19 @@ typedef struct wait_q_entry {
 	 TAILQ_HEAD(we_tailq, waiter) waitq;
 } wait_q_entry_t;
 
-static inline void init_wait_entry(wait_entry_t * we)
+static inline void init_wait_entry(wait_entry_t *we)
 {
 	mutex_init(&we->mtx, NULL);
 	pthread_cond_init(&we->cv, NULL);
 }
 
-static inline void destroy_wait_entry(wait_entry_t * we)
+static inline void destroy_wait_entry(wait_entry_t *we)
 {
 	mutex_destroy(&we->mtx);
 	cond_destroy(&we->cv);
 }
 
-static inline void init_wait_q_entry(wait_q_entry_t * wqe)
+static inline void init_wait_q_entry(wait_q_entry_t *wqe)
 {
 	TAILQ_INIT(&wqe->waitq);
 	init_wait_entry(&wqe->lwe);

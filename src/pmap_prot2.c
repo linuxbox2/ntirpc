@@ -54,18 +54,18 @@
  *
  * typedef union switch (bool_t) {
  *
- * case TRUE: struct {
+ * case true: struct {
  *  struct pmap;
  *   pmaplist_t foo;
  * };
  *
- * case FALSE: struct {};
+ * case false: struct {};
  * } pmaplist_t;
  *
  * Notice that the xdr declaration has no nxt pointer while
  * the C declaration has no bool_t variable.  The bool_t can be
- * interpreted as ``more data follows me''; if FALSE then nothing
- * follows this bool_t; if TRUE then the bool_t is followed by
+ * interpreted as ``more data follows me''; if false then nothing
+ * follows this bool_t; if true then the bool_t is followed by
  * an actual struct pmap, and then (recursively) by the
  * xdr union, pamplist_t.
  *
@@ -78,7 +78,8 @@
  * the net, yet is the data that the pointer points to which is interesting;
  * this sounds like a job for xdr_reference!
  */
-bool xdr_pmaplist(XDR * xdrs, struct pmaplist **rp)
+bool
+xdr_pmaplist(XDR *xdrs, struct pmaplist **rp)
 {
 	/*
 	 * more_elements is pre-computed in case the direction is
@@ -87,7 +88,7 @@ bool xdr_pmaplist(XDR * xdrs, struct pmaplist **rp)
 	 */
 	int freeing;
 	struct pmaplist **next = NULL;	/* pacify gcc */
-	bool_t more_elements = FALSE;	/* yes, bool_t */
+	bool_t more_elements = false;	/* yes, bool_t */
 
 	assert(xdrs != NULL);
 	assert(rp != NULL);
@@ -97,9 +98,9 @@ bool xdr_pmaplist(XDR * xdrs, struct pmaplist **rp)
 	for (;;) {
 		more_elements = (bool_t) (*rp != NULL);
 		if (!xdr_bool(xdrs, &more_elements))
-			return (FALSE);
+			return (false);
 		if (!more_elements)
-			return (TRUE);	/* we are done */
+			return (true);	/* we are done */
 		/*
 		 * the unfortunate side effect of non-recursion is that in
 		 * the case of freeing we must remember the next object
@@ -110,7 +111,7 @@ bool xdr_pmaplist(XDR * xdrs, struct pmaplist **rp)
 		if (!xdr_reference
 		    (xdrs, (caddr_t *) rp, (u_int) sizeof(struct pmaplist),
 		     (xdrproc_t) xdr_pmap))
-			return (FALSE);
+			return (false);
 		rp = (freeing) ? next : &((*rp)->pml_next);
 	}
 }
@@ -119,7 +120,8 @@ bool xdr_pmaplist(XDR * xdrs, struct pmaplist **rp)
  * xdr_pmaplist_ptr() is specified to take a PMAPLIST *, but is identical in
  * functionality to xdr_pmaplist().
  */
-bool xdr_pmaplist_ptr(XDR * xdrs, struct pmaplist * rp)
+bool
+xdr_pmaplist_ptr(XDR *xdrs, struct pmaplist *rp)
 {
 	return xdr_pmaplist(xdrs, (struct pmaplist **)(void *)rp);
 }

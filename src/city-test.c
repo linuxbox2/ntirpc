@@ -1,30 +1,29 @@
-// city-test.c - cityhash-c
-// CityHash on C
-// Copyright (c) 2011-2012, Alexander Nusov
-//
-// - original copyright notice -
-// Copyright (c) 2011 Google, Inc.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
+/* city-test.c - cityhash-c
+ * CityHash on C
+ * Copyright (c) 2011-2012, Alexander Nusov
+ *
+ * - original copyright notice -
+ * Copyright (c) 2011 Google, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
 
-//#include <cstdio>
-//#include <iostream>
 #include <string.h>
 #include <stdio.h>
 
@@ -43,9 +42,9 @@ static const int kTestSize = 300;
 
 static char data[1 << 20];
 
-static int errors = 0;		// global error count
+static int errors; /* global error count */
 
-// Initialize data to pseudorandom values.
+/* Initialize data to pseudorandom values. */
 void setup()
 {
 	uint64 a = 9;
@@ -55,11 +54,11 @@ void setup()
 		a = (a ^ (a >> 41)) * k0 + b;
 		b = (b ^ (b >> 41)) * k0 + i;
 		uint8 u = b >> 37;
-		memcpy(data + i, &u, 1);	// uint8 -> char
+		memcpy(data + i, &u, 1);	/* uint8 -> char */
 	}
 }
 
-#define C(x) 0x ## x ## ULL
+#define C(x) (0x ## x ## ULL)
 static const uint64 testdata[300][15] = {
 	{C(9 ae16a3b2f90404f), C(75106 db890237a4a), C(3f eac5f636039766),
 	 C(3 df09dfc64c09a2b), C(3 cb540c392e51e29), C(6 b56343feac0663),
@@ -2172,7 +2171,7 @@ void Check(uint64 expected, uint64 actual)
 	}
 }
 
-void Test(const uint64 * expected, int offset, int len)
+void Test(const uint64 *expected, int offset, int len)
 {
 	const uint128 u = CityHash128(data + offset, len);
 	const uint128 v = CityHash128WithSeed(data + offset, len, kSeed128);
@@ -2196,6 +2195,7 @@ void Test(const uint64 * expected, int offset, int len)
 
 	int i;
 	for (i = 0; i < 4; i++) {
+		/* suppress block warning */
 		Check(expected[11 + i], crc256_results[i]);
 	}
 #endif
@@ -2206,6 +2206,7 @@ int main(int argc, char **argv)
 	setup();
 	int i;
 	for (i = 0; i < kTestSize - 1; i++) {
+		/* suppress block warning */
 		Test(testdata[i], i * i, i);
 	}
 	Test(testdata[i], 0, kDataSize);

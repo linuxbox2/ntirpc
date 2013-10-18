@@ -88,8 +88,10 @@ bool xdr_desresp();
 
 #ifdef __cplusplus
 #define DES_CRYPT ((u_int32_t)1)
-extern "C" desresp * des_crypt_1(desargs *, CLIENT *);
-extern "C" desresp * des_crypt_1_svc(desargs *, struct svc_req *);
+extern "C" {
+	desresp *des_crypt_1(desargs *, CLIENT *);
+	desresp *des_crypt_1_svc(desargs *, struct svc_req *);
+}
 
 #elif __STDC__
 #define DES_CRYPT ((u_int32_t)1)

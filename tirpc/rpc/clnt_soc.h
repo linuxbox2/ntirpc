@@ -1,5 +1,6 @@
 /*	$NetBSD: clnt_soc.h,v 1.1 2000/06/02 22:57:55 fvdl Exp $	*/
-/*	$FreeBSD: src/include/rpc/clnt_soc.h,v 1.2 2002/03/23 17:24:55 imp Exp $ */
+/*	$FreeBSD: src/include/rpc/clnt_soc.h,v 1.2 2002/03/23 17:24:55
+ *	imp Exp $ */
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
@@ -61,20 +62,23 @@
  *	u_int sendsz;
  *	u_int recvsz;
  */
-__BEGIN_DECLS extern CLIENT *clnttcp_ncreate(struct sockaddr_in *, u_long,
-					     u_long, int *, u_int, u_int);
+__BEGIN_DECLS
+extern CLIENT * clnttcp_ncreate(struct sockaddr_in *, u_long,
+			       u_long, int *, u_int, u_int);
 __END_DECLS
 /*
  * Raw (memory) rpc.
  */
-__BEGIN_DECLS extern CLIENT *clntraw_ncreate(u_long, u_long);
+__BEGIN_DECLS
+extern CLIENT *clntraw_ncreate(u_long, u_long);
 __END_DECLS
 /*
-IPv6 socket version 
+IPv6 socket version
 */
 #ifdef INET6
-__BEGIN_DECLS extern CLIENT *clnttcp6_ncreate(struct sockaddr_in6 *, u_long,
-					      u_long, int *, u_int, u_int);
+__BEGIN_DECLS
+extern CLIENT *clnttcp6_ncreate(struct sockaddr_in6 *, u_long,
+				u_long, int *, u_int, u_int);
 __END_DECLS
 #endif
 /*
@@ -98,8 +102,9 @@ __END_DECLS
  *	u_int sendsz;
  *	u_int recvsz;
  */
-__BEGIN_DECLS extern CLIENT *clntudp_ncreate(struct sockaddr_in *, u_long,
-					     u_long, struct timeval, int *);
+__BEGIN_DECLS
+extern CLIENT *clntudp_ncreate(struct sockaddr_in *, u_long,
+			       u_long, struct timeval, int *);
 extern CLIENT *clntudp_nbufcreate(struct sockaddr_in *, u_long, u_long,
 				  struct timeval, int *, u_int, u_int);
 #ifdef INET6

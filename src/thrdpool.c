@@ -44,7 +44,8 @@
 #include <intrinsic.h>
 #include <misc/thrdpool.h>
 
-int thrdpool_init(struct thrdpool *pool, const char *name,
+int
+thrdpool_init(struct thrdpool *pool, const char *name,
 		  struct thrdpool_params *params)
 {
 	memset(pool, 0, sizeof(struct thrdpool));
@@ -64,7 +65,8 @@ int thrdpool_init(struct thrdpool *pool, const char *name,
 	return 0;
 }
 
-static bool thrd_wait(struct thrd *thrd)
+static bool
+thrd_wait(struct thrd *thrd)
 {
 	bool code = false;
 	struct thrdpool *pool = thrd->pool;
@@ -180,15 +182,13 @@ int thrdpool_submit_work(struct thrdpool *pool, thrd_func_t func, void *arg)
 
 	/* queue is draining */
 	mutex_lock(&pool->we.mtx);
-	if (unlikely(pool->flags & THRD_FLAG_SHUTDOWN)) {
+	if (unlikely(pool->flags & THRD_FLAG_SHUTDOWN))
 		goto unlock;
-	}
 
 	/* idle thread(s) available */
 	if (pool->n_idle > 0) {
-		if (thrdpool_dispatch(pool, func, arg)) {
+		if (thrdpool_dispatch(pool, func, arg))
 			goto unlock;
-		}
 	}
 
 	/* need a thread */

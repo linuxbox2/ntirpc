@@ -1,6 +1,7 @@
 /*
- * @(#)des_crypt.h	2.1 88/08/11 4.0 RPCSRC;	from 1.4 88/02/08 (C) 1986 SMI
- * $FreeBSD: src/include/rpc/des_crypt.h,v 1.4 2002/03/23 17:24:55 imp Exp $
+ * @(#)des_crypt.h 2.1 88/08/11 4.0 RPCSRC; from 1.4 88/02/08 (C) 1986
+ * SMI $FreeBSD: src/include/rpc/des_crypt.h,v 1.4 2002/03/23 17:24:55
+ * imp Exp $
  *
  * des_crypt.h, des library routine interface
  * Copyright (C) 1986, Sun Microsystems, Inc.
@@ -80,14 +81,16 @@
 /*
  * Cipher Block Chaining mode
  */
-__BEGIN_DECLS int cbc_crypt(char *, char *, unsigned int, unsigned int, char *);
+__BEGIN_DECLS
+int cbc_crypt(char *, char *, unsigned int, unsigned int, char *);
 __END_DECLS
 /*
  * Electronic Code Book mode
  */
-__BEGIN_DECLS int ecb_crypt(char *, char *, unsigned int, unsigned int);
+__BEGIN_DECLS
+int ecb_crypt(char *, char *, unsigned int, unsigned int);
 __END_DECLS
-/* 
+/*
  * Set des parity for a key.
  * DES parity is odd and in the low bit of each byte
  */

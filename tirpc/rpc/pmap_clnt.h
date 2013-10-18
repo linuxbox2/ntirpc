@@ -65,7 +65,8 @@
 #define _RPC_PMAP_CLNT_H_
 #include <sys/cdefs.h>
 
-__BEGIN_DECLS extern bool pmap_set(u_long, u_long, int, int);
+__BEGIN_DECLS
+extern bool pmap_set(u_long, u_long, int, int);
 extern bool pmap_unset(u_long, u_long);
 extern struct pmaplist *pmap_getmaps(struct sockaddr_in *);
 extern enum clnt_stat pmap_rmtcall(struct sockaddr_in *, u_long, u_long, u_long,

@@ -51,7 +51,8 @@
 /*
  * Bind a socket to a privileged IP port
  */
-int bindresvport(int sd, struct sockaddr_in *sin)
+int
+bindresvport(int sd, struct sockaddr_in *sin)
 {
 	return bindresvport_sa(sd, (struct sockaddr *)sin);
 }
@@ -63,7 +64,8 @@ int bindresvport(int sd, struct sockaddr_in *sin)
 #define ENDPORT (IPPORT_RESERVED - 1)
 #define NPORTS  (ENDPORT - STARTPORT + 1)
 
-int bindresvport_sa(int sd, struct sockaddr *sa)
+int
+bindresvport_sa(int sd, struct sockaddr *sa)
 {
 	int res, af;
 	struct sockaddr_storage myaddr;
@@ -111,9 +113,9 @@ int bindresvport_sa(int sd, struct sockaddr *sa)
 	}
 	sa->sa_family = af;
 
-	if (port == 0) {
+	if (port == 0)
 		port = (getpid() % NPORTS) + STARTPORT;
-	}
+
 	res = -1;
 	errno = EADDRINUSE;
  again:
@@ -142,7 +144,8 @@ int bindresvport_sa(int sd, struct sockaddr *sa)
 /*
  * Bind a socket to a privileged IP port
  */
-int bindresvport_sa(int sd, struct sockaddr *sa)
+int
+bindresvport_sa(int sd, struct sockaddr *sa)
 {
 	int old, error, af;
 	struct sockaddr_storage myaddr;

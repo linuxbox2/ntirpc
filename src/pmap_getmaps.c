@@ -53,7 +53,7 @@
 #include <rpc/rpc.h>
 #include <rpc/pmap_prot.h>
 #include <rpc/pmap_clnt.h>
-//#include <clnt_soc.h>
+
 #define NAMELEN 255
 #define MAX_BROADCAST_SIZE 1400
 

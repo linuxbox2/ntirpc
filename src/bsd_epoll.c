@@ -32,16 +32,18 @@
  *      names of its contributors may be used to endorse or promote products
  *      derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
- * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+ * <COPYRIGHT HOLDER> BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+ * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
 #if defined(__FreeBSD__)
 
@@ -56,7 +58,8 @@
 #include <misc/bsd_epoll.h>
 
 /* Create a new epoll file descriptor. */
-int epoll_create(int size)
+int
+epoll_create(int size)
 {
 	if (size <= 0)
 		return -EINVAL;
@@ -68,7 +71,8 @@ int epoll_create(int size)
 	return kqueue();
 }
 
-static void kevent_to_epoll(struct kevent *kevent, struct epoll_event *event)
+static void
+kevent_to_epoll(struct kevent *kevent, struct epoll_event *event)
 {
 	/* if (kevent->flags & EV_ERROR) {
 	   ... Any special event flags on Errors?
@@ -97,8 +101,9 @@ static void kevent_to_epoll(struct kevent *kevent, struct epoll_event *event)
 	event->data.ptr = kevent->udata;
 }
 
-static void kevent_to_epoll_arr(struct kevent *kevp, int count,
-				struct epoll_event *eep)
+static void
+kevent_to_epoll_arr(struct kevent *kevp, int count,
+		    struct epoll_event *eep)
 {
 	int i;
 
@@ -113,7 +118,8 @@ static void kevent_to_epoll_arr(struct kevent *kevp, int count,
  * EV_ENABLE/EV_DISABLE according to epoll flags. On EPOLL_CTL_MOD
  * first delete then add a new. On EPOLL_CTL_DEL remove both.
  */
-int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
+int
+epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 {
 	struct kevent kev[2] = { {.flags = 0}, };
 	int read_flags, write_flags;
@@ -178,7 +184,8 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 /*
  * Wait for a filter to be triggered on the epoll file descriptor.
  */
-int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
+int
+epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 {
 	struct kevent *kevp;
 	struct timespec ts;

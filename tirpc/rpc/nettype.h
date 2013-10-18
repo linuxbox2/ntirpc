@@ -1,5 +1,6 @@
-/*	$NetBSD: nettype.h,v 1.2 2000/07/06 03:17:19 christos Exp $	*/
-/*	$FreeBSD: src/include/rpc/nettype.h,v 1.2 2002/03/23 17:24:55 imp Exp $ */
+/*	$NetBSD: nettype.h,v 1.2 2000/07/06 03:17:19 christos Exp $ */
+/*	$FreeBSD: src/include/rpc/nettype.h,v 1.2 2002/03/23 17:24:55
+ *	imp Exp $ */
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
@@ -53,7 +54,8 @@
 #define	_RPC_TCP	7
 #define	_RPC_UDP	8
 
-__BEGIN_DECLS extern void *__rpc_setconf(const char *);
+__BEGIN_DECLS
+extern void *__rpc_setconf(const char *);
 extern void __rpc_endconf(void *);
 extern struct netconfig *__rpc_getconf(void *);
 extern struct netconfig *__rpc_getconfip(const char *);

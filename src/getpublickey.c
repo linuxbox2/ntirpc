@@ -56,7 +56,8 @@ int (*__getpublickey_LOCAL) () = 0;
 /*
  * Get somebody's public key
  */
-int __getpublickey_real(char *netname, char *publickey)
+int
+__getpublickey_real(char *netname, char *publickey)
 {
 	char lookup[3 * HEXKEYBYTES];
 	char *p;
@@ -66,9 +67,8 @@ int __getpublickey_real(char *netname, char *publickey)
 	if (!getpublicandprivatekey(netname, lookup))
 		return (0);
 	p = strchr(lookup, ':');
-	if (p == NULL) {
+	if (!p)
 		return (0);
-	}
 	*p = '\0';
 	(void)strncpy(publickey, lookup, HEXKEYBYTES);
 	publickey[HEXKEYBYTES] = '\0';
@@ -80,7 +80,8 @@ int __getpublickey_real(char *netname, char *publickey)
  * yellow pages
  */
 
-int getpublicandprivatekey(char *key, char *ret)
+int
+getpublicandprivatekey(char *key, char *ret)
 {
 	char buf[1024];		/* big enough */
 	char *res;
@@ -108,9 +109,8 @@ int getpublicandprivatekey(char *key, char *ret)
 			int len;
 
 			err = yp_get_default_domain(&domain);
-			if (err) {
+			if (err)
 				continue;
-			}
 			lookup = NULL;
 			err =
 			    yp_match(domain, PKMAP, key, strlen(key), &lookup,
@@ -129,7 +129,8 @@ int getpublicandprivatekey(char *key, char *ret)
 #else				/* YP */
 #ifdef DEBUG
 			fprintf(stderr,
-				"Bad record in %s '+' -- NIS not supported in this library copy\n",
+				"Bad record in %s '+' -- NIS not supported in "
+				"this library copy\n",
 				PKFILE);
 #endif				/* DEBUG */
 			continue;
@@ -159,7 +160,8 @@ int getpublicandprivatekey(char *key, char *ret)
 	}
 }
 
-int getpublickey(const char *netname, char *publickey)
+int
+getpublickey(const char *netname, char *publickey)
 {
 	if (__getpublickey_LOCAL != NULL)
 		return (__getpublickey_LOCAL(netname, publickey));

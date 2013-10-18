@@ -60,14 +60,14 @@ __BEGIN_DECLS
  *
  * PMAPPROC_DUMP() RETURNS (struct pmaplist *)
  *
- * PMAPPROC_CALLIT(unsigned, unsigned, unsigned, string<>)
- * RETURNS (port, string<>);
- * usage: encapsulatedresults = PMAPPROC_CALLIT(prog, vers, proc, encapsulatedargs);
- * Calls the procedure on the local machine.  If it is not registered,
- * this procedure is quite; ie it does not return error information!!!
- * This procedure only is supported on rpc/udp and calls via
- * rpc/udp.  This routine only passes null authentication parameters.
- * This file has no interface to xdr routines for PMAPPROC_CALLIT.
+ * PMAPPROC_CALLIT(unsigned, unsigned, unsigned, string<>) RETURNS
+ * (port, string<>); usage: encapsulatedresults =
+ * PMAPPROC_CALLIT(prog, vers, proc, encapsulatedargs); Calls the
+ * procedure on the local machine.  If it is not registered, this
+ * procedure is quite; ie it does not return error information!!!
+ * This procedure only is supported on rpc/udp and calls via rpc/udp.
+ * This routine only passes null authentication parameters.  This file
+ * has no interface to xdr routines for PMAPPROC_CALLIT.
  *
  * The service supports remote procedure calls on udp/ip or tcp/ip socket 111.
  */
@@ -82,21 +82,21 @@ __BEGIN_DECLS
 #define PMAPPROC_GETPORT ((u_long)3)
 #define PMAPPROC_DUMP  ((u_long)4)
 #define PMAPPROC_CALLIT  ((u_long)5)
-    struct pmap {
+struct pmap {
 	long unsigned pm_prog;
 	long unsigned pm_vers;
 	long unsigned pm_prot;
 	long unsigned pm_port;
 };
 
-extern bool xdr_pmap(XDR * __xdrs, struct pmap *__regs);
+extern bool xdr_pmap(XDR *__xdrs, struct pmap *__regs);
 
 struct pmaplist {
 	struct pmap pml_map;
 	struct pmaplist *pml_next;
 };
 
-extern bool xdr_pmaplist(XDR * __xdrs, struct pmaplist **__rp);
+extern bool xdr_pmaplist(XDR *__xdrs, struct pmaplist **__rp);
 
 __END_DECLS
 #endif				/* rpc/pmap_prot.h */

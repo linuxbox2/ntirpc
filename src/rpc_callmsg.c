@@ -47,7 +47,8 @@
 /*
  * XDR a call message
  */
-bool xdr_ncallmsg(XDR * xdrs, struct rpc_msg * cmsg)
+bool
+xdr_ncallmsg(XDR *xdrs, struct rpc_msg *cmsg)
 {
 	int32_t *buf;
 	struct opaque_auth *oa;
@@ -56,12 +57,10 @@ bool xdr_ncallmsg(XDR * xdrs, struct rpc_msg * cmsg)
 	assert(cmsg != NULL);
 
 	if (xdrs->x_op == XDR_ENCODE) {
-		if (cmsg->rm_call.cb_cred.oa_length > MAX_AUTH_BYTES) {
-			return (FALSE);
-		}
-		if (cmsg->rm_call.cb_verf.oa_length > MAX_AUTH_BYTES) {
-			return (FALSE);
-		}
+		if (cmsg->rm_call.cb_cred.oa_length > MAX_AUTH_BYTES)
+			return (false);
+		if (cmsg->rm_call.cb_verf.oa_length > MAX_AUTH_BYTES)
+			return (false);
 		buf =
 		    XDR_INLINE(xdrs,
 			       8 * BYTES_PER_XDR_UNIT +
@@ -71,13 +70,11 @@ bool xdr_ncallmsg(XDR * xdrs, struct rpc_msg * cmsg)
 		if (buf != NULL) {
 			IXDR_PUT_INT32(buf, cmsg->rm_xid);
 			IXDR_PUT_ENUM(buf, cmsg->rm_direction);
-			if (cmsg->rm_direction != CALL) {
-				return (FALSE);
-			}
+			if (cmsg->rm_direction != CALL)
+				return (false);
 			IXDR_PUT_INT32(buf, cmsg->rm_call.cb_rpcvers);
-			if (cmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION) {
-				return (FALSE);
-			}
+			if (cmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION)
+				return (false);
 			IXDR_PUT_INT32(buf, cmsg->rm_call.cb_prog);
 			IXDR_PUT_INT32(buf, cmsg->rm_call.cb_vers);
 			IXDR_PUT_INT32(buf, cmsg->rm_call.cb_proc);
@@ -94,10 +91,10 @@ bool xdr_ncallmsg(XDR * xdrs, struct rpc_msg * cmsg)
 			if (oa->oa_length) {
 				memmove(buf, oa->oa_base, oa->oa_length);
 				/* no real need....
-				   buf += RNDUP(oa->oa_length) / sizeof (int32_t);
-				 */
+				   buf += RNDUP(oa->oa_length) /
+				 * sizeof (int32_t); */
 			}
-			return (TRUE);
+			return (true);
 		}
 	}
 	if (xdrs->x_op == XDR_DECODE) {
@@ -105,13 +102,11 @@ bool xdr_ncallmsg(XDR * xdrs, struct rpc_msg * cmsg)
 		if (buf != NULL) {
 			cmsg->rm_xid = IXDR_GET_U_INT32(buf);
 			cmsg->rm_direction = IXDR_GET_ENUM(buf, enum msg_type);
-			if (cmsg->rm_direction != CALL) {
-				return (FALSE);
-			}
+			if (cmsg->rm_direction != CALL)
+				return (false);
 			cmsg->rm_call.cb_rpcvers = IXDR_GET_U_INT32(buf);
-			if (cmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION) {
-				return (FALSE);
-			}
+			if (cmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION)
+				return (false);
 			cmsg->rm_call.cb_prog = IXDR_GET_U_INT32(buf);
 			cmsg->rm_call.cb_vers = IXDR_GET_U_INT32(buf);
 			cmsg->rm_call.cb_proc = IXDR_GET_U_INT32(buf);
@@ -119,21 +114,20 @@ bool xdr_ncallmsg(XDR * xdrs, struct rpc_msg * cmsg)
 			oa->oa_flavor = IXDR_GET_ENUM(buf, enum_t);
 			oa->oa_length = (u_int) IXDR_GET_U_INT32(buf);
 			if (oa->oa_length) {
-				if (oa->oa_length > MAX_AUTH_BYTES) {
-					return (FALSE);
-				}
+				if (oa->oa_length > MAX_AUTH_BYTES)
+					return (false);
 				if (oa->oa_base == NULL) {
 					oa->oa_base = (caddr_t)
 					    mem_alloc(oa->oa_length);
 					if (oa->oa_base == NULL)
-						return (FALSE);
+						return (false);
 				}
 				buf = XDR_INLINE(xdrs, RNDUP(oa->oa_length));
 				if (buf == NULL) {
 					if (xdr_opaque
 					    (xdrs, oa->oa_base,
-					     oa->oa_length) == FALSE) {
-						return (FALSE);
+					     oa->oa_length) == false) {
+						return (false);
 					}
 				} else {
 					memmove(oa->oa_base, buf,
@@ -148,32 +142,31 @@ bool xdr_ncallmsg(XDR * xdrs, struct rpc_msg * cmsg)
 			buf = XDR_INLINE(xdrs, 2 * BYTES_PER_XDR_UNIT);
 			if (buf == NULL) {
 				if (inline_xdr_enum(xdrs, &oa->oa_flavor) ==
-				    FALSE
+				    false
 				    || inline_xdr_u_int(xdrs,
 							&oa->oa_length) ==
-				    FALSE) {
-					return (FALSE);
+				    false) {
+					return (false);
 				}
 			} else {
 				oa->oa_flavor = IXDR_GET_ENUM(buf, enum_t);
 				oa->oa_length = (u_int) IXDR_GET_U_INT32(buf);
 			}
 			if (oa->oa_length) {
-				if (oa->oa_length > MAX_AUTH_BYTES) {
-					return (FALSE);
-				}
+				if (oa->oa_length > MAX_AUTH_BYTES)
+					return (false);
 				if (oa->oa_base == NULL) {
 					oa->oa_base = (caddr_t)
 					    mem_alloc(oa->oa_length);
 					if (oa->oa_base == NULL)
-						return (FALSE);
+						return (false);
 				}
 				buf = XDR_INLINE(xdrs, RNDUP(oa->oa_length));
 				if (buf == NULL) {
 					if (inline_xdr_opaque
 					    (xdrs, oa->oa_base,
-					     oa->oa_length) == FALSE) {
-						return (FALSE);
+					     oa->oa_length) == false) {
+						return (false);
 					}
 				} else {
 					memmove(oa->oa_base, buf,
@@ -184,11 +177,11 @@ bool xdr_ncallmsg(XDR * xdrs, struct rpc_msg * cmsg)
 					 */
 				}
 			}
-			return (TRUE);
+			return (true);
 		}
 	}
 	if (inline_xdr_u_int32_t(xdrs, &(cmsg->rm_xid))
-	    && inline_xdr_enum(xdrs, (enum_t *) & (cmsg->rm_direction))
+	    && inline_xdr_enum(xdrs, (enum_t *) &(cmsg->rm_direction))
 	    && (cmsg->rm_direction == CALL)
 	    && inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_rpcvers))
 	    && (cmsg->rm_call.cb_rpcvers == RPC_MSG_VERSION)
@@ -197,5 +190,5 @@ bool xdr_ncallmsg(XDR * xdrs, struct rpc_msg * cmsg)
 	    && inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_proc))
 	    && inline_xdr_opaque_auth(xdrs, &(cmsg->rm_call.cb_cred)))
 		return (inline_xdr_opaque_auth(xdrs, &(cmsg->rm_call.cb_verf)));
-	return (FALSE);
+	return (false);
 }

@@ -47,7 +47,7 @@
 #include <rpc/rpc.h>
 #include <rpc/raw.h>
 
-extern mutex_t clntraw_lock;
+extern mutex_t clntraw_lock; /* XXXX does it need to be extern? */
 
 #define MCALL_MSG_SIZE 24
 
@@ -77,7 +77,8 @@ static struct clnt_ops *clnt_raw_ops(void);
 /*
  * Create a client handle for memory based rpc.
  */
-CLIENT *clnt_raw_ncreate(rpcprog_t prog, rpcvers_t vers)
+CLIENT *
+clnt_raw_ncreate(rpcprog_t prog, rpcvers_t vers)
 {
 	struct clntraw_private *clp;
 	struct rpc_msg call_msg;
@@ -129,10 +130,11 @@ CLIENT *clnt_raw_ncreate(rpcprog_t prog, rpcvers_t vers)
 }
 
 /* ARGSUSED */
-static enum clnt_stat clnt_raw_call(CLIENT * h, AUTH * auth, rpcproc_t proc,
-				    xdrproc_t xargs, void *argsp,
-				    xdrproc_t xresults, void *resultsp,
-				    struct timeval timeout)
+static enum clnt_stat
+clnt_raw_call(CLIENT *h, AUTH *auth, rpcproc_t proc,
+	      xdrproc_t xargs, void *argsp,
+	      xdrproc_t xresults, void *resultsp,
+	      struct timeval timeout)
 {
 	struct clntraw_private *clp = clntraw_private;
 	XDR *xdrs = &clp->xdr_stream;
@@ -157,7 +159,7 @@ static enum clnt_stat clnt_raw_call(CLIENT * h, AUTH * auth, rpcproc_t proc,
 	XDR_SETPOS(xdrs, 0);
 	clp->u.mashl_rpcmsg.rm_xid++;
 	if ((!XDR_PUTBYTES(xdrs, clp->u.mashl_callmsg, clp->mcnt))
-	    || (!XDR_PUTINT32(xdrs, (int32_t *) & proc))
+	    || (!XDR_PUTINT32(xdrs, (int32_t *) &proc))
 	    || (!AUTH_MARSHALL(auth, xdrs)) || (!(*xargs) (xdrs, argsp))) {
 		return (RPC_CANTENCODEARGS);
 	}
@@ -198,9 +200,8 @@ static enum clnt_stat clnt_raw_call(CLIENT * h, AUTH * auth, rpcproc_t proc,
 	status = error.re_status;
 
 	if (status == RPC_SUCCESS) {
-		if (!AUTH_VALIDATE(auth, &msg.acpted_rply.ar_verf)) {
+		if (!AUTH_VALIDATE(auth, &msg.acpted_rply.ar_verf))
 			status = RPC_AUTHERROR;
-		}
 	} /* end successful completion */
 	else {
 		if (AUTH_REFRESH(auth, &msg))
@@ -208,9 +209,8 @@ static enum clnt_stat clnt_raw_call(CLIENT * h, AUTH * auth, rpcproc_t proc,
 	}			/* end of unsuccessful completion */
 
 	if (status == RPC_SUCCESS) {
-		if (!AUTH_VALIDATE(auth, &msg.acpted_rply.ar_verf)) {
+		if (!AUTH_VALIDATE(auth, &msg.acpted_rply.ar_verf))
 			status = RPC_AUTHERROR;
-		}
 		if (msg.acpted_rply.ar_verf.oa_base != NULL) {
 			xdrs->x_op = XDR_FREE;
 			(void)xdr_opaque_auth(xdrs, &(msg.acpted_rply.ar_verf));
@@ -220,12 +220,14 @@ static enum clnt_stat clnt_raw_call(CLIENT * h, AUTH * auth, rpcproc_t proc,
 	return (status);
 }
 
- /*ARGSUSED*/ static void clnt_raw_geterr(CLIENT * cl, struct rpc_err *err)
+ /*ARGSUSED*/
+static void clnt_raw_geterr(CLIENT *cl, struct rpc_err *err)
 {
 }
 
 /* ARGSUSED */
-static bool clnt_raw_freeres(CLIENT * cl, xdrproc_t xdr_res, void *res_ptr)
+static bool
+clnt_raw_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
 {
 	struct clntraw_private *clp = clntraw_private;
 	XDR *xdrs = &clp->xdr_stream;
@@ -242,23 +244,29 @@ static bool clnt_raw_freeres(CLIENT * cl, xdrproc_t xdr_res, void *res_ptr)
 	return ((*xdr_res) (xdrs, res_ptr));
 }
 
- /*ARGSUSED*/ static void clnt_raw_abort(CLIENT * cl)
+/*ARGSUSED*/
+static void
+clnt_raw_abort(CLIENT *cl)
 {
 }
 
- /*ARGSUSED*/ static bool clnt_raw_control(CLIENT * cl, u_int ui, void *str)
+/*ARGSUSED*/
+static bool
+clnt_raw_control(CLIENT *cl, u_int ui, void *str)
 {
-	return (FALSE);
+	return (false);
 }
 
- /*ARGSUSED*/ static void clnt_raw_destroy(CLIENT * cl)
+/*ARGSUSED*/
+static void clnt_raw_destroy(CLIENT *cl)
 {
 }
 
-static struct clnt_ops *clnt_raw_ops(void)
+static struct clnt_ops *
+clnt_raw_ops(void)
 {
 	static struct clnt_ops ops;
-	extern mutex_t ops_lock;
+	extern mutex_t ops_lock; /* XXXX does it need to be extern? */
 
 	/* VARIABLES PROTECTED BY ops_lock: ops */
 

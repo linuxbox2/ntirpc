@@ -54,17 +54,17 @@
 
 #include <rpc/xdr_ioq.h>
 
-static bool xdr_ioq_getlong(XDR * xdrs, long *lp);
-static bool xdr_ioq_putlong(XDR * xdrs, const long *lp);
-static bool xdr_ioq_getbytes(XDR * xdrs, char *addr, u_int len);
-static bool xdr_ioq_putbytes(XDR * xdrs, const char *addr, u_int len);
-static bool xdr_ioq_getbufs(XDR * xdrs, xdr_uio * uio, u_int len, u_int flags);
-static bool xdr_ioq_putbufs(XDR * xdrs, xdr_uio * uio, u_int flags);
-static u_int xdr_ioq_getpos(XDR * xdrs);
-static bool xdr_ioq_setpos(XDR * xdrs, u_int pos);
-static int32_t *xdr_ioq_inline(XDR * xdrs, u_int len);
-static void xdr_ioq_destroy(XDR * xdrs);
-static bool xdr_ioq_control(XDR * xdrs, /* const */ int rq, void *in);
+static bool xdr_ioq_getlong(XDR *xdrs, long *lp);
+static bool xdr_ioq_putlong(XDR *xdrs, const long *lp);
+static bool xdr_ioq_getbytes(XDR *xdrs, char *addr, u_int len);
+static bool xdr_ioq_putbytes(XDR *xdrs, const char *addr, u_int len);
+static bool xdr_ioq_getbufs(XDR *xdrs, xdr_uio *uio, u_int len, u_int flags);
+static bool xdr_ioq_putbufs(XDR *xdrs, xdr_uio *uio, u_int flags);
+static u_int xdr_ioq_getpos(XDR *xdrs);
+static bool xdr_ioq_setpos(XDR *xdrs, u_int pos);
+static int32_t *xdr_ioq_inline(XDR *xdrs, u_int len);
+static void xdr_ioq_destroy(XDR *xdrs);
+static bool xdr_ioq_control(XDR *xdrs, /* const */ int rq, void *in);
 static bool xdr_ioq_noop(void) __attribute__ ((unused));
 
 static const struct xdr_ops xdr_ioq_ops = {
@@ -84,20 +84,20 @@ static const struct xdr_ops xdr_ioq_ops = {
 #define LAST_FRAG ((u_int32_t)(1 << 31))
 
 #define reset_pos(pos) \
-    do { \
-        (pos)->loff = 0; \
-        (pos)->bpos = 0; \
-        (pos)->boff = 0; \
-    } while (0)
+	do { \
+		(pos)->loff = 0; \
+		(pos)->bpos = 0; \
+		(pos)->boff = 0; \
+	} while (0)
 
 /* not intended to be general--we know fpos->vrec is head of queue */
 #define init_lpos(lpos, fpos) \
-    do { \
-        (lpos)->vrec = (fpos)->vrec; \
-        (lpos)->loff = 0; \
-        (lpos)->bpos = 0; \
-        (lpos)->boff = 0; \
-    } while (0)
+	do { \
+		(lpos)->vrec = (fpos)->vrec; \
+		(lpos)->loff = 0; \
+		(lpos)->bpos = 0; \
+		(lpos)->boff = 0; \
+	} while (0)
 
 #define VREC_MAXBUFS 24
 
@@ -121,8 +121,8 @@ enum vrec_cursor {
 /*
  * Set initial read/insert or fill position.
  */
-static inline void ioq_stream_reset(struct xdr_ioq *xioq,
-				    enum vrec_cursor wh_pos)
+static inline void
+ioq_stream_reset(struct xdr_ioq *xioq, enum vrec_cursor wh_pos)
 {
 	struct vpos_t *pos;
 
@@ -147,7 +147,8 @@ static inline void ioq_stream_reset(struct xdr_ioq *xioq,
 	pos->vrec = TAILQ_FIRST(&xioq->ioq.q);
 }
 
-static inline struct v_rec *get_vrec(struct xdr_ioq *xioq)
+static inline struct v_rec *
+get_vrec(struct xdr_ioq *xioq)
 {
 	struct v_rec *vrec;
 	vrec = mem_zalloc(sizeof(struct v_rec));
@@ -155,24 +156,26 @@ static inline struct v_rec *get_vrec(struct xdr_ioq *xioq)
 	return (vrec);
 }
 
-static inline void ioq_append_rec(struct xdr_ioq *xioq, struct v_rec *vrec)
+static inline void
+ioq_append_rec(struct xdr_ioq *xioq, struct v_rec *vrec)
 {
 	TAILQ_INSERT_TAIL(&xioq->ioq.q, vrec, ioq);
 	(xioq->ioq.size)++;
 }
 
-static inline void vrec_rele(struct xdr_ioq *xioq, struct v_rec *vrec)
+static inline void
+vrec_rele(struct xdr_ioq *xioq, struct v_rec *vrec)
 {
 	(vrec->refcnt)--;
 	if (unlikely(vrec->refcnt == 0)) {
-		if (vrec->flags & IOQ_FLAG_RECLAIM) {
+		if (vrec->flags & IOQ_FLAG_RECLAIM)
 			free_buffer(vrec->base);
-		}
 		mem_free(vrec, 0);
 	}
 }
 
-static inline void init_ioq(struct xdr_ioq *xioq)
+static inline void
+init_ioq(struct xdr_ioq *xioq)
 {
 	struct v_rec *vrec;
 
@@ -189,7 +192,8 @@ static inline void init_ioq(struct xdr_ioq *xioq)
 	ioq_stream_reset(xioq, VREC_RESET_POS);
 }
 
-XDR *xdr_ioq_create(u_int def_bsize, u_int max_bsize, u_int flags)
+XDR *
+xdr_ioq_create(u_int def_bsize, u_int max_bsize, u_int flags)
 {
 	struct xdr_ioq *xioq = mem_alloc(sizeof(struct xdr_ioq));
 
@@ -214,7 +218,8 @@ XDR *xdr_ioq_create(u_int def_bsize, u_int max_bsize, u_int flags)
 /*
  * Advance read/insert or fill position.
  */
-static inline bool vrec_next(struct xdr_ioq *xioq, u_int flags)
+static inline bool
+vrec_next(struct xdr_ioq *xioq, u_int flags)
 {
 	struct vpos_t *pos;
 	struct v_rec *vrec;
@@ -228,8 +233,8 @@ static inline bool vrec_next(struct xdr_ioq *xioq, u_int flags)
 	if ((!vrec) && likely(flags & IOQ_FLAG_XTENDQ)) {
 		/* alloc a buffer, iif requested */
 		if (flags & IOQ_FLAG_BALLOC) {
-			/* XXX workaround for lack of segmented buffer interfaces
-			 * in some callers (e.g, GSS_WRAP) */
+			/* XXX workaround for lack of segmented buffer
+			 * interfaces in some callers (e.g, GSS_WRAP) */
 			if (xioq->flags & IOQ_FLAG_REALLOC) {
 				void *base;
 				vrec = pos->vrec;
@@ -272,10 +277,11 @@ static inline bool vrec_next(struct xdr_ioq *xioq, u_int flags)
 	/* pos->loff is unchanged */
 
  done:
-	return (TRUE);
+	return (true);
 }
 
-static bool xdr_ioq_getlong(XDR * xdrs, long *lp)
+static bool
+xdr_ioq_getlong(XDR *xdrs, long *lp)
 {
 	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
 	struct vpos_t *pos = vrec_fpos(xioq);
@@ -301,7 +307,7 @@ static bool xdr_ioq_getlong(XDR * xdrs, long *lp)
 				goto restart;
 			}
 		} else
-			return (FALSE);
+			return (false);
 		break;
 	case XDR_DECODE:
 	default:
@@ -310,10 +316,11 @@ static bool xdr_ioq_getlong(XDR * xdrs, long *lp)
 	}			/* switch */
 
 	/* assert(len == 0); */
-	return (TRUE);
+	return (true);
 }
 
-static bool xdr_ioq_putlong(XDR * xdrs, const long *lp)
+static bool
+xdr_ioq_putlong(XDR *xdrs, const long *lp)
 {
 	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
 	struct vpos_t *pos = vrec_fpos(xioq);
@@ -321,7 +328,7 @@ static bool xdr_ioq_putlong(XDR * xdrs, const long *lp)
 	if (unlikely((pos->vrec->len + sizeof(int32_t)) > pos->vrec->size)) {
 		/* advance fill pointer */
 		if (!vrec_next(xioq, IOQ_FLAG_XTENDQ | IOQ_FLAG_BALLOC))
-			return (FALSE);
+			return (false);
 	}
 
 	*((int32_t *) (pos->vrec->base + pos->vrec->off)) =
@@ -334,10 +341,11 @@ static bool xdr_ioq_putlong(XDR * xdrs, const long *lp)
 	if (pos->loff > xioq->ioq.frag_len)
 		xioq->ioq.frag_len = pos->loff;
 
-	return (TRUE);
+	return (true);
 }
 
-static bool xdr_ioq_getbytes(XDR * xdrs, char *addr, u_int len)
+static bool
+xdr_ioq_getbytes(XDR *xdrs, char *addr, u_int len)
 {
 	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
 	struct vpos_t *pos;
@@ -352,13 +360,13 @@ static bool xdr_ioq_getbytes(XDR * xdrs, char *addr, u_int len)
 			int delta = MIN(len, (pos->vrec->len - pos->boff));
 			if (unlikely(!delta)) {
 				if (!vrec_next(xioq, IOQ_FLAG_NONE))
-					return (FALSE);
+					return (false);
 				goto restart;
 			}
-			/* in glibc 2.14+ x86_64, memcpy no longer tries to handle
-			 * overlapping areas, see Fedora Bug 691336 (NOTABUG);
-			 * we dont permit overlapping segments, so memcpy may be a
-			 * small win over memmove */
+			/* in glibc 2.14+ x86_64, memcpy no longer tries to
+			 * handle overlapping areas, see Fedora Bug 691336
+			 * (NOTABUG); we dont permit overlapping segments,
+			 * so memcpy may be a small win over memmove */
 			memcpy(addr + off, (pos->vrec->base + pos->boff),
 			       delta);
 			pos->loff += delta;
@@ -374,10 +382,11 @@ static bool xdr_ioq_getbytes(XDR * xdrs, char *addr, u_int len)
 	}
 
 	/* assert(len == 0); */
-	return (TRUE);
+	return (true);
 }
 
-static bool xdr_ioq_putbytes(XDR * xdrs, const char *addr, u_int len)
+static bool
+xdr_ioq_putbytes(XDR *xdrs, const char *addr, u_int len)
 {
 	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
 	struct vpos_t *pos;
@@ -392,7 +401,7 @@ static bool xdr_ioq_putbytes(XDR * xdrs, const char *addr, u_int len)
 			if (unlikely
 			    (!vrec_next
 			     (xioq, IOQ_FLAG_XTENDQ | IOQ_FLAG_BALLOC))) {
-				return (FALSE);
+				return (false);
 			}
 			continue;
 		}
@@ -407,11 +416,12 @@ static bool xdr_ioq_putbytes(XDR * xdrs, const char *addr, u_int len)
 			xioq->ioq.frag_len = pos->loff;
 		len -= delta;
 	}
-	return (TRUE);
+	return (true);
 }
 
 /* Get buffers from the queue. */
-static bool xdr_ioq_getbufs(XDR * xdrs, xdr_uio * uio, u_int len, u_int flags)
+static bool
+xdr_ioq_getbufs(XDR *xdrs, xdr_uio *uio, u_int len, u_int flags)
 {
 	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
 	struct vpos_t *pos = vrec_fpos(xioq);
@@ -422,7 +432,7 @@ static bool xdr_ioq_getbufs(XDR * xdrs, xdr_uio * uio, u_int len, u_int flags)
 
 	/* fail if no segments available */
 	if (unlikely(!uio->xbs_cnt))
-		return (FALSE);
+		return (false);
 
 	uio->xbs_buf = mem_alloc(uio->xbs_cnt);
 	uio->xbs_resid = 0;
@@ -434,7 +444,7 @@ static bool xdr_ioq_getbufs(XDR * xdrs, xdr_uio * uio, u_int len, u_int flags)
 		u_int delta = MIN(len, (pos->vrec->len - pos->boff));
 		if (unlikely(!delta)) {
 			if (!vrec_next(xioq, IOQ_FLAG_NONE))
-				return (FALSE);
+				return (false);
 			goto restart;
 		}
 		(uio->xbs_buf[ix]).xb_p1 = pos->vrec;
@@ -446,12 +456,13 @@ static bool xdr_ioq_getbufs(XDR * xdrs, xdr_uio * uio, u_int len, u_int flags)
 	}
 
 	/* assert(len == 0); */
-	return (TRUE);
+	return (true);
 }
 
 /* Post buffers on the queue, or, if indicated in flags, return buffers
  * referenced with getbufs. */
-static bool xdr_ioq_putbufs(XDR * xdrs, xdr_uio * uio, u_int flags)
+static bool
+xdr_ioq_putbufs(XDR *xdrs, xdr_uio *uio, u_int flags)
 {
 	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
 	struct vpos_t *pos = vrec_fpos(xioq);
@@ -461,7 +472,7 @@ static bool xdr_ioq_putbufs(XDR * xdrs, xdr_uio * uio, u_int flags)
 	/* XXXX fixme */
 
 	switch (flags & XDR_PUTBUFS_FLAG_BRELE) {
-	case TRUE:
+	case true:
 		/* the caller is returning buffers */
 		for (ix = 0; ix < uio->xbs_cnt; ++ix) {
 			struct v_rec *vrec =
@@ -470,12 +481,12 @@ static bool xdr_ioq_putbufs(XDR * xdrs, xdr_uio * uio, u_int flags)
 			mem_free(uio->xbs_buf, 0);
 		}
 		break;
-	case FALSE:
+	case false:
 	default:
 		for (ix = 0; ix < uio->xbs_cnt; ++ix) {
 			/* advance fill pointer, do not allocate buffers */
 			if (!vrec_next(xioq, IOQ_FLAG_XTENDQ))
-				return (FALSE);
+				return (false);
 			xbuf = &(uio->xbs_buf[ix]);
 			xioq->ioq.frag_len += xbuf->xb_len;
 			pos->loff += xbuf->xb_len;
@@ -489,10 +500,11 @@ static bool xdr_ioq_putbufs(XDR * xdrs, xdr_uio * uio, u_int flags)
 		}
 		break;
 	}
-	return (TRUE);
+	return (true);
 }
 
-static u_int xdr_ioq_getpos(XDR * xdrs)
+static u_int
+xdr_ioq_getpos(XDR *xdrs)
 {
 	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
 	struct vpos_t *pos = vrec_fpos(xioq);
@@ -500,7 +512,8 @@ static u_int xdr_ioq_getpos(XDR * xdrs)
 	return (pos->loff);
 }
 
-static bool xdr_ioq_setpos(XDR * xdrs, u_int pos)
+static bool
+xdr_ioq_setpos(XDR *xdrs, u_int pos)
 {
 	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
 	struct vpos_t *fpos = vrec_fpos(xioq);
@@ -519,16 +532,17 @@ static bool xdr_ioq_setpos(XDR * xdrs, u_int pos)
 			/* XXX oops, redundant */
 			fpos->vrec->off = fpos->loff;
 			fpos->vrec->len = fpos->loff;
-			return (TRUE);
+			return (true);
 		}
 		resid += vrec->len;
 		++ix;
 	}
 
-	return (FALSE);
+	return (false);
 }
 
-static int32_t *xdr_ioq_inline(XDR * xdrs, u_int len)
+static int32_t *
+xdr_ioq_inline(XDR *xdrs, u_int len)
 {
 	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
 	struct vpos_t *pos = vrec_fpos(xioq);
@@ -547,7 +561,8 @@ static int32_t *xdr_ioq_inline(XDR * xdrs, u_int len)
 	return (buf);
 }
 
-static void xdr_ioq_destroy(XDR * xdrs)
+static void
+xdr_ioq_destroy(XDR *xdrs)
 {
 	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
 	struct v_rec *vrec;
@@ -562,12 +577,14 @@ static void xdr_ioq_destroy(XDR * xdrs)
 	mem_free(xioq, sizeof(struct xdr_ioq));
 }
 
-static bool xdr_ioq_control(XDR * xdrs, /* const */ int rq, void *in)
+static bool
+xdr_ioq_control(XDR *xdrs, /* const */ int rq, void *in)
 {
-	return (TRUE);
+	return (true);
 }
 
-static bool xdr_ioq_noop(void)
+static bool
+xdr_ioq_noop(void)
 {
-	return (FALSE);
+	return (false);
 }

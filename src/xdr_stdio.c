@@ -85,7 +85,8 @@ static const struct xdr_ops xdrstdio_ops = {
  * Sets the xdr stream handle xdrs for use on the stream file.
  * Operation flag is set to op.
  */
-void xdrstdio_create(XDR * xdrs, FILE * file, enum xdr_op op)
+void
+xdrstdio_create(XDR *xdrs, FILE *file, enum xdr_op op)
 {
 
 	xdrs->x_op = op;
@@ -102,43 +103,42 @@ void xdrstdio_create(XDR * xdrs, FILE * file, enum xdr_op op)
  * Destroy a stdio xdr stream.
  * Cleans up the xdr stream handle xdrs previously set up by xdrstdio_create.
  */
-static void xdrstdio_destroy(XDR * xdrs)
+static void
+xdrstdio_destroy(XDR *xdrs)
 {
 	(void)fflush((FILE *) xdrs->x_private);
 	/* XXX: should we close the file ?? */
 }
 
-static bool xdrstdio_getlong(XDR * xdrs, long *lp)
+static bool
+xdrstdio_getlong(XDR *xdrs, long *lp)
 {
-
 	if (fread(lp, sizeof(int32_t), 1, (FILE *) xdrs->x_private) != 1)
 		return (FALSE);
-	*lp = (long)ntohl((u_int32_t) * lp);
+	*lp = (long)ntohl((u_int32_t) *lp);
 	return (TRUE);
 }
 
-static bool xdrstdio_putlong(XDR * xdrs, const long *lp)
+static bool
+xdrstdio_putlong(XDR *xdrs, const long *lp)
 {
-	long mycopy = (long)htonl((u_int32_t) * lp);
+	long mycopy = (long)htonl((u_int32_t) *lp);
 
 	if (fwrite(&mycopy, sizeof(int32_t), 1, (FILE *) xdrs->x_private) != 1)
 		return (FALSE);
 	return (TRUE);
 }
 
-static bool xdrstdio_getbytes(xdrs, addr, len)
-XDR *xdrs;
-char *addr;
-u_int len;
+static bool xdrstdio_getbytes(XDR *xdrs, char *addr, u_int len)
 {
-
 	if ((len != 0)
 	    && (fread(addr, (size_t) len, 1, (FILE *) xdrs->x_private) != 1))
 		return (FALSE);
 	return (TRUE);
 }
 
-static bool xdrstdio_putbytes(XDR * xdrs, const char *addr, u_int len)
+static bool
+xdrstdio_putbytes(XDR *xdrs, const char *addr, u_int len)
 {
 
 	if ((len != 0)
@@ -147,23 +147,23 @@ static bool xdrstdio_putbytes(XDR * xdrs, const char *addr, u_int len)
 	return (TRUE);
 }
 
-static u_int xdrstdio_getpos(XDR * xdrs)
+static u_int
+xdrstdio_getpos(XDR *xdrs)
 {
-
 	return ((u_int) ftell((FILE *) xdrs->x_private));
 }
 
-static bool xdrstdio_setpos(XDR * xdrs, u_int pos)
+static bool
+xdrstdio_setpos(XDR *xdrs, u_int pos)
 {
-
 	return ((fseek((FILE *) xdrs->x_private, (long)pos, 0) <
 		 0) ? FALSE : TRUE);
 }
 
 /* ARGSUSED */
-static int32_t *xdrstdio_inline(XDR * xdrs, u_int len)
+static int32_t *
+xdrstdio_inline(XDR *xdrs, u_int len)
 {
-
 	/*
 	 * Must do some work to implement this: must insure
 	 * enough data in the underlying stdio buffer,
@@ -176,7 +176,8 @@ static int32_t *xdrstdio_inline(XDR * xdrs, u_int len)
 	return (NULL);
 }
 
-static bool xdrstdio_noop(void)
+static bool
+xdrstdio_noop(void)
 {
 	return (FALSE);
 }

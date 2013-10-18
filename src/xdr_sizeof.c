@@ -48,39 +48,41 @@
 #include "rpc_com.h"
 
 /* ARGSUSED */
-static bool x_putlong(XDR * xdrs, const long *longp)
+static bool
+x_putlong(XDR *xdrs, const long *longp)
 {
 	xdrs->x_handy += BYTES_PER_XDR_UNIT;
 	return (TRUE);
 }
 
 /* ARGSUSED */
-static bool x_putbytes(XDR * xdrs, const char *bp, u_int len)
+static bool
+x_putbytes(XDR *xdrs, const char *bp, u_int len)
 {
 	xdrs->x_handy += len;
 	return (TRUE);
 }
 
-static u_int x_getpostn(XDR * xdrs)
+static u_int x_getpostn(XDR *xdrs)
 {
 	return (xdrs->x_handy);
 }
 
 /* ARGSUSED */
-static bool x_setpostn(XDR * xdrs, u_int pos)
+static bool
+x_setpostn(XDR *xdrs, u_int pos)
 {
 	/* This is not allowed */
 	return (FALSE);
 }
 
-static int32_t *x_inline(XDR * xdrs, u_int len)
+static int32_t *
+x_inline(XDR *xdrs, u_int len)
 {
-	if (len == 0) {
+	if (len == 0)
 		return (NULL);
-	}
-	if (xdrs->x_op != XDR_ENCODE) {
+	if (xdrs->x_op != XDR_ENCODE)
 		return (NULL);
-	}
 	if (len < PtrToUlong(xdrs->x_base)) {
 		/* x_private was already allocated */
 		xdrs->x_handy += len;
@@ -89,7 +91,8 @@ static int32_t *x_inline(XDR * xdrs, u_int len)
 		/* Free the earlier space and allocate new area */
 		if (xdrs->x_private)
 			__free(xdrs->x_private);
-		if ((xdrs->x_private = (caddr_t) mem_alloc(len)) == NULL) {
+		xdrs->x_private = (caddr_t) mem_alloc(len);
+		if (!xdrs->x_private) {
 			xdrs->x_base = 0;
 			return (NULL);
 		}
@@ -99,13 +102,15 @@ static int32_t *x_inline(XDR * xdrs, u_int len)
 	}
 }
 
-static int harmless(void)
+static int
+harmless(void)
 {
 	/* Always return FALSE/NULL, as the case may be */
 	return (0);
 }
 
-static void x_destroy(XDR * xdrs)
+static void
+x_destroy(XDR *xdrs)
 {
 	xdrs->x_handy = 0;
 	xdrs->x_base = 0;
@@ -116,7 +121,8 @@ static void x_destroy(XDR * xdrs)
 	return;
 }
 
-unsigned long xdr_sizeof(xdrproc_t func, void *data)
+unsigned long
+xdr_sizeof(xdrproc_t func, void *data)
 {
 	XDR x;
 	struct xdr_ops ops;

@@ -26,8 +26,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)queue.h	8.5 (Berkeley) 8/20/94
- * $FreeBSD: src/sys/sys/queue.h,v 1.75.2.1.2.1 2011/11/11 04:20:22 kensmith Exp $
+ *	@(#)queue.h 8.5 (Berkeley) 8/20/94 $FreeBSD:
+ * src/sys/sys/queue.h,v 1.75.2.1.2.1 2011/11/11 04:20:22 kensmith Exp
+ * $
  */
 
 #ifndef _TIRPC_SYS_QUEUE_H_
@@ -112,7 +113,7 @@ struct qm_trace {
 };
 
 #define	TRACEBUF	struct qm_trace trace;
-#define	TRASHIT(x)	do {(x) = (void *)-1;} while (0)
+#define	TRASHIT(x)	do {(x) = (void *)-1; } while (0)
 #define	QMD_SAVELINK(name, link)	void **name = (void *)&(link)
 
 #define	QMD_TRACE_HEAD(head) do {					\
@@ -253,7 +254,7 @@ struct {								\
 #define	STAILQ_FIRST(head)	((head)->stqh_first)
 
 #define	STAILQ_FOREACH(var, head, field)				\
-	for((var) = STAILQ_FIRST((head));				\
+	for ((var) = STAILQ_FIRST((head));				\
 	   (var);							\
 	   (var) = STAILQ_NEXT((var), field))
 
@@ -288,8 +289,8 @@ struct {								\
 #define	STAILQ_LAST(head, type, field)					\
 	(STAILQ_EMPTY((head)) ?						\
 		NULL :							\
-	        ((struct type *)(void *)				\
-		((char *)((head)->stqh_last) - __offsetof(struct type, field))))
+	 ((struct type *)(void *)					\
+	  ((char *)((head)->stqh_last) - __offsetof(struct type, field))))
 
 #define	STAILQ_NEXT(elm, field)	((elm)->field.stqe_next)
 
@@ -364,8 +365,8 @@ struct {								\
 #define	QMD_LIST_CHECK_NEXT(elm, field) do {				\
 	if (LIST_NEXT((elm), field) != NULL &&				\
 	    LIST_NEXT((elm), field)->field.le_prev !=			\
-	     &((elm)->field.le_next))					\
-	     	panic("Bad link elm %p next->prev != elm", (elm));	\
+	    &((elm)->field.le_next))					\
+		panic("Bad link elm %p next->prev != elm", (elm));	\
 } while (0)
 
 #define	QMD_LIST_CHECK_PREV(elm, field) do {				\
@@ -430,7 +431,7 @@ struct {								\
 	QMD_LIST_CHECK_PREV(elm, field);				\
 	if (LIST_NEXT((elm), field) != NULL)				\
 		LIST_NEXT((elm), field)->field.le_prev = 		\
-		    (elm)->field.le_prev;				\
+			(elm)->field.le_prev;				\
 	*(elm)->field.le_prev = LIST_NEXT((elm), field);		\
 	TRASHIT(*oldnext);						\
 	TRASHIT(*oldprev);						\
@@ -479,13 +480,13 @@ struct {								\
 
 #define	QMD_TAILQ_CHECK_TAIL(head, field) do {				\
 	if (*(head)->tqh_last != NULL)					\
-	    	panic("Bad tailq NEXT(%p->tqh_last) != NULL", (head)); 	\
+		panic("Bad tailq NEXT(%p->tqh_last) != NULL", (head));	\
 } while (0)
 
 #define	QMD_TAILQ_CHECK_NEXT(elm, field) do {				\
 	if (TAILQ_NEXT((elm), field) != NULL &&				\
 	    TAILQ_NEXT((elm), field)->field.tqe_prev !=			\
-	     &((elm)->field.tqe_next))					\
+	    &((elm)->field.tqe_next))					\
 		panic("Bad link elm %p next->prev != elm", (elm));	\
 } while (0)
 
@@ -544,18 +545,18 @@ struct {								\
 /* XXX optional IS_ENQUEUED support--entries must be initialized if
  * IS_ENQUEUED will be used */
 #define TAILQ_INIT_ENTRY(elm, field) do { \
-        (elm)->field.tqe_prev = NULL;     \
-        (elm)->field.tqe_next = NULL;     \
-    } while (0);
+		(elm)->field.tqe_prev = NULL;	\
+		(elm)->field.tqe_next = NULL;	\
+	} while (0)
 
-#define TAILQ_IS_ENQUEUED(elm, field) ( ((elm)->field.tqe_prev != NULL) || \
-                                        ((elm)->field.tqe_next != NULL))
+#define TAILQ_IS_ENQUEUED(elm, field) (((elm)->field.tqe_prev != NULL) || \
+				       ((elm)->field.tqe_next != NULL))
 
 #define	TAILQ_INSERT_AFTER(head, listelm, elm, field) do {		\
 	QMD_TAILQ_CHECK_NEXT(listelm, field);				\
 	if ((TAILQ_NEXT((elm), field) = TAILQ_NEXT((listelm), field)) != NULL)\
-		TAILQ_NEXT((elm), field)->field.tqe_prev = 		\
-		    &TAILQ_NEXT((elm), field);				\
+		TAILQ_NEXT((elm), field)->field.tqe_prev =		\
+			&TAILQ_NEXT((elm), field);			\
 	else {								\
 		(head)->tqh_last = &TAILQ_NEXT((elm), field);		\
 		QMD_TRACE_HEAD(head);					\
@@ -613,7 +614,7 @@ struct {								\
 	QMD_TAILQ_CHECK_NEXT(elm, field);				\
 	QMD_TAILQ_CHECK_PREV(elm, field);				\
 	if ((TAILQ_NEXT((elm), field)) != NULL)				\
-		TAILQ_NEXT((elm), field)->field.tqe_prev = 		\
+		TAILQ_NEXT((elm), field)->field.tqe_prev =		\
 		    (elm)->field.tqe_prev;				\
 	else {								\
 		(head)->tqh_last = (elm)->field.tqe_prev;		\

@@ -60,16 +60,16 @@
 #define USEC_PER_SEC  1000000
 #define RTIME_TIMEOUT  5	/* seconds to wait for sync */
 
-#define AUTH_PRIVATE(auth) (struct ad_private *) auth->ah_private
-#define ALLOC(object_type) (object_type *) mem_alloc(sizeof(object_type))
+#define AUTH_PRIVATE(auth) ((struct ad_private *) (auth)->ah_private)
+#define ALLOC(object_type) ((object_type *) mem_alloc(sizeof(object_type)))
 #define FREE(ptr, size)  mem_free((char *)(ptr), (int) size)
-#define ATTEMPT(xdr_op)  if (!(xdr_op)) return (FALSE)
+#define ATTEMPT(xdr_op)  if (!(xdr_op)) return (false)
 
-extern bool xdr_authdes_cred(XDR *, struct authdes_cred *);
-extern bool xdr_authdes_verf(XDR *, struct authdes_verf *);
+bool xdr_authdes_cred(XDR *, struct authdes_cred *);
+bool xdr_authdes_verf(XDR *, struct authdes_verf *);
 
-extern bool __rpc_get_time_offset(struct timeval *, nis_server *, char *,
-				  char **, char **);
+bool __rpc_get_time_offset(struct timeval *, nis_server *, char *,
+			   char **, char **);
 
 /*
  * DES authenticator operations vector
@@ -106,8 +106,9 @@ struct ad_private {
 	nis_server *ad_nis_srvr;	/* NIS+ server struct */
 };
 
-AUTH *authdes_pk_nseccreate(const char *, netobj *, u_int, const char *,
-			    const des_block *, nis_server *);
+AUTH *
+authdes_pk_nseccreate(const char *, netobj *, u_int, const char *,
+		      const des_block *, nis_server *);
 
 /*
  * documented version of authdes_nseccreate
@@ -119,8 +120,9 @@ AUTH *authdes_pk_nseccreate(const char *, netobj *, u_int, const char *,
   ckey:  optional conversation key to use
 */
 
-AUTH *authdes_nseccreate(const char *servername, const u_int win,
-			 const char *timehost, const des_block * ckey)
+AUTH *
+authdes_nseccreate(const char *servername, const u_int win,
+		   const char *timehost, const des_block *ckey)
 {
 	u_char pkey_data[1024];
 	netobj pkey;
@@ -145,9 +147,10 @@ AUTH *authdes_nseccreate(const char *servername, const u_int win,
  * of the server principal as an argument. This spares us a call to
  * getpublickey() which in the nameserver context can cause a deadlock.
  */
-AUTH *authdes_pk_nseccreate(const char *servername, netobj * pkey, u_int window,
-			    const char *timehost, const des_block * ckey,
-			    nis_server * srvr)
+AUTH *
+authdes_pk_nseccreate(const char *servername, netobj *pkey, u_int window,
+		      const char *timehost, const des_block *ckey,
+		      nis_server *srvr)
 {
 	AUTH *auth;
 	struct ad_private *ad;
@@ -196,12 +199,12 @@ AUTH *authdes_pk_nseccreate(const char *servername, netobj * pkey, u_int window,
 			goto failed;
 		}
 		memcpy(ad->ad_timehost, timehost, strlen(timehost) + 1);
-		ad->ad_dosync = TRUE;
+		ad->ad_dosync = true;
 	} else if (srvr != NULL) {
 		ad->ad_nis_srvr = srvr;	/* transient */
-		ad->ad_dosync = TRUE;
+		ad->ad_dosync = true;
 	} else {
-		ad->ad_dosync = FALSE;
+		ad->ad_dosync = false;
 	}
 	memcpy(ad->ad_fullname, namebuf, ad->ad_fullnamelen + 1);
 	memcpy(ad->ad_servername, servername, ad->ad_servernamelen + 1);
@@ -225,9 +228,9 @@ AUTH *authdes_pk_nseccreate(const char *servername, netobj * pkey, u_int window,
 	auth->ah_ops = authdes_ops();
 	auth->ah_private = (caddr_t) ad;
 
-	if (!authdes_refresh(auth, NULL)) {
+	if (!authdes_refresh(auth, NULL))
 		goto failed;
-	}
+
 	ad->ad_nis_srvr = NULL;	/* not needed any longer */
 	auth_get(auth);		/* Reference for caller */
 	return (auth);
@@ -258,7 +261,7 @@ AUTH *authdes_pk_nseccreate(const char *servername, netobj * pkey, u_int window,
 /*
  * 1. Next Verifier
  */
- /*ARGSUSED*/ static void authdes_nextverf(AUTH * auth)
+static void authdes_nextverf(AUTH *auth)
 {
 	/* what the heck am I supposed to do??? */
 }
@@ -266,9 +269,10 @@ AUTH *authdes_pk_nseccreate(const char *servername, netobj * pkey, u_int window,
 /*
  * 2. Marshal
  */
-static bool authdes_marshal(AUTH * auth, XDR * xdrs)
+static bool
+authdes_marshal(AUTH *auth, XDR *xdrs)
 {
-/* LINTED pointer alignment */
+	/* LINTED pointer alignment */
 	struct ad_private *ad = AUTH_PRIVATE(auth);
 	struct authdes_cred *cred = &ad->ad_cred;
 	struct authdes_verf *verf = &ad->ad_verf;
@@ -313,7 +317,7 @@ static bool authdes_marshal(AUTH * auth, XDR * xdrs)
 	if (DES_FAILED(status)) {
 		__warnx(TIRPC_DEBUG_FLAG_AUTH,
 			"authdes_marshal: DES encryption failure");
-		return (FALSE);
+		return (false);
 	}
 	ad->ad_verf.adv_xtimestamp = cryptbuf[0];
 	if (ad->ad_cred.adc_namekind == ADN_FULLNAME) {
@@ -335,7 +339,8 @@ static bool authdes_marshal(AUTH * auth, XDR * xdrs)
 		len = (1 + 1) * BYTES_PER_XDR_UNIT;
 	}
 
-	if ((ixdr = xdr_inline(xdrs, 2 * BYTES_PER_XDR_UNIT))) {
+	ixdr = xdr_inline(xdrs, 2 * BYTES_PER_XDR_UNIT);
+	if (ixdr) {
 		IXDR_PUT_INT32(ixdr, AUTH_DES);
 		IXDR_PUT_INT32(ixdr, len);
 	} else {
@@ -345,7 +350,8 @@ static bool authdes_marshal(AUTH * auth, XDR * xdrs)
 	ATTEMPT(xdr_authdes_cred(xdrs, cred));
 
 	len = (2 + 1) * BYTES_PER_XDR_UNIT;
-	if ((ixdr = xdr_inline(xdrs, 2 * BYTES_PER_XDR_UNIT))) {
+	ixdr = xdr_inline(xdrs, 2 * BYTES_PER_XDR_UNIT);
+	if (ixdr) {
 		IXDR_PUT_INT32(ixdr, AUTH_DES);
 		IXDR_PUT_INT32(ixdr, len);
 	} else {
@@ -353,29 +359,30 @@ static bool authdes_marshal(AUTH * auth, XDR * xdrs)
 		ATTEMPT(xdr_putint32(xdrs, &len));
 	}
 	ATTEMPT(xdr_authdes_verf(xdrs, verf));
-	return (TRUE);
+	return (true);
 }
 
 /*
  * 3. Validate
  */
-static bool authdes_validate(AUTH * auth, struct opaque_auth *rverf)
+static bool
+authdes_validate(AUTH *auth, struct opaque_auth *rverf)
 {
-/* LINTED pointer alignment */
+	/* LINTED pointer alignment */
 	struct ad_private *ad = AUTH_PRIVATE(auth);
 	struct authdes_verf verf;
 	int status;
 	uint32_t *ixdr;
 	des_block buf;
 
-	if (rverf->oa_length != (2 + 1) * BYTES_PER_XDR_UNIT) {
-		return (FALSE);
-	}
-/* LINTED pointer alignment */
+	if (rverf->oa_length != (2 + 1) * BYTES_PER_XDR_UNIT)
+		return (false);
+
+	/* LINTED pointer alignment */
 	ixdr = (uint32_t *) rverf->oa_base;
-	buf.key.high = (uint32_t) * ixdr++;
-	buf.key.low = (uint32_t) * ixdr++;
-	verf.adv_int_u = (uint32_t) * ixdr++;
+	buf.key.high = (uint32_t) *ixdr++;
+	buf.key.low = (uint32_t) *ixdr++;
+	verf.adv_int_u = (uint32_t) *ixdr++;
 
 	/*
 	 * Decrypt the timestamp
@@ -387,13 +394,13 @@ static bool authdes_validate(AUTH * auth, struct opaque_auth *rverf)
 	if (DES_FAILED(status)) {
 		__warnx(TIRPC_DEBUG_FLAG_AUTH,
 			"authdes_validate: DES decryption failure");
-		return (FALSE);
+		return (false);
 	}
 
 	/*
 	 * xdr the decrypted timestamp
 	 */
-/* LINTED pointer alignment */
+	/* LINTED pointer alignment */
 	ixdr = (uint32_t *) buf.c;
 	verf.adv_timestamp.tv_sec = IXDR_GET_INT32(ixdr) + 1;
 	verf.adv_timestamp.tv_usec = IXDR_GET_INT32(ixdr);
@@ -406,7 +413,7 @@ static bool authdes_validate(AUTH * auth, struct opaque_auth *rverf)
 	     sizeof(struct timeval)) != 0) {
 		__warnx(TIRPC_DEBUG_FLAG_AUTH,
 			"authdes_validate: verifier mismatch");
-		return (FALSE);
+		return (false);
 	}
 
 	/*
@@ -414,13 +421,15 @@ static bool authdes_validate(AUTH * auth, struct opaque_auth *rverf)
 	 */
 	ad->ad_nickname = verf.adv_nickname;
 	ad->ad_cred.adc_namekind = ADN_NICKNAME;
-	return (TRUE);
+	return (true);
 }
 
 /*
  * 4. Refresh
  */
- /*ARGSUSED*/ static bool authdes_refresh(AUTH * auth, void *dummy)
+ /*ARGSUSED*/
+static bool
+authdes_refresh(AUTH *auth, void *dummy)
 {
 /* LINTED pointer alignment */
 	struct ad_private *ad = AUTH_PRIVATE(auth);
@@ -446,19 +455,21 @@ static bool authdes_validate(AUTH * auth, struct opaque_auth *rverf)
 	pkey.n_len = (u_int) strlen((char *)ad->ad_pkey) + 1;
 	if (key_encryptsession_pk(ad->ad_servername, &pkey, &ad->ad_xkey) < 0) {
 		__warnx(TIRPC_DEBUG_FLAG_AUTH,
-			"authdes_refresh: keyserv(1m) is unable to encrypt session key");
-		return (FALSE);
+			"authdes_refresh: keyserv(1m) is unable to encrypt "
+			"session key");
+		return (false);
 	}
 	cred->adc_fullname.key = ad->ad_xkey;
 	cred->adc_namekind = ADN_FULLNAME;
 	cred->adc_fullname.name = ad->ad_fullname;
-	return (TRUE);
+	return (true);
 }
 
 /*
  * 5. Destroy
  */
-static void authdes_destroy(AUTH * auth)
+static void
+authdes_destroy(AUTH *auth)
 {
 /* LINTED pointer alignment */
 	struct ad_private *ad = AUTH_PRIVATE(auth);
@@ -475,13 +486,15 @@ static void authdes_destroy(AUTH * auth)
 	FREE(auth, sizeof(AUTH));
 }
 
-static bool authdes_wrap(AUTH * auth, XDR * xdrs, xdrproc_t xfunc,
-			 caddr_t xwhere)
+static bool
+authdes_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xfunc,
+	     caddr_t xwhere)
 {
 	return ((*xfunc) (xdrs, xwhere));
 }
 
-static struct auth_ops *authdes_ops(void)
+static struct auth_ops *
+authdes_ops(void)
 {
 	static struct auth_ops ops;
 	extern mutex_t authdes_ops_lock;

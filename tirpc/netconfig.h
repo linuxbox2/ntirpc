@@ -80,7 +80,8 @@ typedef struct {
 #define NC_UDP		"udp"
 #define NC_ICMP		"icmp"
 
-__BEGIN_DECLS extern void *setnetconfig(void);
+__BEGIN_DECLS
+extern void *setnetconfig(void);
 extern struct netconfig *getnetconfig(void *);
 extern struct netconfig *getnetconfigent(const char *);
 extern void freenetconfigent(struct netconfig *);
