@@ -26,10 +26,10 @@ git_describe(_GIT_DESCRIBE)
 
 option (USE_GSS "enable RPCSEC_GSS support" ON)
 
-option(TIRPC_EPOLL "platform supports EPOLL or emulation" OFF)
+option(TIRPC_EPOLL "platform supports EPOLL or emulation" ON)
 
 # MSPAC support -lwbclient link flag
-option(_MSPAC_SUPPORT "enable mspac Winbind support" ON)
+option(_MSPAC_SUPPORT "enable mspac Winbind support" OFF)
 
 # Choose a shortcut build config
 
@@ -91,6 +91,9 @@ endif(_MSPAC_SUPPORT)
 
 if (FREEBSD)
    set(EXTRA_INCLUDE_DIR "/opt/ganesha/include")
+else()
+  # workaround bug in some include_directories when no extra includes
+  set(EXTRA_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/ntirpc/")
 endif(FREEBSD)
 
 add_definitions(-DHAVE_CONFIG_H)
@@ -106,7 +109,6 @@ include_directories(
 )
 
 # Find misc system libs
-
 find_library(LIBRT rt)   # extended Pthreads functions
 find_library(LIBNSL nsl) # sockets
 
