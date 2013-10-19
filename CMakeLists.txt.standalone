@@ -101,7 +101,7 @@ endif(MSVC)
 
 include_directories(
   "${PROJECT_BINARY_DIR}"
-  "${PROJECT_SOURCE_DIR}/tirpc/"
+  "${PROJECT_SOURCE_DIR}/ntirpc/"
   "${EXTRA_INCLUDE_DIR}"
 )
 

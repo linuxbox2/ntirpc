@@ -8,4 +8,4 @@ Description: New Transport Independent RPC Library
 Requires:
 Version: @PACKAGE_VERSION@
 Libs: -L@libdir@ -lintirpc
-Cflags: -I@includedir@/tirpc
+Cflags: -I@includedir@/ntirpc
