@@ -26,7 +26,7 @@
 #ifndef _RPC_INTRINSIC_H
 #define _RPC_INTRINSIC_H
 
-#if __GLIBC__
+#if (__GNUC__ >= 3)
 #ifndef likely
 #define likely(x)    __builtin_expect(!!(x), 1)
 #define unlikely(x)  __builtin_expect(!!(x), 0)
