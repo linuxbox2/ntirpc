@@ -443,10 +443,6 @@ svc_dg_ref(SVCXPRT *xprt, u_int flags, const char *tag,
 	if (!(flags & SVC_REF_FLAG_LOCKED))
 		mutex_lock(&xprt->xp_lock);
 
-	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
-		mutex_unlock(&xprt->xp_lock);
-		return (false);
-	}
 	++(xprt->xp_refcnt);
 	mutex_unlock(&xprt->xp_lock);
 	return (true);
