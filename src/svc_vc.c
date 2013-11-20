@@ -738,11 +738,6 @@ svc_vc_ref(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	if (!(flags & SVC_REF_FLAG_LOCKED))
 		mutex_lock(&xprt->xp_lock);
 
-	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
-		mutex_unlock(&xprt->xp_lock);
-		return (false);
-	}
-
 	refcnt = ++(xprt->xp_refcnt);
 
 	XPRT_TRACE_RADDR(xprt, __func__, tag, line);
