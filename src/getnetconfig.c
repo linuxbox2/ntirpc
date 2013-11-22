@@ -146,7 +146,8 @@ __nc_error()
 			return (&nc_error);
 	}
 	if ((nc_addr = (int *)thr_getspecific(nc_key)) == NULL) {
-		nc_addr = (int *)malloc(sizeof (int));
+		if((nc_addr = (int *)malloc(sizeof (int))) == NULL)
+			return (&nc_error);
 		if (thr_setspecific(nc_key, (void *) nc_addr) != 0) {
 			if (nc_addr)
 				free(nc_addr);
