@@ -91,6 +91,9 @@ pthread_mutex_t	xprtlist_lock = PTHREAD_MUTEX_INITIALIZER;
 /* serializes calls to public key routines */
 pthread_mutex_t serialize_pkey = PTHREAD_MUTEX_INITIALIZER;
 
+/* protects global variables ni and nc_file (getnetconfig.c) */
+pthread_mutex_t nc_db_lock = PTHREAD_MUTEX_INITIALIZER;
+
 #undef	rpc_createerr
 
 struct rpc_createerr rpc_createerr;
