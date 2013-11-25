@@ -133,6 +133,7 @@ struct ct_data {
  *      should be the first thing fixed.  One step at a time.
  */
 static int      *vc_fd_locks;
+extern pthread_mutex_t disrupt_lock;
 extern mutex_t  clnt_fd_lock;
 static cond_t   *vc_cv;
 #define release_fd_lock(fd, mask) {	\
@@ -179,8 +180,10 @@ clnt_vc_create(fd, raddr, prog, vers, sendsz, recvsz)
 	socklen_t slen;
 	struct __rpc_sockinfo si;
 
+	mutex_lock(&disrupt_lock);
 	if (disrupt == 0)
 		disrupt = (u_int32_t)(long)raddr;
+	mutex_unlock(&disrupt_lock);
 
 	cl = (CLIENT *)mem_alloc(sizeof (*cl));
 	ct = (struct ct_data *)mem_alloc(sizeof (*ct));
@@ -270,7 +273,9 @@ clnt_vc_create(fd, raddr, prog, vers, sendsz, recvsz)
 	 * Initialize call message
 	 */
 	(void)gettimeofday(&now, NULL);
+	mutex_lock(&disrupt_lock);
 	call_msg.rm_xid = ((u_int32_t)++disrupt) ^ __RPC_GETXID(&now);
+	mutex_unlock(&disrupt_lock);
 	call_msg.rm_direction = CALL;
 	call_msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
 	call_msg.rm_call.cb_prog = (u_int32_t)prog;

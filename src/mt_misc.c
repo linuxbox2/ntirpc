@@ -97,6 +97,9 @@ pthread_mutex_t nc_db_lock = PTHREAD_MUTEX_INITIALIZER;
 /* protects static port and startport (bindresvport.c) */
 pthread_mutex_t port_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/* protects static disrupt (clnt_vc.c) */
+pthread_mutex_t disrupt_lock = PTHREAD_MUTEX_INITIALIZER;
+
 #undef	rpc_createerr
 
 struct rpc_createerr rpc_createerr;
