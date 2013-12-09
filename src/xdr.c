@@ -255,6 +255,18 @@ xdr_u_int32_t(xdrs, u_int32_p)
 
 
 /*
+ * XDR unsigned 32-bit integers
+ */
+bool_t
+xdr_uint32_t(xdrs, uint32_p)
+	XDR *xdrs;
+	uint32_t *uint32_p;
+{
+	return (xdr_u_int32_t(xdrs, (u_int32_t *)uint32_p));
+}
+
+
+/*
  * XDR short integers
  */
 bool_t
@@ -377,6 +389,18 @@ xdr_u_int16_t(xdrs, u_int16_p)
 
 
 /*
+ * XDR unsigned 16-bit integers
+ */
+bool_t
+xdr_uint16_t(xdrs, uint16_p)
+	XDR *xdrs;
+	uint16_t *uint16_p;
+{
+	return (xdr_u_int16_t(xdrs, (u_int16_t *)uint16_p));
+}
+
+
+/*
  * XDR 8-bit integers
  */
 bool_t
@@ -435,6 +459,18 @@ xdr_u_int8_t(xdrs, uint8_p)
 	}
 	/* NOTREACHED */
 	return (FALSE);
+}
+
+
+/*
+ * XDR unsigned 8-bit integers
+ */
+bool_t
+xdr_uint8_t(xdrs, uint8_p)
+	XDR *xdrs;
+	uint8_t *uint8_p;
+{
+	return (xdr_u_int8_t(xdrs, (uint8_t *)uint8_p));
 }
 
 
@@ -862,6 +898,18 @@ xdr_u_int64_t(xdrs, ullp)
 	}
 	/* NOTREACHED */
 	return (FALSE);
+}
+
+
+/*
+ * XDR unsigned 64-bit integers
+ */
+bool_t
+xdr_uint64_t(xdrs, ullp)
+	XDR *xdrs;
+	uint64_t *ullp;
+{
+	return (xdr_u_int64_t(xdrs, (u_int64_t *)ullp));
 }
 
 
