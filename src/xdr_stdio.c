@@ -38,7 +38,6 @@
  * from the stream.
  */
 
-#include "namespace.h"
 #include <stdio.h>
 
 #include <arpa/inet.h>

@@ -36,7 +36,6 @@
 
 #include <sys/cdefs.h>
 
-#include "namespace.h"
 #include <rpc/types.h>
 #include <rpc/xdr.h>
 #include <sys/types.h>

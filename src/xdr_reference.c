@@ -38,7 +38,6 @@
  * "pointers".  See xdr.h for more info on the interface to xdr.
  */
 
-#include "namespace.h"
 #include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
