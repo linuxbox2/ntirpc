@@ -7,3 +7,5 @@ man3_MANS = bindresvport.3t des_crypt.3t getnetconfig.3t getnetpath.3t \
 
 EXTRA_DIST = $(man5_MANS) $(man3_MANS)
 
+CLEANFILES	       = cscope.* *~
+DISTCLEANFILES	       = Makefile.in

@@ -40,3 +40,6 @@ nobase_include_HEADERS = tirpc/netconfig.h \
     
 pkgconfigdir=$(libdir)/pkgconfig
 pkgconfig_DATA = libtirpc.pc
+
+CLEANFILES	       = cscope.* *~
+DISTCLEANFILES	       = Makefile.in libtirpc*.tar.gz
