@@ -10,26 +10,11 @@ AC_ARG_ENABLE(gssapi,
       [],[enable_gssapi=yes])
 AM_CONDITIONAL(GSS, test x$enable_gssapi = xyes)
 
-AC_ARG_WITH(gssglue,
-		[  --with-gssglue        Use libgssglue],
-		 [case "${enableval}" in
-		  yes) gssglue=true ;;
-		  no)  gssglue=false ;;
-		  *) AC_MSG_ERROR(bad value ${enableval} for --with-gssglue) ;;
-		  esac],
-		[gssglue=false])
-AM_CONDITIONAL(USEGSSGLUE, test x$gssglue = xtrue)
-
 if test x$enable_gssapi = xyes; then
-	if test x$gssglue = xtrue; then
-		PKG_CHECK_MODULES(GSSAPI, libgssglue, [],
-		AC_MSG_ERROR([Unable to locate information required to use libgssglue.]))
-	else
-		GSSAPI_CFLAGS=`krb5-config --cflags gssapi`
-		GSSAPI_LIBS=`krb5-config --libs gssapi`
-		AC_SUBST([GSSAPI_CFLAGS])
-		AC_SUBST([GSSAPI_LIBS])
-	fi
+	GSSAPI_CFLAGS=`krb5-config --cflags gssapi`
+	GSSAPI_LIBS=`krb5-config --libs gssapi`
+	AC_SUBST([GSSAPI_CFLAGS])
+	AC_SUBST([GSSAPI_LIBS])
 fi
 AC_ARG_ENABLE(ipv6,
 	[AC_HELP_STRING([--disable-ipv6], [Disable IPv6 support @<:@default=no@:>@])],
