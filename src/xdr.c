@@ -979,3 +979,26 @@ xdr_u_longlong_t(xdrs, ullp)
 	 */
 	return (xdr_u_int64_t(xdrs, (u_int64_t *)ullp));
 }
+
+/*
+ * XDR quad_t
+ */
+bool_t
+xdr_quad_t(xdrs, llp)
+	XDR *xdrs;
+	int64_t *llp;
+{
+	return (xdr_int64_t(xdrs, (int64_t *)llp));
+}
+
+
+/*
+ * XDR u_quad_t
+ */
+bool_t
+xdr_u_quad_t(xdrs, ullp)
+	XDR *xdrs;
+	u_int64_t *ullp;
+{
+	return (xdr_u_int64_t(xdrs, (u_int64_t *)ullp));
+}

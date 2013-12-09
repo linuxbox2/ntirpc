@@ -307,6 +307,8 @@ extern bool_t	xdr_uint32_t(XDR *, uint32_t *);
 extern bool_t	xdr_int64_t(XDR *, int64_t *);
 extern bool_t	xdr_u_int64_t(XDR *, u_int64_t *);
 extern bool_t	xdr_uint64_t(XDR *, uint64_t *);
+extern bool_t	xdr_quad_t(XDR *, int64_t *);
+extern bool_t	xdr_u_quad_t(XDR *, u_int64_t *);
 extern bool_t	xdr_bool(XDR *, bool_t *);
 extern bool_t	xdr_enum(XDR *, enum_t *);
 extern bool_t	xdr_array(XDR *, char **, u_int *, u_int, u_int, xdrproc_t);
