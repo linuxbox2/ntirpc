@@ -377,6 +377,68 @@ xdr_u_int16_t(xdrs, u_int16_p)
 
 
 /*
+ * XDR 8-bit integers
+ */
+bool_t
+xdr_int8_t(xdrs, int8_p)
+	XDR *xdrs;
+	int8_t *int8_p;
+{
+	long l;
+
+	switch (xdrs->x_op) {
+
+	case XDR_ENCODE:
+		l = (long) *int8_p;
+		return (XDR_PUTLONG(xdrs, &l));
+
+	case XDR_DECODE:
+		if (!XDR_GETLONG(xdrs, &l)) {
+			return (FALSE);
+		}
+		*int8_p = (int8_t) l;
+		return (TRUE);
+
+	case XDR_FREE:
+		return (TRUE);
+	}
+	/* NOTREACHED */
+	return (FALSE);
+}
+
+
+/*
+ * XDR unsigned 8-bit integers
+ */
+bool_t
+xdr_u_int8_t(xdrs, uint8_p)
+	XDR *xdrs;
+	uint8_t *uint8_p;
+{
+	u_long l;
+
+	switch (xdrs->x_op) {
+
+	case XDR_ENCODE:
+		l = (u_long) *uint8_p;
+		return (XDR_PUTLONG(xdrs, (long *)&l));
+
+	case XDR_DECODE:
+		if (!XDR_GETLONG(xdrs, (long *)&l)) {
+			return (FALSE);
+		}
+		*uint8_p = (uint8_t) l;
+		return (TRUE);
+
+	case XDR_FREE:
+		return (TRUE);
+	}
+	/* NOTREACHED */
+	return (FALSE);
+}
+
+
+/*
  * XDR a char
  */
 bool_t

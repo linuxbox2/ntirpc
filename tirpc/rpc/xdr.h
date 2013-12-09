@@ -295,6 +295,8 @@ extern bool_t	xdr_long(XDR *, long *);
 extern bool_t	xdr_u_long(XDR *, u_long *);
 extern bool_t	xdr_short(XDR *, short *);
 extern bool_t	xdr_u_short(XDR *, u_short *);
+extern bool_t	xdr_int8_t(XDR *, int8_t *);
+extern bool_t	xdr_u_int8_t(XDR *, uint8_t *);
 extern bool_t	xdr_int16_t(XDR *, int16_t *);
 extern bool_t	xdr_u_int16_t(XDR *, u_int16_t *);
 extern bool_t	xdr_int32_t(XDR *, int32_t *);
