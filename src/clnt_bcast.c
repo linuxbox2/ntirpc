@@ -43,9 +43,6 @@
 #include <sys/types.h>
 #include <sys/queue.h>
 
-/* new queue functions */
-#include <misc/queue.h>
-
 #include <net/if.h>
 #include <netinet/in.h>
 #include <ifaddrs.h>
