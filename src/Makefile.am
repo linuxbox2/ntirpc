@@ -5,6 +5,7 @@
 ## program built.  We also don't bother trying to assemble code, or
 ## anything like that.
 
+noinst_HEADERS = rpc_com.h
 
 AM_CPPFLAGS = -I$(top_srcdir)/tirpc -DPORTMAP -DINET6 \
 		-D_GNU_SOURCE -Wall -pipe  
