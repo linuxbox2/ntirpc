@@ -620,6 +620,7 @@ rpcb_unset(program, version, nconf)
 	CLNT_DESTROY(client);
 	return (rslt);
 }
+
 #ifdef NOTUSED
 /*
  * From the merged list, find the appropriate entry
@@ -652,7 +653,6 @@ got_entry(relp, nconf)
 	}
 	return (na);
 }
-#endif
 
 /*
  * Quick check to see if rpcbind is up.  Tries to connect over
@@ -693,6 +693,7 @@ __rpcbind_is_up()
 	close(sock);
 	return (TRUE);
 }
+#endif
 
 /*
  * An internal function which optimizes rpcb_getaddr function.  It also
