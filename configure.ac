@@ -5,12 +5,11 @@ AM_MAINTAINER_MODE
 AC_CONFIG_SRCDIR([src/auth_des.c])
 AC_CONFIG_MACRO_DIR([m4])
 
-AC_ARG_ENABLE(gss,[  --enable-gss            Turn on gss api], [case "${enableval}" in
-        yes) gss=true ;;
-        no)  gss=false ;;
-        *) AC_MSG_ERROR(bad value ${enableval} for --enable-gss) ;;
-      esac],[gss=false])
-AM_CONDITIONAL(GSS, test x$gss = xtrue)
+AC_ARG_ENABLE(gssapi,
+	[AC_HELP_STRING([--disable-gssapi], [Disable GSSAPI support @<:@default=no@:>@])],
+      [],[enable_gssapi=yes])
+AM_CONDITIONAL(GSS, test x$enable_gssapi = xyes)
+
 AC_ARG_WITH(gssglue,
 		[  --with-gssglue        Use libgssglue],
 		 [case "${enableval}" in
@@ -20,7 +19,8 @@ AC_ARG_WITH(gssglue,
 		  esac],
 		[gssglue=false])
 AM_CONDITIONAL(USEGSSGLUE, test x$gssglue = xtrue)
-if test x$gss = xtrue; then
+
+if test x$enable_gssapi = xyes; then
 	if test x$gssglue = xtrue; then
 		PKG_CHECK_MODULES(GSSAPI, libgssglue, [],
 		AC_MSG_ERROR([Unable to locate information required to use libgssglue.]))
