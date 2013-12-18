@@ -241,6 +241,7 @@ clnt_dg_call(CLIENT *clnt,           /* client handle */
     u_int32_t xid, inval, outval;
     bool slocked = FALSE;
     bool rlocked = FALSE;
+    bool once = TRUE;
 
     outlen = 0;
     rpc_dplx_slc(clnt);
@@ -298,19 +299,7 @@ call_again:
     }
     outlen = (size_t)XDR_GETPOS(xdrs);
 
-    /*
-     * Hack to provide rpc-based message passing
-     */
-    if (timeout.tv_sec == 0 && timeout.tv_usec == 0) {
-        cu->cu_error.re_status = RPC_TIMEDOUT;
-        goto out;
-    }
-
 send_again:
-    if (total_time <= 0) {
-        cu->cu_error.re_status = RPC_TIMEDOUT;
-        goto out;
-    }
     nextsend_time = cu->cu_wait.tv_sec * 1000 + cu->cu_wait.tv_usec / 1000;
     if (sendto(cu->cu_fd, cu->cu_outbuf, outlen, 0, sa, salen) != outlen) {
         cu->cu_error.re_errno = errno;
@@ -337,13 +326,18 @@ get_reply:
     fd.fd = cu->cu_fd;
     fd.events = POLLIN;
     fd.revents = 0;
-    while (total_time > 0) {
+    while ((total_time > 0) || once) {
         tv = total_time < nextsend_time ? total_time : nextsend_time;
+	once = FALSE;
         switch (poll(&fd, 1, tv)) {
         case 0:
             total_time -= tv;
             rpc_dplx_ruc(clnt);
             rlocked = FALSE;
+	    if (total_time <= 0) {
+		    cu->cu_error.re_status = RPC_TIMEDOUT;
+		    goto out;
+	    }
             goto send_again;
         case -1:
             if (errno == EINTR)
