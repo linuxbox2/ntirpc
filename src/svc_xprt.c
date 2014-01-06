@@ -389,13 +389,12 @@ svc_xprt_shutdown()
 				 */
 				SVC_DESTROY(srec->xprt); /* locks srec, so
 							  * avoid deadlock */
-				srec->xprt = NULL;
-				mutex_destroy(&srec->mtx);
-			}
-			/* now remove srec */
-			opr_rbtree_remove(&t->t, &srec->node_k);
-			/* and free it */
-			mem_free(srec, sizeof(struct svc_xprt_rec));
+                        } else {
+                          /* now remove srec */
+                          opr_rbtree_remove(&t->t, &srec->node_k);  
+                          /* and free it */
+                          mem_free(srec, sizeof(struct svc_xprt_rec));
+                        }
 			n = opr_rbtree_first(&t->t);
 		}		/* curr partition */
 		rwlock_unlock(&t->lock);	/* t !LOCKED */
