@@ -396,7 +396,7 @@ rpc_dplx_shutdown()
 	p_ix = 0;
 	while (p_ix < RPC_DPLX_PARTITIONS) {
 		t = &rpc_dplx_rec_set.xt.tree[p_ix];
-		rwlock_rdlock(&t->lock);	/* t RLOCKED */
+		rwlock_wrlock(&t->lock);	/* t WLOCKED */
 		n = opr_rbtree_first(&t->t);
 		while (n != NULL) {
 			rec = opr_containerof(n, struct rpc_dplx_rec, node_k);
