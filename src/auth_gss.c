@@ -49,14 +49,14 @@
 #include <netinet/in.h>
 #include <gssapi/gssapi.h>
 
-static void	authgss_nextverf();
-static bool_t	authgss_marshal();
-static bool_t	authgss_refresh();
-static bool_t	authgss_validate();
-static void	authgss_destroy();
-static void	authgss_destroy_context();
-static bool_t	authgss_wrap();
-static bool_t	authgss_unwrap();
+static void	authgss_nextverf(AUTH *);
+static bool_t	authgss_marshal(AUTH *, XDR *);
+static bool_t	authgss_refresh(AUTH *, void *);
+static bool_t	authgss_validate(AUTH *, struct opaque_auth *);
+static void	authgss_destroy(AUTH *);
+static void	authgss_destroy_context(AUTH *);
+static bool_t	authgss_wrap(AUTH *, XDR *, xdrproc_t, caddr_t);
+static bool_t	authgss_unwrap(AUTH *, XDR *, xdrproc_t, caddr_t);
 
 
 /*
@@ -198,7 +198,7 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 	save_auth = clnt->cl_auth;
 	clnt->cl_auth = auth;
 
-	if (!authgss_refresh(auth))
+	if (!authgss_refresh(auth, NULL))
 		auth = NULL;
 	else
 		auth_get(auth); /* Reference for caller */
@@ -418,7 +418,7 @@ authgss_validate(AUTH *auth, struct opaque_auth *verf)
 }
 
 static bool_t
-authgss_refresh(AUTH *auth)
+authgss_refresh(AUTH *auth, void *dummy)
 {
 	struct rpc_gss_data	*gd;
 	struct rpc_gss_init_res	 gr;
@@ -639,7 +639,7 @@ authgss_destroy(AUTH *auth)
 	free(auth);
 }
 
-bool_t
+static bool_t
 authgss_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr)
 {
 	struct rpc_gss_data	*gd;
@@ -656,7 +656,7 @@ authgss_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr)
 				 gd->sec.svc, gd->gc.gc_seq));
 }
 
-bool_t
+static bool_t
 authgss_unwrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr)
 {
 	struct rpc_gss_data	*gd;
