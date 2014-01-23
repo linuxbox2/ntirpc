@@ -78,12 +78,12 @@ pthread_mutex_t	svcraw_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t	tsd_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* Library global tsd keys */
-thread_key_t clnt_broadcast_key;
-thread_key_t rpc_call_key = -1;
-thread_key_t tcp_key = -1;
-thread_key_t udp_key = -1;
-thread_key_t nc_key = -1;
-thread_key_t rce_key = -1;
+thread_key_t clnt_broadcast_key = KEY_INITIALIZER;
+thread_key_t rpc_call_key = KEY_INITIALIZER;
+thread_key_t tcp_key = KEY_INITIALIZER;
+thread_key_t udp_key = KEY_INITIALIZER;
+thread_key_t nc_key = KEY_INITIALIZER;
+thread_key_t rce_key = KEY_INITIALIZER;
 
 /* xprtlist (svc_generic.c) */
 pthread_mutex_t	xprtlist_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -110,7 +110,7 @@ __rpc_createerr()
 	struct rpc_createerr *rce_addr;
 
 	mutex_lock(&tsd_lock);
-	if (rce_key == -1)
+	if (rce_key == KEY_INITIALIZER)
 		thr_keycreate(&rce_key, free);
 	mutex_unlock(&tsd_lock);
 
@@ -131,17 +131,17 @@ __rpc_createerr()
 
 void tsd_key_delete(void)
 {
-	if (clnt_broadcast_key != -1)
+	if (clnt_broadcast_key != KEY_INITIALIZER)
 		pthread_key_delete(clnt_broadcast_key);
-	if (rpc_call_key != -1)
+	if (rpc_call_key != KEY_INITIALIZER)
 		pthread_key_delete(rpc_call_key);
-	if (tcp_key != -1)
+	if (tcp_key != KEY_INITIALIZER)
 		pthread_key_delete(tcp_key);
-	if (udp_key != -1)
+	if (udp_key != KEY_INITIALIZER)
 		pthread_key_delete(udp_key);
-	if (nc_key != -1)
+	if (nc_key != KEY_INITIALIZER)
 		pthread_key_delete(nc_key);
-	if (rce_key != -1)
+	if (rce_key != KEY_INITIALIZER)
 		pthread_key_delete(rce_key);
 	return;
 }

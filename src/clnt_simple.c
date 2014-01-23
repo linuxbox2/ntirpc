@@ -104,9 +104,9 @@ rpc_call(host, prognum, versnum, procnum, inproc, in, outproc, out, nettype)
 	extern thread_key_t rpc_call_key;
 	extern mutex_t tsd_lock;
 
-	if (rpc_call_key == -1) {
+	if (rpc_call_key == KEY_INITIALIZER) {
 		mutex_lock(&tsd_lock);
-		if (rpc_call_key == -1)
+		if (rpc_call_key == KEY_INITIALIZER)
 			thr_keycreate(&rpc_call_key, rpc_call_destroy);
 		mutex_unlock(&tsd_lock);
 	}

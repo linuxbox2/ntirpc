@@ -46,6 +46,8 @@
 #define once_t			pthread_once_t
 
 #define thread_key_t		pthread_key_t
+
+#define KEY_INITIALIZER		((thread_key_t)-1)
 #define MUTEX_INITIALIZER	PTHREAD_MUTEX_INITIALIZER
 #define RWLOCK_INITIALIZER	PTHREAD_RWLOCK_INITIALIZER
 #define ONCE_INITIALIZER	PTHREAD_ONCE_INIT

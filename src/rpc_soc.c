@@ -508,9 +508,9 @@ clnt_broadcast(prog, vers, proc, xargs, argsp, xresults, resultsp, eachresult)
 {
 	extern mutex_t tsd_lock;
 
-	if (clnt_broadcast_key == -1) {
+	if (clnt_broadcast_key == KEY_INITIALIZER) {
 		mutex_lock(&tsd_lock);
-		if (clnt_broadcast_key == -1)
+		if (clnt_broadcast_key == KEY_INITIALIZER)
 			thr_keycreate(&clnt_broadcast_key, free);
 		mutex_unlock(&tsd_lock);
 	}

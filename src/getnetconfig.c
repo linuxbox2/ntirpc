@@ -137,10 +137,10 @@ __nc_error()
 	 * (including non-threaded programs), or if an allocation
 	 * fails.
 	 */
-	if (nc_key == -1) {
+	if (nc_key == KEY_INITIALIZER) {
 		error = 0;
 		mutex_lock(&nc_lock);
-		if (nc_key == -1)
+		if (nc_key == KEY_INITIALIZER)
 			error = thr_keycreate(&nc_key, free);
 		mutex_unlock(&nc_lock);
 		if (error)

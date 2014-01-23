@@ -228,16 +228,16 @@ __rpc_getconfip(nettype)
 	extern thread_key_t tcp_key, udp_key;
 	extern mutex_t tsd_lock;
 
-	if (tcp_key == -1) {
+	if (tcp_key == KEY_INITIALIZER) {
 		mutex_lock(&tsd_lock);
-		if (tcp_key == -1)
+		if (tcp_key == KEY_INITIALIZER)
 			thr_keycreate(&tcp_key, free);
 		mutex_unlock(&tsd_lock);
 	}
 	netid_tcp = (char *)thr_getspecific(tcp_key);
-	if (udp_key == -1) {
+	if (udp_key == KEY_INITIALIZER) {
 		mutex_lock(&tsd_lock);
-		if (udp_key == -1)
+		if (udp_key == KEY_INITIALIZER)
 			thr_keycreate(&udp_key, free);
 		mutex_unlock(&tsd_lock);
 	}
