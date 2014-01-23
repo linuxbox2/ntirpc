@@ -53,11 +53,11 @@ typedef struct gss_union_ctx_id_t {
 
 
 
-static bool_t	svcauth_gss_destroy();
-static bool_t   svcauth_gss_wrap();
-static bool_t   svcauth_gss_unwrap();
+static bool_t	svcauth_gss_wrap(SVCAUTH *, XDR *, xdrproc_t, caddr_t);
+static bool_t	svcauth_gss_unwrap(SVCAUTH *, XDR *, xdrproc_t, caddr_t);
+static bool_t	svcauth_gss_destroy(SVCAUTH *);
 
-struct svc_auth_ops svc_auth_gss_ops = {
+static struct svc_auth_ops svc_auth_gss_ops = {
 	svcauth_gss_wrap,
 	svcauth_gss_unwrap,
 	svcauth_gss_destroy
@@ -79,7 +79,7 @@ struct svc_rpc_gss_data {
 	((struct svc_rpc_gss_data *)(auth)->svc_ah_private)
 
 /* Global server credentials. */
-gss_cred_id_t		_svcauth_gss_creds;
+static gss_cred_id_t	_svcauth_gss_creds;
 static gss_name_t	_svcauth_gss_name = NULL;
 
 bool_t
@@ -332,7 +332,7 @@ svcauth_gss_validate(struct svc_rpc_gss_data *gd, struct rpc_msg *msg)
 	return (TRUE);
 }
 
-bool_t
+static bool_t
 svcauth_gss_nextverf(struct svc_req *rqst, u_int num)
 {
 	struct svc_rpc_gss_data	*gd;
@@ -513,7 +513,7 @@ _svcauth_gss(struct svc_req *rqst, struct rpc_msg *msg, bool_t *no_dispatch)
 	return (AUTH_OK);
 }
 
-bool_t
+static bool_t
 svcauth_gss_destroy(SVCAUTH *auth)
 {
 	struct svc_rpc_gss_data	*gd;
@@ -535,7 +535,7 @@ svcauth_gss_destroy(SVCAUTH *auth)
 	return (TRUE);
 }
 
-bool_t
+static bool_t
 svcauth_gss_wrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr)
 {
 	struct svc_rpc_gss_data	*gd;
@@ -552,7 +552,7 @@ svcauth_gss_wrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr)
 				 gd->sec.svc, gd->seq));
 }
 
-bool_t
+static bool_t
 svcauth_gss_unwrap(SVCAUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr)
 {
 	struct svc_rpc_gss_data	*gd;
