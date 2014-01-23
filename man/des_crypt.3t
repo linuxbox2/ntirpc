@@ -6,8 +6,6 @@
 .Sh NAME
 .Nm des_crypt , ecb_crypt , cbc_crypt , des_setparity
 .Nd "fast DES encryption"
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .In rpc/des_crypt.h
 .Ft int
@@ -118,6 +116,13 @@ Given a result status
 the macro
 .Fn DES_FAILED stat
 is false only for the first two statuses.
+.Sh AVAILABILITY
+The
+.Fn ecb_crypt ,
+.Fn cbc_crypt ,
+and
+.Fn des_setparity
+functions are part of libtirpc.
 .Sh SEE ALSO
 .\" .Xr des 1 ,
 .Xr crypt 3

@@ -15,8 +15,6 @@
 .Nm xdr_rejected_reply ,
 .Nm xdr_replymsg
 .Nd XDR library routines for remote procedure calls
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .In rpc/rpc.h
 .Ft bool_t
@@ -96,6 +94,8 @@ This reply could be either an acceptance,
 rejection or
 .Dv NULL .
 .El
+.Sh AVAILABILITY
+These functions are part of libtirpc.
 .Sh SEE ALSO
 .Xr rpc 3 ,
 .Xr xdr 3

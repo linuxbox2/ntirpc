@@ -7,8 +7,6 @@
 .Nm bindresvport ,
 .Nm bindresvport_sa
 .Nd bind a socket to a privileged IP port
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .In sys/types.h
 .In rpc/rpc.h
@@ -94,8 +92,11 @@ for any of the errors specified for the calls
 .Xr getsockopt 2 ,
 or
 .Xr setsockopt 2 .
+.Sh AVAILABILITY
+The
+.Fn bindresvport
+function is part of libtirpc.
 .Sh SEE ALSO
 .Xr bind 2 ,
 .Xr getsockopt 2 ,
-.Xr setsockopt 2 ,
-.Xr ip 4
+.Xr setsockopt 2

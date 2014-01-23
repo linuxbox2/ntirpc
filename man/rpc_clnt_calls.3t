@@ -19,8 +19,6 @@
 .Nm rpc_broadcast_exp ,
 .Nm rpc_call
 .Nd library routines for client side calls
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .In rpc/rpc.h
 .Ft "enum clnt_stat"
@@ -309,6 +307,8 @@ on which it can create a connection.
 You do not have control of timeouts or authentication
 using this routine.
 .El
+.Sh AVAILABILITY
+These functions are part of libtirpc.
 .Sh SEE ALSO
 .Xr printf 3 ,
 .Xr rpc 3 ,

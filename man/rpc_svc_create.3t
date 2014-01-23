@@ -18,8 +18,6 @@
 .Nm svc_tp_create ,
 .Nm svc_vc_create
 .Nd library routines for the creation of server handles
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .In rpc/rpc.h
 .Ft bool_t
@@ -329,6 +327,8 @@ The server is not registered with the
 .Xr rpcbind 8
 service.
 .El
+.Sh AVAILABILITY
+These functions are part of libtirpc.
 .Sh SEE ALSO
 .Xr rpc 3 ,
 .Xr rpc_svc_calls 3 ,

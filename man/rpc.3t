@@ -6,8 +6,6 @@
 .Sh NAME
 .Nm rpc
 .Nd library routines for remote procedure calls
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .In rpc/rpc.h
 .In netconfig.h
@@ -499,6 +497,8 @@ pages on which they are described:
 .Bl -tag -width /etc/netconfig
 .It Pa /etc/netconfig
 .El
+.Sh AVAILABILITY
+These functions are part of libtirpc.
 .Sh SEE ALSO
 .Xr getnetconfig 3 ,
 .Xr getnetpath 3 ,

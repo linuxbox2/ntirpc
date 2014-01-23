@@ -13,8 +13,6 @@
 .Nm authsys_create ,
 .Nm authsys_create_default
 .Nd library routines for client side remote procedure call authentication
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .In rpc/rpc.h
 .Ft "void"
@@ -90,6 +88,8 @@ Call
 .Fn authsys_create
 with the appropriate arguments.
 .El
+.Sh AVAILABILITY
+These functions are part of libtirpc.
 .Sh SEE ALSO
 .Xr rpc 3 ,
 .Xr rpc_clnt_calls 3 ,

@@ -12,8 +12,6 @@
 .Nm nc_perror ,
 .Nm nc_sperror
 .Nd get network configuration database entry
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .In netconfig.h
 .Ft "struct netconfig *"
@@ -215,6 +213,8 @@ implemented as thread-specific data.
 .Bl -tag -width /etc/netconfig -compact
 .It Pa /etc/netconfig
 .El
+.Sh AVAILABILITY
+These functions are part of libtirpc.
 .Sh SEE ALSO
 .Xr getnetpath 3 ,
 .Xr netconfig 5

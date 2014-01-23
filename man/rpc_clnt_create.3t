@@ -27,8 +27,6 @@
 .Nd "library routines for dealing with creation and manipulation of"
 .Vt CLIENT
 handles
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .In rpc/rpc.h
 .Ft bool_t
@@ -507,6 +505,8 @@ It is used by the routine
 .Fn clnt_pcreateerror
 to print the reason for the failure.
 .El
+.Sh AVAILABILITY
+These functions are part of libtirpc.
 .Sh SEE ALSO
 .Xr rpc 3 ,
 .Xr rpc_clnt_auth 3 ,

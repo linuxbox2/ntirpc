@@ -16,8 +16,6 @@
 .Nm xprt_register ,
 .Nm xprt_unregister
 .Nd library routines for registering servers
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .In rpc/rpc.h
 .Ft int
@@ -173,6 +171,8 @@ This routine modifies the global variable
 .Xr rpc_svc_calls 3 ) .
 Service implementors usually do not need this routine.
 .El
+.Sh AVAILABILITY
+These functions are part of libtirpc.
 .Sh SEE ALSO
 .Xr select 2 ,
 .Xr rpc 3 ,

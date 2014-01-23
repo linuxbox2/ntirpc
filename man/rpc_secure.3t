@@ -258,10 +258,11 @@ if it succeeds and
 if it fails.
 Inverse of
 .Fn netname2user .
+.Sh AVAILABILITY
+These functions are part of libtirpc.
 .Sh SEE ALSO
 .Xr rpc 3 ,
-.Xr xdr 3 ,
-.Xr keyserv 8
+.Xr xdr 3
 .Pp
 The following manuals:
 .Rs

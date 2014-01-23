@@ -14,8 +14,6 @@
 .Nm rpcb_set ,
 .Nm rpcb_unset
 .Nd library routines for RPC bind service
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .In rpc/rpc.h
 .Ft "rpcblist *"
@@ -187,6 +185,8 @@ Only the owner of the service or the super-user can destroy the mapping.
 in
 .Xr rpc_svc_calls 3 . )
 .El
+.Sh AVAILABILITY
+These functions are part of libtirpc.
 .Sh SEE ALSO
 .Xr rpc_clnt_calls 3 ,
 .Xr rpc_svc_calls 3 ,

@@ -12,8 +12,6 @@
 entry corresponding to
 .Ev NETPATH
 component
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .In netconfig.h
 .Ft "struct netconfig *"
@@ -162,6 +160,8 @@ has been exhausted,
 .Fn getnetpath
 returns
 .Dv NULL .
+.Sh AVAILABILITY
+These functions are part of libtirpc.
 .Sh SEE ALSO
 .Xr getnetconfig 3 ,
 .Xr netconfig 5 ,

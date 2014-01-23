@@ -21,8 +21,6 @@
 .Nm svc_run ,
 .Nm svc_sendreply
 .Nd library routines for RPC servers
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .In rpc/rpc.h
 .Ft int
@@ -258,6 +256,8 @@ if it succeeds,
 .Dv FALSE
 otherwise.
 .El
+.Sh AVAILABILITY
+These functions are part of libtirpc.
 .Sh SEE ALSO
 .Xr poll 2 ,
 .Xr select 2 ,

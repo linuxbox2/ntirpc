@@ -10,8 +10,6 @@
 .Nm endrpcent ,
 .Nm setrpcent
 .Nd get RPC entry
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .In rpc/rpc.h
 .Ft struct rpcent *
@@ -89,10 +87,11 @@ program number is found, or until end-of-file is encountered.
 .Bl -tag -width /etc/rpc -compact
 .It Pa /etc/rpc
 .El
+.Sh AVAILABILITY
+These functions are part of libtirpc.
 .Sh SEE ALSO
 .Xr rpc 5 ,
-.Xr rpcinfo 8 ,
-.Xr ypserv 8
+.Xr rpcinfo 8
 .Sh DIAGNOSTICS
 A
 .Dv NULL

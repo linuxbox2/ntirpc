@@ -6,8 +6,6 @@
 .Sh NAME
 .Nm getrpcport
 .Nd get RPC port number
-.Sh LIBRARY
-.Lb libc
 .Sh SYNOPSIS
 .Ft int
 .Fn getrpcport "char *host" "int prognum" "int versnum" "int proto"
@@ -32,3 +30,7 @@ is registered but not with version
 it will still return a port number (for some version of the program)
 indicating that the program is indeed registered.
 The version mismatch will be detected upon the first call to the service.
+.Sh AVAILABILITY
+The
+.Fn getrpcport
+function is part of libtirpc.
