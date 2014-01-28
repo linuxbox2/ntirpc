@@ -166,7 +166,7 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 	/* we hold recv channel lock */
 	ctx->flags |= RPC_CTX_FLAG_WAITSYNC;
 	while (!(ctx->flags & RPC_CTX_FLAG_SYNCDONE)) {
-		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
+		(void)clock_gettime(CLOCK_REALTIME_FAST, &ts);
 		timespecadd(&ts, &ctx->ctx_u.clnt.timeout);
 		code = cond_timedwait(&lk->we.cv, &lk->we.mtx, &ts);
 		/* if we timed out, check for xprt destroyed (no more
@@ -235,7 +235,7 @@ free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
 	if (ctx->flags & RPC_CTX_FLAG_WAITSYNC) {
 		/* WAITSYNC is already cleared if the call timed out, but it is
 		 * incorrect to wait forever */
-		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
+		(void)clock_gettime(CLOCK_REALTIME_FAST, &ts);
 		timespecadd(&ts, &ctx->ctx_u.clnt.timeout);
 		(void)cond_timedwait(&ctx->we.cv, &ctx->we.mtx, &ts);
 	}

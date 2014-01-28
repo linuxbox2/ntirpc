@@ -87,7 +87,7 @@ thrd_wait(struct thrd *thrd)
 	mutex_unlock(&pool->we.mtx);
 
 	while (1) {
-		clock_gettime(CLOCK_REALTIME, &ts);
+		clock_gettime(CLOCK_REALTIME_FAST, &ts);
 		timespec_addms(&ts, 1000 * 120);
 		rc = cond_timedwait(&thrd->ctx.we.cv, &thrd->ctx.we.mtx, &ts);
 		if (rc == ETIMEDOUT) {
@@ -213,7 +213,7 @@ int thrdpool_shutdown(struct thrdpool *pool)
 	pool->flags |= THRD_FLAG_SHUTDOWN;
 	while (pool->n_threads > 0) {
 		cond_broadcast(&pool->we.cv);
-		clock_gettime(CLOCK_REALTIME, &ts);
+		clock_gettime(CLOCK_REALTIME_FAST, &ts);
 		timespec_addms(&ts, 1000 * wait);
 		(void)cond_timedwait(&pool->we.cv, &pool->we.mtx, &ts);
 		/* wait a bit longer */

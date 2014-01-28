@@ -26,6 +26,7 @@ struct in_pktinfo {
 #if defined(__linux__)
 
 /* POSIX clocks */
+#define CLOCK_REALTIME_FAST CLOCK_REALTIME_COARSE
 #define CLOCK_MONOTONIC_FAST CLOCK_MONOTONIC_COARSE
 
 /* poll */
