@@ -467,6 +467,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 		if (code == ETIMEDOUT) {
 			/* UL can retry, we dont.  This CAN indicate xprt
 			 * destroyed (error status already set). */
+			ctx->error.re_status = RPC_TIMEDOUT;
 			goto unlock;
 		}
 		/* switch on direction */
