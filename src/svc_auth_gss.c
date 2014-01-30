@@ -599,15 +599,19 @@ svcauth_gss_wrap(SVCAUTH *auth, struct svc_req *req,
                  XDR *xdrs, xdrproc_t xdr_func,
                  caddr_t xdr_ptr)
 {
+    bool result;
     struct svc_rpc_gss_data *gd = SVCAUTH_PRIVATE(req->rq_auth);
     u_int gc_seq = (u_int)(uintptr_t)req->rq_ap1;
 
     if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE) {
         return ((*xdr_func)(xdrs, xdr_ptr));
     }
-    return (xdr_rpc_gss_data(xdrs, xdr_func, xdr_ptr,
+    mutex_lock(&gd->lock);
+    result = xdr_rpc_gss_data(xdrs, xdr_func, xdr_ptr,
                              gd->ctx, gd->sec.qop,
-                             gd->sec.svc, gc_seq));
+                             gd->sec.svc, gc_seq);
+    mutex_unlock(&gd->lock);
+    return result; 
 }
 
 bool
@@ -615,15 +619,19 @@ svcauth_gss_unwrap(SVCAUTH *auth, struct svc_req *req,
                    XDR *xdrs, xdrproc_t xdr_func,
                    caddr_t xdr_ptr)
 {
+    bool result;
     struct svc_rpc_gss_data *gd = SVCAUTH_PRIVATE(req->rq_auth);
     u_int gc_seq = (u_int)(uintptr_t)req->rq_ap1;
 
     if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE) {
         return ((*xdr_func)(xdrs, xdr_ptr));
     }
-    return (xdr_rpc_gss_data(xdrs, xdr_func, xdr_ptr,
+    mutex_lock(&gd->lock);
+    result = (xdr_rpc_gss_data(xdrs, xdr_func, xdr_ptr,
                              gd->ctx, gd->sec.qop,
                              gd->sec.svc, gc_seq));
+    mutex_unlock(&gd->lock);
+    return result; 
 }
 
 char *
