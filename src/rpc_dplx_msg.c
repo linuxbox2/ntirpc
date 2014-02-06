@@ -260,7 +260,7 @@ xdr_dplx_msg(XDR *xdrs, struct rpc_msg *dmsg)
 								xdrs,
 								&(rr->rj_vers.high)));
 					}
-
+					break;
 				case AUTH_ERROR:
 					buf = XDR_INLINE(
 						xdrs, 2 * BYTES_PER_XDR_UNIT);
