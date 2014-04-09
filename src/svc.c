@@ -649,6 +649,7 @@ svc_getreq_common (fd)
     {
       if (SVC_RECV (xprt, &msg))
 	{
+	  bool_t no_dispatch;
 
 	  /* now find the exported program and call it */
 	  struct svc_callout *s;
@@ -660,11 +661,14 @@ svc_getreq_common (fd)
 	  r.rq_proc = msg.rm_call.cb_proc;
 	  r.rq_cred = msg.rm_call.cb_cred;
 	  /* first authenticate the message */
-	  if ((why = _authenticate (&r, &msg)) != AUTH_OK)
+	  why = _gss_authenticate(&r, &msg, &no_dispatch);
+	  if (why != AUTH_OK)
 	    {
 	      svcerr_auth (xprt, why);
 	      goto call_done;
 	    }
+	  if (no_dispatch)
+	    goto call_done;
 	  /* now match message with a registered service */
 	  prog_found = FALSE;
 	  low_vers = (rpcvers_t) - 1L;

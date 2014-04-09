@@ -82,9 +82,10 @@ static struct authsvc *Auths = NULL;
  * invalid.
  */
 enum auth_stat
-_authenticate(rqst, msg)
+_gss_authenticate(rqst, msg, no_dispatch)
 	struct svc_req *rqst;
 	struct rpc_msg *msg;
+	bool_t *no_dispatch;
 {
 	int cred_flavor;
 	struct authsvc *asp;
@@ -97,6 +98,7 @@ _authenticate(rqst, msg)
 	rqst->rq_xprt->xp_verf.oa_flavor = _null_auth.oa_flavor;
 	rqst->rq_xprt->xp_verf.oa_length = 0;
 	cred_flavor = rqst->rq_cred.oa_flavor;
+	*no_dispatch = FALSE;
 	switch (cred_flavor) {
 	case AUTH_NONE:
 		dummy = _svcauth_none(rqst, msg);
@@ -110,6 +112,11 @@ _authenticate(rqst, msg)
 #ifdef DES_BUILTIN
 	case AUTH_DES:
 		dummy = _svcauth_des(rqst, msg);
+		return (dummy);
+#endif
+#ifdef HAVE_RPCSEC_GSS
+	case RPCSEC_GSS:
+		dummy = _svcauth_gss(rqst, msg, no_dispatch);
 		return (dummy);
 #endif
 	default:
@@ -130,6 +137,13 @@ _authenticate(rqst, msg)
 	mutex_unlock(&authsvc_lock);
 
 	return (AUTH_REJECTEDCRED);
+}
+
+enum auth_stat
+_authenticate(struct svc_req *rqst, struct rpc_msg *msg)
+{
+	bool_t no_dispatch;
+	return _gss_authenticate(rqst, msg, &no_dispatch);
 }
 
 /*
@@ -160,6 +174,9 @@ svc_auth_reg(cred_flavor, handler)
 	    case AUTH_SHORT:
 #ifdef DES_BUILTIN
 	    case AUTH_DES:
+#endif
+#ifdef HAVE_RPCSEC_GSS
+	    case RPCSEC_GSS:
 #endif
 		/* already registered */
 		return (1);
