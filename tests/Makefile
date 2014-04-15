@@ -1,5 +1,5 @@
-GANESHA_BUILD=/root/shared/nfs-ganesha/src/build
-CFLAGS=-g -Wall -Werror -I../tirpc
+GANESHA_BUILD=/opt/GANESHA/build-nfs
+CFLAGS=-g -Wall -Werror -I../ntirpc
 LDFLAGS=-L$(GANESHA_BUILD)/libntirpc/src
 
 all: nfs4_testmsk nfs4_server

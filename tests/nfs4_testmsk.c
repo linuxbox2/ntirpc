@@ -120,7 +120,8 @@ int main() {
 	attr.sq_depth = CREDITS;
 	attr.max_send_sge = 4;
 	attr.port = "20049";
-	attr.node = "::1";
+	attr.node = "127.0.0.1";
+	attr.debug = 1;
 
 	if (msk_init(&trans, &attr))
 		die("couldn't init trans", ENOMEM);

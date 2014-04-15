@@ -46,7 +46,8 @@ int main() {
 	attr.sq_depth = CREDITS;
 	attr.max_send_sge = 4;
 	attr.port = "20049";
-	attr.node = "::";
+	attr.node = "0.0.0.0";
+	attr.debug = 1;
 
 	if (msk_init(&trans, &attr))
 		die("couldn't init trans", ENOMEM);
@@ -65,26 +66,22 @@ int main() {
 
 	FILE *logfd =	fopen("/tmp/nfsrdma_log", "w+");
 
-	while(1) {
-		memset(&req, 0, sizeof(req));
-		memset(&rply, 0, sizeof(rply));
+	memset(&req, 0, sizeof(req));
+	memset(&rply, 0, sizeof(rply));
 
-		rc = rpc_svc->xp_ops->xp_recv(rpc_svc, &req);
-		printf("Got something (status %d)\n", rc);
-		fwrite((char*)(&req.rq_msg), sizeof(req.rq_msg), sizeof(char), logfd);
-	        fwrite("\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11", 0x10, sizeof(char), logfd);
-		fflush(logfd);
-		rply.rm_xid = req.rq_xid;
-		rply.rm_direction=REPLY;
-		rply.rm_reply.rp_stat = MSG_DENIED;
-		rply.rm_flags = RPC_MSG_FLAG_NONE;
-		rply.rjcted_rply.rj_stat = AUTH_ERROR;
-		rply.rjcted_rply.rj_why = AUTH_FAILED;
+	rc = rpc_svc->xp_ops->xp_recv(rpc_svc, &req);
+	printf("Got something (status %d)\n", rc);
+	fwrite((char*)(&req.rq_msg), sizeof(req.rq_msg), sizeof(char), logfd);
+        fwrite("\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11", 0x10, sizeof(char), logfd);
+	fflush(logfd);
+	rply.rm_xid = req.rq_xid;
+	rply.rm_direction=REPLY;
+	rply.rm_reply.rp_stat = MSG_DENIED;
+	rply.rm_flags = RPC_MSG_FLAG_NONE;
+	rply.rjcted_rply.rj_stat = AUTH_ERROR;
+	rply.rjcted_rply.rj_why = AUTH_FAILED;
 
-		rpc_svc->xp_ops->xp_reply(rpc_svc, &req, &rply);
-
-	}
-
+	rpc_svc->xp_ops->xp_reply(rpc_svc, &req, &rply);
 
 
 	msk_destroy_trans(&trans);
