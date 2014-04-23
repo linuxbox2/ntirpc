@@ -633,9 +633,10 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 
 		pthread_mutex_unlock(&mi->cl.lock);
 
-		//handy = length, base = address
+#ifdef MSK_DUMP_FRAGMENTS
+		rpcrdma_dump_msg(mi->curbuf, "call", ((struct rpcrdma_msg *)mi->curbuf->data)->rm_xid);
+#endif
 
-		
 		read_chunk = rpcrdma_get_read_list((struct rpcrdma_msg*)mi->curbuf->data);
 		prev_buf = NULL;
 		while (read_chunk->rc_discrim != 0) {
@@ -665,6 +666,7 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 
 		i = rpcrdma_get_call((struct rpcrdma_msg *)mi->curbuf->data, (char **)&xdrs->x_base);
 		if (i != 0) {
+			//handy = length, base = address
 			mi->pos = xdrs->x_base;
 			xdrs->x_handy = mi->curbuf->size - i; //FIXME: check this matches read_chunk position
 			mi->xdrbuf = mi->curbuf;
@@ -672,11 +674,6 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 
 		xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
 		    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
-
-#ifdef MSK_DUMP_FRAGMENTS
-		rpcrdma_dump_msg(mi->curbuf, "call", ((struct rpcrdma_msg *)mi->curbuf->data)->rm_xid);
-#endif
-
 
 		break;		
 
