@@ -269,7 +269,7 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 	return (true);
 }
 
-static bool
+static int
 svcauth_gss_validate(struct svc_req *req,
 		     struct svc_rpc_gss_data *gd,
 		     struct rpc_msg *msg)
