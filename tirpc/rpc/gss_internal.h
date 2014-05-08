@@ -92,6 +92,7 @@ struct svc_rpc_gss_data
         gss_buffer_desc ms_pac;
     } pac;
     SVCAUTH *auth;
+    uint32_t endtime;
 };
 
 bool svcauth_gss_destroy(SVCAUTH *auth);
