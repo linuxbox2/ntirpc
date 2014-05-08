@@ -157,6 +157,8 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 	gss_buffer_desc recv_tok, seqbuf, checksum;
 	gss_OID mech;
 	OM_uint32 maj_stat = 0, min_stat = 0, ret_flags, seq;
+#define INDEF_EXPIRE 60*60*24	/* from mit k5 src/lib/rpc/svc_auth_gssapi.c */
+	OM_uint32 time_rec;
 
 	gc = (struct rpc_gss_cred *)req->rq_clntcred;
 	memset(gr, 0, sizeof(*gr));
@@ -173,7 +175,7 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 	    gss_accept_sec_context(&gr->gr_minor, &gd->ctx, svcauth_gss_creds,
 				   &recv_tok, GSS_C_NO_CHANNEL_BINDINGS,
 				   &gd->client_name, &mech, &gr->gr_token,
-				   &ret_flags, NULL, NULL);
+				   &ret_flags, &time_rec, NULL);
 
 	svc_freeargs(req->rq_xprt, (xdrproc_t) xdr_rpc_gss_init_args,
 		     (caddr_t) &recv_tok);
@@ -208,6 +210,10 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 	gd->sec.qop = GSS_C_QOP_DEFAULT;
 	gd->sec.svc = gc->gc_svc;
 	gd->win = gr->gr_win;
+
+	if (time_rec == GSS_C_INDEFINITE) time_rec = INDEF_EXPIRE;
+	if (time_rec > 10) time_rec -= 5;
+	gd->endtime = time_rec + time(0);
 
 	if (gr->gr_major == GSS_S_COMPLETE) {
 		maj_stat =
@@ -279,11 +285,11 @@ svcauth_gss_validate(struct svc_req *req,
 	/* XXX - Reconstruct RPC header for signing (from xdr_callmsg). */
 	oa = &msg->rm_call.cb_cred;
 	if (oa->oa_length > MAX_AUTH_BYTES)
-		return (false);
+		return GSS_S_CALL_BAD_STRUCTURE;
 
 	/* 8 XDR units from the IXDR macro calls. */
 	if (sizeof(rpchdr) < (8 * BYTES_PER_XDR_UNIT + RNDUP(oa->oa_length)))
-		return (false);
+		return GSS_S_CALL_BAD_STRUCTURE;
 
 	buf = (int32_t *) rpchdr;
 	IXDR_PUT_LONG(buf, msg->rm_xid);
@@ -310,9 +316,9 @@ svcauth_gss_validate(struct svc_req *req,
 	if (maj_stat != GSS_S_COMPLETE) {
 		__warnx(TIRPC_DEBUG_FLAG_AUTH, "%s: %d %d", __func__, maj_stat,
 			min_stat);
-		return (false);
+		return (maj_stat);
 	}
-	return (true);
+	return GSS_S_COMPLETE;
 }
 
 bool
@@ -437,6 +443,11 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 		if (gc->gc_seq > MAXSEQ)
 			svcauth_gss_return(RPCSEC_GSS_CTXPROBLEM);
 
+		if (time(0) >= gd->endtime) {
+			*no_dispatch = true;
+			svcauth_gss_return(RPCSEC_GSS_CTXPROBLEM);
+		}
+
 		/* XXX implied serialization?  or just fudging?  advance if
 		 * greater? */
 		offset = gd->seqlast - gc->gc_seq;
@@ -539,8 +550,13 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 		 * after a validate or verf failure ? */
 
 	case RPCSEC_GSS_DATA:
-		if (!svcauth_gss_validate(req, gd, msg))
+		call_stat = svcauth_gss_validate(req, gd, msg);
+		switch (call_stat) {
+		default:
 			svcauth_gss_return(RPCSEC_GSS_CREDPROBLEM);
+		case 0:
+			break;
+		}
 
 		if (!svcauth_gss_nextverf(req, gd, htonl(gc->gc_seq)))
 			svcauth_gss_return(AUTH_FAILED);
@@ -550,7 +566,7 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 		if (req->rq_proc != NULLPROC)
 			svcauth_gss_return(AUTH_FAILED);	/* XXX ? */
 
-		if (!svcauth_gss_validate(req, gd, msg))
+		if (svcauth_gss_validate(req, gd, msg))
 			svcauth_gss_return(RPCSEC_GSS_CREDPROBLEM);
 
 		if (!svcauth_gss_nextverf(req, gd, htonl(gc->gc_seq)))
