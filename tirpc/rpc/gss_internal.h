@@ -93,6 +93,8 @@ struct svc_rpc_gss_data
     } pac;
     SVCAUTH *auth;
     uint32_t endtime;
+    caddr_t last_oa_base;
+    size_t last_oa_length;
 };
 
 bool svcauth_gss_destroy(SVCAUTH *auth);

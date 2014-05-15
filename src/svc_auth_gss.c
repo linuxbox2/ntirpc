@@ -326,14 +326,22 @@ bool
 svcauth_gss_nextverf(struct svc_req *req, struct svc_rpc_gss_data *gd,
                      u_int num)
 {
-    gss_buffer_desc signbuf, checksum;
-    OM_uint32 maj_stat, min_stat;
+   gss_buffer_desc signbuf, checksum;
+   OM_uint32 maj_stat, min_stat;
+   caddr_t last_oa_base;
 
     signbuf.value = &num;
     signbuf.length = sizeof(num);
 
-    maj_stat = gss_get_mic(&min_stat, gd->ctx, gd->sec.qop,
-                           &signbuf, &checksum);
+    if ((last_oa_base = gd->last_oa_base)) {
+	    /* XXX wrapper conflict: mem_free vs. gssalloc_free ? */
+	    /* ... but this only matters for win32 | kernel */
+	    gd->last_oa_base = 0;
+	    mem_free(last_oa_base, gd->last_oa_length);
+    }
+
+    maj_stat =
+	    gss_get_mic(&min_stat, gd->ctx, gd->sec.qop, &signbuf, &checksum);
 
     if (maj_stat != GSS_S_COMPLETE) {
         log_status("gss_get_mic", maj_stat, min_stat);
@@ -343,7 +351,10 @@ svcauth_gss_nextverf(struct svc_req *req, struct svc_rpc_gss_data *gd,
     req->rq_verf.oa_base = (caddr_t)checksum.value;
     req->rq_verf.oa_length = (u_int)checksum.length;
 
-    return (TRUE);
+    gd->last_oa_base = req->rq_verf.oa_base;
+    gd->last_oa_length = req->rq_verf.oa_length;
+
+    return (true);
 }
 
 #define svcauth_gss_return(code) \
@@ -416,22 +427,25 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg, bool *no_dispatch)
             gd->sec.svc = gc->gc_svc;
     }
 
-    if (! gd) {
-        /* Allocate and set up server auth handle. */
-        if ((auth = mem_alloc(sizeof(SVCAUTH))) == NULL) {
-            __warnx(TIRPC_DEBUG_FLAG_AUTH,
-                    "%s: alloc auth failed", __func__);
-            svcauth_gss_return(AUTH_FAILED);
-        }
-        if ((gd = alloc_svc_rpc_gss_data()) == NULL) {
-            __warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-                    "%s: alloc svc_rpc_gss_data failed", __func__);
-            mem_free(auth, sizeof(SVCAUTH));
-            svcauth_gss_return(AUTH_FAILED);
-        }
-        auth->svc_ah_ops = &svc_auth_gss_ops;
-        auth->svc_ah_private = (caddr_t) gd;
-        gd->auth = auth;
+    if (!gd) {
+	    /* Allocate and set up server auth handle. */
+	    auth = mem_alloc(sizeof(SVCAUTH));
+	    if (!auth) {
+		    __warnx(TIRPC_DEBUG_FLAG_AUTH, "%s: alloc auth failed",
+			    __func__);
+		    svcauth_gss_return(AUTH_FAILED);
+	    }
+	    gd = alloc_svc_rpc_gss_data();
+	    if (!gd) {
+		    __warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
+			    "%s: alloc svc_rpc_gss_data failed", __func__);
+		    mem_free(auth, sizeof(SVCAUTH));
+		    svcauth_gss_return(AUTH_FAILED);
+	    }
+	    gd->last_oa_base = 0;
+	    auth->svc_ah_ops = &svc_auth_gss_ops;
+	    auth->svc_ah_private = (caddr_t) gd;
+	    gd->auth = auth;
     }
 
     /* Serialize context. */
@@ -587,7 +601,8 @@ bool
 svcauth_gss_destroy(SVCAUTH *auth)
 {
     struct svc_rpc_gss_data *gd;
-    OM_uint32   min_stat;
+    OM_uint32 min_stat;
+    caddr_t last_oa_base;
 
     gd = SVCAUTH_PRIVATE(auth);
 
@@ -602,6 +617,13 @@ svcauth_gss_destroy(SVCAUTH *auth)
 
     gss_release_buffer(&min_stat, &gd->checksum);
     mutex_destroy(&gd->lock);
+
+    if ((last_oa_base = gd->last_oa_base)) {
+	    /* XXX wrapper conflict: mem_free vs. gssalloc_free ? */
+	    /* ... but this only matters for win32 | kernel */
+	    gd->last_oa_base = 0;
+	    mem_free(last_oa_base, gd->last_oa_length);
+    }
 
     mem_free(gd, sizeof(struct svc_rpc_gss_data));
     mem_free(auth, sizeof(*auth));
