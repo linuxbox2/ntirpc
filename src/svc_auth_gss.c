@@ -43,6 +43,7 @@
 #include <rpc/svc_auth.h>
 #include "rpc_com.h"
 #include <rpc/gss_internal.h>
+#include <misc/portable.h>
 
 static bool svcauth_gss_wrap(SVCAUTH *, struct svc_req *, XDR *, xdrproc_t,
 			     caddr_t);
@@ -148,6 +149,19 @@ svcauth_gss_release_cred(void)
 	return (true);
 }
 
+#ifdef __APPLE__
+/* there's also mach_absolute_time() - don't know if it's faster */
+#define get_time_fast()	time(0)
+#else
+static inline int64_t
+get_time_fast(void)
+{
+	struct timespec ts[1];
+	(void)clock_gettime(CLOCK_MONOTONIC_FAST, ts);
+	return ts->tv_sec;
+}
+#endif
+
 static bool
 svcauth_gss_accept_sec_context(struct svc_req *req,
 			       struct svc_rpc_gss_data *gd,
@@ -213,7 +227,7 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 
 	if (time_rec == GSS_C_INDEFINITE) time_rec = INDEF_EXPIRE;
 	if (time_rec > 10) time_rec -= 5;
-	gd->endtime = time_rec + time(0);
+	gd->endtime = time_rec + get_time_fast();
 
 	if (gr->gr_major == GSS_S_COMPLETE) {
 		maj_stat =
@@ -455,7 +469,7 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 		if (gc->gc_seq > MAXSEQ)
 			svcauth_gss_return(RPCSEC_GSS_CTXPROBLEM);
 
-		if (time(0) >= gd->endtime) {
+		if (get_time_fast() >= gd->endtime) {
 			*no_dispatch = true;
 			svcauth_gss_return(RPCSEC_GSS_CTXPROBLEM);
 		}
