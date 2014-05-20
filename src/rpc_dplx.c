@@ -265,6 +265,8 @@ rpc_dplx_lookup_rec(int fd, uint32_t iflags, uint32_t *oflags)
 					"%s: collision inserting in locked rbtree partition",
 					__func__);
 				free_dplx_rec(rec);
+				rec = NULL;
+				goto unlock;
 			}
 		}
 	} else {
