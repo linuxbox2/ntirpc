@@ -218,6 +218,17 @@ free_rpc_msg(struct rpc_msg *msg)
 	mem_free(msg, sizeof(struct rpc_msg));
 }
 
+static inline void
+free_req_rpc_msg(struct svc_req *req)
+{
+	if (req->rq_msg) {
+		struct rpc_msg *msg = req->rq_msg;
+		mem_free(msg->fr_vec[0], 2 * MAX_AUTH_BYTES + RQCRED_SIZE);
+		mem_free(msg, sizeof(struct rpc_msg));
+		req->rq_msg = NULL;
+	}
+}
+
 /* ***************  SVCXPRT related stuff **************** */
 
 /*
@@ -888,14 +899,14 @@ svc_getreq_default(SVCXPRT *xprt)
 			}
 
 			/* dispose RPC header */
-			(void)free_rpc_msg(req.rq_msg);
+			free_req_rpc_msg(&req);
 
 		}
 		/* SVC_RECV again? */
  call_done:
 
 		/* dispose RPC header */
-		(void)free_rpc_msg(req.rq_msg);
+		free_req_rpc_msg(&req); /* SAFE */
 
 		stat = SVC_STAT(xprt);
 		if (stat == XPRT_DIED) {
