@@ -478,8 +478,8 @@ xdr_ioq_putbufs(XDR *xdrs, xdr_uio *uio, u_int flags)
 			struct v_rec *vrec =
 			    (struct v_rec *)(uio->xbs_buf[ix]).xb_p1;
 			vrec_rele(xioq, vrec);
-			mem_free(uio->xbs_buf, 0);
 		}
+		mem_free(uio->xbs_buf, 0);
 		break;
 	case false:
 	default:
