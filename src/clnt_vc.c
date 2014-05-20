@@ -560,8 +560,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	vc_call_return_rlocked(ctx->error.re_status);
 
  out:
-	if (ctx)
-		free_rpc_call_ctx(ctx, RPC_CTX_FLAG_NONE);
+	free_rpc_call_ctx(ctx, RPC_CTX_FLAG_NONE);
 
 	return (result);
 }
