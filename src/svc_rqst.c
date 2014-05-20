@@ -1048,12 +1048,10 @@ xprt_register(SVCXPRT *xprt)
 void
 xprt_unregister(SVCXPRT *xprt)
 {
-	SVCXPRT *xprt2 __attribute__ ((unused));
-
 	(void)svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id, xprt,
 				    SVC_RQST_FLAG_NONE);
 
 	/* xprt2 holds the address we displaced, it would be of interest
 	 * if xprt2 != xprt */
-	xprt2 = svc_xprt_clear(xprt, SVC_XPRT_FLAG_NONE);
+	/* SVCXPRT *xprt2 = */ (void) svc_xprt_clear(xprt, SVC_XPRT_FLAG_NONE);
 }
