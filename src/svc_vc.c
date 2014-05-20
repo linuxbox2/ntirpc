@@ -487,6 +487,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 	struct __rpc_sockinfo si;
 	const char *netid;
 	uint32_t oflags;
+	bool newxd = false;
 
 	assert(fd != -1);
 
@@ -508,6 +509,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 
 	/* attach shared state */
 	if ((oflags & RPC_DPLX_LKP_OFLAG_ALLOC) || (!rec->hdl.xd)) {
+		newxd = true;
 		xd = rec->hdl.xd = alloc_x_vc_data();
 		if (xd == NULL) {
 			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
@@ -592,7 +594,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 	xd->sx.strm_stat = XPRT_IDLE;
 
 	xprt->xp_p1 = xd;
-	if (__rpc_sockinfo2netid(&si, &netid))
+	if (newxd /* ensures valid si */ && __rpc_sockinfo2netid(&si, &netid))
 		xprt->xp_netid = rpc_strdup(netid);
 
 	/* make reachable from rec */
