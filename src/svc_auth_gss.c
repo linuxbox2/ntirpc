@@ -50,9 +50,12 @@ static bool svcauth_gss_wrap(SVCAUTH *, struct svc_req *, XDR *, xdrproc_t,
 static bool svcauth_gss_unwrap(SVCAUTH *, struct svc_req *, XDR *, xdrproc_t,
                                caddr_t);
 
+static bool svcauth_gss_release(SVCAUTH *, struct svc_req *);
+
 struct svc_auth_ops svc_auth_gss_ops = {
     svcauth_gss_wrap,
     svcauth_gss_unwrap,
+    svcauth_gss_release,
     svcauth_gss_destroy
 };
 
@@ -683,6 +686,28 @@ svcauth_gss_unwrap(SVCAUTH *auth, struct svc_req *req,
                              gd->sec.svc, gc_seq));
     mutex_unlock(&gd->lock);
     return result; 
+}
+
+static bool
+svcauth_gss_release(SVCAUTH *auth, struct svc_req *req)
+{
+        struct svc_rpc_gss_data *gd;
+	caddr_t last_oa_base;
+
+        gd = SVCAUTH_PRIVATE(auth);
+#if 0
+        if (gd)
+                unref_svc_rpc_gss_data(gd);
+        req->rq_auth = NULL;
+#endif
+        if ((last_oa_base = req->rq_verf.oa_base)) {
+               /* XXX wrapper conflict: mem_free vs. gssalloc_free ? */
+               /* ... but this only matters for win32 | kernel */
+               req->rq_verf.oa_base = 0;
+               mem_free(last_oa_base, req->rq_verf.oa_length);
+       }
+
+        return (true);
 }
 
 char *

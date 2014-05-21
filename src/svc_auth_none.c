@@ -40,6 +40,7 @@
 #include <rpc/svc.h>
 #include <rpc/svc_auth.h>
 
+static bool svcauth_none_release(SVCAUTH *, struct svc_req *);
 static bool svcauth_none_destroy(SVCAUTH *);
 static bool svcauth_none_wrap(SVCAUTH *, struct svc_req *, XDR *, xdrproc_t,
                               caddr_t);
@@ -47,6 +48,7 @@ static bool svcauth_none_wrap(SVCAUTH *, struct svc_req *, XDR *, xdrproc_t,
 struct svc_auth_ops svc_auth_none_ops = {
     svcauth_none_wrap,
     svcauth_none_wrap,
+    svcauth_none_release,
     svcauth_none_destroy
 };
 
@@ -54,6 +56,13 @@ SVCAUTH svc_auth_none = {
     &svc_auth_none_ops,
     NULL,
 };
+
+static bool
+svcauth_none_release(SVCAUTH * __attribute__ ((unused)) auth,
+                     struct svc_req * __attribute__ ((unused)) req)
+{
+        return (true);
+}
 
 static bool
 svcauth_none_destroy(SVCAUTH *auth)
