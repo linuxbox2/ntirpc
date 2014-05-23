@@ -230,7 +230,6 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
     gd->win = gr->gr_win;
 
     if (time_rec == GSS_C_INDEFINITE) time_rec = INDEF_EXPIRE;
-    if (time_rec > 10) time_rec -= 5;
     gd->endtime = time_rec + get_time_fast();
 
     if (gr->gr_major == GSS_S_COMPLETE) {
@@ -480,7 +479,7 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg, bool *no_dispatch)
 
 	if (get_time_fast() >= gd->endtime) {
 		*no_dispatch = true;
-		svcauth_gss_return(RPCSEC_GSS_CTXPROBLEM);
+		svcauth_gss_return(RPCSEC_GSS_CREDPROBLEM);
 	}
 
         /* XXX implied serialization?  or just fudging?  advance if greater? */
