@@ -55,6 +55,8 @@
 #include <err.h>
 
 #include "rpc_com.h"
+#include "misc/city.h"
+#include "rpc/xdr_inrec.h"
 #include "svc_internal.h"
 #include "clnt_internal.h"
 #include "svc_xprt.h"
