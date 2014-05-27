@@ -427,7 +427,7 @@ svc_fd_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 		} else
 			addr =
 			    __rpc_set_netbuf(&xprt->xp_rtaddr, &sin6,
-					     sizeof(ss));
+					     sizeof(struct sockaddr_in6));
 	} else
 		addr = __rpc_set_netbuf(&xprt->xp_rtaddr, &ss, sizeof(ss));
 	if (!addr) {
