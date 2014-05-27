@@ -134,7 +134,7 @@ svcauth_gss_acquire_cred(void)
 }
 
 /* XXX the function itself is unused */
-static bool svcauth_gss_release_cred(void) __attribute__ ((unused));
+// static bool svcauth_gss_release_cred(void) __attribute__ ((unused));
 
 static bool
 svcauth_gss_release_cred(void)
@@ -490,6 +490,7 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 			svcauth_gss_return(AUTH_FAILED); /* XXX ? */
 
 		/* XXX why unconditionally acquire creds? */
+svcauth_gss_release_cred();
 		if (!svcauth_gss_acquire_cred())
 			svcauth_gss_return(AUTH_FAILED);
 
