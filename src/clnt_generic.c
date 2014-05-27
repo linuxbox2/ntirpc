@@ -374,8 +374,8 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 	case NC_TPI_COTS_ORD:
 		if (nconf && ((strcmp(nconf->nc_protofmly, "inet") == 0)
 			      || (strcmp(nconf->nc_protofmly, "inet6") == 0))) {
-			setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one,
-				   sizeof(one));
+			(void) setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one,
+					  sizeof(one));
 		}
 		cl = clnt_vc_ncreate(fd, svcaddr, prog, vers, sendsz, recvsz);
 		break;
