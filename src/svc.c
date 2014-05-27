@@ -275,7 +275,7 @@ svc_reg(SVCXPRT *xprt, const rpcprog_t prog, const rpcvers_t vers,
 	if (xprt->xp_netid) {
 		netid = rpc_strdup(xprt->xp_netid);
 		flag = 1;
-	} else if (nconf && nconf->nc_netid) {
+	} else if (nconf) {
 		netid = rpc_strdup(nconf->nc_netid);
 		flag = 1;
 	} else {
