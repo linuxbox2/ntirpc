@@ -1243,6 +1243,7 @@ static CLIENT *local_rpcb(void)
 		}
 		if (tmpnconf == NULL) {
 			rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
+			endnetconfig(nc_handle);
 			mutex_unlock(&loopnconf_lock);
 			return (NULL);
 		}
