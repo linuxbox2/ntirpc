@@ -558,15 +558,17 @@ __rpcbind_is_up(void)
 
 	nconf = NULL;
 	localhandle = setnetconfig();
+	if (localhandle == NULL)
+		return (false);
+
 	while ((nconf = getnetconfig(localhandle)) != NULL) {
 		if (nconf->nc_protofmly != NULL
 		    && strcmp(nconf->nc_protofmly, NC_LOOPBACK) == 0)
 			break;
 	}
+	endnetconfig(localhandle);
 	if (nconf == NULL)
 		return (false);
-
-	endnetconfig(localhandle);
 
 	memset(&sun, 0, sizeof(sun));
 	sock = socket(AF_LOCAL, SOCK_STREAM, 0);
