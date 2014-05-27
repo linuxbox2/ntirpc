@@ -194,7 +194,7 @@ add_cache(const char *host, const char *netid, struct netbuf *taddr,
 	    mem_zalloc(sizeof(struct address_cache));
 	if (!ad_cache)
 		return;
-	ad_cache->ac_host = rpc_strdup(host);
+	ad_cache->ac_host = (host) ? rpc_strdup(host) : NULL;
 	ad_cache->ac_netid = rpc_strdup(netid);
 	ad_cache->ac_uaddr = uaddr ? rpc_strdup(uaddr) : NULL;
 	ad_cache->ac_taddr = (struct netbuf *)mem_zalloc(sizeof(struct netbuf));
