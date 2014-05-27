@@ -151,6 +151,7 @@ svc_ioq(struct thrd_context *thr_ctx)
 	struct x_vc_data *xd = arg->xd;
 	struct xdr_ioq *xioq = NULL;
 
+	mem_free(arg, sizeof(struct svc_ioq_args));
 	for (;;) {
 		mutex_lock(&xprt->xp_lock);
 		if (unlikely((!xd->shared.ioq.size) || ioq_shutdown)) {
