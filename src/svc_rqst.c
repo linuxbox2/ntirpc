@@ -340,11 +340,11 @@ evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
 	struct opr_rbtree_node *nx;
 	uint32_t refcnt;
 
-	if (!(flags & SVC_RQST_FLAG_SREC_LOCKED))
-		mutex_lock(&sr_rec->mtx);
-
 	if (!(flags & SVC_RQST_FLAG_MUTEX_LOCKED))
 		mutex_lock(&xprt->xp_lock);
+
+	if (!(flags & SVC_RQST_FLAG_SREC_LOCKED))
+		mutex_lock(&sr_rec->mtx);
 
 	xp_ev = (struct svc_xprt_ev *)xprt->xp_ev;
 
