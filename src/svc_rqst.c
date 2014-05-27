@@ -236,6 +236,7 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
 			"%s: failed creating event signal socketpair",
 			__func__);
+		mem_free(sr_rec, sizeof(struct svc_rqst_rec));
 		goto out;
 	}
 
