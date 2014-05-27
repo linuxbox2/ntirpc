@@ -335,8 +335,7 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 		si.si_socktype);
 #endif
 
-	if (nconf->nc_protofmly != NULL
-	    && strcmp(nconf->nc_protofmly, NC_LOOPBACK) == 0) {
+	if (strcmp(nconf->nc_protofmly, NC_LOOPBACK) == 0) {
 		client = local_rpcb();
 		if (!client) {
 #ifdef ND_DEBUG
