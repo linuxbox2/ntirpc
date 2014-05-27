@@ -226,6 +226,7 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 	gd->win = gr->gr_win;
 
 	if (time_rec == GSS_C_INDEFINITE) time_rec = INDEF_EXPIRE;
+	if (time_rec > 10) time_rec -= 5;
 	gd->endtime = time_rec + get_time_fast();
 
 	if (gr->gr_major == GSS_S_COMPLETE) {
@@ -301,11 +302,10 @@ svcauth_gss_validate(struct svc_req *req,
 	oa = &msg->rm_call.cb_cred;
 	if (oa->oa_length > MAX_AUTH_BYTES)
 		return GSS_S_CALL_BAD_STRUCTURE;
-
 	/* XXX since MAX_AUTH_BYTES is 400, the following code trivially
 	 * overruns (up to 431 per Coverity, but compare RPCHDR_LEN with
 	 * what is marshalled below). */
-	 
+
 	buf = (int32_t *) rpchdr;
 	IXDR_PUT_LONG(buf, msg->rm_xid);
 	IXDR_PUT_ENUM(buf, msg->rm_direction);
@@ -466,10 +466,6 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 
 	/* Check sequence number. */
 	if (gd->established) {
-
-		if (gc->gc_seq > MAXSEQ)
-			svcauth_gss_return(RPCSEC_GSS_CTXPROBLEM);
-
 		if (get_time_fast() >= gd->endtime) {
 			*no_dispatch = true;
 			svcauth_gss_return(RPCSEC_GSS_CREDPROBLEM);
