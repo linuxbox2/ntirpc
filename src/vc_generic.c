@@ -242,83 +242,6 @@ svc_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
 	return (len);
 }
 
-/* vector versions */
-
-/*
- * reads data from the tcp or udp connection.
- * any error is fatal and the connection is closed.
- * (And a read of zero bytes is a half closed stream => error.)
- * All read operations timeout after 35 seconds.  A timeout is
- * fatal for the connection.
- */
-static inline size_t
-svc_readv_vc(XDR *xdrs, void *ctp, struct iovec *iov,
-	     int iovcnt, u_int flags)
-{
-	SVCXPRT *xprt;
-	int milliseconds = 35 * 1000;	/* XXX configurable? */
-	struct pollfd pollfd;
-	struct x_vc_data *xd;
-	size_t nbytes = -1;
-
-	xd = (struct x_vc_data *)ctp;
-	xprt = xd->rec->hdl.xprt;
-
-	do {
-		pollfd.fd = xprt->xp_fd;
-		pollfd.events = POLLIN;
-		pollfd.revents = 0;
-		switch (poll(&pollfd, 1, milliseconds)) {
-		case -1:
-			if (errno == EINTR)
-				continue;
-		 /*FALLTHROUGH*/ case 0:
-			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-				"%s: poll returns 0 (will set dead)", __func__);
-			goto fatal_err;
-		default:
-			break;
-		}
-	} while ((pollfd.revents & POLLIN) == 0);
-
-	nbytes = readv(xprt->xp_fd, iov, iovcnt);
-	if (nbytes > 0) {
-		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
-		goto out;
-	}
-
- fatal_err:
-	cfconn_set_dead(xprt, xd);
- out:
-	return (nbytes);
-}
-
-/*
- * writes data to the tcp connection.
- * Any error is fatal and the connection is closed.
- */
-static size_t
-svc_writev_vc(XDR *xdrs, void *ctp, struct iovec *iov,
-	      int iovcnt, u_int flags)
-{
-	SVCXPRT *xprt;
-	struct x_vc_data *xd;
-	size_t nbytes;
-
-	xd = (struct x_vc_data *)ctp;
-	xprt = xd->rec->hdl.xprt;
-
-	nbytes = writev(xprt->xp_fd, iov, iovcnt);
-	if (nbytes < 0) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"%s: short writev (will set dead)", __func__);
-		cfconn_set_dead(xprt, xd);
-		return (-1);
-	}
-
-	return (nbytes);
-}
-
 /* generic read and write callbacks */
 int
 generic_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
@@ -345,44 +268,6 @@ generic_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
 		break;
 	case RPC_DPLX_SVC:
 		return (svc_write_vc(xdrs, ctp, buf, len));
-		break;
-	default:
-		/* better not */
-		abort();
-	}
-}
-
-size_t
-generic_readv_vc(XDR *xdrs, void *xprtp, struct iovec *iov, int iovcnt,
-		 u_int flags)
-{
-	switch ((enum rpc_duplex_callpath)xdrs->x_lib[0]) {
-#if 0				/* XXX implmenent */
-	case RPC_DPLX_CLNT:
-		return (clnt_readv_vc(xdrs, xprtp, iov, iovcnt, flags));
-		break;
-#endif
-	case RPC_DPLX_SVC:
-		return (svc_readv_vc(xdrs, xprtp, iov, iovcnt, flags));
-		break;
-	default:
-		/* better not */
-		abort();
-	}
-}
-
-size_t
-generic_writev_vc(XDR *xdrs, void *xprtp, struct iovec *iov, int iovcnt,
-		  u_int flags)
-{
-	switch ((enum rpc_duplex_callpath)xdrs->x_lib[0]) {
-#if 0				/* XXX implement */
-	case RPC_DPLX_CLNT:
-		return (clnt_writev_vc(xdrs, xprtp, iov, iovcnt, flags));
-		break;
-#endif
-	case RPC_DPLX_SVC:
-		return (svc_writev_vc(xdrs, xprtp, iov, iovcnt, flags));
 		break;
 	default:
 		/* better not */

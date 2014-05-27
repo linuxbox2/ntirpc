@@ -85,11 +85,6 @@ static void svc_vc_release(SVCXPRT *, u_int, const char *, const int);
 static void svc_vc_destroy(SVCXPRT *);
 int generic_read_vc(XDR *, void *, void *, int);
 int generic_write_vc(XDR *, void *, void *, int);
-static size_t readv_vc(void *, struct iovec *, int, u_int)
-	__attribute__ ((unused));
-static size_t writev_vc(void *, struct iovec *, int, u_int)
-	__attribute__ ((unused));
-static size_t writev_vc(void *, struct iovec *, int, u_int);
 static enum xprt_stat svc_vc_stat(SVCXPRT *);
 static bool svc_vc_recv(SVCXPRT *, struct svc_req *);
 static bool svc_vc_getargs(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
@@ -107,20 +102,6 @@ bool __svc_clean_idle2(int, bool);
 static SVCXPRT *makefd_xprt(int, u_int, u_int, bool *);
 
 extern pthread_mutex_t svc_ctr_lock;
-
-static size_t
-readv_vc(void *xprt, struct iovec *iov, int iovcnt, u_int flags)
-{
-	/* To be written (maybe useless) */
-	abort();
-}
-
-static size_t
-writev_vc(void *xprt, struct iovec *iov, int iovcnt, u_int flags)
-{
-	/* To be written (maybe useless) */
-	abort();
-}
 
 static void map_ipv4_to_ipv6(sin, sin6)
 struct sockaddr_in *sin;
