@@ -890,6 +890,7 @@ svc_getreq_default(SVCXPRT *xprt)
 					__func__);
 				svcerr_progvers(xprt, &req, vrange.lowvers,
 						vrange.highvers);
+				break;
 			default:
 				__warnx(TIRPC_DEBUG_FLAG_SVC,
 					"%s: dispatch prog notfound\n",
