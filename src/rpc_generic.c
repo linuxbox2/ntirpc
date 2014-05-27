@@ -775,6 +775,8 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 		ret->buf = sun;
 		break;
 	default:
+		mem_free(ret, 0);
+		ret = NULL;
 		break;
 	}
  out:
