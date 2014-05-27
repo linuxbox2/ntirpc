@@ -90,6 +90,7 @@ setnetpath(void)
 		return (NULL);
 	np_sessionp->nc_handlep = setnetconfig();
 	if (!np_sessionp->nc_handlep) {
+		mem_free(np_sessionp, sizeof(struct netpath_vars));
 		syslog(LOG_ERR, "rpc: failed to open " NETCONFIG);
 		return (NULL);
 	}
