@@ -111,7 +111,7 @@ clnt_com_ncreate(struct sockaddr_in *raddr, rpcprog_t prog,
 					goto syserror;
 				if (flags & SOCK_CLOEXEC) {
 					have_cloexec = -1;
-					fcntl(fd, F_SETFD, FD_CLOEXEC);
+					(void) fcntl(fd, F_SETFD, FD_CLOEXEC);
 				}
 			} else
 				goto syserror;
