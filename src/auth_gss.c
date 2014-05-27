@@ -180,6 +180,7 @@ authgss_ncreate(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 		    != GSS_S_COMPLETE) {
 			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 			rpc_createerr.cf_error.re_errno = ENOMEM;
+			mem_free(gd, 0);
 			mem_free(auth, 0);
 			return (NULL);
 		}
