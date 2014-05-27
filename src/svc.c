@@ -842,6 +842,7 @@ svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg)
 		return;
 	case SVC_LKP_VERS_NOTFOUND:
 		svcerr_progvers(xprt, &r, vrange.lowvers, vrange.highvers);
+		break;
 	default:
 		svcerr_noprog(xprt, &r);
 		break;
