@@ -192,7 +192,7 @@ clnt_raw_call(CLIENT *h, AUTH *auth, rpcproc_t proc,
 		 */
 		int op = xdrs->x_op;
 		xdrs->x_op = XDR_FREE;
-		xdr_replymsg(xdrs, &msg);
+		(void) xdr_replymsg(xdrs, &msg);
 		xdrs->x_op = op;
 		return (RPC_CANTDECODERES);
 	}
