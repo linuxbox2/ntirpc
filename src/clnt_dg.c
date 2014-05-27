@@ -183,7 +183,7 @@ clnt_dg_ncreate(int fd,	/* open file descriptor */
 #ifdef IP_RECVERR
 	{
 		int on = 1;
-		setsockopt(fd, SOL_IP, IP_RECVERR, &on, sizeof(on));
+		(void) setsockopt(fd, SOL_IP, IP_RECVERR, &on, sizeof(on));
 	}
 #endif
 	ioctl(fd, FIONBIO, (char *)(void *)&one);
