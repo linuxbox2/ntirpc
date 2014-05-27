@@ -407,7 +407,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 		 * Nb, we should probably use getpagesize() on Unix.  Need
 		 * an equivalent for Windows.
 		 */
-		gss = ((auth) && (auth->ah_cred.oa_flavor == RPCSEC_GSS));
+		gss = (auth->ah_cred.oa_flavor == RPCSEC_GSS);
 		xdrs = xdr_ioq_create(8192 /* default segment size */ ,
 				      __svc_params->svc_ioq_maxbuf + 8192,
 				      gss ? IOQ_FLAG_REALLOC : IOQ_FLAG_NONE);
