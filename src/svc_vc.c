@@ -506,12 +506,14 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 		xd->cx.calls.xid = 0;	/* next call xid is 1 */
 		xd->refcnt = 1;
 
-		__rpc_fd2sockinfo(fd, &si);
-
-		xd->shared.sendsz =
-		    __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
-		xd->shared.recvsz =
-		    __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
+		if (__rpc_fd2sockinfo(fd, &si)) {
+			xd->shared.sendsz =
+				__rpc_get_t_size(
+					si.si_af, si.si_proto, (int)sendsz);
+			xd->shared.recvsz =
+				__rpc_get_t_size(
+					si.si_af, si.si_proto, (int)recvsz);
+		}
 
 		/* duplex streams */
 		xdr_inrec_create(&(xd->shared.xdrs_in), recvsz, xd,
