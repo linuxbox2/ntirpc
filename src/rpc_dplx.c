@@ -268,6 +268,10 @@ rpc_dplx_lookup_rec(int fd, uint32_t iflags, uint32_t *oflags)
 				rec = NULL;
 				goto unlock;
 			}
+		} else {
+			/* raced */
+			rec = opr_containerof(nv, struct rpc_dplx_rec, node_k);
+			*oflags = RPC_DPLX_LKP_FLAG_NONE;
 		}
 	} else {
 		rec = opr_containerof(nv, struct rpc_dplx_rec, node_k);
