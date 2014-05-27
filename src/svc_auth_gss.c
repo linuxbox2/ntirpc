@@ -342,17 +342,9 @@ svcauth_gss_nextverf(struct svc_req *req, struct svc_rpc_gss_data *gd,
 {
 	gss_buffer_desc signbuf, checksum;
 	OM_uint32 maj_stat, min_stat;
-	caddr_t last_oa_base;
 
 	signbuf.value = &num;
 	signbuf.length = sizeof(num);
-
-	if ((last_oa_base = gd->last_oa_base)) {
-		/* XXX wrapper conflict: mem_free vs. gssalloc_free ? */
-		/* ... but this only matters for win32 | kernel */
-		gd->last_oa_base = 0;
-		mem_free(last_oa_base, gd->last_oa_length);
-	}
 
 	maj_stat =
 	    gss_get_mic(&min_stat, gd->ctx, gd->sec.qop, &signbuf, &checksum);
@@ -364,9 +356,6 @@ svcauth_gss_nextverf(struct svc_req *req, struct svc_rpc_gss_data *gd,
 	req->rq_verf.oa_flavor = RPCSEC_GSS;
 	req->rq_verf.oa_base = (caddr_t) checksum.value;
 	req->rq_verf.oa_length = (u_int) checksum.length;
-
-	gd->last_oa_base = req->rq_verf.oa_base;
-	gd->last_oa_length = req->rq_verf.oa_length;
 
 	return (true);
 }
@@ -451,7 +440,6 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 			mem_free(auth, sizeof(SVCAUTH));
 			svcauth_gss_return(AUTH_FAILED);
 		}
-		gd->last_oa_base = 0;
 		auth->svc_ah_ops = &svc_auth_gss_ops;
 		auth->svc_ah_private = (caddr_t) gd;
 		gd->auth = auth;
@@ -618,11 +606,19 @@ static bool
 svcauth_gss_release(SVCAUTH *auth, struct svc_req *req)
 {
 	struct svc_rpc_gss_data *gd;
+	caddr_t last_oa_base;
 
 	gd = SVCAUTH_PRIVATE(auth);
 	if (gd)
 		unref_svc_rpc_gss_data(gd, SVC_RPC_GSS_FLAG_NONE);
 	req->rq_auth = NULL;
+
+	if ((last_oa_base = req->rq_verf.oa_base)) {
+		/* XXX wrapper conflict: mem_free vs. gssalloc_free ? */
+		/* ... but this only matters for win32 | kernel */
+		req->rq_verf.oa_base = 0;
+		mem_free(last_oa_base, req->rq_verf.oa_length);
+	}
 
 	return (true);
 }
@@ -632,7 +628,6 @@ svcauth_gss_destroy(SVCAUTH *auth)
 {
 	struct svc_rpc_gss_data *gd;
 	OM_uint32 min_stat;
-	caddr_t last_oa_base;
 
 	gd = SVCAUTH_PRIVATE(auth);
 
@@ -647,13 +642,6 @@ svcauth_gss_destroy(SVCAUTH *auth)
 
 	gss_release_buffer(&min_stat, &gd->checksum);
 	mutex_destroy(&gd->lock);
-
-	if ((last_oa_base = gd->last_oa_base)) {
-		/* XXX wrapper conflict: mem_free vs. gssalloc_free ? */
-		/* ... but this only matters for win32 | kernel */
-		gd->last_oa_base = 0;
-		mem_free(last_oa_base, gd->last_oa_length);
-	}
 
 	mem_free(gd, sizeof(struct svc_rpc_gss_data));
 	mem_free(auth, sizeof(*auth));
