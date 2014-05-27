@@ -206,7 +206,12 @@ svc_tli_ncreate(int fd,	/* Connection end point */
 				nconf->nc_netid);
 			return (NULL);
 		}
-		__rpc_nconf2sockinfo(nconf, &si);
+
+		if (!__rpc_nconf2sockinfo(nconf, &si)) {
+			__warnx(TIRPC_DEBUG_FLAG_SVC,
+				"svc_tli_create: could not get netconfig information");
+			return (NULL);
+		}
 		madefd = true;
 	} else {
 		/*
