@@ -348,6 +348,7 @@ __rpc_setconf(const char *nettype)
 		handle->nflag = false;
 		break;
 	default:
+		mem_free(handle, 0);
 		return (NULL);
 	}
 
