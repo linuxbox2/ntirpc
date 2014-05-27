@@ -550,7 +550,7 @@ svcunix_ncreate(int sock, u_int sendsize, u_int recvsize, char *path)
 			break;
 	}
 	if (nconf == NULL)
-		return (xprt);
+		goto done;
 
 	sock = __rpc_nconf2fd(nconf);
 	if (sock < 0)
