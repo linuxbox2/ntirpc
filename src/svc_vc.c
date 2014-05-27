@@ -195,12 +195,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 		if (xd == NULL) {
 			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 				"svc_vc: makefd_xprt: out of memory");
-			/* return extra ref */
-			rpc_dplx_unref(rec,
-				       RPC_DPLX_FLAG_LOCKED |
-				       RPC_DPLX_FLAG_UNLOCK);
-			mem_free(xprt, sizeof(SVCXPRT));
-			goto done;
+			goto err;
 		}
 
 		xd->rec = rec;
@@ -231,6 +226,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 				xprt = rec->hdl.xprt;
 				/* inc xprt refcnt */
 				SVC_REF(xprt, SVC_REF_FLAG_NONE);
+				mem_free(rdvs, sizeof(struct cf_rendezvous));
 				goto done;
 			} else
 				++(xd->refcnt);
