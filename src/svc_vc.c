@@ -1056,10 +1056,14 @@ svc_vc_rendezvous_control(SVCXPRT *xprt, const u_int rq, void *in)
 		cfp->maxrec = *(int *)in;
 		break;
 	case SVCGET_XP_RECV:
+		mutex_lock(&ops_lock);
 		*(xp_recv_t *) in = xprt->xp_ops->xp_recv;
+		mutex_unlock(&ops_lock);
 		break;
 	case SVCSET_XP_RECV:
+		mutex_lock(&ops_lock);
 		xprt->xp_ops->xp_recv = *(xp_recv_t) in;
+		mutex_unlock(&ops_lock);
 		break;
 	case SVCGET_XP_GETREQ:
 		mutex_lock(&ops_lock);
