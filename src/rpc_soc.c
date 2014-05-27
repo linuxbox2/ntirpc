@@ -584,6 +584,8 @@ svcunix_ncreate(int sock, u_int sendsize, u_int recvsize, char *path)
 
  done:
 	endnetconfig(localhandle);
+	if (! xprt)
+		close(sock);
 	return (xprt);
 }
 
