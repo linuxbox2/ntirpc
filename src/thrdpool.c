@@ -105,6 +105,7 @@ thrd_wait(struct thrd *thrd)
 			TAILQ_REMOVE(&pool->idle_q, thrd, tailq);
 			--(pool->n_idle);
 			thrd->idle = false;
+			mutex_unlock(&thrd->ctx.we.mtx);
 			mutex_unlock(&pool->we.mtx);
 			goto out;
 		}
