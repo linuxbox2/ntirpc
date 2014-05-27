@@ -313,6 +313,9 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 				mem_free(ct->ct_addr.buf, ct->ct_addr.len);
 			free_x_vc_data(xd);
 		}
+		if (cs) {
+			mem_free(cs, sizeof(struct ct_serialized));
+		}
 		mem_free(clnt, sizeof(CLIENT));
 	}
 	if (rec) {
