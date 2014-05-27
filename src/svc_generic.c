@@ -117,6 +117,7 @@ svc_ncreate(void (*dispatch) (struct svc_req *req, SVCXPRT *xprt),
 					__warnx(TIRPC_DEBUG_FLAG_SVC,
 						"svc_ncreate: no memory");
 					mutex_unlock(&xprtlist_lock);
+					__rpc_endconf(handle);
 					return (0);
 				}
 				l->xprt = xprt;
