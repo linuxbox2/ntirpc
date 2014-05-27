@@ -346,9 +346,11 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 		} else {
 			struct sockaddr_un sun;
 
-			*targaddr = mem_zalloc(sizeof(sun.sun_path));
-			strncpy(*targaddr, _PATH_RPCBINDSOCK,
-				sizeof(sun.sun_path));
+			if (targaddr) {
+				*targaddr = mem_zalloc(sizeof(sun.sun_path));
+				strncpy(*targaddr, _PATH_RPCBINDSOCK,
+					sizeof(sun.sun_path));
+			}
 			return (client);
 		}
 	} else {
