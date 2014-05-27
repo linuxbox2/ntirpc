@@ -397,6 +397,13 @@ authgss_validate(AUTH *auth, struct opaque_auth *verf)
 	return (true);
 }
 
+#define authgss_refresh_return(code) \
+	do { \
+		if (gd_locked) \
+			mutex_unlock(&gd->lock); \
+		return (code); \
+	} while (0)
+
 static bool
 authgss_refresh(AUTH *auth, void *arg)
 {
@@ -404,13 +411,18 @@ authgss_refresh(AUTH *auth, void *arg)
 	struct rpc_gss_init_res gr;
 	gss_buffer_desc *recv_tokenp, send_token;
 	OM_uint32 maj_stat, min_stat, call_stat, ret_flags;
+	bool gd_locked = false;
 
 	log_debug("in authgss_refresh()");
 
 	gd = AUTH_PRIVATE(auth);
 
+	/* Serialize context. */
+	mutex_lock(&gd->lock);
+	gd_locked = true;
+
 	if (gd->established)
-		return (true);
+		authgss_refresh_return(true);
 
 	/* GSS context establishment loop. */
 	memset(&gr, 0, sizeof(gr));
@@ -474,7 +486,7 @@ authgss_refresh(AUTH *auth, void *arg)
 			if (call_stat != RPC_SUCCESS
 			    || (gr.gr_major != GSS_S_COMPLETE
 				&& gr.gr_major != GSS_S_CONTINUE_NEEDED))
-				return false;
+				authgss_refresh_return(false);
 
 			if (gr.gr_ctx.length != 0) {
 				if (gd->gc.gc_ctx.value)
@@ -516,7 +528,7 @@ authgss_refresh(AUTH *auth, void *arg)
 					gd->established = false;
 					authgss_destroy_context(auth);
 				}
-				return (false);
+				authgss_refresh_return (false);
 			}
 			gd->established = true;
 			gd->gc.gc_proc = RPCSEC_GSS_DATA;
@@ -534,9 +546,9 @@ authgss_refresh(AUTH *auth, void *arg)
 		auth = NULL;
 		rpc_createerr.cf_stat = RPC_AUTHERROR;
 
-		return (false);
+		authgss_refresh_return(false);
 	}
-	return (true);
+	authgss_refresh_return(true);
 }
 
 bool
