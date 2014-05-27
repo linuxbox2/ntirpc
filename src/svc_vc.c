@@ -628,7 +628,7 @@ rendezvous_request(SVCXPRT *xprt, struct svc_req *req)
 		return (FALSE);
 	}
 
-	setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &n, sizeof(n));
+	(void) setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &n, sizeof(n));
 
 	/*
 	 * make a new transport (re-uses xprt)
@@ -656,7 +656,8 @@ rendezvous_request(SVCXPRT *xprt, struct svc_req *req)
 	/* XXX fvdl - is this useful? (Yes.  Matt) */
 	if (__rpc_fd2sockinfo(fd, &si) && si.si_proto == IPPROTO_TCP) {
 		len = 1;
-		setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &len, sizeof(len));
+		(void) setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &len,
+				  sizeof(len));
 	}
 
 	slen = sizeof(struct sockaddr_storage);
@@ -1613,7 +1614,8 @@ svc_vc_ncreate_clnt(CLIENT *clnt, const u_int sendsz,
 
 	if (__rpc_fd2sockinfo(fd, &si) && si.si_proto == IPPROTO_TCP) {
 		len = 1;
-		setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &len, sizeof(len));
+		(void) setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &len,
+				  sizeof(len));
 	}
 
 	xd->sx.maxrec = __svc_maxrec;	/* XXX check */
