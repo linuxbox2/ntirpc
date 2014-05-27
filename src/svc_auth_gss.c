@@ -282,6 +282,8 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 	return (true);
 }
 
+#define RPCHDR_LEN ((10 * BYTES_PER_XDR_UNIT) + MAX_AUTH_BYTES)
+
 static int
 svcauth_gss_validate(struct svc_req *req,
 		     struct svc_rpc_gss_data *gd,
@@ -290,20 +292,20 @@ svcauth_gss_validate(struct svc_req *req,
 	struct opaque_auth *oa;
 	gss_buffer_desc rpcbuf, checksum;
 	OM_uint32 maj_stat, min_stat, qop_state;
-	u_char rpchdr[128];
+	u_char rpchdr[RPCHDR_LEN];
 	int32_t *buf;
 
-	memset(rpchdr, 0, sizeof(rpchdr));
+	memset(rpchdr, 0, RPCHDR_LEN);
 
 	/* XXX - Reconstruct RPC header for signing (from xdr_callmsg). */
 	oa = &msg->rm_call.cb_cred;
 	if (oa->oa_length > MAX_AUTH_BYTES)
 		return GSS_S_CALL_BAD_STRUCTURE;
 
-	/* 8 XDR units from the IXDR macro calls. */
-	if (sizeof(rpchdr) < (8 * BYTES_PER_XDR_UNIT + RNDUP(oa->oa_length)))
-		return GSS_S_CALL_BAD_STRUCTURE;
-
+	/* XXX since MAX_AUTH_BYTES is 400, the following code trivially
+	 * overruns (up to 431 per Coverity, but compare RPCHDR_LEN with
+	 * what is marshalled below). */
+	 
 	buf = (int32_t *) rpchdr;
 	IXDR_PUT_LONG(buf, msg->rm_xid);
 	IXDR_PUT_ENUM(buf, msg->rm_direction);

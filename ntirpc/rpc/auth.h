@@ -56,7 +56,7 @@
 #endif
 #include <sys/types.h>
 
-#define MAX_AUTH_BYTES 400
+#define MAX_AUTH_BYTES 400	/* maximum length of opaque auth */
 #define MAXNETNAMELEN 255	/* maximum length of network user's name */
 
 /*
