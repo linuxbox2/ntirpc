@@ -374,10 +374,10 @@ endnetconfig(void *handlep)
 	/*
 	 * Return 0 if anyone still needs it.
 	 */
+	mutex_lock(&nc_mtx);
 	nc_handlep->valid = NC_INVALID;
 	nc_handlep->flag = 0;
 	nc_handlep->nc_configs = NULL;
-	mutex_lock(&nc_mtx);
 	if (--ni.ref > 0) {
 		mutex_unlock(&nc_mtx);
 		mem_free(nc_handlep, 0);
