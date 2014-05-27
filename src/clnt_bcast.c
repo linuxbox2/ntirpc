@@ -330,13 +330,8 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 
 #ifdef PORTMAP
 		if (si.si_af == AF_INET && si.si_proto == IPPROTO_UDP) {
-			udpbufsz = fdlist[fdlistno].dsize;
-			outbuf_pmap = mem_alloc(udpbufsz);
-			if (outbuf_pmap == NULL) {
-				close(fd);
-				stat = RPC_SYSTEMERROR;
-				goto done_broad;
-			}
+			if (udpbufsz < fdlist[fdlistno].dsize)
+				udpbufsz = fdlist[fdlistno].dsize;
 			pmap_flag = 1;
 		}
 #endif				/* PORTMAP */
@@ -392,6 +387,11 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 #ifdef PORTMAP
 	/* Prepare the packet for version 2 PORTMAP */
 	if (pmap_flag) {
+		outbuf_pmap = mem_alloc(udpbufsz);
+		if (outbuf_pmap == NULL) {
+			stat = RPC_SYSTEMERROR;
+			goto done_broad;
+		}
 		msg.rm_xid++;	/* One way to distinguish */
 		msg.rm_call.cb_prog = PMAPPROG;
 		msg.rm_call.cb_vers = PMAPVERS;
