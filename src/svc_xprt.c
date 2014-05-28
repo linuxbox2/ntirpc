@@ -157,7 +157,8 @@ svc_xprt_insert(SVCXPRT *xprt, uint32_t flags)
 		if (opr_rbtree_insert(&t->t, &srec->node_k)) {
 			/* cant happen */
 			__warnx(TIRPC_DEBUG_FLAG_SVC_XPRT,
-				"%s: collision inserting in locked rbtree partition",
+				"%s: collision inserting in locked rbtree "
+				"partition",
 				__func__);
 			mutex_destroy(&srec->mtx);
 			mem_free(srec, sizeof(struct svc_xprt_rec));
@@ -389,12 +390,12 @@ svc_xprt_shutdown()
 				 */
 				SVC_DESTROY(srec->xprt); /* locks srec, so
 							  * avoid deadlock */
-                        } else {
-                          /* now remove srec */
-                          opr_rbtree_remove(&t->t, &srec->node_k);  
-                          /* and free it */
-                          mem_free(srec, sizeof(struct svc_xprt_rec));
-                        }
+			} else {
+				/* now remove srec */
+				opr_rbtree_remove(&t->t, &srec->node_k);
+				/* and free it */
+				mem_free(srec, sizeof(struct svc_xprt_rec));
+			}
 			n = opr_rbtree_first(&t->t);
 		}		/* curr partition */
 		rwlock_unlock(&t->lock);	/* t !LOCKED */
