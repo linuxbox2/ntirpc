@@ -65,6 +65,9 @@ struct svc_auth_ops svc_auth_gss_ops = {
 /* Global server credentials. */
 gss_cred_id_t svcauth_gss_creds;
 static gss_name_t svcauth_gss_name = NULL;
+static int64_t svcauth_gss_creds_expires;
+static mutex_t svcauth_gss_creds_lock = MUTEX_INITIALIZER;
+static gss_cred_id_t svcauth_prev_gss_creds;
 
 bool
 svcauth_gss_set_svc_name(gss_name_t name)
@@ -115,37 +118,6 @@ svcauth_gss_import_name(char *service)
   return (TRUE);
 }
 
-bool
-svcauth_gss_acquire_cred(void)
-{
-    OM_uint32 maj_stat, min_stat;
-
-    maj_stat = gss_acquire_cred(&min_stat, 
-                                svcauth_gss_name, 0,
-                                GSS_C_NULL_OID_SET, GSS_C_ACCEPT,
-                                &svcauth_gss_creds,
-                                NULL, NULL);
-    if (maj_stat != GSS_S_COMPLETE)
-        return (FALSE);
-
-    return (TRUE);
-}
-
-// static bool svcauth_gss_release_cred(void) __attribute__((unused));
-
-static bool
-svcauth_gss_release_cred(void)
-{
-    OM_uint32 maj_stat, min_stat;
-
-    maj_stat = gss_release_cred(&min_stat, &svcauth_gss_creds);
-    if (maj_stat != GSS_S_COMPLETE)
-        return (FALSE);
-    svcauth_gss_creds = NULL;
-
-    return (TRUE);
-}
-
 #ifdef __APPLE__
 /* there's also mach_absolute_time() - don't know if it's faster */
 #define get_time_fast()	time(0)
@@ -158,6 +130,70 @@ get_time_fast(void)
 	return ts->tv_sec;
 }
 #endif
+
+bool
+svcauth_gss_acquire_cred(void)
+{
+    OM_uint32 maj_stat, min_stat;
+    int64_t now;
+    OM_uint32 timerec;
+    gss_cred_id_t old_creds, ancient_creds;
+
+    now = get_time_fast();
+    if (svcauth_gss_creds && (!svcauth_gss_creds_expires
+				|| svcauth_gss_creds_expires > now))
+        return (TRUE);
+    mutex_lock(&svcauth_gss_creds_lock);
+    if (svcauth_gss_creds && (!svcauth_gss_creds_expires
+				|| svcauth_gss_creds_expires > now)) {
+	maj_stat = GSS_S_COMPLETE;
+    } else {
+	ancient_creds = svcauth_prev_gss_creds;
+	old_creds = svcauth_gss_creds;
+	timerec = 0;
+	now = get_time_fast();
+	maj_stat = gss_acquire_cred(&min_stat, 
+				    svcauth_gss_name, 0,
+				    GSS_C_NULL_OID_SET, GSS_C_ACCEPT,
+				    &svcauth_gss_creds,
+				    NULL, &timerec);
+	if (maj_stat == GSS_S_COMPLETE) {
+	    if (timerec == GSS_C_INDEFINITE)
+		svcauth_gss_creds_expires = 0;
+	    else
+		svcauth_gss_creds_expires = now + timerec;
+	    if (old_creds) {
+		svcauth_prev_gss_creds = old_creds;
+	    }
+	    if (ancient_creds) {
+		(void) gss_release_cred(&min_stat, &ancient_creds);
+	    }
+	}
+    }
+    mutex_unlock(&svcauth_gss_creds_lock);
+    if (maj_stat != GSS_S_COMPLETE)
+        return (FALSE);
+
+    return (TRUE);
+}
+
+bool
+svcauth_gss_release_cred(void)
+{
+#if 0
+    OM_uint32 maj_stat, min_stat;
+
+    maj_stat = gss_release_cred(&min_stat, &svcauth_gss_creds);
+    if (maj_stat != GSS_S_COMPLETE)
+        return (FALSE);
+    svcauth_gss_creds = NULL;
+#else
+    svcauth_gss_creds_expires = 1;
+    /* make any future callers to svcauth_gss_acquire_cred() get a new cred. */
+#endif
+
+    return (TRUE);
+}
 
 static bool
 svcauth_gss_accept_sec_context(struct svc_req *req,
@@ -501,7 +537,6 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg, bool *no_dispatch)
           svcauth_gss_return(AUTH_FAILED); /* XXX ? */
 
         /* XXX why unconditionally acquire creds? */
-svcauth_gss_release_cred();
         if (! svcauth_gss_acquire_cred())
             svcauth_gss_return(AUTH_FAILED);
 
