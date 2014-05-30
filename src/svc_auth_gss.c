@@ -317,13 +317,9 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 	return (true);
 }
 
-<<<<<<< HEAD
 #define RPCHDR_LEN ((10 * BYTES_PER_XDR_UNIT) + MAX_AUTH_BYTES)
 
 static int
-=======
-static OM_uint32
->>>>>>> Notify clients on GSS context expiration.
 svcauth_gss_validate(struct svc_req *req,
 		     struct svc_rpc_gss_data *gd,
 		     struct rpc_msg *msg)
@@ -340,16 +336,9 @@ svcauth_gss_validate(struct svc_req *req,
 	oa = &msg->rm_call.cb_cred;
 	if (oa->oa_length > MAX_AUTH_BYTES)
 		return GSS_S_CALL_BAD_STRUCTURE;
-<<<<<<< HEAD
 	/* XXX since MAX_AUTH_BYTES is 400, the following code trivially
 	 * overruns (up to 431 per Coverity, but compare RPCHDR_LEN with
 	 * what is marshalled below). */
-=======
-
-	/* 8 XDR units from the IXDR macro calls. */
-	if (sizeof(rpchdr) < (8 * BYTES_PER_XDR_UNIT + RNDUP(oa->oa_length)))
-		return GSS_S_CALL_BAD_STRUCTURE;
->>>>>>> Notify clients on GSS context expiration.
 
 	buf = (int32_t *) rpchdr;
 	IXDR_PUT_LONG(buf, msg->rm_xid);
@@ -502,11 +491,6 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 		if (get_time_fast() >= gd->endtime) {
 			*no_dispatch = true;
 			svcauth_gss_return(RPCSEC_GSS_CREDPROBLEM);
-		}
-
-		if (time(0) >= gd->endtime) {
-			*no_dispatch = true;
-			svcauth_gss_return(RPCSEC_GSS_CTXPROBLEM);
 		}
 
 		/* XXX implied serialization?  or just fudging?  advance if
