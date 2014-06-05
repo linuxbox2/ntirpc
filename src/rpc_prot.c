@@ -150,7 +150,6 @@ xdr_rejected_reply(xdrs, rr)
 		return (xdr_enum(xdrs, (enum_t *)&(rr->rj_why)));
 	}
 	/* NOTREACHED */
-	assert(0);
 	return (FALSE);
 }
 
