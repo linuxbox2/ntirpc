@@ -48,6 +48,8 @@ typedef enum {
 	RPCSEC_GSS_DESTROY = 3
 } rpc_gss_proc_t;
 
+#define RPCSEC_GSS_MAXPROC RPCSEC_GSS_DESTROY
+
 /* RPCSEC_GSS services. */
 typedef enum {
 	RPCSEC_GSS_SVC_NONE = 1,
@@ -101,7 +103,7 @@ struct rpc_gss_init_res {
 };
 
 /* Maximum sequence number value. */
-#define MAXSEQ  0x80000000
+#define RPCSEC_GSS_MAXSEQ  0x80000000
 
 /* Prototypes. */
 __BEGIN_DECLS

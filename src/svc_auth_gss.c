@@ -440,6 +440,12 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 	if (gc->gc_v != RPCSEC_GSS_VERSION)
 		svcauth_gss_return(AUTH_BADCRED);
 
+	if (gc->gc_seq > RPCSEC_GSS_MAXSEQ)
+		svcauth_gss_return(RPCSEC_GSS_CTXPROBLEM);
+
+	if (gc->gc_proc > RPCSEC_GSS_MAXPROC /* highest valid proc */)
+		svcauth_gss_return(AUTH_BADCRED);
+
 	/* Check RPCSEC_GSS service. */
 	if (gc->gc_svc != RPCSEC_GSS_SVC_NONE
 	    && gc->gc_svc != RPCSEC_GSS_SVC_INTEGRITY
@@ -503,7 +509,6 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 			offset = 0;
 		} else if (offset >= gd->win || (gd->seqmask & (1 << offset))) {
 			*no_dispatch = true;
-			svcauth_gss_return(RPCSEC_GSS_CTXPROBLEM);
 		}
 		gd->seqmask |= (1 << offset);	/* XXX harmless */
 
