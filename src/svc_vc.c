@@ -191,14 +191,9 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 		xd->shared.recvsz =
 		    __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsize);
 
-		/* duplex streams */
-		xdr_inrec_create(&(xd->shared.xdrs_in), recvsize, xd,
-				 generic_read_vc);
-		xd->shared.xdrs_in.x_op = XDR_DECODE;
-
-		xdrrec_create(&(xd->shared.xdrs_out), sendsize, recvsize, xd,
-			      generic_read_vc, generic_write_vc);
-		xd->shared.xdrs_out.x_op = XDR_ENCODE;
+		/* duplex streams are not used by the rendevous transport */
+		memset(&xd->shared.xdrs_in, 0, sizeof xd->shared.xdrs_in);
+		memset(&xd->shared.xdrs_out, 0, sizeof xd->shared.xdrs_out);
 	} else {
 		xd = (struct x_vc_data *)rec->hdl.xd;
 		/* dont return destroyed xprts */
