@@ -133,6 +133,7 @@ svc_rqst_init_xprt(SVCXPRT *xprt)
 {
 	struct svc_xprt_ev *xp_ev = mem_alloc(sizeof(struct svc_xprt_ev));
 
+	xp_ev->sr_rec = 0;
 	xp_ev->xprt = xprt;
 #if defined(TIRPC_EPOLL)
 	xp_ev->ev_type = SVC_EVENT_EPOLL;
@@ -164,8 +165,10 @@ svc_rqst_finalize_xprt(SVCXPRT *xprt, uint32_t flags)
 	svc_xprt_clear(xprt, flags2);
 
 	/* free state */
-	if (xprt->xp_ev)
+	if (xprt->xp_ev) {
 		mem_free(xprt->xp_ev, sizeof(struct svc_xprt_ev));
+		xprt->xp_ev = 0;
+	}
 
 	if (!(flags & SVC_RQST_FLAG_MUTEX_LOCKED))
 		mutex_unlock(&xprt->xp_lock);
