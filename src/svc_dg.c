@@ -417,7 +417,10 @@ svc_dg_dodestroy(SVCXPRT *xprt)
 {
 	struct svc_dg_data *su = su_data(xprt);
 
-	(void)svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
+	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYING)
+		return;
+	xprt->xp_flags |= SVC_XPRT_FLAG_DESTROYING;
+
 	if (xprt->xp_fd != -1)
 		(void)close(xprt->xp_fd);
 	XDR_DESTROY(&(su->su_xdrs));
@@ -467,8 +470,6 @@ svc_dg_release(SVCXPRT *xprt, u_int flags, const char *tag,
 static void
 svc_dg_destroy(SVCXPRT *xprt)
 {
-	uint32_t refcnt = 0;
-
 	mutex_lock(&xprt->xp_lock);
 	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
 		mutex_unlock(&xprt->xp_lock);
@@ -483,9 +484,7 @@ svc_dg_destroy(SVCXPRT *xprt)
 	/* clears xprt from the xprt table (eg, idle scans) */
 	svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
 
-	/* XXX prefer LOCKED? (would require lock order change) */
-	if (refcnt == 0)
-		svc_dg_dodestroy(xprt);
+	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 
  out:
 	return;

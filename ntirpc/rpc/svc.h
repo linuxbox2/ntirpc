@@ -150,6 +150,7 @@ typedef struct svc_init_params {
 #define SVC_XPRT_FLAG_GCHAN              0x0008
 #define SVC_XPRT_FLAG_COPY               0x0010	/* XXX */
 #define SVC_XPRT_FLAG_DESTROYED          0x0020
+#define SVC_XPRT_FLAG_DESTROYING         0x0040
 
 /*
  * SVC_REF flags
