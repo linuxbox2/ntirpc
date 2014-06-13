@@ -55,6 +55,8 @@ typedef enum {
 	RPCSEC_GSS_SVC_PRIVACY = 3
 } rpc_gss_svc_t;
 
+#define RPCSEC_GSS_MAXPROC 3
+
 #define RPCSEC_GSS_VERSION 1
 
 /* RPCSEC_GSS security triple. */
@@ -101,7 +103,7 @@ struct rpc_gss_init_res {
 };
 
 /* Maximum sequence number value. */
-#define MAXSEQ  0x80000000
+#define RPCSEC_GSS_MAXSEQ 0x80000000
 
 /* Prototypes. */
 __BEGIN_DECLS
