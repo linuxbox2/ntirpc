@@ -921,6 +921,8 @@ svc_getreq_default(SVCXPRT *xprt)
 				"%s: stat == XPRT_DIED (%p)\n", __func__,
 				xprt);
 			SVC_DESTROY(xprt);
+			SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+			xprt = 0;
 			break;
 
 		} else {
@@ -929,11 +931,19 @@ svc_getreq_default(SVCXPRT *xprt)
 			 * recursive call in the service dispatch routine.
 			 * If so, then break.
 			 */
-			if (!svc_validate_xprt_list(xprt))
+			if (!svc_validate_xprt_list(xprt)) {
+				SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+				xprt = 0;
 				break;
+			}
 		}
 
 	} while (stat == XPRT_MOREREQS);
+
+	if (xprt) {
+		svc_rqst_rearm_events(xprt, SVC_RQST_FLAG_NONE);
+		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+	}
 
 	return (stat);
 }
