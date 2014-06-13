@@ -1009,7 +1009,6 @@ svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags)
 
 	sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_RQST_FLAG_LOCK);
 	if (!sr_rec) {
-		mutex_unlock(&t->mtx);
 		code = ENOENT;
 		goto out;
 	}
@@ -1020,6 +1019,7 @@ svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags)
 	mutex_unlock(&sr_rec->mtx);
 
  out:
+	mutex_unlock(&t->mtx);
 	return (code);
 }
 
