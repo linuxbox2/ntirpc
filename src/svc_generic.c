@@ -210,6 +210,7 @@ svc_tli_ncreate(int fd,	/* Connection end point */
 		if (!__rpc_nconf2sockinfo(nconf, &si)) {
 			__warnx(TIRPC_DEBUG_FLAG_SVC,
 				"svc_tli_create: could not get netconfig information");
+			close(fd);
 			return (NULL);
 		}
 		madefd = true;
