@@ -227,6 +227,11 @@ free_req_rpc_msg(struct svc_req *req)
 		mem_free(msg, sizeof(struct rpc_msg));
 		req->rq_msg = NULL;
 	}
+	if (req->rq_rtaddr.buf) {
+		mem_free(req->rq_rtaddr.buf, req->rq_rtaddr.maxlen);
+		req->rq_rtaddr.buf = 0;
+		req->rq_rtaddr.len = req->rq_rtaddr.maxlen = 0;
+	}
 }
 
 /* ***************  SVCXPRT related stuff **************** */
