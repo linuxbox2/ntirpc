@@ -1056,3 +1056,12 @@ xprt_unregister(SVCXPRT *xprt)
 	 * if xprt2 != xprt */
 	/* SVCXPRT *xprt2 = */ (void) svc_xprt_clear(xprt, SVC_XPRT_FLAG_NONE);
 }
+
+void
+svc_rqst_shutdown(void)
+{
+	if (__svc_params->ev_u.evchan.id) {
+		svc_rqst_delete_evchan(__svc_params->ev_u.evchan.id, 0);
+		__svc_params->ev_u.evchan.id = 0;
+	}
+}

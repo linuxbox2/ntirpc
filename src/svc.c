@@ -974,6 +974,9 @@ svc_shutdown(u_long flags)
 	/* release fd lock records */
 	rpc_dplx_shutdown();
 
+	/* release request event channels */
+	svc_rqst_shutdown();
+
 	/* XXX assert quiescent */
 
 	return (code);

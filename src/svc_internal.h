@@ -201,4 +201,6 @@ epoll_create_wr(size_t size, int flags)
 }
 #endif
 
+void svc_rqst_shutdown(void);
+
 #endif				/* TIRPC_SVC_INTERNAL_H */
