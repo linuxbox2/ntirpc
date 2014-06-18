@@ -793,7 +793,6 @@ svc_rdvs_release(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 static void
 svc_rdvs_destroy(SVCXPRT *xprt)
 {
-	uint32_t xp_refcnt = 0;
 	uint32_t drefcnt = 0;	/* debugging only */
 
 	mutex_lock(&xprt->xp_lock);
@@ -803,7 +802,6 @@ svc_rdvs_destroy(SVCXPRT *xprt)
 	}
 
 	xprt->xp_flags |= SVC_XPRT_FLAG_DESTROYED;
-	xp_refcnt = --(xprt->xp_refcnt);	/* sentinel ref */
 	mutex_unlock(&xprt->xp_lock);
 
 	drefcnt = xprt->xp_refcnt;
@@ -825,12 +823,7 @@ svc_rdvs_destroy(SVCXPRT *xprt)
 		"%s: postfinalize %p unserialized xp_refcnt %u", __func__, xprt,
 		drefcnt);
 
-	if (xp_refcnt == 0) {
-		__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-			"%s: %p xp_refcnt %u calling rdvs_dodestroy", __func__,
-			xprt, xp_refcnt);
-		rdvs_dodestroy(xprt);
-	}
+	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 
  out:
 	return;
