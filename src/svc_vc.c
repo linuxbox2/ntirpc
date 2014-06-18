@@ -1539,12 +1539,9 @@ clnt_vc_ncreate_svc(SVCXPRT *xprt, const rpcprog_t prog,
 	    clnt_vc_ncreate2(xprt->xp_fd, &xprt->xp_rtaddr, prog, vers,
 			     xd->shared.recvsz, xd->shared.sendsz,
 			     CLNT_CREATE_FLAG_SVCXPRT);
-	if (!clnt)
-		goto fail;
 
 	mutex_unlock(&xprt->xp_lock);
 
- fail:
 	/* for a dedicated channel, unregister and free xprt */
 	if ((flags & SVC_VC_CREATE_ONEWAY) && (flags & SVC_VC_CREATE_DISPOSE)) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
