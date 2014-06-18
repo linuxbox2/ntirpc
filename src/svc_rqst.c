@@ -498,6 +498,12 @@ svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
 	}
 	sr_rec->states = SVC_RQST_STATE_DESTROYED;
 	sr_rec->id_k = 0;	/* no chan */
+	/*	ref count here should be 2:
+	 *	1	initial create/rbt ref we just deleted
+	 *	+1	lookup (top of this routine through here)
+	 * so, DROP one ref here so the final release will go to 0.
+	 */
+	--(sr_rec->refcnt);	/* DROP one extra ref - initial create */
 	sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED);
 
  out:
@@ -998,6 +1004,8 @@ svc_rqst_thrd_run(uint32_t chan_id, __attribute__ ((unused)) uint32_t flags)
 			"svc_rqst_thrd_run: unsupported event type");
 		break;
 	}			/* switch */
+	if (sr_rec)
+		sr_rec_release(sr_rec, SVC_RQST_FLAG_NONE);
 
  out:
 	return (code);
@@ -1023,6 +1031,8 @@ svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags)
 
  out:
 	mutex_unlock(&t->mtx);
+	if (sr_rec)
+		sr_rec_release(sr_rec, SVC_RQST_FLAG_NONE);
 	return (code);
 }
 
