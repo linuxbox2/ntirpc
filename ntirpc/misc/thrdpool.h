@@ -40,7 +40,7 @@ struct thrd {
 	struct thrd_context {
 		pthread_t id;
 		struct wait_entry we;
-		void (*func) (struct thrd_context *);
+		void (*func) (void*);
 		void *arg;
 	} ctx;
 	struct thrdpool *pool;
@@ -63,7 +63,7 @@ struct thrdpool {
 	int32_t n_threads;
 };
 
-typedef void (*thrd_func_t) (struct thrd_context *);
+typedef void (*thrd_func_t) (void *);
 
 int thrdpool_init(struct thrdpool *, const char *, struct thrdpool_params *);
 int thrdpool_submit_work(struct thrdpool *, thrd_func_t, void *);
