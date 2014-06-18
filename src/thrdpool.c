@@ -89,7 +89,11 @@ thrd_wait(struct thrd *thrd)
 	while (1) {
 		clock_gettime(CLOCK_REALTIME_FAST, &ts);
 		timespec_addms(&ts, 1000 * 120);
-		rc = cond_timedwait(&thrd->ctx.we.cv, &thrd->ctx.we.mtx, &ts);
+		if (pool->flags & THRD_FLAG_SHUTDOWN) {
+			rc = ETIMEDOUT;
+		} else {
+			rc = cond_timedwait(&thrd->ctx.we.cv, &thrd->ctx.we.mtx, &ts);
+		}
 		if (rc == ETIMEDOUT) {
 			mutex_unlock(&thrd->ctx.we.mtx);
 			mutex_lock(&pool->we.mtx);
@@ -110,7 +114,7 @@ thrd_wait(struct thrd *thrd)
 			goto out;
 		}
 		/* signalled */
-		code = true;
+		code = !thrd->idle;
 		mutex_unlock(&thrd->ctx.we.mtx);
 		break;
 	}
@@ -122,15 +126,21 @@ thrd_wait(struct thrd *thrd)
 static void *thrdpool_start_routine(void *arg)
 {
 	struct thrd *thrd = arg;
+	struct thrdpool *pool = thrd->pool;
 	bool reschedule;
 
 	do {
-		thrd->ctx.func(&thrd->ctx);
+		thrd->ctx.func(thrd->ctx.arg);
+thrd->ctx.func = 0;
 		reschedule = thrd_wait(thrd);
 	} while (reschedule);
 
 	/* cleanup thread context */
 	destroy_wait_entry(&thrd->ctx.we);
+	--(thrd->pool->n_threads);
+	mutex_lock(&pool->we.mtx);
+	cond_signal(&pool->we.cv);
+	mutex_unlock(&pool->we.mtx);
 	mem_free(thrd, 0);
 
 	return (NULL);
@@ -209,11 +219,14 @@ int thrdpool_shutdown(struct thrdpool *pool)
 {
 	struct timespec ts;
 	int wait = 1;
+	struct thrd *thrd;
 
 	mutex_lock(&pool->we.mtx);
 	pool->flags |= THRD_FLAG_SHUTDOWN;
+	TAILQ_FOREACH(thrd, &pool->idle_q, tailq) {
+		cond_signal(&thrd->ctx.we.cv);
+	}
 	while (pool->n_threads > 0) {
-		cond_broadcast(&pool->we.cv);
 		clock_gettime(CLOCK_REALTIME_FAST, &ts);
 		timespec_addms(&ts, 1000 * wait);
 		(void)cond_timedwait(&pool->we.cv, &pool->we.mtx, &ts);

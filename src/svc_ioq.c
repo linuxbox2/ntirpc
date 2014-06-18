@@ -142,11 +142,9 @@ ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd,
 }
 
 void
-svc_ioq(struct thrd_context *thr_ctx)
+svc_ioq(void *a)
 {
-	struct svc_ioq_args *arg = (struct svc_ioq_args *)thr_ctx->arg;
-	struct thrd *thrd = opr_containerof(thr_ctx, struct thrd, ctx);
-	struct thrdpool *pool = thrd->pool;
+	struct svc_ioq_args *arg = (struct svc_ioq_args *)a;
 	SVCXPRT *xprt = arg->xprt;
 	struct x_vc_data *xd = arg->xd;
 	struct xdr_ioq *xioq = NULL;
@@ -169,10 +167,6 @@ svc_ioq(struct thrd_context *thr_ctx)
 	}
 
  out:
-	mutex_lock(&pool->we.mtx);
-	--(pool->n_threads);
-	cond_signal(&pool->we.cv);
-	mutex_unlock(&pool->we.mtx);
 	return;
 }
 
