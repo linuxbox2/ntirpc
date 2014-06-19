@@ -33,6 +33,12 @@
 #define THRD_FLAG_SHUTDOWN    0x0001
 #define THRD_FLAG_ACTIVE      0x0002
 
+struct work {
+	TAILQ_ENTRY(work) tailq;
+	void (*func) (void*);
+	void *arg;
+};
+
 struct thrdpool;
 
 struct thrd {
@@ -40,8 +46,7 @@ struct thrd {
 	struct thrd_context {
 		pthread_t id;
 		struct wait_entry we;
-		void (*func) (void*);
-		void *arg;
+		struct work *work;
 	} ctx;
 	struct thrdpool *pool;
 	bool idle;
@@ -59,6 +64,7 @@ struct thrdpool {
 	pthread_attr_t attr;
 	struct wait_entry we;
 	 TAILQ_HEAD(idle_tailq, thrd) idle_q;
+	 TAILQ_HEAD(work_tailq, work) work_q;
 	int32_t n_idle;
 	int32_t n_threads;
 };
