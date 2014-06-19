@@ -153,6 +153,11 @@ svc_init(svc_init_params *params)
 	if (params->flags & SVC_INIT_NOREG_XPRTS)
 		__svc_params->flags |= SVC_FLAG_NOREG_XPRTS;
 
+	if (params->ioq_thrd_max)
+		__svc_params->ioq.thrd_max = params->ioq_thrd_max;
+	else
+		__svc_params->ioq.thrd_max = 200;
+
 	if (params->gss_ctx_hash_partitions)
 		__svc_params->gss.ctx_hash_partitions =
 		    params->gss_ctx_hash_partitions;

@@ -64,6 +64,10 @@ struct svc_params {
 		int max_idle_gen;
 		int max_gc;
 	} gss;
+
+	struct {
+		u_int thrd_max;
+	} ioq;
 };
 
 extern struct svc_params __svc_params[1];

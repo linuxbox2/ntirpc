@@ -124,6 +124,7 @@ enum svc_event_type {
 
 typedef struct svc_init_params {
 	u_long flags;
+	warnx_t warnx;
 	u_int max_connections;	/* xprts */
 	u_int max_events;	/* evchan events */
 	u_int svc_ioq_maxbuf;
@@ -132,7 +133,7 @@ typedef struct svc_init_params {
 	u_int gss_max_ctx;
 	u_int gss_max_idle_gen;
 	u_int gss_max_gc;
-	warnx_t warnx;
+	u_int ioq_thrd_max;
 } svc_init_params;
 
 /* Svc param flags */

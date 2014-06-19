@@ -74,7 +74,7 @@ void
 svc_ioq_init()
 {
 	struct thrdpool_params params = {
-		.thrd_max = 200,
+		.thrd_max = __svc_params->ioq.thrd_max,
 		.thrd_min = 2
 	};
 

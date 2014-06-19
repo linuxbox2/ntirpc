@@ -76,8 +76,6 @@
 #include <getpeereid.h>
 #include "svc_ioq.h"
 
-extern struct svc_params __svc_params[1];
-
 static bool rendezvous_request(SVCXPRT *, struct svc_req *);
 static enum xprt_stat rendezvous_stat(SVCXPRT *);
 static bool svc_vc_ref(SVCXPRT *, u_int, const char *, const int);
