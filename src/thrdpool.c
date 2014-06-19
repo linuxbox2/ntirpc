@@ -55,6 +55,7 @@ thrdpool_init(struct thrdpool *pool, const char *name,
 	pool->name = rpc_strdup(name);
 	pool->params = *params;
 	TAILQ_INIT(&pool->idle_q);
+	TAILQ_INIT(&pool->work_q);
 
 	(void)pthread_attr_init(&pool->attr);
 	(void)pthread_attr_setscope(&pool->attr, PTHREAD_SCOPE_SYSTEM);
@@ -71,10 +72,18 @@ thrd_wait(struct thrd *thrd)
 	bool code = false;
 	struct thrdpool *pool = thrd->pool;
 	struct timespec ts;
+	struct work *work;
 	int rc;
 
 	mutex_lock(&pool->we.mtx);
 	if (pool->flags & THRD_FLAG_SHUTDOWN) {
+		mutex_unlock(&pool->we.mtx);
+		goto out;
+	}
+	TAILQ_FOREACH(work, &pool->work_q, tailq) {
+		TAILQ_REMOVE(&pool->work_q, work, tailq);
+		thrd->ctx.work = work;
+		code = true;
 		mutex_unlock(&pool->we.mtx);
 		goto out;
 	}
@@ -130,8 +139,10 @@ static void *thrdpool_start_routine(void *arg)
 	bool reschedule;
 
 	do {
-		thrd->ctx.func(thrd->ctx.arg);
-thrd->ctx.func = 0;
+		struct work *work = thrd->ctx.work;
+		work->func(work->arg);
+		thrd->ctx.work = 0;
+		mem_free(work, sizeof(struct work));
 		reschedule = thrd_wait(thrd);
 	} while (reschedule);
 
@@ -146,8 +157,7 @@ thrd->ctx.func = 0;
 	return (NULL);
 }
 
-static inline bool thrdpool_dispatch(struct thrdpool *pool, thrd_func_t func,
-				     void *arg)
+static inline bool thrdpool_dispatch(struct thrdpool *pool, struct work *work)
 {
 	struct thrd *thrd;
 	TAILQ_FOREACH(thrd, &pool->idle_q, tailq) {
@@ -155,8 +165,7 @@ static inline bool thrdpool_dispatch(struct thrdpool *pool, thrd_func_t func,
 		TAILQ_REMOVE(&pool->idle_q, thrd, tailq);
 		--(pool->n_idle);
 		thrd->idle = false;
-		thrd->ctx.func = func;
-		thrd->ctx.arg = arg;
+		thrd->ctx.work = work;
 		cond_signal(&thrd->ctx.we.cv);
 		mutex_unlock(&thrd->ctx.we.mtx);
 		break;
@@ -164,16 +173,14 @@ static inline bool thrdpool_dispatch(struct thrdpool *pool, thrd_func_t func,
 	return (true);
 }
 
-static inline bool thrdpool_spawn(struct thrdpool *pool, thrd_func_t func,
-				  void *arg)
+static inline bool thrdpool_spawn(struct thrdpool *pool, struct work *work)
 {
 	int code;
 	struct thrd *thrd = mem_alloc(sizeof(struct thrd));
 	memset(thrd, 0, sizeof(struct thrd));
 	init_wait_entry(&thrd->ctx.we);
 	thrd->pool = pool;
-	thrd->ctx.func = func;
-	thrd->ctx.arg = arg;
+	thrd->ctx.work = work;
 	++(pool->n_threads);
 
 	code =
@@ -190,24 +197,33 @@ static inline bool thrdpool_spawn(struct thrdpool *pool, thrd_func_t func,
 int thrdpool_submit_work(struct thrdpool *pool, thrd_func_t func, void *arg)
 {
 	int code = 0;
+	struct work *work;
 
 	/* queue is draining */
 	mutex_lock(&pool->we.mtx);
 	if (unlikely(pool->flags & THRD_FLAG_SHUTDOWN))
 		goto unlock;
 
+	work = mem_zalloc(sizeof(struct work));
+	if (unlikely(!work)) {
+		code = -1;
+		goto unlock;
+	}
+	work->func = func;
+	work->arg = arg;
 	/* idle thread(s) available */
 	if (pool->n_idle > 0) {
-		if (thrdpool_dispatch(pool, func, arg))
+		if (thrdpool_dispatch(pool, work))
 			goto unlock;
 	}
 
 	/* need a thread */
 	if ((pool->params.thrd_max == 0)
 	    || (pool->n_threads < pool->params.thrd_max)) {
-		code = thrdpool_spawn(pool, func, arg);
+		code = thrdpool_spawn(pool, work);
 		goto unlock;
 	}
+	TAILQ_INSERT_TAIL(&pool->work_q, work, tailq);
 
  unlock:
 	mutex_unlock(&pool->we.mtx);
@@ -220,11 +236,15 @@ int thrdpool_shutdown(struct thrdpool *pool)
 	struct timespec ts;
 	int wait = 1;
 	struct thrd *thrd;
+	struct work *work;
 
 	mutex_lock(&pool->we.mtx);
 	pool->flags |= THRD_FLAG_SHUTDOWN;
 	TAILQ_FOREACH(thrd, &pool->idle_q, tailq) {
 		cond_signal(&thrd->ctx.we.cv);
+	}
+	TAILQ_FOREACH(work, &pool->work_q, tailq) {
+		work->func(work->arg);
 	}
 	while (pool->n_threads > 0) {
 		clock_gettime(CLOCK_REALTIME_FAST, &ts);
