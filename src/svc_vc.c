@@ -222,6 +222,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	xprt->xp_refcnt = 1;
 	svc_vc_rendezvous_ops(xprt);
 	xprt->xp_p1 = rdvs;
+	xprt->xp_p2 = xd;
 	xprt->xp_p5 = rec;
 	xprt->xp_fd = fd;
 	mutex_init(&xprt->xp_lock, NULL);
@@ -732,6 +733,7 @@ svc_vc_ref(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
  *
  * note:  currently, rdvs xprt handles have a rec structure,
  * but no xd structure, etc.
+ * (they do too have an xd -- to track "destroyed" flag -- fixme?)
  *
  */
 
@@ -739,7 +741,9 @@ static inline void
 rdvs_dodestroy(SVCXPRT *xprt)
 {
 	struct cf_rendezvous *rdvs = (struct cf_rendezvous *)xprt->xp_p1;
+	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p2;
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)xprt->xp_p5;
+	int refcnt;
 
 	if (xprt->xp_fd != RPC_ANYFD)
 		(void)close(xprt->xp_fd);
@@ -764,7 +768,9 @@ rdvs_dodestroy(SVCXPRT *xprt)
 	mem_free(rdvs, sizeof(struct cf_rendezvous));
 	mem_free(xprt, sizeof(SVCXPRT));
 
-	rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
+	refcnt = rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
+	if (!refcnt)
+		mem_free(xd, sizeof(struct x_vc_data));
 }
 
 static void
