@@ -1093,7 +1093,7 @@ boolrpcb_gettime(const char *host, time_t *timep)
 char *rpcb_taddr2uaddr(struct netconfig *nconf, struct netbuf *taddr)
 {
 	CLIENT *client;
-	AUTH *auth = NULL;
+	AUTH *auth = authnone_ncreate();
 	char *uaddr = NULL;
 
 	/* parameter checking */
