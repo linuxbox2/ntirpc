@@ -307,6 +307,7 @@ xdr_inrec_getpos(XDR *xdrs)
 		break;
 
 	default:
+		/* XXX annoys Coverity */
 		pos = (off_t) -1;
 		break;
 	}
