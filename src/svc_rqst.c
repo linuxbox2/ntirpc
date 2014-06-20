@@ -372,7 +372,7 @@ evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
 		__func__, xprt, refcnt);
 
 	/* channel ref */
-	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_LOCKED);
+	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_LOCKED); /* ! XP LOCKED */
 
 	if (!(flags & SVC_RQST_FLAG_SREC_LOCKED))
 		mutex_unlock(&sr_rec->mtx);
@@ -541,7 +541,9 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 			(void)svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.
 						    id, xprt,
 						    SVC_RQST_FLAG_MUTEX_LOCKED);
-			(void)svc_xprt_clear(xprt, SVC_XPRT_FLAG_MUTEX_LOCKED);
+			/* SVC_RELEASE in svc_rqst_evchan_unreg released
+			 * xprt->xp_lock */
+			(void)svc_xprt_clear(xprt, SVC_XPRT_FLAG_NONE);
 		}
 	}
 
