@@ -1638,12 +1638,16 @@ svc_vc_ncreate_clnt(CLIENT *clnt, const u_int sendsz,
 	 * without closing fd */
 	if ((flags & SVC_VC_CREATE_ONEWAY) && (flags & SVC_VC_CREATE_DISPOSE)) {
 		ct->ct_closeit = FALSE;	/* must not close */
+		rpc_dplx_ruc(clnt);
+		rpc_dplx_suc(clnt);
 		CLNT_DESTROY(clnt);	/* clean up immediately */
+		goto out;
 	}
 
- unlock:
+unlock:
 	rpc_dplx_ruc(clnt);
 	rpc_dplx_suc(clnt);
 
+out:
 	return (xprt);
 }
