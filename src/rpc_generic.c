@@ -643,6 +643,8 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 
 	/* XXX check (fix) this */
 	ret = mem_zalloc(INET6_ADDRSTRLEN + (2 * 6) + 1);
+	if (!ret)
+		return (NULL);
 
 	switch (af) {
 	case AF_INET:
@@ -653,20 +655,26 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 		port = ntohs(sin->sin_port);
 		if (sprintf
 		    (ret, "%s.%u.%u", namebuf, ((u_int32_t) port) >> 8,
-		     port & 0xff) < 0)
+		     port & 0xff) < 0) {
+			mem_free(ret, 0);
 			return NULL;
+		}
 		break;
 #ifdef INET6
 	case AF_INET6:
 		sin6 = nbuf->buf;
 		if (inet_ntop(af, &sin6->sin6_addr, namebuf6, sizeof(namebuf6))
-		    == NULL)
+		    == NULL) {
+			mem_free(ret, 0);
 			return NULL;
+		}
 		port = ntohs(sin6->sin6_port);
 		if (sprintf
 		    (ret, "%s.%u.%u", namebuf6, ((u_int32_t) port) >> 8,
-		     port & 0xff) < 0)
+		     port & 0xff) < 0) {
+			mem_free(ret, 0);
 			return NULL;
+		}
 		break;
 #endif
 	case AF_LOCAL:
@@ -677,10 +685,13 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 		if (sprintf(ret, "%.*s",
 			    (int)(sizeof(*sun) -
 				  offsetof(struct sockaddr_un, sun_path)),
-			    sun->sun_path) < 0)
-			return (NULL);
+			    sun->sun_path) < 0) {
+			mem_free(ret, 0);
+			return NULL;
+		}
 		break;
 	default:
+		mem_free(ret, 0);
 		return NULL;
 	}
 
