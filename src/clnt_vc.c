@@ -535,7 +535,8 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 		if (!AUTH_VALIDATE(auth, &(ctx->msg->acpted_rply.ar_verf))) {
 			ctx->error.re_status = RPC_AUTHERROR;
 			ctx->error.re_why = AUTH_INVALIDRESP;
-		} else if (!AUTH_UNWRAP(auth, xdrs, xdr_results, results_ptr)) {
+		} else if (xdr_results /* XXX caller setup error? */ &&
+			   !AUTH_UNWRAP(auth, xdrs, xdr_results, results_ptr)) {
 			if (ctx->error.re_status == RPC_SUCCESS)
 				ctx->error.re_status = RPC_CANTDECODERES;
 		}
