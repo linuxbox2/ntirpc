@@ -381,6 +381,7 @@ svc_xprt_shutdown()
 	p_ix = 0;
 	while (p_ix < SVC_XPRT_PARTITIONS) {
 		t = &svc_xprt_set_.xt.tree[p_ix];
+	restart:
 		rwlock_wrlock(&t->lock);	/* t WLOCKED */
 		n = opr_rbtree_first(&t->t);
 		while (n != NULL) {
@@ -388,8 +389,9 @@ svc_xprt_shutdown()
 			if (srec->xprt) {
 				/* call each_func with t !LOCKED, srec !LOCKED
 				 */
-				SVC_DESTROY(srec->xprt); /* locks srec, so
-							  * avoid deadlock */
+				rwlock_unlock(&t->lock); /* xp_lock, t->lock order */
+				SVC_DESTROY(srec->xprt); /* locks srec, xprt */
+				goto restart;
 			} else {
 				/* now remove srec */
 				opr_rbtree_remove(&t->t, &srec->node_k);
