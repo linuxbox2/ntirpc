@@ -59,15 +59,10 @@
 #include <sys/wait.h>
 #include <sys/fcntl.h>
 
+#include "dump.h"
 
 #define	KEY_TIMEOUT	5	/* per-try timeout in seconds */
 #define	KEY_NRETRY	12	/* number of retries */
-
-#ifdef DEBUG
-#define	debug(msg)	(void) fprintf(stderr, "%s\n", msg);
-#else
-#define	debug(msg)
-#endif /* DEBUG */
 
 /*
  * Hack to allow the keyserver to use AUTH_DES (for authenticated
@@ -96,7 +91,7 @@ key_setsecret(secretkey)
 		return (-1);
 	}
 	if (status != KEY_SUCCESS) {
-		debug("set status is nonzero");
+		LIBTIRPC_DEBUG(1, ("key_setsecret: set status is nonzero"));
 		return (-1);
 	}
 	return (0);
@@ -144,7 +139,7 @@ key_encryptsession_pk(remotename, remotekey, deskey)
 		return (-1);
 	}
 	if (res.status != KEY_SUCCESS) {
-		debug("encrypt status is nonzero");
+		LIBTIRPC_DEBUG(1, ("key_encryptsession_pk: encrypt status is nonzero"));
 		return (-1);
 	}
 	*deskey = res.cryptkeyres_u.deskey;
@@ -168,7 +163,7 @@ key_decryptsession_pk(remotename, remotekey, deskey)
 		return (-1);
 	}
 	if (res.status != KEY_SUCCESS) {
-		debug("decrypt status is nonzero");
+		LIBTIRPC_DEBUG(1, ("key_decryptsession_pk: decrypt status is nonzero"));
 		return (-1);
 	}
 	*deskey = res.cryptkeyres_u.deskey;
@@ -190,7 +185,7 @@ key_encryptsession(remotename, deskey)
 		return (-1);
 	}
 	if (res.status != KEY_SUCCESS) {
-		debug("encrypt status is nonzero");
+		LIBTIRPC_DEBUG(1, ("key_encryptsession: encrypt status is nonzero"));
 		return (-1);
 	}
 	*deskey = res.cryptkeyres_u.deskey;
@@ -212,7 +207,7 @@ key_decryptsession(remotename, deskey)
 		return (-1);
 	}
 	if (res.status != KEY_SUCCESS) {
-		debug("decrypt status is nonzero");
+		LIBTIRPC_DEBUG(1, ("key_decryptsession: decrypt status is nonzero"));
 		return (-1);
 	}
 	*deskey = res.cryptkeyres_u.deskey;
@@ -243,7 +238,7 @@ struct key_netstarg *arg;
 	}
 
 	if (status != KEY_SUCCESS) {
-		debug("key_setnet status is nonzero");
+		LIBTIRPC_DEBUG(1, ("key_setnet: key_setnet status is nonzero"));
 		return (-1);
 	}
 	return (1);
@@ -262,7 +257,7 @@ key_get_conv(pkey, deskey)
 		return (-1);
 	}
 	if (res.status != KEY_SUCCESS) {
-		debug("get_conv status is nonzero");
+		LIBTIRPC_DEBUG(1, ("key_get_conv: get_conv status is nonzero"));
 		return (-1);
 	}
 	*deskey = res.cryptkeyres_u.deskey;
