@@ -279,7 +279,7 @@ getnetid(key, ret)
 			err = yp_match(domain, NETID, key,
 				strlen(key), &lookup, &len);
 			if (err) {
-				LIBTIRPC_DEBUG(1, ("getnetid: match failed error %d\n", err));
+				LIBTIRPC_DEBUG(1, ("getnetid: match failed error %d", err));
 				continue;
 			}
 			lookup[len] = 0;

@@ -169,7 +169,7 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 		free(auth);
 		return (NULL);
 	}
-	LIBTIRPC_DEBUG(2, ("authgss_create: name is %p\n", name));
+	LIBTIRPC_DEBUG(3, ("authgss_create: name is %p", name));
 	if (name != GSS_C_NO_NAME) {
 		if (gss_duplicate_name(&min_stat, name, &gd->name)
 						!= GSS_S_COMPLETE) {
@@ -182,7 +182,7 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 	else
 		gd->name = name;
 
-	LIBTIRPC_DEBUG(2, ("authgss_create: gd->name is %p\n", gd->name));
+	LIBTIRPC_DEBUG(3, ("authgss_create: gd->name is %p", gd->name));
 	gd->clnt = clnt;
 	gd->ctx = GSS_C_NO_CONTEXT;
 	gd->sec = *sec;
@@ -235,7 +235,7 @@ authgss_create_default(CLIENT *clnt, char *service, struct rpc_gss_sec *sec)
 	auth = authgss_create(clnt, name, sec);
 
 	if (name != GSS_C_NO_NAME) {
-		LIBTIRPC_DEBUG(1, ("authgss_create_default: freeing name %p\n", name));
+		LIBTIRPC_DEBUG(3, ("authgss_create_default: freeing name %p", name));
  		gss_release_name(&min_stat, &name);
 	}
 
@@ -626,7 +626,7 @@ authgss_destroy(AUTH *auth)
 
 	authgss_destroy_context(auth);
 
-	LIBTIRPC_DEBUG(2, ("authgss_destroy: freeing name %p\n", gd->name));
+	LIBTIRPC_DEBUG(3, ("authgss_destroy: freeing name %p", gd->name));
 	if (gd->name != GSS_C_NO_NAME)
 		gss_release_name(&min_stat, &gd->name);
 
