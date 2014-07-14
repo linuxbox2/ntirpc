@@ -312,21 +312,19 @@ gss_log_debug(const char *fmt, ...)
 void
 gss_log_status(char *m, OM_uint32 maj_stat, OM_uint32 min_stat)
 {
-	OM_uint32 min;
-	gss_buffer_desc msg;
+	OM_uint32 min, maj;
+	gss_buffer_desc maj_msg, min_msg;
 	u_int32_t msg_ctx = 0;
 
-	LIBTIRPC_DEBUG(1, ("rpcsec_gss: %s: ", m));
-
-	gss_display_status(&min, maj_stat, GSS_C_GSS_CODE, GSS_C_NULL_OID,
-			   &msg_ctx, &msg);
-	LIBTIRPC_DEBUG(1, ("%s - ", (char *)msg.value));
-	gss_release_buffer(&min, &msg);
-
+	gss_display_status(&maj, maj_stat, GSS_C_GSS_CODE, GSS_C_NULL_OID,
+			   &msg_ctx, &maj_msg);
 	gss_display_status(&min, min_stat, GSS_C_MECH_CODE, GSS_C_NULL_OID,
-			   &msg_ctx, &msg);
-	LIBTIRPC_DEBUG(1, ("%s", (char *)msg.value));
-	gss_release_buffer(&min, &msg);
+			   &msg_ctx, &min_msg);
+
+	LIBTIRPC_DEBUG(1, ("%s: %s - %s", m, (char *)maj_msg.value, (char *)min_msg.value));
+
+	gss_release_buffer(&maj, &maj_msg);
+	gss_release_buffer(&min, &min_msg);
 }
 
 void
