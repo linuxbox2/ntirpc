@@ -55,9 +55,7 @@
 #endif				/* PORTMAP */
 #include <rpc/nettype.h>
 #include <arpa/inet.h>
-#ifdef RPC_DEBUG
 #include <stdio.h>
-#endif
 #include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -66,6 +64,7 @@
 #include <string.h>
 
 #include "rpc_com.h"
+#include "debug.h"
 
 #define	MAXBCAST 20	/* Max no of broadcasting transports */
 #define	INITTIME 4000	/* Time to wait initially */
@@ -454,20 +453,15 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 					    outlen, 0, (struct sockaddr*)addr,
 					    (size_t)fdlist[i].asize) !=
 					    outlen) {
-#ifdef RPC_DEBUG
-						perror("sendto");
-#endif
-						warnx("clnt_bcast: cannot send"
-						      "broadcast packet");
+						LIBTIRPC_DEBUG(1, 
+							("rpc_broadcast_exp: sendto failed: errno %d", errno));
+						warnx("rpc_broadcast_exp: cannot send broadcast packet");
 						stat = RPC_CANTSEND;
 						continue;
 					};
-#ifdef RPC_DEBUG
 				if (!__rpc_lowvers)
-					fprintf(stderr, "Broadcast packet sent "
-						"for %s\n",
-						 fdlist[i].nconf->nc_netid);
-#endif
+					LIBTIRPC_DEBUG(3, ("rpc_broadcast_exp: Broadcast packet sent for %s\n",
+						 fdlist[i].nconf->nc_netid));
 #ifdef PORTMAP
 				/*
 				 * Send the version 2 packet also
@@ -485,11 +479,8 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 						continue;
 					}
 				}
-#ifdef RPC_DEBUG
-				fprintf(stderr, "PMAP Broadcast packet "
-					"sent for %s\n",
-					fdlist[i].nconf->nc_netid);
-#endif
+				LIBTIRPC_DEBUG(3, ("rpc_broadcast_exp: PMAP Broadcast packet sent for %s\n",
+					fdlist[i].nconf->nc_netid));
 #endif				/* PORTMAP */
 			}
 			/* End for sending all packets on this transport */
@@ -532,10 +523,8 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 				continue;
 			} else
 				fds_found++;
-#ifdef RPC_DEBUG
-			fprintf(stderr, "response for %s\n",
-				fdlist[i].nconf->nc_netid);
-#endif
+			LIBTIRPC_DEBUG(3, ("rpc_broadcast_exp: response for %s\n", 
+				fdlist[i].nconf->nc_netid));
 		try_again:
 			inlen = recvfrom(fdlist[i].fd, inbuf, fdlist[i].dsize,
 			    0, (struct sockaddr *)(void *)&fdlist[i].raddr,
@@ -596,10 +585,7 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 						    &taddr, fdlist[i].nconf);
 					} else {
 #endif				/* PORTMAP */
-#ifdef RPC_DEBUG
-						fprintf(stderr, "uaddr %s\n",
-						    uaddrp);
-#endif
+						LIBTIRPC_DEBUG(3, ("rpc_broadcast_exp: uaddr %s\n", uaddrp));
 						np = uaddr2taddr(
 						    fdlist[i].nconf, uaddrp);
 						done = (*eachresult)(resultsp,
