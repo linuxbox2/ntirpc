@@ -88,6 +88,9 @@ print_rpc_gss_sec(struct rpc_gss_sec *ptr)
 int i;
 char *p;
 
+	if (libtirpc_debug_level < 4 || log_stderr == 0)
+		return;
+
 	gss_log_debug("rpc_gss_sec:");
 	if(ptr->mech == NULL)
 		gss_log_debug("NULL gss_OID mech");

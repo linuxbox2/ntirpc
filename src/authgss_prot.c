@@ -338,7 +338,7 @@ gss_log_hexdump(const u_char *buf, int len, int offset)
 	u_int i, j, jm;
 	int c;
 
-	if (libtirpc_debug_level < 3 || log_stderr == 0)
+	if (libtirpc_debug_level < 4 || log_stderr == 0)
 		return;
 
 	fprintf(stderr, "\n");
