@@ -42,7 +42,10 @@
 #include <rpc/auth.h>
 #include <rpc/auth_gss.h>
 #include <rpc/rpc.h>
+#include <ctype.h>
 #include <gssapi/gssapi.h>
+
+#include "debug.h"
 
 /* additional space needed for encoding */
 #define RPC_SLACK_SPACE 1024
@@ -296,18 +299,13 @@ xdr_rpc_gss_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	return (FALSE);
 }
 
-#ifdef DEBUG
-#include <ctype.h>
-
 void
 gss_log_debug(const char *fmt, ...)
 {
 	va_list ap;
 
 	va_start(ap, fmt);
-	fprintf(stderr, "rpcsec_gss: ");
-	vfprintf(stderr, fmt, ap);
-	fprintf(stderr, "\n");
+	vlibtirpc_log_dbg(2, fmt, ap);
 	va_end(ap);
 }
 
@@ -316,18 +314,18 @@ gss_log_status(char *m, OM_uint32 maj_stat, OM_uint32 min_stat)
 {
 	OM_uint32 min;
 	gss_buffer_desc msg;
-	int msg_ctx = 0;
+	u_int32_t msg_ctx = 0;
 
-	fprintf(stderr, "rpcsec_gss: %s: ", m);
+	LIBTIRPC_DEBUG(1, ("rpcsec_gss: %s: ", m));
 
 	gss_display_status(&min, maj_stat, GSS_C_GSS_CODE, GSS_C_NULL_OID,
 			   &msg_ctx, &msg);
-	fprintf(stderr, "%s - ", (char *)msg.value);
+	LIBTIRPC_DEBUG(1, ("%s - ", (char *)msg.value));
 	gss_release_buffer(&min, &msg);
 
 	gss_display_status(&min, min_stat, GSS_C_MECH_CODE, GSS_C_NULL_OID,
 			   &msg_ctx, &msg);
-	fprintf(stderr, "%s\n", (char *)msg.value);
+	LIBTIRPC_DEBUG(1, ("%s", (char *)msg.value));
 	gss_release_buffer(&min, &msg);
 }
 
@@ -336,6 +334,9 @@ gss_log_hexdump(const u_char *buf, int len, int offset)
 {
 	u_int i, j, jm;
 	int c;
+
+	if (libtirpc_debug_level < 3 || log_stderr == 0)
+		return;
 
 	fprintf(stderr, "\n");
 	for (i = 0; i < len; i += 0x10) {
@@ -363,24 +364,4 @@ gss_log_hexdump(const u_char *buf, int len, int offset)
 		fprintf(stderr, "\n");
 	}
 }
-
-#else
-
-void
-gss_log_debug(const char *fmt, ...)
-{
-}
-
-void
-gss_log_status(char *m, OM_uint32 maj_stat, OM_uint32 min_stat)
-{
-}
-
-void
-gss_log_hexdump(const u_char *buf, int len, int offset)
-{
-}
-
-#endif
-
 
