@@ -54,6 +54,8 @@
 #endif
 #include <sys/cdefs.h>
 
+#include "debug.h"
+
 #define USEC_PER_SEC		1000000
 #define RTIME_TIMEOUT		5	/* seconds to wait for sync */
 
@@ -399,7 +401,7 @@ authdes_validate(AUTH *auth, struct opaque_auth *rverf)
 	 */
 	if (bcmp((char *)&ad->ad_timestamp, (char *)&verf.adv_timestamp,
 		 sizeof(struct timeval)) != 0) {
-		syslog(LOG_DEBUG, "authdes_validate: verifier mismatch");
+		LIBTIRPC_DEBUG(1, ("authdes_validate: verifier mismatch"));
 		return (FALSE);
 	}
 
@@ -433,16 +435,15 @@ authdes_refresh(AUTH *auth, void *dummy)
 			 * Hope the clocks are synced!
 			 */
 			ad->ad_dosync = 0;
-			syslog(LOG_DEBUG,
-			    "authdes_refresh: unable to synchronize clock");
+			LIBTIRPC_DEBUG(1, ("authdes_refresh: unable to synchronize clock"));
 		 }
 	}
 	ad->ad_xkey = auth->ah_key;
 	pkey.n_bytes = (char *)(ad->ad_pkey);
 	pkey.n_len = (u_int)strlen((char *)ad->ad_pkey) + 1;
 	if (key_encryptsession_pk(ad->ad_servername, &pkey, &ad->ad_xkey) < 0) {
-		syslog(LOG_INFO,
-		    "authdes_refresh: keyserv(1m) is unable to encrypt session key");
+		LIBTIRPC_DEBUG(1,
+		    ("authdes_refresh: keyserv(1m) is unable to encrypt session key"));
 		return (FALSE);
 	}
 	cred->adc_fullname.key = ad->ad_xkey;
