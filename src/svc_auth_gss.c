@@ -248,7 +248,6 @@ svcauth_gss_accept_sec_context(struct svc_req *rqst,
 				maj_stat, min_stat);
 			return (FALSE);
 		}
-#ifdef DEBUG
 #ifdef HAVE_KRB5
 		{
 			gss_buffer_desc mechname;
@@ -269,7 +268,6 @@ svcauth_gss_accept_sec_context(struct svc_req *rqst,
 			      gd->cname.length, (char *)gd->cname.value,
 			      gd->sec.qop, gd->sec.svc);
 #endif
-#endif /* DEBUG */
 		seq = htonl(gr->gr_win);
 		seqbuf.value = &seq;
 		seqbuf.length = sizeof(seq);

@@ -46,6 +46,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "debug.h"
+
 #define PKFILE "/etc/publickey"
 
 /*
@@ -120,9 +122,8 @@ getpublicandprivatekey(key, ret)
 			lookup = NULL;
 			err = yp_match(domain, PKMAP, key, strlen(key), &lookup, &len);
 			if (err) {
-#ifdef DEBUG
-				fprintf(stderr, "match failed error %d\n", err);
-#endif
+				LIBTIRPC_DEBUG(1, 
+					("getpublicandprivatekey: match failed error %d\n", err));
 				continue;
 			}
 			lookup[len] = 0;
@@ -131,10 +132,8 @@ getpublicandprivatekey(key, ret)
 			free(lookup);
 			return (2);
 #else /* YP */
-#ifdef DEBUG
-			fprintf(stderr,
-"Bad record in %s '+' -- NIS not supported in this library copy\n", PKFILE);
-#endif /* DEBUG */
+			LIBTIRPC_DEBUG(1, 
+("Bad record in %s '+' -- NIS not supported in this library copy\n", PKFILE));
 			continue;
 #endif /* YP */
 		} else {

@@ -47,6 +47,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "debug.h"
+
 static char    *OPSYS = "unix";
 static char    *NETID = "netid.byname";
 static char    *NETIDFILE = "/etc/netid";
@@ -159,10 +161,8 @@ _getgroups(uname, groups)
 		for (i = 0; grp->gr_mem[i]; i++)
 			if (!strcmp(grp->gr_mem[i], uname)) {
 				if (ngroups == NGROUPS) {
-#ifdef DEBUG
-					fprintf(stderr,
-				"initgroups: %s is in too many groups\n", uname);
-#endif
+					LIBTIRPC_DEBUG(1,
+				("_getgroups: %s is in too many groups\n", uname));
 					goto toomany;
 				}
 				/* filter out duplicate group entries */
@@ -279,9 +279,7 @@ getnetid(key, ret)
 			err = yp_match(domain, NETID, key,
 				strlen(key), &lookup, &len);
 			if (err) {
-#ifdef DEBUG
-				fprintf(stderr, "match failed error %d\n", err);
-#endif
+				LIBTIRPC_DEBUG(1, ("getnetid: match failed error %d\n", err));
 				continue;
 			}
 			lookup[len] = 0;
@@ -291,11 +289,9 @@ getnetid(key, ret)
 				fclose(fd);
 			return (2);
 #else	/* YP */
-#ifdef DEBUG
-			fprintf(stderr,
-"Bad record in %s '+' -- NIS not supported in this library copy\n",
-				NETIDFILE);
-#endif
+			LIBTIRPC_DEBUG(1,
+("Bad record in %s '+' -- NIS not supported in this library copy\n",
+				NETIDFILE));
 			continue;
 #endif	/* YP */
 		} else {

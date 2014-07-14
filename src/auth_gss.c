@@ -49,6 +49,8 @@
 #include <netinet/in.h>
 #include <gssapi/gssapi.h>
 
+#include "debug.h"
+
 static void	authgss_nextverf(AUTH *);
 static bool_t	authgss_marshal(AUTH *, XDR *);
 static bool_t	authgss_refresh(AUTH *, void *);
@@ -164,9 +166,7 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 		free(auth);
 		return (NULL);
 	}
-#ifdef DEBUG
-	fprintf(stderr, "authgss_create: name is %p\n", name);
-#endif
+	LIBTIRPC_DEBUG(2, ("authgss_create: name is %p\n", name));
 	if (name != GSS_C_NO_NAME) {
 		if (gss_duplicate_name(&min_stat, name, &gd->name)
 						!= GSS_S_COMPLETE) {
@@ -179,9 +179,7 @@ authgss_create(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 	else
 		gd->name = name;
 
-#ifdef DEBUG
-	fprintf(stderr, "authgss_create: gd->name is %p\n", gd->name);
-#endif
+	LIBTIRPC_DEBUG(2, ("authgss_create: gd->name is %p\n", gd->name));
 	gd->clnt = clnt;
 	gd->ctx = GSS_C_NO_CONTEXT;
 	gd->sec = *sec;
@@ -234,9 +232,7 @@ authgss_create_default(CLIENT *clnt, char *service, struct rpc_gss_sec *sec)
 	auth = authgss_create(clnt, name, sec);
 
 	if (name != GSS_C_NO_NAME) {
-#ifdef DEBUG
-	fprintf(stderr, "authgss_create_default: freeing name %p\n", name);
-#endif
+		LIBTIRPC_DEBUG(1, ("authgss_create_default: freeing name %p\n", name));
  		gss_release_name(&min_stat, &name);
 	}
 
@@ -627,9 +623,7 @@ authgss_destroy(AUTH *auth)
 
 	authgss_destroy_context(auth);
 
-#ifdef DEBUG
-	fprintf(stderr, "authgss_destroy: freeing name %p\n", gd->name);
-#endif
+	LIBTIRPC_DEBUG(2, ("authgss_destroy: freeing name %p\n", gd->name));
 	if (gd->name != GSS_C_NO_NAME)
 		gss_release_name(&min_stat, &gd->name);
 
