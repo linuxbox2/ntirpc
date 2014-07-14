@@ -178,7 +178,8 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 		maj_stat = gss_get_mic(&min_stat, ctx, qop,
 				       &databuf, &wrapbuf);
 		if (maj_stat != GSS_S_COMPLETE) {
-			gss_log_debug("gss_get_mic failed");
+			gss_log_status("xdr_rpc_gss_wrap_data: gss_get_mic", 
+				maj_stat, min_stat);
 			return (FALSE);
 		}
 		/* Marshal checksum. */
@@ -226,13 +227,13 @@ xdr_rpc_gss_unwrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	if (svc == RPCSEC_GSS_SVC_INTEGRITY) {
 		/* Decode databody_integ. */
 		if (!xdr_rpc_gss_buf(xdrs, &databuf, (u_int)-1)) {
-			gss_log_debug("xdr decode databody_integ failed");
+			LIBTIRPC_DEBUG(1, ("xdr_rpc_gss_unwrap_data: decode databody_integ failed"));
 			return (FALSE);
 		}
 		/* Decode checksum. */
 		if (!xdr_rpc_gss_buf(xdrs, &wrapbuf, (u_int)-1)) {
 			gss_release_buffer(&min_stat, &databuf);
-			gss_log_debug("xdr decode checksum failed");
+			LIBTIRPC_DEBUG(1, ("xdr_rpc_gss_unwrap_data: decode checksum failed"));
 			return (FALSE);
 		}
 		/* Verify checksum and QOP. */
@@ -250,7 +251,7 @@ xdr_rpc_gss_unwrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	else if (svc == RPCSEC_GSS_SVC_PRIVACY) {
 		/* Decode databody_priv. */
 		if (!xdr_rpc_gss_buf(xdrs, &wrapbuf, (u_int)-1)) {
-			gss_log_debug("xdr decode databody_priv failed");
+			LIBTIRPC_DEBUG(1, ("xdr_rpc_gss_unwrap_data: decode databody_priv failed"));
 			return (FALSE);
 		}
 		/* Decrypt databody. */
@@ -277,7 +278,8 @@ xdr_rpc_gss_unwrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 
 	/* Verify sequence number. */
 	if (xdr_stat == TRUE && seq_num != seq) {
-		gss_log_debug("wrong sequence number in databody");
+		LIBTIRPC_DEBUG(1, 
+			("xdr_rpc_gss_unwrap_data: wrong sequence number in databody"));
 		return (FALSE);
 	}
 	return (xdr_stat);
