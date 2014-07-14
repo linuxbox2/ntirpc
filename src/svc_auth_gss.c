@@ -93,7 +93,8 @@ svcauth_gss_set_svc_name(gss_name_t name)
 		maj_stat = gss_release_name(&min_stat, &_svcauth_gss_name);
 
 		if (maj_stat != GSS_S_COMPLETE) {
-			gss_log_status("gss_release_name", maj_stat, min_stat);
+			gss_log_status("svcauth_gss_set_svc_name: gss_release_name", 
+				maj_stat, min_stat);
 			return (FALSE);
 		}
 		_svcauth_gss_name = NULL;
@@ -101,7 +102,8 @@ svcauth_gss_set_svc_name(gss_name_t name)
 	maj_stat = gss_duplicate_name(&min_stat, name, &_svcauth_gss_name);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		gss_log_status("gss_duplicate_name", maj_stat, min_stat);
+		gss_log_status("svcauth_gss_set_svc_name: gss_duplicate_name", 
+			maj_stat, min_stat);
 		return (FALSE);
 	}
 
@@ -124,7 +126,8 @@ svcauth_gss_import_name(char *service)
 				   (gss_OID)GSS_C_NT_HOSTBASED_SERVICE, &name);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		gss_log_status("gss_import_name", maj_stat, min_stat);
+		gss_log_status("svcauth_gss_import_name: gss_import_name", 
+			maj_stat, min_stat);
 		return (FALSE);
 	}
 	if (svcauth_gss_set_svc_name(name) != TRUE) {
@@ -146,7 +149,8 @@ svcauth_gss_acquire_cred(void)
 				    &_svcauth_gss_creds, NULL, NULL);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		gss_log_status("gss_acquire_cred", maj_stat, min_stat);
+		gss_log_status("svcauth_gss_acquire_cred: gss_acquire_cred", 
+			maj_stat, min_stat);
 		return (FALSE);
 	}
 	return (TRUE);
@@ -162,7 +166,8 @@ svcauth_gss_release_cred(void)
 	maj_stat = gss_release_cred(&min_stat, &_svcauth_gss_creds);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		gss_log_status("gss_release_cred", maj_stat, min_stat);
+		gss_log_status("svcauth_gss_release_cred: gss_release_cred", 
+			maj_stat, min_stat);
 		return (FALSE);
 	}
 
@@ -208,7 +213,8 @@ svcauth_gss_accept_sec_context(struct svc_req *rqst,
 
 	if (gr->gr_major != GSS_S_COMPLETE &&
 	    gr->gr_major != GSS_S_CONTINUE_NEEDED) {
-		gss_log_status("accept_sec_context", gr->gr_major, gr->gr_minor);
+		gss_log_status("svcauth_gss_accept_sec_context: accept_sec_context",
+			gr->gr_major, gr->gr_minor);
 		gd->ctx = GSS_C_NO_CONTEXT;
 		gss_release_buffer(&min_stat, &gr->gr_token);
 		return (FALSE);
@@ -238,7 +244,8 @@ svcauth_gss_accept_sec_context(struct svc_req *rqst,
 		maj_stat = gss_display_name(&min_stat, gd->client_name,
 					    &gd->cname, &gd->sec.mech);
 		if (maj_stat != GSS_S_COMPLETE) {
-			gss_log_status("display_name", maj_stat, min_stat);
+			gss_log_status("svcauth_gss_accept_sec_context: display_name", 
+				maj_stat, min_stat);
 			return (FALSE);
 		}
 #ifdef DEBUG
@@ -326,7 +333,8 @@ svcauth_gss_validate(struct svc_rpc_gss_data *gd, struct rpc_msg *msg)
 	free(rpchdr);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		gss_log_status("gss_verify_mic", maj_stat, min_stat);
+		gss_log_status("svcauth_gss_validate: gss_verify_mic", 
+			maj_stat, min_stat);
 		return (FALSE);
 	}
 	return (TRUE);
@@ -353,7 +361,8 @@ svcauth_gss_nextverf(struct svc_req *rqst, u_int num)
 			       &signbuf, &checksum);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		gss_log_status("gss_get_mic", maj_stat, min_stat);
+		gss_log_status("svcauth_gss_nextverf: gss_get_mic", 
+			maj_stat, min_stat);
 		return (FALSE);
 	}
 	rqst->rq_xprt->xp_verf.oa_flavor = RPCSEC_GSS;

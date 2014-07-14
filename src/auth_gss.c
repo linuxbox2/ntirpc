@@ -225,7 +225,8 @@ authgss_create_default(CLIENT *clnt, char *service, struct rpc_gss_sec *sec)
 		&name);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		gss_log_status("gss_import_name", maj_stat, min_stat);
+		gss_log_status("authgss_create_default: gss_import_name", 
+			maj_stat, min_stat);
 		rpc_createerr.cf_stat = RPC_AUTHERROR;
 		return (NULL);
 	}
@@ -344,7 +345,8 @@ authgss_marshal(AUTH *auth, XDR *xdrs)
 			    &rpcbuf, &checksum);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		gss_log_status("gss_get_mic", maj_stat, min_stat);
+		gss_log_status("authgss_marshal: gss_get_mic", 
+			maj_stat, min_stat);
 		if (maj_stat == GSS_S_CONTEXT_EXPIRED) {
 			gd->established = FALSE;
 			authgss_destroy_context(auth);
@@ -406,7 +408,8 @@ authgss_validate(AUTH *auth, struct opaque_auth *verf)
 				  &checksum, &qop_state);
 
 	if (maj_stat != GSS_S_COMPLETE || qop_state != gd->sec.qop) {
-		gss_log_status("gss_verify_mic", maj_stat, min_stat);
+		gss_log_status("authgss_validate: gss_verify_mic", 
+			maj_stat, min_stat);
 		if (maj_stat == GSS_S_CONTEXT_EXPIRED) {
 			gd->established = FALSE;
 			authgss_destroy_context(auth);
@@ -464,7 +467,8 @@ authgss_refresh(AUTH *auth, void *dummy)
 		}
 		if (maj_stat != GSS_S_COMPLETE &&
 		    maj_stat != GSS_S_CONTINUE_NEEDED) {
-			gss_log_status("gss_init_sec_context", maj_stat, min_stat);
+			gss_log_status("authgss_refresh: gss_init_sec_context", 
+				maj_stat, min_stat);
 			break;
 		}
 		if (send_token.length != 0) {
@@ -521,7 +525,8 @@ authgss_refresh(AUTH *auth, void *dummy)
 
 			if (maj_stat != GSS_S_COMPLETE
 					|| qop_state != gd->sec.qop) {
-				gss_log_status("gss_verify_mic", maj_stat, min_stat);
+				gss_log_status("authgss_refresh: gss_verify_mic", 
+					maj_stat, min_stat);
 				if (maj_stat == GSS_S_CONTEXT_EXPIRED) {
 					gd->established = FALSE;
 					authgss_destroy_context(auth);

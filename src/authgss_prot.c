@@ -192,7 +192,8 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 		maj_stat = gss_wrap(&min_stat, ctx, TRUE, qop, &databuf,
 				    &conf_state, &wrapbuf);
 		if (maj_stat != GSS_S_COMPLETE) {
-			gss_log_status("gss_wrap", maj_stat, min_stat);
+			gss_log_status("xdr_rpc_gss_wrap_data: gss_wrap", 
+				maj_stat, min_stat);
 			return (FALSE);
 		}
 		/* Marshal databody_priv. */
@@ -241,7 +242,8 @@ xdr_rpc_gss_unwrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 
 		if (maj_stat != GSS_S_COMPLETE || qop_state != qop) {
 			gss_release_buffer(&min_stat, &databuf);
-			gss_log_status("gss_verify_mic", maj_stat, min_stat);
+			gss_log_status("xdr_rpc_gss_unwrap_data: gss_verify_mic", 
+				maj_stat, min_stat);
 			return (FALSE);
 		}
 	}
@@ -261,7 +263,8 @@ xdr_rpc_gss_unwrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 		if (maj_stat != GSS_S_COMPLETE || qop_state != qop ||
 			conf_state != TRUE) {
 			gss_release_buffer(&min_stat, &databuf);
-			gss_log_status("gss_unwrap", maj_stat, min_stat);
+			gss_log_status("xdr_rpc_gss_unwrap_data: gss_unwrap", 
+				maj_stat, min_stat);
 			return (FALSE);
 		}
 	}
