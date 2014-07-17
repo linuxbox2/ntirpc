@@ -245,8 +245,9 @@ _get_next_token(char *npp, /* string */
 		 * token */
 		if ((cp > npp + 1) && (cp[-2] != '\\')) {
 			/* shift r-o-s  onto the escaped token */
-			strcpy(&cp[-1], cp);	/* XXX: overlapping string
-						 * copy */
+			int n = strlen(cp);
+			memmove(&cp[-1], cp, n); /* XXX: was overlapping
+						  * strcpy */
 			/*
 			 * Do a recursive call.
 			 * We don't know how many escaped tokens there might
