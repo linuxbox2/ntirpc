@@ -624,11 +624,16 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 
 		*no_dispatch = true;
 
+		(void)authgss_ctx_hash_del(gd);	/* unrefs, can destroy gd */
+
+		/* avoid lock order reversal gd->lock, xprt->xp_lock */
+		mutex_unlock(&gd->lock);
+		gd_locked = false;
+
 		call_stat =
 		    svc_sendreply(req->rq_xprt, req, (xdrproc_t) xdr_void,
 				  (caddr_t) NULL);
 
-		(void)authgss_ctx_hash_del(gd);	/* unrefs, can destroy gd */
 		req->rq_auth = &svc_auth_none;
 
 		break;
