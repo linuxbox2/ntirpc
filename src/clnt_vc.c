@@ -157,8 +157,8 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 		 const struct netbuf *raddr,	/* servers address */
 		 const rpcprog_t prog,	/* program number */
 		 const rpcvers_t vers,	/* version number */
-		 u_int sendsz,	/* buffer recv size */
-		 u_int recvsz,	/* buffer send size */
+		 u_int sendsz,	/* buffer send size */
+		 u_int recvsz,	/* buffer recv size */
 		 u_int flags)
 {
 	CLIENT *clnt = NULL;

@@ -1541,7 +1541,7 @@ clnt_vc_ncreate_svc(SVCXPRT *xprt, const rpcprog_t prog,
 
 	clnt =
 	    clnt_vc_ncreate2(xprt->xp_fd, &xprt->xp_rtaddr, prog, vers,
-			     xd->shared.recvsz, xd->shared.sendsz,
+			     xd->shared.sendsz, xd->shared.recvsz,
 			     CLNT_CREATE_FLAG_SVCXPRT);
 
 	mutex_unlock(&xprt->xp_lock);
