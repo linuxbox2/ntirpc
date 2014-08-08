@@ -28,7 +28,7 @@
 #include "debug.h"
 
 /* library global debug level */
-int libtirpc_debug_level = 3;
+int libtirpc_debug_level = 0;
 int  log_stderr = 1; /* log to stderr instead of systlog */
 
 /*
@@ -46,7 +46,8 @@ libtirpc_set_debug(char *name, int level, int use_stderr)
 	if (!use_stderr)
 		openlog(name, LOG_PID, LOG_DAEMON);
 
-	LIBTIRPC_DEBUG(1, ("libtirpc: debug level %d", level));
+	libtirpc_debug_level = level;
+	LIBTIRPC_DEBUG(1, ("libtirpc: debug level %d", libtirpc_debug_level));
 }
 
 void
