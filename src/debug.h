@@ -21,6 +21,8 @@
 
 #ifndef _DEBUG_H
 #define _DEBUG_H
+
+#include <stdarg.h>
 #include <syslog.h>
 
 extern int libtirpc_debug_level;
