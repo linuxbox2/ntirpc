@@ -41,6 +41,7 @@
 #include <sys/types.h>
 #include <assert.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -75,6 +76,12 @@
 #define SVC_VERSQUIET 0x0001	/* keep quiet about vers mismatch */
 #define version_keepquiet(xp) ((u_long)(xp)->xp_p3 & SVC_VERSQUIET)
 
+/* svc_internal.h */
+#ifdef IOV_MAX
+int __svc_maxiov = IOV_MAX;
+#else
+int __svc_maxiov = 1024; /* UIO_MAXIOV value from sys/uio.h */
+#endif
 int __svc_maxrec = 0;
 
 extern tirpc_pkg_params __pkg_params;
@@ -183,6 +190,9 @@ svc_init(svc_init_params *params)
 
 	mutex_unlock(&__svc_params->mtx);
 
+#if defined(_SC_IOV_MAX) /* IRIX, MacOS X, FreeBSD, Solaris, ... */
+	__svc_maxiov = sysconf(_SC_IOV_MAX);
+#endif
 	return;
 }
 

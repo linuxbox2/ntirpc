@@ -107,7 +107,5 @@ rpc_strdup(const char *s)
 
 void __rpc_free(void *ptr);
 
-extern int __svc_maxrec;
-
 __END_DECLS
 #endif				/* _TIRPC_RPCCOM_H */

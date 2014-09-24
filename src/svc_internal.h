@@ -28,6 +28,9 @@
 
 #include <misc/os_epoll.h>
 
+extern int __svc_maxiov;
+extern int __svc_maxrec;
+
 /* threading fdsets around is annoying */
 struct svc_params {
 	bool initialized;
