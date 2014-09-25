@@ -95,19 +95,24 @@ static inline void
 ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd,
 	   struct xdr_ioq *xioq)
 {
-	struct iovec *iov, *tiov;
-	ssize_t nbytes = 0, resid = xioq->ioq.frag_len + sizeof(u_int32_t);
+	struct iovec *iov, *tiov, *wiov;
 	struct v_rec *vrec = NULL;
+	ssize_t result;
 	u_int32_t frag_header;
-	int iovcnt, ix;
+	u_int32_t fbytes;
+	u_int32_t remaining = xioq->ioq.frag_len;
+	u_int32_t vsize = (xioq->ioq.size + 1) * sizeof(struct iovec);
+	int iw = 0;
+	int ix = 1;
 
-	frag_header = htonl((u_int32_t) (xioq->ioq.frag_len | LAST_FRAG));
+	if (unlikely(vsize > 256)) {
+		iov = malloc(vsize);
+	} else {
+		iov = alloca(vsize);
+	}
+	wiov = iov; /* position at initial fragment header */
 
-	iov = alloca((xioq->ioq.size) * sizeof(struct iovec));
-	iov[0].iov_base = &(frag_header);
-	iov[0].iov_len = sizeof(u_int32_t);
-
-	ix = 1;
+	/* build list after initial fragment header (ix = 1 above) */
 	TAILQ_FOREACH(vrec, &(xioq->ioq.q), ioq) {
 		tiov = iov + ix;
 		tiov->iov_base = vrec->base;
@@ -115,29 +120,68 @@ ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd,
 		ix++;
 	}
 
-	iovcnt = ix;
-	while (resid > 0) {
-		/* advance iov */
-		for (ix = 0, tiov = iov; ((nbytes > 0) && (ix < iovcnt));
-		     ++ix) {
-			tiov = iov + ix;
-			if (tiov->iov_len > nbytes) {
-				tiov->iov_base += nbytes;
-				tiov->iov_len -= nbytes;
-				break;
+	while (remaining > 0) {
+		if (iw == 0) {
+			/* new fragment header, determine last iov */
+			fbytes = 0;
+			for (tiov = &wiov[++iw];
+			     (tiov < &iov[ix]) && (iw < __svc_maxiov);
+			     ++tiov, ++iw) {
+				fbytes += tiov->iov_len;
+
+				/* check for fragment value overflow */
+				if (fbytes >= LAST_FRAG) {
+					fbytes -= tiov->iov_len;
+					break;
+				}
+			} /* for */
+
+			/* fragment length doesn't include fragment header */
+			if (&wiov[iw] < &iov[ix]) {
+				frag_header = htonl((u_int32_t) (fbytes));
 			} else {
-				nbytes -= tiov->iov_len;
+				frag_header = htonl((u_int32_t) (fbytes | LAST_FRAG));
 			}
-		}		/* advance */
+			wiov->iov_base = &(frag_header);
+			wiov->iov_len = sizeof(u_int32_t);
+
+			/* writev return includes fragment header */
+			remaining += sizeof(u_int32_t);
+			fbytes += sizeof(u_int32_t);
+		}
+
 		/* blocking write */
-		nbytes = writev(xprt->xp_fd, iov, iovcnt);
-		if (unlikely(nbytes < 0)) {
+		result = writev(xprt->xp_fd, wiov, iw);
+		remaining -= result;
+
+		if (result == fbytes) {
+			wiov += iw - 1;
+			iw = 0;
+			continue;
+		}
+		if (unlikely(result < 0)) {
 			__warnx(TIRPC_DEBUG_FLAG_SVC_VC, "writev failed %d\n",
 				__func__, errno);
 			cfconn_set_dead(xprt, xd);
-			return;
+			break;
 		}
-		resid -= nbytes;
+		fbytes -= result;
+
+		/* rare? writev underrun? (assume never overrun) */
+		for (tiov = wiov; iw > 0; ++tiov, --iw) {
+			if (tiov->iov_len > result) {
+				tiov->iov_len -= result;
+				tiov->iov_base += result;
+				wiov = tiov;
+				break;
+			} else {
+				result -= tiov->iov_len;
+			}
+		} /* for */
+	} /* while */
+
+	if (unlikely(vsize > 256)) {
+		free(iov);
 	}
 }
 
