@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2012-2014 CEA
+ * Dominique Martinet <dominique.martinet@cea.fr>
+ */
+
 #include <rpc/rpc.h>
 #include <rpc/clnt.h>
 #include <rpc/xdr.h>
