@@ -352,12 +352,12 @@ struct svc_req {
 /*
  * Ganesha.  Get connected transport type.
  */
-#define svc_get_xprt_type(x) ((x)->xp_type);
+#define svc_get_xprt_type(x) ((x)->xp_type)
 
 /*
  * Ganesha.  Original TI-RPC si type.
  */
-#define svc_get_xprt_si_type(x) ((x)->xp_si_type);
+#define svc_get_xprt_si_type(x) ((x)->xp_si_type)
 
 /*
  * Operations defined on an SVCXPRT handle
