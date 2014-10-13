@@ -90,6 +90,7 @@ cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
 }
 
 #define LAST_FRAG ((u_int32_t)(1 << 31))
+#define MAXALLOCA (256)
 
 static inline void
 ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd,
@@ -105,8 +106,14 @@ ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd,
 	int iw = 0;
 	int ix = 1;
 
-	if (unlikely(vsize > 256)) {
-		iov = malloc(vsize);
+	if (unlikely(vsize > MAXALLOCA)) {
+		iov = mem_alloc(vsize);
+                if (unlikely(iov == NULL)) {
+                        __warnx(TIRPC_DEBUG_FLAG_SVC_VC, "malloc failed %d\n",
+                                __func__, errno);
+                        cfconn_set_dead(xprt, xd);
+                        return;
+                }
 	} else {
 		iov = alloca(vsize);
 	}
@@ -130,7 +137,8 @@ ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd,
 				fbytes += tiov->iov_len;
 
 				/* check for fragment value overflow */
-				if (fbytes >= LAST_FRAG) {
+				/* never happens, see ganesha FSAL_MAXIOSIZE */
+				if (unlikely(fbytes >= LAST_FRAG)) {
 					fbytes -= tiov->iov_len;
 					break;
 				}
@@ -180,8 +188,8 @@ ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd,
 		} /* for */
 	} /* while */
 
-	if (unlikely(vsize > 256)) {
-		free(iov);
+	if (unlikely(vsize > MAXALLOCA)) {
+		mem_free(iov, vsize);
 	}
 }
 
