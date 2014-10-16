@@ -29,7 +29,6 @@ SET(ntirpc_common_SRCS
   clnt_raw.c
   clnt_simple.c
   clnt_vc.c
-  clnt_msk.c
   getnetconfig.c
   getnetpath.c
   getpeereid.c
@@ -70,7 +69,6 @@ SET(ntirpc_common_SRCS
   svc_simple.c
   svc_vc.c
   svc_xprt.c
-  svc_msk.c
   vc_generic.c
   xdr.c
   xdr_array.c
@@ -83,7 +81,6 @@ SET(ntirpc_common_SRCS
   xdr_ioq.c
   svc_ioq.c
   thrdpool.c
-  xdr_msk.c
 )
 
 if(USE_DES)
@@ -106,11 +103,20 @@ if(USE_GSS)
 
 endif(USE_GSS)
 
+if(USE_NFS_MSK)
+  SET(ntirpc_rdma_SRCS
+  clnt_msk.c
+  svc_msk.c
+  xdr_msk.c
+  )
+endif(USE_NFS_MSK)
+
 # declares the library
 add_library(ntirpc STATIC
   ${ntirpc_common_SRCS}
   ${ntirpc_des_SRCS}
   ${ntirpc_gss_SRCS}
+  ${ntirpc_rdma_SRCS}
   )
 
 ########### next target ###############

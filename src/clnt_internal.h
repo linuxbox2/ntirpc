@@ -37,7 +37,9 @@
 #ifndef _CLNT_INTERNAL_H
 #define _CLNT_INTERNAL_H
 
+#ifdef USE_RPC_RDMA
 #include <mooshika.h>
+#endif
 
 struct ct_wait_entry
 {
@@ -144,6 +146,7 @@ struct ct_data {
 	struct wait_entry ct_sync;	/* wait for completion */
 };
 
+#ifdef USE_RPC_RDMA
 struct cm_data {
 	msk_trans_t       *trans; /* connection's "fd" since it's not an int... */
 	bool cm_closeit; /* close it on destroy */
@@ -156,6 +159,7 @@ struct cm_data {
 	//add a lastreceive?
 	char *buffers;
 };
+#endif
 
 enum CX_TYPE
 {
@@ -207,7 +211,9 @@ struct cx_data {
 	union {
 		struct cu_data cu;
 		struct ct_data ct;
+#ifdef USE_RPC_RDMA
 		struct cm_data cm;
+#endif
 	} c_u;
 	int cx_fd;		/* connection's fd */
 	struct rpc_dplx_rec *cx_rec;	/* unified sync */
