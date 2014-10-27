@@ -161,8 +161,9 @@ authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 	 * set auth handle to reflect new cred.
 	 */
 	auth->ah_cred = au->au_origcred;
+	/* auth_get not needed:  ah_refcnt == 1, as desired */
 	marshal_new_auth(auth);
-	auth_get(auth);		/* Reference for caller */
+	/* */
 	return (auth);
 #ifndef _KERNEL
 cleanup_authunix_create:
