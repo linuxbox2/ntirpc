@@ -559,20 +559,19 @@ write_vc(xprtp, buf, len)
 				cd->strm_stat = XPRT_DIED;
 				return (-1);
 			}
-			if (cd->nonblock && i != cnt) {
-				/*
-				 * For non-blocking connections, do not
-				 * take more than 2 seconds writing the
-				 * data out.
-				 *
-				 * XXX 2 is an arbitrary amount.
-				 */
-				gettimeofday(&tv1, NULL);
-				if (tv1.tv_sec - tv0.tv_sec >= 2) {
-					cd->strm_stat = XPRT_DIED;
-					return (-1);
-				}
+			/*
+			 * For non-blocking connections, do not
+			 * take more than 2 seconds writing the
+			 * data out.
+			 *
+			 * XXX 2 is an arbitrary amount.
+			 */
+			gettimeofday(&tv1, NULL);
+			if (tv1.tv_sec - tv0.tv_sec >= 2) {
+				cd->strm_stat = XPRT_DIED;
+				return (-1);
 			}
+			i = 0; /* Don't change buf and cnt */
 		}
 	}
 
