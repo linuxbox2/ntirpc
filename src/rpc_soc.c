@@ -564,16 +564,12 @@ clntunix_create(raddr, prog, vers, sockp, sendsz, recvsz)
 	u_int sendsz;
 	u_int recvsz;
 {
-	struct netbuf *svcaddr;
-	CLIENT *cl;
+	struct netbuf svcaddr = {0, 0, NULL};
+	CLIENT *cl = NULL;
 	int len;
 
-	cl = NULL;
-	svcaddr = NULL;
-	if (((svcaddr = malloc(sizeof(struct netbuf))) == NULL ) ||
-	    ((svcaddr->buf = malloc(sizeof(struct sockaddr_un))) == NULL)) {
-		if (svcaddr != NULL)
-			free(svcaddr);
+	memset(&svcaddr, 0, sizeof(svcaddr));
+	if (__rpc_set_netbuf(&svcaddr, raddr, sizeof(*raddr)) == NULL) {
 		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 		rpc_createerr.cf_error.re_errno = errno;
 		return(cl);
@@ -590,14 +586,10 @@ clntunix_create(raddr, prog, vers, sockp, sendsz, recvsz)
 			goto done;
 		}
 	}
-	svcaddr->buf = raddr;
-	svcaddr->len = sizeof(raddr);
-	svcaddr->maxlen = sizeof (struct sockaddr_un);
-	cl = clnt_vc_create(*sockp, svcaddr, prog,
+	cl = clnt_vc_create(*sockp, &svcaddr, prog,
 	    vers, sendsz, recvsz);
 done:
-	free(svcaddr->buf);
-	free(svcaddr);
+	free(svcaddr.buf);
 	return(cl);
 }
 
