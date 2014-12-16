@@ -142,7 +142,8 @@ __rpc_getbroadifs(int af, int proto, int socktype, broadlist_t *list)
 		return 0;
 
 	for (ifap = ifp; ifap != NULL; ifap = ifap->ifa_next) {
-		if (ifap->ifa_addr->sa_family != af ||
+		if (ifap->ifa_addr == NULL ||		/* happens for eg tuntap devices */
+		    ifap->ifa_addr->sa_family != af ||
 		    !(ifap->ifa_flags & IFF_UP))
 			continue;
 		bip = (struct broadif *)malloc(sizeof *bip);
