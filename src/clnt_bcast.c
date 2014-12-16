@@ -588,9 +588,11 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 						LIBTIRPC_DEBUG(3, ("rpc_broadcast_exp: uaddr %s\n", uaddrp));
 						np = uaddr2taddr(
 						    fdlist[i].nconf, uaddrp);
-						done = (*eachresult)(resultsp,
-						    np, fdlist[i].nconf);
-						free(np);
+						if (np != NULL) {
+							done = (*eachresult)(resultsp,
+							    np, fdlist[i].nconf);
+							free(np);
+						}
 #ifdef PORTMAP
 					}
 #endif				/* PORTMAP */
