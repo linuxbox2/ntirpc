@@ -608,6 +608,7 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 	struct sockaddr_in6 *sin6;
 	char namebuf6[INET6_ADDRSTRLEN];
 #endif
+	int path_len;
 	u_int16_t port;
 
 	if (nbuf->len <= 0)
@@ -638,13 +639,12 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 #endif
 	case AF_LOCAL:
 		sun = nbuf->buf;
-		/*	if (asprintf(&ret, "%.*s", (int)(sun->sun_len -
-		    offsetof(struct sockaddr_un, sun_path)),
-		    sun->sun_path) < 0)*/
-		if (asprintf(&ret, "%.*s", (int)(sizeof(*sun) -
-						 offsetof(struct sockaddr_un, sun_path)),
-			     sun->sun_path) < 0)
 
+		path_len = nbuf->len - offsetof(struct sockaddr_un, sun_path);
+		if (path_len < 0)
+			return NULL;
+
+		if (asprintf(&ret, "%.*s", path_len, sun->sun_path) < 0)
 			return (NULL);
 		break;
 	default:
