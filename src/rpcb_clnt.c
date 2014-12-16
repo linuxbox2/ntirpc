@@ -401,6 +401,44 @@ out_err:
 	return (client);
 }
 
+/*
+ * Create a PMAP client handle.
+ */
+static CLIENT *
+getpmaphandle(nconf, hostname, tgtaddr)
+	const struct netconfig *nconf;
+	const char *hostname;
+	char **tgtaddr;
+{
+	CLIENT *client = NULL;
+	rpcvers_t pmapvers = 2;
+
+	/*
+	 * Try UDP only - there are some portmappers out
+	 * there that use UDP only.
+	 */
+	if (nconf == NULL || strcmp(nconf->nc_proto, NC_TCP) == 0) {
+		struct netconfig *newnconf;
+
+		if ((newnconf = getnetconfigent("udp")) == NULL) {
+			rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
+			return NULL;
+		}
+		client = getclnthandle(hostname, newnconf, tgtaddr);
+		freenetconfigent(newnconf);
+	} else if (strcmp(nconf->nc_proto, NC_UDP) == 0) {
+		if (strcmp(nconf->nc_protofmly, NC_INET) != 0)
+			return NULL;
+		client = getclnthandle(hostname, nconf, tgtaddr);
+	}
+
+	/* Set version */
+	if (client != NULL)
+		CLNT_CONTROL(client, CLSET_VERS, (char *)&pmapvers);
+
+	return client;
+}
+
 /* XXX */
 #define IN4_LOCALHOST_STRING	"127.0.0.1"
 #define IN6_LOCALHOST_STRING	"::1"
@@ -733,34 +771,20 @@ __rpcb_findaddr_timed(program, version, nconf, host, clpp, tp)
 	if (strcmp(nconf->nc_protofmly, NC_INET) == 0) {
 		u_short port = 0;
 		struct netbuf remote;
-		rpcvers_t pmapvers = 2;
 		struct pmap pmapparms;
 
-		/*
-		 * Try UDP only - there are some portmappers out
-		 * there that use UDP only.
-		 */
-		if (strcmp(nconf->nc_proto, NC_TCP) == 0) {
-			struct netconfig *newnconf;
-
-			if ((newnconf = getnetconfigent("udp")) == NULL) {
-				rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
-				return (NULL);
-			}
-			client = getclnthandle(host, newnconf, &parms.r_addr);
-			freenetconfigent(newnconf);
-		} else if (strcmp(nconf->nc_proto, NC_UDP) == 0)
-			client = getclnthandle(host, nconf, &parms.r_addr);
-		else
+		if (strcmp(nconf->nc_proto, NC_UDP) != 0
+		 && strcmp(nconf->nc_proto, NC_TCP) != 0)
 			goto try_rpcbind;
+
+		client = getpmaphandle(nconf, host, &parms.r_addr);
 		if (client == NULL)
 			return (NULL);
 
 		/*
-		 * Set version and retry timeout.
+		 * Set retry timeout.
 		 */
 		CLNT_CONTROL(client, CLSET_RETRY_TIMEOUT, (char *)&rpcbrmttime);
-		CLNT_CONTROL(client, CLSET_VERS, (char *)&pmapvers);
 
 		pmapparms.pm_prog = program;
 		pmapparms.pm_vers = version;
