@@ -175,26 +175,28 @@ clnt_msk_call(CLIENT *cl,             /* client handle */
 {
         struct cm_data *cm = CM_DATA((struct cx_data *) cl->cl_p1);
 	XDR *xdrs;
-	size_t outlen = 0;
 	struct rpc_msg reply_msg;
 	bool ok;
-	int nrefreshes = 2;		/* number of times to refresh cred */
+#if 0
 	struct timeval timeout;
 	int total_time;
+#endif
 //	sigset_t mask;
 	socklen_t  __attribute__((unused)) inlen, salen;
 	ssize_t recvlen = 0;
+/* ???	size_t outlen = 0;	??? */
+	int nrefreshes = 2;		/* number of times to refresh cred */
 
-	outlen = 0;
 //        thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
 //        vc_fd_lock_c(cl, &mask); //What does that do?
+#if 0
 	if (cm->cm_total.tv_usec == -1) {
 		timeout = utimeout;	/* use supplied timeout */
 	} else {
 		timeout = cm->cm_total;	/* use default timeout */
 	}
 	total_time = timeout.tv_sec * 1000 + timeout.tv_usec / 1000;
-
+#endif
 
 	/* Clean up in case the last call ended in a longjmp(3) call. */
 call_again:
@@ -217,7 +219,7 @@ call_again:
 		cm->cm_error.re_status = RPC_CANTENCODEARGS;
 		goto out;
 	}
-	outlen = (size_t)XDR_GETPOS(xdrs);
+/* ???	outlen = (size_t)XDR_GETPOS(xdrs);	??? */
 
 
 	if (! rpcrdma_clnt_flushout(&cm->cm_xdrs)) {

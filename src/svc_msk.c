@@ -96,9 +96,10 @@ static bool svc_msk_control(SVCXPRT *, const u_int, void *);
  * credits is the number of buffers used
  */
 SVCXPRT *
-svc_msk_create(msk_trans_t *trans, u_int credits, void (*callback)(void*), void* callbackarg)
+svc_msk_create(void *arg, u_int credits, void (*callback)(void*), void* callbackarg)
 {
 	SVCXPRT *xprt;
+	msk_trans_t *trans = arg;
 	struct svc_msk_data *sm = NULL;
 
 	if (!trans || trans->state != MSK_CONNECT_REQUEST) {

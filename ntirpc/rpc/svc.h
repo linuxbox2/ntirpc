@@ -718,15 +718,11 @@ extern SVCXPRT *svcunixfd_ncreate(int, u_int, u_int);
  */
 extern SVCXPRT *svc_raw_ncreate(void);
 
-#ifdef USE_RPC_RDMA
 /*
- * Temporary for Mooshika, because it isn't going through the correct path???
- * and pretty checkpatch is more important than running code....
- * FixMe!!!
+ * RDMA based rpc
  */
-extern SVCXPRT *svc_msk_create(msk_trans_t *trans, u_int credits,
+extern SVCXPRT *svc_msk_create(void *arg, u_int credits,
 				void (*callback)(void *), void *callbackarg);
-#endif
 
 /*
  * Getreq plug-out prototype
