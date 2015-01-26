@@ -77,7 +77,6 @@ struct svc_msk_data {
 	unsigned char   sm_cmsg[64];            /* cmsghdr received from clnt */
 };
 
-
 extern struct svc_params __svc_params[1];
 
 #define	sm_data(xprt)	((struct svc_msk_data *)(xprt->xp_p2))
@@ -166,21 +165,19 @@ svc_msk_stat(xprt)
 	}
 }
 
-
 static bool
 svc_msk_recv(SVCXPRT *xprt, struct svc_req *req)
 {
 	struct svc_msk_data *sm = sm_data(xprt);
 	XDR *xdrs = &(sm->sm_xdrs);
 
-	printf("in recv, waiting for incoming buffer\n");
-
+	__warnx(TIRPC_DEBUG_FLAG_SVC_RDMA, "%s: waiting for incoming buffer\n",
+		__func__);
 
 	req->rq_msg = alloc_rpc_msg();
 
 	if (rpcrdma_svc_setbuf(xdrs, 0, XDR_DECODE))
 		return (FALSE);
-
 
 	xdrs->x_op = XDR_DECODE;
 	XDR_SETPOS(xdrs, 0);
@@ -287,7 +284,6 @@ svc_msk_destroy(SVCXPRT *xprt)
 }
 
 extern mutex_t ops_lock;
-
 
 static void
 svc_msk_lock(SVCXPRT *xprt, uint32_t flags, const char *file, int line)

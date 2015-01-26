@@ -47,8 +47,6 @@
 
 #include "rpc_rdma.h"
 
-#define MSK_DUMP_FRAGMENTS 1
-
 static void xdrmsk_destroy(XDR *);
 static bool xdrmsk_getlong_aligned(XDR *, long *);
 static bool xdrmsk_putlong_aligned(XDR *, const long *);
@@ -114,6 +112,50 @@ struct mskinfo {
 #define callback_of_xdrs(xdrs) (priv(xdrs)->callback)
 #define callbackarg_of_xdrs(xdrs) (priv(xdrs)->callbackarg)
 
+#define rpcrdma_dump_msg(data, base, xid)
+
+#ifndef rpcrdma_dump_msg
+static void rpcrdma_dump_msg(msk_data_t *data, char *base, uint32_t xid)
+{
+	char *buffer;
+	int sized = data->size;
+	int buffered = (((sized / 16) + 1) * (12 + (9 * 4))) + 1;
+	int i = 0;
+	int m = 0;
+
+	if (sized == 0) {
+		__warnx(TIRPC_DEBUG_FLAG_XDR, "rpcrdma %x %s?", xid, base);
+		return;
+	}
+	buffer = (char *)mem_alloc(buffered);
+
+	while (sized > i) {
+		int j = sized - i;
+		int k = j < 16 ? j : 16;
+		int l = 0;
+		int r = sprintf(&buffer[m], "\n%10d:", i);
+
+		if (r < 0)
+			goto quit;
+		m += r;
+
+		for (; l < k; l++) {
+			if (l % 4 == 0)
+				buffer[m++] = ' ';
+
+			r = sprintf(&buffer[m], "%02X", data->data[i++]);
+			if (r < 0)
+				goto quit;
+			m += r;
+		}
+	}
+quit:
+	buffer[m] = '\0';	/* in case of error */
+	__warnx(TIRPC_DEBUG_FLAG_XDR, "rpcrdma %x %s:%s\n",
+		xid, base, buffer);
+	mem_free(buffer, buffered);
+}
+#endif /* rpcrdma_dump_msg */
 
 /***********************************/
 /****** Utilities for buffers ******/
@@ -134,11 +176,12 @@ funname(msk_data_t *bufs, struct mskinfo *mi, ##optargs) {	\
 			break;					\
 								\
 		/* INFO LOG */					\
-		printf(#funname " - waiting for buffer\n");     \
+		__warnx(TIRPC_DEBUG_FLAG_XDR,			\
+			#funname ": waiting for buffer\n");	\
 		pthread_cond_wait(&mi->cl.cond, &mi->cl.lock); 	\
 	} while (1);						\
 								\
-	return bufs + i;						\
+	return bufs + i;					\
 }
 
 /* condition can use:
@@ -155,10 +198,11 @@ XDRMSK_GETBUF(xdrmsk_getaddrbuf, bufs[i].data == addr, uint8_t *addr)
 
 static int
 xdrmsk_countusedbufs(struct mskinfo *mi) {
-	//do we want to lock?
-	int i, count;
-	count = 0;
-	for (i=0; i < mi->credits; i++) {
+	int i = 0;
+	int count = 0;
+
+	/* do we want to lock? */
+	for (; i < mi->credits; i++) {
 		if (mi->inbufs[i].size != 0)
 			count++;
 	}
@@ -166,13 +210,9 @@ xdrmsk_countusedbufs(struct mskinfo *mi) {
 	return count;
 }
 
-
-
-
 /***********************/
 /****** Callbacks ******/
 /***********************/
-
 
 static void rpcrdma_signal(msk_trans_t *trans) {
 	struct condlock *cl = cl_of_xdrs((XDR*)trans->private_data);
@@ -184,7 +224,8 @@ static void rpcrdma_signal(msk_trans_t *trans) {
 static void signal_callback(msk_trans_t *trans, msk_data_t *data, void *arg) {
 	XDR *xdrs = trans->private_data;
 	rpcrdma_signal(trans);
-	printf("received something on trans %p!\n", trans);
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"received something on trans %p!\n", trans);
 
 	if (callback_of_xdrs(xdrs))
 		(callback_of_xdrs(xdrs))(callbackarg_of_xdrs(xdrs));
@@ -205,15 +246,13 @@ static void setunused_callback(msk_trans_t *trans, msk_data_t *data, void *arg) 
 
 static void err_callback(msk_trans_t *trans, msk_data_t *data, void *arg) {
 	if(trans->state != MSK_CLOSING && trans->state != MSK_CLOSED)
-		printf("error callback on buffer %p\n", data);
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"error callback on buffer %p\n", data);
 }
-
-
 
 /***********************************/
 /****** Utilities for rpcrdma ******/
 /***********************************/
-
 
 #define rc(ptr) ((struct rpcrdma_read_chunk*)ptr)
 #define wa(ptr) ((struct rpcrdma_write_array*)ptr)
@@ -232,7 +271,6 @@ static inline void rpcrdma_skip_write_array(uint32_t **pptr) {
 	(*pptr)++;
 }
 
-
 static inline void rpcrdma_skip_reply_array(uint32_t **pptr) {
 	if (wa(*pptr)->wc_discrim) {
 		*pptr += (sizeof(struct rpcrdma_write_array) + sizeof(struct rpcrdma_write_chunk) * ntohl(wa(*pptr)->wc_nchunks))/sizeof(**pptr);
@@ -240,7 +278,6 @@ static inline void rpcrdma_skip_reply_array(uint32_t **pptr) {
 		(*pptr)++;
 	}
 }
-
 
 static inline struct rpcrdma_read_chunk *rpcrdma_get_read_list(struct rpcrdma_msg *rmsg) {
 	return rc(rmsg->rm_body.rm_chunks);
@@ -293,23 +330,6 @@ static inline void rpcrdma_rloc_from_segment(msk_rloc_t *rloc, struct rpcrdma_se
 	rloc->size = ntohl(seg->rs_length);
 	rloc->raddr = xdr_decode_hyper(&seg->rs_offset);
 }
-
-#ifdef MSK_DUMP_FRAGMENTS
-static void rpcrdma_dump_msg(msk_data_t *data, char *filebase, uint32_t xid) {
-	char filename[255];
-	sprintf(filename, "/tmp/rpcrdma-%x-%s", xid, filebase);
-	FILE *fd = fopen(filename, "a");
-
-	fwrite(data->data, data->size, 1, fd);
-	fwrite("\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11\x11", 0x10, 1, fd);
-
-	fflush(fd);
-
-	fclose(fd);
-}
-#endif
-
-
 
 #if 0
 int svc_rdma_xdr_encode_error(struct svcxprt_rdma *xprt,
@@ -365,15 +385,11 @@ void svc_rdma_xdr_encode_reply_header(struct svcxprt_rdma *xprt,
 	rdma_resp->rm_body.rm_chunks[2] = xdr_zero;
 }
 
-#endif // 0
-
-
+#endif /* 0 */
 
 /****************************/
 /****** Main functions ******/
 /****************************/
-
-
 
 /*
  * The procedure xdrmsk_create initializes a stream descriptor for a
@@ -395,13 +411,11 @@ xdrmsk_create(XDR *xdrs,
 	if (xdrs->x_private == NULL)
 		goto err;
 
-
 	mi = priv(xdrs);
 
 	mi->mskbase = mem_alloc((sendsz+2*recvsz+HDR_MAX_SIZE)*credits);
 	if (mi->mskbase == NULL)
 		goto err;
-
 
 	mi->sendsz = sendsz;
 	mi->recvsz = recvsz;
@@ -426,7 +440,6 @@ xdrmsk_create(XDR *xdrs,
 	mi->rdmabufs = mem_alloc(sizeof(msk_data_t)*mi->credits);
 	if (!mi->rdmabufs)
 		goto err;
-
 
 	trans->private_data = xdrs;
 
@@ -505,8 +518,6 @@ rpcrdma_clnt_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 
 	xdrs->x_op = op;
 
-
-
 	/* get new buffer */
 	switch (xdrs->x_op) {
 	// Client encodes a call request
@@ -520,7 +531,7 @@ rpcrdma_clnt_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 		mi->pos = xdrs->x_base = (char*)mi->curbuf->data;
 		xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
 		    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
-		
+
 		pthread_mutex_unlock(&mi->cl.lock);
 
 		break;
@@ -531,10 +542,8 @@ rpcrdma_clnt_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 
 		mi->curbuf = xdrmsk_getxidbuf(mi->inbufs, mi, xid);
 
-#ifdef MSK_DUMP_FRAGMENTS
 		rpcrdma_dump_msg(mi->curbuf, "clntrplyhdr", ntohl(xid));
-#endif
- 
+
 		//handy = length, base = address
 		reply_array = rpcrdma_get_reply_array((struct rpcrdma_msg*)mi->curbuf->data);
 		if (reply_array->wc_discrim == 0) {
@@ -549,9 +558,7 @@ rpcrdma_clnt_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 				/* rs_length < max_size if the protocol works out... FIXME: check anyway? */
 				tmp_buf->size = ntohl(reply_array->wc_array[i].wc_target.rs_length);
 
-#ifdef MSK_DUMP_FRAGMENTS
 				rpcrdma_dump_msg(tmp_buf, "clntrplybody", ntohl(xid));
-#endif
 
 				if (prev_buf)
 					prev_buf->next = tmp_buf;
@@ -563,7 +570,6 @@ rpcrdma_clnt_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 		}
 
 		pthread_mutex_unlock(&mi->cl.lock);
-
 
 		xdrs->x_handy = mi->xdrbuf->size;
 		mi->pos = xdrs->x_base = (char*)mi->xdrbuf->data;
@@ -591,7 +597,6 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 	struct rpcrdma_read_chunk *read_chunk;
 	msk_rloc_t rloc;
 
-
 	if (!xdrs) {
 		__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: no xdrs?", __func__);
 		return -1;
@@ -611,8 +616,6 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 
 	xdrs->x_op = op;
 
-
-
 	/* get new buffer */
 	switch (xdrs->x_op) {
 	// Server decodes a call request
@@ -622,14 +625,13 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 
 		pthread_mutex_unlock(&mi->cl.lock);
 
-#ifdef MSK_DUMP_FRAGMENTS
 		rpcrdma_dump_msg(mi->curbuf, "call", ((struct rpcrdma_msg *)mi->curbuf->data)->rm_xid);
-#endif
 
 		read_chunk = rpcrdma_get_read_list((struct rpcrdma_msg*)mi->curbuf->data);
 		prev_buf = NULL;
 		while (read_chunk->rc_discrim != 0) {
-			printf("got something to read :D\n");
+			__warnx(TIRPC_DEBUG_FLAG_XDR,
+				"got something to read :D\n");
 
 			tmp_buf = xdrmsk_getfreebuf(mi->rdmabufs, mi);
 
@@ -638,16 +640,12 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 			//FIXME: get them only when needed in xdrmsk_getnextbuf or at least post all the reads and wait only at the end...
 			msk_wait_read(mi->trans, tmp_buf, &rloc);
 
-#ifdef MSK_DUMP_FRAGMENTS
 			rpcrdma_dump_msg(tmp_buf, "svcreaddata", ((struct rpcrdma_msg *)mi->curbuf->data)->rm_xid);
-#endif
-
 
 			if (prev_buf)
 				prev_buf->next = tmp_buf;
 			else
-				mi->curbuf->next = tmp_buf;				
-
+				mi->curbuf->next = tmp_buf;
 
 			prev_buf = tmp_buf;
 			read_chunk++;
@@ -664,7 +662,7 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 		xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
 		    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
 
-		break;		
+		break;
 
 	// Server encodes a reply
 	case XDR_ENCODE:
@@ -676,17 +674,17 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 			// no reply array to write to, replying inline an' hope it works (OK on RPC/RDMA Read)
 			mi->curbuf = xdrmsk_getfreebuf(mi->outbufs, mi);
 			mi->curbuf->size = mi->curbuf->max_size;
-			xdrs->x_handy = mi->curbuf->size; 
+			xdrs->x_handy = mi->curbuf->size;
 			mi->pos = xdrs->x_base = (char*)mi->curbuf->data;
 			mi->xdrbuf = mi->curbuf;
 			xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
 			    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
-		
 		} else {
 			prev_buf = NULL;
 
 			if (ntohl(call_array->wc_nchunks) != 1) {
-				printf("More than one chunk in list\n");
+				__warnx(TIRPC_DEBUG_FLAG_XDR,
+					"More than one chunk in list\n");
 			}
 
 			for (i=0; i < ntohl(call_array->wc_nchunks); i++) {
@@ -701,12 +699,12 @@ rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
 			}
 		}
 
-		xdrs->x_handy = mi->curbuf->size; 
+		xdrs->x_handy = mi->curbuf->size;
 		mi->pos = xdrs->x_base = (char*)mi->curbuf->data;
 		mi->xdrbuf = mi->curbuf;
 		xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
 		    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
-		
+
 		pthread_mutex_unlock(&mi->cl.lock);
 
 		break;
@@ -737,7 +735,6 @@ rpcrdma_clnt_flushout(XDR * xdrs) {
 
 	mi = priv(xdrs);
 
-
 	switch(ntohl(msg->rm_direction)) {
 	    case CALL:
 		pthread_mutex_lock(&mi->cl.lock);
@@ -755,7 +752,7 @@ rpcrdma_clnt_flushout(XDR * xdrs) {
 
 			prev_buf = tmp_buf;
 		}
-			
+
 		pthread_mutex_unlock(&mi->cl.lock);
 
 		rmsg = (struct rpcrdma_msg*)hdr_buf->data;
@@ -784,10 +781,8 @@ rpcrdma_clnt_flushout(XDR * xdrs) {
 		hdr_buf->next = mi->curbuf;
 		mi->curbuf->size = xdrmsk_getpos(xdrs);
 
-#ifdef MSK_DUMP_FRAGMENTS
 		rpcrdma_dump_msg(hdr_buf, "clntcall", msg->rm_xid);
 		rpcrdma_dump_msg(mi->curbuf, "clntcall", msg->rm_xid);
-#endif
 
 		/* actual send, callback will take care of cleanup */
 		msk_post_n_send(mi->trans, hdr_buf, 2, setunused_callback, err_callback, hdr_buf);
@@ -841,7 +836,6 @@ rpcrdma_svc_flushout(XDR * xdrs) {
 		rmsg->rm_body.rm_chunks[0] = htonl(0);
 		rmsg->rm_body.rm_chunks[1] = htonl(0);
 
-
 		if (call_array->wc_discrim == 0) {
 			rmsg->rm_type = htonl(RDMA_MSG);
 
@@ -853,11 +847,8 @@ rpcrdma_svc_flushout(XDR * xdrs) {
 
 			mi->xdrbuf->size = xdrmsk_getpos(xdrs);
 
-
-#ifdef MSK_DUMP_FRAGMENTS
 			rpcrdma_dump_msg(hdr_buf, "rplyhdr", msg->rm_xid);
 			rpcrdma_dump_msg(mi->curbuf, "rplybody", msg->rm_xid);
-#endif
 
 			/* actual send, callback will take care of cleanup */
 			/* TODO: make it work with not just one outbuf, but get more outbufs as needed in xdrmsk_getnextbuf?
@@ -870,7 +861,6 @@ rpcrdma_svc_flushout(XDR * xdrs) {
 			/* reply chunk */
 			w_array = (struct rpcrdma_write_array*)&rmsg->rm_body.rm_chunks[2];
 			w_array->wc_discrim = htonl(1);
-
 
 			i = 0;
 			while (i < ntohl(call_array->wc_nchunks)) {
@@ -885,15 +875,12 @@ rpcrdma_svc_flushout(XDR * xdrs) {
 
 				msk_wait_write(mi->trans, mi->curbuf, &rloc); /* FIXME: change to msk_post_write and wait somehow */
 
-
 				w_array->wc_array[i].wc_target.rs_handle = call_array->wc_array[i].wc_target.rs_handle;
 				w_array->wc_array[i].wc_target.rs_length = htonl(mi->curbuf->size);
 				w_array->wc_array[i].wc_target.rs_offset = call_array->wc_array[i].wc_target.rs_offset;
 
-
-#ifdef MSK_DUMP_FRAGMENTS
 				rpcrdma_dump_msg(mi->curbuf, "rplybody", msg->rm_xid);
-#endif
+
 				mi->curbuf->size = 0; /* FIXME: _not_ MT-safe without lock */
 
 				if (mi->curbuf == mi->xdrbuf)
@@ -916,9 +903,7 @@ rpcrdma_svc_flushout(XDR * xdrs) {
 
 			hdr_buf->size = rpcrdma_hdr_len(rmsg);
 
-#ifdef MSK_DUMP_FRAGMENTS
 			rpcrdma_dump_msg(hdr_buf, "rplyhdr", msg->rm_xid);
-#endif
 
 			/* actual send, callback will take care of cleanup */
 			msk_post_send(mi->trans, hdr_buf, setunused_callback, err_callback, hdr_buf);
@@ -1008,7 +993,6 @@ xdrmsk_getsizeleft(XDR *xdrs)
 
 	return count;
 }
-	
 
 static bool
 xdrmsk_getlong_aligned(XDR *xdrs, long *lp)
@@ -1128,7 +1112,6 @@ xdrmsk_getpos(XDR *xdrs)
 	/* XXX w/64-bit pointers, u_int not enough! */
 	return (u_int)((u_long)priv(xdrs)->pos - (u_long)xdrs->x_base);
 }
-
 
 /* FIXME: Completely broken with buffer cut in parts... */
 static bool
