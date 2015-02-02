@@ -126,8 +126,10 @@ svc_msk_create(void *arg, u_int credits, void (*callback)(void*), void* callback
 	sm->credits = credits ? credits : 10; //default value if credits = 0;
 	sm->trans = trans;
 
-	__rpc_set_netbuf(&xprt->xp_ltaddr, msk_get_dst_addr(trans), sizeof(struct sockaddr));
-	__rpc_set_netbuf(&xprt->xp_rtaddr, msk_get_src_addr(trans), sizeof(struct sockaddr));
+	__rpc_set_netbuf(&xprt->xp_ltaddr, rdma_get_peer_addr(trans->cm_id),
+			sizeof(struct sockaddr));
+	__rpc_set_netbuf(&xprt->xp_rtaddr, rdma_get_local_addr(trans->cm_id),
+			sizeof(struct sockaddr));
 
 	svc_msk_ops(xprt);
 
