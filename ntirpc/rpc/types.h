@@ -126,13 +126,13 @@ typedef int32_t rpc_inline_t;
 
 #define TIRPC_FLAG_NONE                 0x0000000
 #define TIRPC_DEBUG_FLAG_NONE           0x0000000
-#define TIRPC_DEBUG_FLAG_DEFAULT        0x0000001
-#define TIRPC_DEBUG_FLAG_RPC_CACHE      0x0000002
-#define TIRPC_DEBUG_FLAG_RPC_MSG        0x0000004
+#define TIRPC_DEBUG_FLAG_ERROR          0x0000001
+#define TIRPC_DEBUG_FLAG_EVENT          0x0000002
+#define TIRPC_DEBUG_FLAG_REFCNT         0x0000004
 #define TIRPC_DEBUG_FLAG_LOCK           0x0000008
 #define TIRPC_DEBUG_FLAG_MEM            0x0000010
-#define TIRPC_DEBUG_FLAG_XDR            0x0000020
-#define TIRPC_DEBUG_FLAG_RPCB           0x0000040
+#define TIRPC_DEBUG_FLAG_RBTREE         0x0000020
+#define TIRPC_DEBUG_FLAG_RPCSEC_GSS     0x0000040
 #define TIRPC_DEBUG_FLAG_AUTH           0x0000080
 #define TIRPC_DEBUG_FLAG_CLNT_BCAST     0x0000100
 #define TIRPC_DEBUG_FLAG_CLNT_DG        0x0000200
@@ -149,10 +149,15 @@ typedef int32_t rpc_inline_t;
 #define TIRPC_DEBUG_FLAG_SVC_SCTP       0x0100000
 #define TIRPC_DEBUG_FLAG_SVC_VC         0x0200000
 #define TIRPC_DEBUG_FLAG_XDRREC         0x0400000
-#define TIRPC_DEBUG_FLAG_RBTREE         0x0800000
+#define TIRPC_DEBUG_FLAG_XDR            0x0800000
 #define TIRPC_DEBUG_FLAG_RPC_CTX        0x1000000
-#define TIRPC_DEBUG_FLAG_RPCSEC_GSS     0x2000000
-#define TIRPC_DEBUG_FLAG_REFCNT         0x4000000
+#define TIRPC_DEBUG_FLAG_RPC_CACHE      0x2000000
+#define TIRPC_DEBUG_FLAG_RPC_MSG        0x4000000
+#define TIRPC_DEBUG_FLAG_RPC_RDMA       0x8000000
+
+/* or symbolic names for default */
+#define TIRPC_DEBUG_FLAG_DEFAULT \
+	(TIRPC_DEBUG_FLAG_ERROR | TIRPC_DEBUG_FLAG_EVENT)
 
 typedef void *(*mem_alloc_t) (size_t);
 typedef void (*mem_free_t) (void *, size_t);
