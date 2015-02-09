@@ -340,6 +340,10 @@ int msk_post_n_recv(struct msk_trans *trans, msk_data_t *data, int num_sge, ctx_
 	return 0;
 }
 
+static inline int msk_post_recv(msk_trans_t *trans, msk_data_t *data, ctx_callback_t callback, ctx_callback_t err_callback, void *callback_arg) {
+	return msk_post_n_recv(trans, data, 1, callback, err_callback, callback_arg);
+}
+
 static int msk_post_send_generic(struct msk_trans *trans, enum ibv_wr_opcode opcode, msk_data_t *data, int num_sge, msk_rloc_t *rloc, ctx_callback_t callback, ctx_callback_t err_callback, void* callback_arg) {
 	struct msk_ctx *wctx;
 	int i, ret;
@@ -449,6 +453,10 @@ int msk_post_n_send(struct msk_trans *trans, msk_data_t *data, int num_sge, ctx_
 	return msk_post_send_generic(trans, IBV_WR_SEND, data, num_sge, NULL, callback, err_callback, callback_arg);
 }
 
+static inline int msk_post_send(msk_trans_t *trans, msk_data_t *data, ctx_callback_t callback, ctx_callback_t err_callback, void *callback_arg) {
+	return msk_post_n_send(trans, data, 1, callback, err_callback, callback_arg);
+}
+
 /**
  * Post a receive buffer and waits for _that one and not any other_ to be filled.
  * Generally a bad idea to use that one unless only that one is used.
@@ -475,6 +483,10 @@ int msk_wait_n_recv(struct msk_trans *trans, msk_data_t *data, int num_sge) {
 	return ret;
 }
 
+static inline int msk_wait_recv(msk_trans_t *trans, msk_data_t *data) {
+	return msk_wait_n_recv(trans, data, 1);
+}
+
 /**
  * Post a send buffer and waits for that one to be completely sent
  * @param trans   [IN]
@@ -499,6 +511,10 @@ int msk_wait_n_send(struct msk_trans *trans, msk_data_t *data, int num_sge) {
 	return ret;
 }
 
+static inline int msk_wait_send(msk_trans_t *trans, msk_data_t *data) {
+	return msk_wait_n_send(trans, data, 1);
+}
+
 // callbacks would all be run in a big send/recv_thread
 
 
@@ -509,8 +525,16 @@ int msk_post_n_read(struct msk_trans *trans, msk_data_t *data, int num_sge, msk_
 	return msk_post_send_generic(trans, IBV_WR_RDMA_READ, data, num_sge, rloc, callback, err_callback, callback_arg);
 }
 
+static inline int msk_post_read(msk_trans_t *trans, msk_data_t *data, msk_rloc_t *rloc, ctx_callback_t callback, ctx_callback_t err_callback, void* callback_arg) {
+	return msk_post_n_read(trans, data, 1, rloc, callback, err_callback, callback_arg);
+}
+
 int msk_post_n_write(struct msk_trans *trans, msk_data_t *data, int num_sge, msk_rloc_t *rloc, ctx_callback_t callback, ctx_callback_t err_callback, void* callback_arg) {
 	return msk_post_send_generic(trans, IBV_WR_RDMA_WRITE, data, num_sge, rloc, callback, err_callback, callback_arg);
+}
+
+static inline int msk_post_write(msk_trans_t *trans, msk_data_t *data, msk_rloc_t *rloc, ctx_callback_t callback, ctx_callback_t err_callback, void* callback_arg) {
+	return msk_post_n_write(trans, data, 1, rloc, callback, err_callback, callback_arg);
 }
 
 int msk_wait_n_read(struct msk_trans *trans, msk_data_t *data, int num_sge, msk_rloc_t *rloc) {
@@ -529,6 +553,9 @@ int msk_wait_n_read(struct msk_trans *trans, msk_data_t *data, int num_sge, msk_
 	return ret;
 }
 
+static inline int msk_wait_read(msk_trans_t *trans, msk_data_t *data, msk_rloc_t *rloc) {
+	return msk_wait_n_read(trans, data, 1, rloc);
+}
 
 int msk_wait_n_write(struct msk_trans *trans, msk_data_t *data, int num_sge, msk_rloc_t *rloc) {
 	pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
@@ -546,6 +573,9 @@ int msk_wait_n_write(struct msk_trans *trans, msk_data_t *data, int num_sge, msk
 	return ret;
 }
 
+static inline int msk_wait_write(msk_trans_t *trans, msk_data_t *data, msk_rloc_t *rloc) {
+	return msk_wait_n_write(trans, data, 1, rloc);
+}
 
 struct sockaddr *msk_get_dst_addr(struct msk_trans *trans) {
 	return rdma_get_peer_addr(trans->cm_id);
