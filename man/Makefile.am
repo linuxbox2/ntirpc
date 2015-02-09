@@ -7,11 +7,12 @@ CLIENT_MANS		= rpc_clnt_auth.3t rpc_clnt_calls.3t rpc_clnt_create.3t \
 SERVER_MANS		= rpc_svc_calls.3t rpc_svc_create.3t rpc_svc_err.3t \
 			  rpc_svc_reg.3t
 GENERIC_MANS		= rpc.3t rpc_xdr.3t
+RPCSEC_MANS		= rpcsec_gss.3t
 
 dist_man5_MANS		= netconfig.5
 dist_man3_MANS		= $(LOOKUP_MANS) $(NETCONFIG_MANS) \
 			  $(BIND_MANS) $(GENERIC_MANS) $(COMPAT_MANS) \
-			  $(CLIENT_MANS) $(SERVER_MANS)
+			  $(CLIENT_MANS) $(SERVER_MANS) $(RPCSEC_MANS)
 
 EXTRA_DIST		= publickey.3t publickey.5 rpc.5
 
