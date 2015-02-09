@@ -83,6 +83,7 @@ thread_key_t tcp_key = KEY_INITIALIZER;
 thread_key_t udp_key = KEY_INITIALIZER;
 thread_key_t nc_key = KEY_INITIALIZER;
 thread_key_t rce_key = KEY_INITIALIZER;
+thread_key_t rg_key = KEY_INITIALIZER;
 
 /* xprtlist (svc_generic.c) */
 pthread_mutex_t	xprtlist_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -141,6 +142,8 @@ void tsd_key_delete(void)
 	if (nc_key != KEY_INITIALIZER)
 		pthread_key_delete(nc_key);
 	if (rce_key != KEY_INITIALIZER)
+		pthread_key_delete(rce_key);
+	if (rg_key != KEY_INITIALIZER)
 		pthread_key_delete(rce_key);
 	return;
 }

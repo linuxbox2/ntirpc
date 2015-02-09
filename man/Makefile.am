@@ -7,7 +7,10 @@ CLIENT_MANS		= rpc_clnt_auth.3t rpc_clnt_calls.3t rpc_clnt_create.3t \
 SERVER_MANS		= rpc_svc_calls.3t rpc_svc_create.3t rpc_svc_err.3t \
 			  rpc_svc_reg.3t
 GENERIC_MANS		= rpc.3t rpc_xdr.3t
-RPCSEC_MANS		= rpcsec_gss.3t
+RPCSEC_MANS		= rpcsec_gss.3t rpc_gss_get_error.3t \
+			  rpc_gss_get_mechanisms.3t rpc_gss_get_mech_info.3t \
+			  rpc_gss_get_versions.3t rpc_gss_is_installed.3t \
+			  rpc_gss_mech_to_oid.3t rpc_gss_qop_to_num.3t
 
 dist_man5_MANS		= netconfig.5
 dist_man3_MANS		= $(LOOKUP_MANS) $(NETCONFIG_MANS) \
