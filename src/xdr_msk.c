@@ -45,7 +45,7 @@
 #include <rpc/rpc.h>
 #include "un-namespace.h"
 
-#include "rpc_rdma.h"
+#include "rpc_msk.h"
 
 static void xdrmsk_destroy(XDR *);
 static bool xdrmsk_getlong_aligned(XDR *, long *);

@@ -59,7 +59,7 @@
 #endif
 
 #include "clnt_internal.h"
-#include "rpc_rdma.h"
+#include "rpc_msk.h"
 #include "rpc_dplx_internal.h"
 
 #define MAX_DEFAULT_FDS                 20000
