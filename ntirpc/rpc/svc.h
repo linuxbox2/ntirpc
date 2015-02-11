@@ -670,22 +670,6 @@ extern SVCXPRT *svc_vc_ncreate_clnt(CLIENT *, u_int, u_int, const uint32_t);
  */
 
 /*
- * Destroy a transport handle.  Do not alter connected transport state.
- */
-extern void svc_vc_destroy_handle(SVCXPRT *);
-
-/*
- * Construct a service transport, unassociated with any transport
- * connection.
- */
-extern SVCXPRT *svc_vc_create_xprt(u_long, u_long);
-
-/*
- * Destroy a transport handle.  Do not alter connected transport state.
- */
-extern void svc_vc_destroy_xprt(SVCXPRT *);
-
-/*
  * Added for compatibility to old rpc 4.0. Obsoleted by svc_vc_create().
  */
 extern SVCXPRT *svcunix_ncreate(int, u_int, u_int, char *);
