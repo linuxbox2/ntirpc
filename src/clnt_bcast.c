@@ -290,8 +290,10 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 	if (nettype == NULL)
 		nettype = "datagram_n";
 	handle = __rpc_setconf(nettype);
-	if (handle == NULL)
-		return (RPC_UNKNOWNPROTO);
+	if (handle == NULL) {
+		stat = RPC_UNKNOWNPROTO;
+		goto cleanup;
+	}
 	while ((nconf = __rpc_getconf(handle)) != NULL) {
 		int fd;
 		struct __rpc_sockinfo si;
@@ -652,6 +654,7 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 		(void)close(fdlist[i].fd);
 		__rpc_freebroadifs(&fdlist[i].nal);
 	}
+ cleanup:
 	AUTH_DESTROY(sys_auth);
 	(void)__rpc_endconf(handle);
 
