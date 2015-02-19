@@ -244,8 +244,8 @@ svc_ioq_append(SVCXPRT *xprt, struct x_vc_data *xd, XDR *xdrs)
 		arg->xprt = xprt;
 		arg->xd = xd;
 		xd->shared.ioq.active = true;
-		thrdpool_submit_work(&pool, svc_ioq, arg);
 		SVC_REF(xprt, SVC_REF_FLAG_LOCKED);	/* !LOCKED */
+		thrdpool_submit_work(&pool, svc_ioq, arg);
 	} else
 		mutex_unlock(&xprt->xp_lock);
 }
