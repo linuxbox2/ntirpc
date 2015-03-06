@@ -39,6 +39,20 @@
 #ifndef _TIRPC_SVC_DG_H_
 #define _TIRPC_SVC_DG_H_
 
+#include <sys/socket.h>
+#include <netinet/in.h>
+
+/*
+ * The following union is defined just to use SVC_CMSG_LEN macro for an
+ * array length. _GNU_SOURCE must be defined to get in6_pktinfo
+ * declaration!
+ */
+union in_pktinfo_u {
+	struct in_pktinfo x;
+	struct in6_pktinfo y;
+};
+#define SVC_CMSG_LEN CMSG_SPACE(sizeof(union in_pktinfo_u))
+
 /*
  * kept in xprt->xp_p2
  */
@@ -51,7 +65,7 @@ struct svc_dg_data {
 	void *su_cache;		/* cached data, NULL if none */
 
 	struct msghdr su_msghdr;	/* msghdr received from clnt */
-	unsigned char su_cmsg[64];	/* cmsghdr received from clnt */
+	unsigned char su_cmsg[SVC_CMSG_LEN];	/* cmsghdr received from clnt */
 };
 
 #define __rpcb_get_dg_xidp(x) (&((struct svc_dg_data *)(x)->xp_p2)->su_xid)

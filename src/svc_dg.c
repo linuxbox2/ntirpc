@@ -95,7 +95,7 @@ static int svc_dg_cache_get(SVCXPRT *, struct rpc_msg *, char **, size_t *);
 static void svc_dg_cache_set(SVCXPRT *, size_t);
 int svc_dg_enablecache(SVCXPRT *, u_int);
 static void svc_dg_enable_pktinfo(int, const struct __rpc_sockinfo *);
-static int svc_dg_valid_pktinfo(struct msghdr *);
+static int svc_dg_store_pktinfo(struct msghdr *, struct svc_req *);
 
 /*
  * Usage:
@@ -215,6 +215,38 @@ svc_dg_stat(SVCXPRT *xprt)
 	return (XPRT_IDLE);
 }
 
+static void svc_dg_set_pktinfo(struct cmsghdr *cmsg, struct svc_req *req)
+{
+	switch (req->rq_daddr.ss_family) {
+	case AF_INET: {
+		struct in_pktinfo *pki = (struct in_pktinfo *)CMSG_DATA(cmsg);
+		struct sockaddr_in *daddr =
+			(struct sockaddr_in *)&req->rq_daddr;
+
+		cmsg->cmsg_level = SOL_IP;
+		cmsg->cmsg_type = IP_PKTINFO;
+		pki->ipi_ifindex = 0;
+		pki->ipi_spec_dst = daddr->sin_addr;
+		cmsg->cmsg_len = CMSG_LEN(sizeof(*pki));
+		break;
+	}
+	case AF_INET6: {
+		struct in6_pktinfo *pki = (struct in6_pktinfo *)CMSG_DATA(cmsg);
+		struct sockaddr_in6 *daddr =
+			(struct sockaddr_in6 *)&req->rq_daddr;
+
+		cmsg->cmsg_level = SOL_IPV6;
+		cmsg->cmsg_type = IPV6_PKTINFO;
+		pki->ipi6_ifindex = daddr->sin6_scope_id;
+		pki->ipi6_addr = daddr->sin6_addr;
+		cmsg->cmsg_len = CMSG_LEN(sizeof(*pki));
+		break;
+	}
+	default:
+	       break;
+	}
+}
+
 static bool
 svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 {
@@ -262,9 +294,10 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 
 	/* Check whether there's an IP_PKTINFO or IP6_PKTINFO control message.
 	 * If yes, preserve it for svc_dg_reply; otherwise just zap any cmsgs */
-	if (!svc_dg_valid_pktinfo(mesgp)) {
+	if (!svc_dg_store_pktinfo(mesgp, req)) {
 		mesgp->msg_control = NULL;
 		mesgp->msg_controllen = 0;
+		req->rq_daddr_len = 0;
 	}
 
 	__xprt_set_raddr(xprt, &ss);
@@ -305,6 +338,18 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 		if (svc_dg_cache_get(xprt, req->rq_msg, &reply, &replylen)) {
 			iov.iov_base = reply;
 			iov.iov_len = replylen;
+
+			/* Set source IP address of the reply message in
+			 * PKTINFO
+			 */
+			if (req->rq_daddr_len != 0) {
+				struct cmsghdr *cmsg;
+
+				cmsg = (struct cmsghdr *)mesgp->msg_control;
+				svc_dg_set_pktinfo(cmsg, req);
+				mesgp->msg_controllen =
+					CMSG_ALIGN(cmsg->cmsg_len);
+			}
 			(void)sendmsg(xprt->xp_fd, mesgp, 0);
 			return (false);
 		}
@@ -346,6 +391,7 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 		(SVCAUTH_WRAP
 		 (req->rq_auth, req, xdrs, xdr_results, xdr_location)))) {
 		struct msghdr *msg = &su->su_msghdr;
+		struct cmsghdr *cmsg;
 		struct iovec iov;
 
 		iov.iov_base = rpc_buffer(xprt);
@@ -354,7 +400,14 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 		msg->msg_iovlen = 1;
 		msg->msg_name = (struct sockaddr *)(void *)req->rq_rtaddr.buf;
 		msg->msg_namelen = xprt->xp_rtaddr.len;
-		/* cmsg already set in svc_dg_recv */
+
+		/* Set source IP address of the reply message in PKTINFO */
+		if (req->rq_daddr_len != 0) {
+			msg->msg_control = su->su_cmsg;
+			cmsg = (struct cmsghdr *)msg->msg_control;
+			svc_dg_set_pktinfo(cmsg, req);
+			msg->msg_controllen = CMSG_ALIGN(cmsg->cmsg_len);
+		}
 
 		if (sendmsg(xprt->xp_fd, msg, 0) == (ssize_t) slen) {
 			stat = true;
@@ -814,19 +867,62 @@ svc_dg_enable_pktinfo(int fd, const struct __rpc_sockinfo *si)
 
 	case AF_INET6:
 #ifdef SOL_IPV6
-		(void)setsockopt(fd, SOL_IPV6, IPV6_PKTINFO, &val, sizeof(val));
+		(void)setsockopt(fd, SOL_IP, IP_PKTINFO, &val, sizeof(val));
+		(void)setsockopt(fd, SOL_IPV6, IPV6_RECVPKTINFO,
+				&val, sizeof(val));
 #endif
 		break;
 	}
 }
 
+static int
+svc_dg_store_in_pktinfo(struct cmsghdr *cmsg, struct svc_req *req)
+{
+	if (cmsg->cmsg_level == SOL_IP &&
+	    cmsg->cmsg_type == IP_PKTINFO &&
+	    cmsg->cmsg_len >= CMSG_LEN(sizeof(struct in_pktinfo))) {
+		struct in_pktinfo *pkti;
+		struct sockaddr_in *daddr;
+
+		pkti = (struct in_pktinfo *)CMSG_DATA(cmsg);
+		daddr = (struct sockaddr_in *)&req->rq_daddr;
+		daddr->sin_family = AF_INET;
+		daddr->sin_addr.s_addr = pkti->ipi_spec_dst.s_addr;
+		req->rq_daddr_len = sizeof(struct sockaddr_in);
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
+static int
+svc_dg_store_in6_pktinfo(struct cmsghdr *cmsg, struct svc_req *req)
+{
+	if (cmsg->cmsg_level == SOL_IPV6 &&
+	    cmsg->cmsg_type == IPV6_PKTINFO &&
+	    cmsg->cmsg_len >= CMSG_LEN(sizeof(struct in6_pktinfo))) {
+		struct in6_pktinfo *pkti;
+		struct sockaddr_in6 *daddr;
+
+		pkti = (struct in6_pktinfo *)CMSG_DATA(cmsg);
+		daddr = (struct sockaddr_in6 *) &req->rq_daddr;
+		daddr->sin6_family = AF_INET6;
+		daddr->sin6_addr = pkti->ipi6_addr;
+		daddr->sin6_scope_id = pkti->ipi6_ifindex;
+		req->rq_daddr_len = sizeof(struct sockaddr_in6);
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
 /*
  * When given a control message received from the socket
- * layer, check whether it contains valid PKTINFO data matching
- * the address family of the peer address.
+ * layer, check whether it contains valid PKTINFO data.
+ * If so, store the data in the request.
  */
-int
-svc_dg_valid_pktinfo(struct msghdr *msg)
+static int
+svc_dg_store_pktinfo(struct msghdr *msg, struct svc_req *req)
 {
 	struct cmsghdr *cmsg;
 
@@ -843,36 +939,25 @@ svc_dg_valid_pktinfo(struct msghdr *msg)
 	switch (((struct sockaddr *)msg->msg_name)->sa_family) {
 	case AF_INET:
 #ifdef SOL_IP
-		if (cmsg->cmsg_level != SOL_IP || cmsg->cmsg_type != IP_PKTINFO
-		    || cmsg->cmsg_len < CMSG_LEN(sizeof(struct in_pktinfo))) {
-			return 0;
-		} else {
-			struct in_pktinfo *pkti;
-
-			pkti = (struct in_pktinfo *)CMSG_DATA(cmsg);
-			pkti->ipi_ifindex = 0;
-		}
+		if (svc_dg_store_in_pktinfo(cmsg, req))
+				return 1;
 #endif
 		break;
 
 	case AF_INET6:
 #ifdef SOL_IPV6
-		if (cmsg->cmsg_level != SOL_IPV6
-		    || cmsg->cmsg_type != IPV6_PKTINFO
-		    || cmsg->cmsg_len < CMSG_LEN(sizeof(struct in6_pktinfo))) {
-			return 0;
-		} else {
-			struct in6_pktinfo *pkti;
+		/* Handle IPv4 PKTINFO as well on IPV6 interface */
+		if (svc_dg_store_in_pktinfo(cmsg, req))
+			return 1;
 
-			pkti = (struct in6_pktinfo *)CMSG_DATA(cmsg);
-			pkti->ipi6_ifindex = 0;
-		}
+		if (svc_dg_store_in6_pktinfo(cmsg, req))
+			return 1;
 #endif
 		break;
 
 	default:
-		return 0;
+		break;
 	}
 
-	return 1;
+	return 0;
 }

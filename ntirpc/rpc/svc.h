@@ -342,6 +342,10 @@ struct svc_req {
 	void *rq_ap2;		/* auth private */
 
 	struct netbuf rq_rtaddr;	/* remote transport address */
+
+	/* Store dest addr for UDP to send replys from */
+	struct sockaddr_storage rq_daddr;
+	size_t rq_daddr_len;
 };
 
 /*
