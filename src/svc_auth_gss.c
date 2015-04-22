@@ -354,7 +354,8 @@ svcauth_gss_accept_sec_context(struct svc_req *rqst,
 }
 
 static bool_t
-svcauth_gss_validate(struct svc_rpc_gss_data *gd, struct rpc_msg *msg)
+svcauth_gss_validate(struct svc_rpc_gss_data *gd, struct rpc_msg *msg,
+	gss_qop_t *qop)
 {
 	struct opaque_auth	*oa;
 	gss_buffer_desc		 rpcbuf, checksum;
@@ -403,6 +404,7 @@ svcauth_gss_validate(struct svc_rpc_gss_data *gd, struct rpc_msg *msg)
 			maj_stat, min_stat);
 		return (FALSE);
 	}
+	*qop = qop_state;
 	return (TRUE);
 }
 
@@ -447,6 +449,7 @@ _svcauth_gss(struct svc_req *rqst, struct rpc_msg *msg, bool_t *no_dispatch)
 	struct rpc_gss_cred	*gc;
 	struct rpc_gss_init_res	 gr;
 	int			 call_stat, offset;
+	gss_qop_t		 qop;
 
 	gss_log_debug("in svcauth_gss()");
 
@@ -556,7 +559,7 @@ _svcauth_gss(struct svc_req *rqst, struct rpc_msg *msg, bool_t *no_dispatch)
 		break;
 
 	case RPCSEC_GSS_DATA:
-		if (!svcauth_gss_validate(gd, msg))
+		if (!svcauth_gss_validate(gd, msg, &qop))
 			return (RPCSEC_GSS_CREDPROBLEM);
 
 		if (!svcauth_gss_nextverf(rqst, htonl(gc->gc_seq)))
@@ -567,7 +570,7 @@ _svcauth_gss(struct svc_req *rqst, struct rpc_msg *msg, bool_t *no_dispatch)
 		if (rqst->rq_proc != NULLPROC)
 			return (AUTH_FAILED);		/* XXX ? */
 
-		if (!svcauth_gss_validate(gd, msg))
+		if (!svcauth_gss_validate(gd, msg, &qop))
 			return (RPCSEC_GSS_CREDPROBLEM);
 
 		if (!svcauth_gss_nextverf(rqst, htonl(gc->gc_seq)))
