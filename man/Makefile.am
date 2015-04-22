@@ -12,7 +12,9 @@ RPCSEC_MANS		= rpcsec_gss.3t rpc_gss_get_error.3t \
 			  rpc_gss_get_versions.3t rpc_gss_is_installed.3t \
 			  rpc_gss_mech_to_oid.3t rpc_gss_qop_to_num.3t \
 			  rpc_gss_max_data_length.3t rpc_gss_seccreate.3t \
-			  rpc_gss_set_defaults.3t
+			  rpc_gss_set_defaults.3t rpc_gss_getcred.3t \
+			  rpc_gss_get_principal_name.3t rpc_gss_set_callback.3t \
+			  rpc_gss_set_svc_name.3t rpc_gss_svc_max_data_length.3t
 
 dist_man5_MANS		= netconfig.5
 dist_man3_MANS		= $(LOOKUP_MANS) $(NETCONFIG_MANS) \
