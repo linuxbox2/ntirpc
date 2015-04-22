@@ -48,6 +48,8 @@
 
 #include <gssapi/gssapi_ext.h>
 
+#include <reentrant.h>
+
 #define UNUSED(x) UNUSED_ ## x __attribute__((unused))
 
 extern SVCAUTH svc_auth_none;
@@ -77,9 +79,19 @@ static struct svc_auth_ops svc_auth_gss_ops = {
 	svcauth_gss_destroy
 };
 
+struct svc_rpc_gss_callback {
+	struct svc_rpc_gss_callback	*cb_next;
+	rpc_gss_callback_t		cb_args;
+};
+
+extern pthread_mutex_t		svcauth_cb_lock;
+static struct svc_rpc_gss_callback *_svcauth_callbacks = NULL;
+
 struct svc_rpc_gss_data {
 	bool_t			established;	/* context established */
+	bool_t			locked;		/* service/qop unchanging */
 	gss_ctx_id_t		ctx;		/* context id */
+	gss_cred_id_t		deleg;		/* delegated creds */
 	struct rpc_gss_sec	sec;		/* security triple */
 	gss_buffer_desc		cname;		/* GSS client name */
 	u_int			seq;		/* sequence number */
@@ -90,6 +102,7 @@ struct svc_rpc_gss_data {
 	rpc_gss_rawcred_t	rcred;		/* raw credential */
 	rpc_gss_ucred_t		ucred;		/* cooked credential */
 	gid_t			gids[NGRPS];	/* list of groups */
+	bool_t			callback_done;	/* TRUE after callback */
 	void *			cookie;		/* callback cookie */
 };
 
@@ -274,7 +287,7 @@ svcauth_gss_accept_sec_context(struct svc_req *rqst,
 					      &gr->gr_token,
 					      &ret_flags,
 					      NULL,
-					      NULL);
+					      &gd->deleg);
 
 	if (gr->gr_major != GSS_S_COMPLETE &&
 	    gr->gr_major != GSS_S_CONTINUE_NEEDED) {
@@ -304,6 +317,7 @@ svcauth_gss_accept_sec_context(struct svc_req *rqst,
 	gd->sec.svc = gc->gc_svc;
 	gd->seq = gc->gc_seq;
 	gd->win = gr->gr_win;
+	gd->callback_done = FALSE;
 
 	if (gr->gr_major == GSS_S_COMPLETE) {
 		maj_stat = gss_display_name(&min_stat, gd->client_name,
@@ -440,6 +454,50 @@ svcauth_gss_nextverf(struct svc_req *rqst, u_int num)
 	return (TRUE);
 }
 
+static bool_t
+svcauth_gss_do_call(struct svc_req *rqst, struct svc_rpc_gss_data *gd,
+		struct svc_rpc_gss_callback *cb)
+{
+	rpc_gss_lock_t lock;
+	bool_t result;
+
+	lock.locked = FALSE;
+	lock.raw_cred = &gd->rcred;
+	result = cb->cb_args.callback(rqst, gd->deleg, gd->ctx,
+							&lock, &gd->cookie);
+	if (result) {
+		gd->locked = lock.locked;
+		gd->deleg = GSS_C_NO_CREDENTIAL;
+	}
+	return result;
+}
+
+static bool_t
+svcauth_gss_callback(struct svc_req *rqst, struct svc_rpc_gss_data *gd)
+{
+	struct svc_rpc_gss_callback *cb;
+	bool_t result;
+
+	result = TRUE;
+	mutex_lock(&svcauth_cb_lock);
+
+	for (cb = _svcauth_callbacks; cb != NULL; cb = cb->cb_next) {
+		if (cb->cb_args.program == rqst->rq_prog &&
+		    cb->cb_args.version == rqst->rq_vers) {
+			result = svcauth_gss_do_call(rqst, gd, cb);
+			break;
+		}
+	}
+
+	if (gd->deleg != GSS_C_NO_CREDENTIAL) {
+		OM_uint32 min_stat;
+		(void)gss_release_cred(&min_stat, &gd->deleg);
+	}
+
+	mutex_unlock(&svcauth_cb_lock);
+	return result;
+}
+
 enum auth_stat
 _svcauth_gss(struct svc_req *rqst, struct rpc_msg *msg, bool_t *no_dispatch)
 {
@@ -469,6 +527,7 @@ _svcauth_gss(struct svc_req *rqst, struct rpc_msg *msg, bool_t *no_dispatch)
 		}
 		auth->svc_ah_ops = &svc_auth_gss_ops;
 		auth->svc_ah_private = (caddr_t) gd;
+		gd->locked = FALSE;
 		rqst->rq_xprt->xp_auth = auth;
 	}
 	else gd = SVCAUTH_PRIVATE(rqst->rq_xprt->xp_auth);
@@ -564,6 +623,32 @@ _svcauth_gss(struct svc_req *rqst, struct rpc_msg *msg, bool_t *no_dispatch)
 
 		if (!svcauth_gss_nextverf(rqst, htonl(gc->gc_seq)))
 			return (AUTH_FAILED);
+
+		if (!gd->callback_done) {
+			gd->callback_done = TRUE;
+			gd->sec.qop = qop;
+			(void)rpc_gss_num_to_qop(gd->rcred.mechanism,
+						gd->sec.qop, &gd->rcred.qop);
+			if (!svcauth_gss_callback(rqst, gd))
+				return (AUTH_REJECTEDCRED);
+		}
+
+		if (gd->locked) {
+			if (gd->rcred.service !=
+					_rpc_gss_svc_to_service(gc->gc_svc))
+				return (AUTH_FAILED);
+			if (gd->sec.qop != qop)
+				return (AUTH_BADVERF);
+		}
+
+		if (gd->sec.qop != qop) {
+			gd->sec.qop = qop;
+			(void)rpc_gss_num_to_qop(gd->rcred.mechanism,
+							qop, &gd->rcred.qop);
+		}
+
+		gd->rcred.service = _rpc_gss_svc_to_service(gc->gc_svc);
+
 		break;
 
 	case RPCSEC_GSS_DESTROY:
@@ -863,8 +948,24 @@ rpc_gss_getcred(struct svc_req *rqst, rpc_gss_rawcred_t **rcred,
 bool_t
 rpc_gss_set_callback(rpc_gss_callback_t *callback)
 {
-	/* not yet supported */
-	return FALSE;
+	struct svc_rpc_gss_callback *new;
+
+	if (callback == NULL)
+		return FALSE;
+
+	/* XXX: This is never freed */
+	new = malloc(sizeof(*new));
+	if (new == NULL)
+		return FALSE;
+
+	new->cb_args = *callback;
+
+	mutex_lock(&svcauth_cb_lock);
+	new->cb_next = _svcauth_callbacks;
+	_svcauth_callbacks = new;
+	mutex_unlock(&svcauth_cb_lock);
+
+	return TRUE;
 }
 
 /*

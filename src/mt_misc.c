@@ -76,6 +76,9 @@ pthread_mutex_t	svcraw_lock = PTHREAD_MUTEX_INITIALIZER;
 /* protects TSD key creation */
 pthread_mutex_t	tsd_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/* protects RPCSEC GSS callback list */
+pthread_mutex_t svcauth_cb_lock = PTHREAD_MUTEX_INITIALIZER;
+
 /* Library global tsd keys */
 thread_key_t clnt_broadcast_key = KEY_INITIALIZER;
 thread_key_t rpc_call_key = KEY_INITIALIZER;
