@@ -44,7 +44,9 @@
 /*	#pragma ident "@(#)rpcent.h   1.13    94/04/25 SMI"	*/
 /*      @(#)rpcent.h 1.1 88/12/06 SMI   */
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* These are defined in /usr/include/rpc/netdb.h */
 #if 0
@@ -60,8 +62,10 @@ extern struct rpcent *getrpcbynumber(int);
 extern struct rpcent *getrpcent(void);
 #endif
 
-extern void setrpcent(int) __THROW;
-extern void endrpcent(void) __THROW;
-__END_DECLS
+extern void setrpcent(int);
+extern void endrpcent(void);
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !_RPC_CENT_H */

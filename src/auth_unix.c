@@ -26,7 +26,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 
 /*
  * auth_unix.c, Implements UNIX style authentication parameters.

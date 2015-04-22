@@ -26,7 +26,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 
 /*
  * xdr_mem.h, XDR implementation using memory buffers.

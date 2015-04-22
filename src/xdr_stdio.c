@@ -26,7 +26,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 
 /*
  * xdr_stdio.c, XDR implementation on standard i/o file.

@@ -27,9 +27,6 @@
  */
 
 /*
-#include <sys/cdefs.h>
-*/
-/*
  * clnt_perror.c
  *
  * Copyright (C) 1984, Sun Microsystems, Inc.

@@ -41,7 +41,6 @@
 
 #ifndef _RPC_PMAP_RMT_H
 #define _RPC_PMAP_RMT_H
-#include <sys/cdefs.h>
 
 struct rmtcallargs {
 	u_long prog, vers, proc, arglen;
@@ -56,9 +55,13 @@ struct rmtcallres {
 	xdrproc_t xdr_results;
 };
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern bool_t xdr_rmtcall_args(XDR *, struct rmtcallargs *);
 extern bool_t xdr_rmtcallres(XDR *, struct rmtcallres *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !_RPC_PMAP_RMT_H */

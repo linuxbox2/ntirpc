@@ -114,17 +114,25 @@ struct authdes_verf {
  * Map a des credential into a unix cred.
  *
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern int authdes_getucred( struct authdes_cred *, uid_t *, gid_t *, int *, gid_t * );
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern bool_t	xdr_authdes_cred(XDR *, struct authdes_cred *);
 extern bool_t	xdr_authdes_verf(XDR *, struct authdes_verf *);
 extern int	rtime(dev_t, struct netbuf *, int, struct timeval *,
 		    struct timeval *);
 extern void	kgetnetname(char *);
 extern enum auth_stat _svcauth_des(struct svc_req *, struct rpc_msg *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ndef _TI_AUTH_DES_ */

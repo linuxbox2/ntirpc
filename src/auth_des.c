@@ -38,7 +38,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/cdefs.h>
 #include <rpc/des_crypt.h>
 #include <syslog.h>
 #include <rpc/types.h>
@@ -52,7 +51,6 @@
 
 #if defined(LIBC_SCCS) && !defined(lint)
 #endif
-#include <sys/cdefs.h>
 
 #include "debug.h"
 

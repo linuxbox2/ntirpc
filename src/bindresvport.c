@@ -26,7 +26,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 
 /*
  * Copyright (c) 1987 by Sun Microsystems, Inc.

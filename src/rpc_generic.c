@@ -29,7 +29,6 @@
  * Copyright (c) 1986-1991 by Sun Microsystems Inc. 
  */
 
-#include <sys/cdefs.h>
 
 /*
  * rpc_generic.c, Miscl routines for RPC.

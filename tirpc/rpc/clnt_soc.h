@@ -46,7 +46,6 @@
  * with TS-RPC.
  */
 
-#include <sys/cdefs.h>
 
 #define UDPMSGSIZE      8800    /* rpc imposed limit on udp msg size */  
 
@@ -61,27 +60,39 @@
  *	u_int sendsz;
  *	u_int recvsz;
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern CLIENT *clnttcp_create(struct sockaddr_in *, u_long, u_long, int *,
 			      u_int, u_int);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Raw (memory) rpc.
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern CLIENT *clntraw_create(u_long, u_long);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 
 /*
 IPv6 socket version 
 */
 #ifdef INET6
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern CLIENT *clnttcp6_create(struct sockaddr_in6 *, u_long, u_long, int *,
 			      u_int, u_int);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 #endif
 
 /*
@@ -105,7 +116,9 @@ __END_DECLS
  *	u_int sendsz;
  *	u_int recvsz;
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern CLIENT *clntudp_create(struct sockaddr_in *, u_long, u_long, 
 			      struct timeval, int *);
 extern CLIENT *clntudp_bufcreate(struct sockaddr_in *, u_long, u_long,
@@ -116,7 +129,9 @@ extern CLIENT *clntudp6_create(struct sockaddr_in6 *, u_long, u_long,
 extern CLIENT *clntudp6_bufcreate(struct sockaddr_in6 *, u_long, u_long,
 				 struct timeval, int *, u_int, u_int);
 #endif
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif /* _RPC_CLNT_SOC_H */

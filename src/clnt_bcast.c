@@ -28,7 +28,6 @@
 /*
  * Copyright (c) 1986-1991 by Sun Microsystems Inc. 
  */
-#include <sys/cdefs.h>
 
 /*
  * clnt_bcast.c

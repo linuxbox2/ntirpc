@@ -40,7 +40,6 @@
 
 #ifndef _TIRPC_SVC_H
 #define _TIRPC_SVC_H
-#include <sys/cdefs.h>
 
 /*
  * This interface must manage two items concerning remote procedure calling:
@@ -200,11 +199,15 @@ struct svc_req {
  *	const struct netconfig *nconf;
  */
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern bool_t	svc_reg(SVCXPRT *, const rpcprog_t, const rpcvers_t,
 			void (*)(struct svc_req *, SVCXPRT *),
 			const struct netconfig *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Service un-registration
@@ -214,9 +217,13 @@ __END_DECLS
  *	const rpcvers_t vers;
  */
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern void	svc_unreg(const rpcprog_t, const rpcvers_t);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Transport registration.
@@ -224,9 +231,13 @@ __END_DECLS
  * xprt_register(xprt)
  *	SVCXPRT *xprt;
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern void	xprt_register(SVCXPRT *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Transport un-register
@@ -234,9 +245,13 @@ __END_DECLS
  * xprt_unregister(xprt)
  *	SVCXPRT *xprt;
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern void	xprt_unregister(SVCXPRT *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 
 /*
@@ -265,7 +280,9 @@ __END_DECLS
  * deadlock the caller and server processes!
  */
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern bool_t	svc_sendreply(SVCXPRT *, xdrproc_t, void *);
 extern void	svcerr_decode(SVCXPRT *);
 extern void	svcerr_weakauth(SVCXPRT *);
@@ -277,7 +294,9 @@ extern void	svcerr_systemerr(SVCXPRT *);
 extern int	rpc_reg(rpcprog_t, rpcvers_t, rpcproc_t,
 			char *(*)(char *), xdrproc_t, xdrproc_t,
 			char *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Lowest level dispatching -OR- who owns this process anyway.
@@ -306,11 +325,17 @@ extern int svc_fds;
  * a small program implemented by the svc_rpc implementation itself;
  * also see clnt.h for protocol numbers.
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern void rpctest_service(void);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern void	svc_getreq(int);
 extern void	svc_getreqset(fd_set *);
 extern void	svc_getreq_common(int);
@@ -319,7 +344,9 @@ extern void	svc_getreq_poll(struct pollfd *, int);
 
 extern void	svc_run(void);
 extern void	svc_exit(void);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Socket to use on svcxxx_create call to get default socket
@@ -331,7 +358,9 @@ __END_DECLS
  * These are the existing service side transport implementations
  */
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 /*
  * Transport independent svc_create routine.
  */
@@ -427,7 +456,9 @@ int svc_dg_enablecache(SVCXPRT *, const u_int);
 
 int __rpc_get_local_uid(SVCXPRT *_transp, uid_t *_uid);
 
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 
 /* for backward compatibility */

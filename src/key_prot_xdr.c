@@ -33,7 +33,6 @@
  */
 /* Copyright (c)  1990, 1991 Sun Microsystems, Inc. */
 
-#include <sys/cdefs.h>
 
 /* 
  * Compiled from key_prot.x using rpcgen.

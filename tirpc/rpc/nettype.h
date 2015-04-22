@@ -53,11 +53,15 @@
 #define	_RPC_TCP	7
 #define	_RPC_UDP	8
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern void *__rpc_setconf(const char *);
 extern void __rpc_endconf(void *);
 extern struct netconfig *__rpc_getconf(void *);
 extern struct netconfig *__rpc_getconfip(const char *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #endif	/* !_TIRPC_NETTYPE_H */

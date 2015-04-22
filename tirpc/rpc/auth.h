@@ -48,7 +48,6 @@
 
 #include <rpc/xdr.h>
 #include <rpc/clnt_stat.h>
-#include <sys/cdefs.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 
@@ -164,9 +163,13 @@ union des_block {
 	char c[8];
 };
 typedef union des_block des_block;
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern bool_t xdr_des_block(XDR *, des_block *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Authentication info.  Opaque to client.
@@ -277,9 +280,13 @@ auth_put(AUTH *auth)
 		xfunc, xwhere))
 
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern struct opaque_auth _null_auth;
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Any style authentication.  These routines can be used by any
@@ -300,11 +307,15 @@ int authany_wrap(void), authany_unwrap(void);
  *	int len;
  *	int *aup_gids;
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern AUTH *authunix_create(char *, uid_t, uid_t, int, uid_t *);
 extern AUTH *authunix_create_default(void);	/* takes no parameters */
 extern AUTH *authnone_create(void);		/* takes no parameters */
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 /*
  * DES style authentication
  * AUTH *authsecdes_create(servername, window, timehost, ckey)
@@ -313,15 +324,23 @@ __END_DECLS
  * 	const char *timehost;			- optional hostname to sync with
  * 	des_block *ckey;		- optional conversation key to use
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern AUTH *authdes_create (char *, u_int, struct sockaddr *, des_block *);
 extern AUTH *authdes_seccreate (const char *, const u_int, const  char *,
     const  des_block *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern bool_t xdr_opaque_auth		(XDR *, struct opaque_auth *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #define authsys_create(c,i1,i2,i3,ip) authunix_create((c),(i1),(i2),(i3),(ip))
 #define authsys_create_default() authunix_create_default()
@@ -329,36 +348,48 @@ __END_DECLS
 /*
  * Netname manipulation routines.
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern int getnetname(char *);
 extern int host2netname(char *, const char *, const char *);
 extern int user2netname(char *, const uid_t, const char *);
 extern int netname2user(char *, uid_t *, gid_t *, int *, gid_t *);
 extern int netname2host(char *, char *, const int);
 extern void passwd2des ( char *, char * );
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  *
  * These routines interface to the keyserv daemon
  *
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern int key_decryptsession(const char *, des_block *);
 extern int key_encryptsession(const char *, des_block *);
 extern int key_gendes(des_block *);
 extern int key_setsecret(const char *);
 extern int key_secretkey_is_set(void);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Publickey routines.
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern int getpublickey (const char *, char *);
 extern int getpublicandprivatekey (char *, char *);
 extern int getsecretkey (char *, char *, char *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #ifdef KERBEROS
 /*
@@ -371,10 +402,14 @@ __END_DECLS
  *	const char *timehost;			- optional hostname to sync with
  *	int *status;				- kerberos status returned
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern AUTH	*authkerb_seccreate(const char *, const char *, const  char *,
 		    const u_int, const char *, int *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Map a kerberos credential into a unix cred.
@@ -387,20 +422,28 @@ __END_DECLS
  *	int *groups;
  *
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern int	authkerb_getucred(/* struct svc_req *, uid_t *, gid_t *,
 		    short *, int * */);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 #endif /* KERBEROS */
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 struct svc_req;
 struct rpc_msg;
 enum auth_stat _svcauth_none (struct svc_req *, struct rpc_msg *);
 enum auth_stat _svcauth_short (struct svc_req *, struct rpc_msg *);
 enum auth_stat _svcauth_unix (struct svc_req *, struct rpc_msg *);
 enum auth_stat _svcauth_gss (struct svc_req *, struct rpc_msg *, bool_t *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #define AUTH_NONE	0		/* no authentication */
 #define	AUTH_NULL	0		/* backward compatibility */

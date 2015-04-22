@@ -45,7 +45,6 @@
 
 #ifndef _TIRPC_AUTH_UNIX_H
 #define _TIRPC_AUTH_UNIX_H
-#include <sys/cdefs.h>
 
 /* The machine name is part of a credential; it may not exceed 255 bytes */
 #define MAX_MACHINE_NAME 255
@@ -67,9 +66,13 @@ struct authunix_parms {
 
 #define authsys_parms authunix_parms
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern bool_t xdr_authunix_parms(XDR *, struct authunix_parms *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * If a response verifier has flavor AUTH_SHORT,

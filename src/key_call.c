@@ -30,7 +30,6 @@
  */
 
 
-#include <sys/cdefs.h>
 
 /*
  * key_call.c, Interface to keyserver

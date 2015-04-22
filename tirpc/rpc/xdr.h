@@ -40,7 +40,6 @@
 
 #ifndef _TIRPC_XDR_H
 #define _TIRPC_XDR_H
-#include <sys/cdefs.h>
 #include <stdio.h>
 #include <netinet/in.h>
 
@@ -287,7 +286,9 @@ struct xdr_discrim {
 /*
  * These are the "generic" xdr routines.
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern bool_t	xdr_void(void);
 extern bool_t	xdr_int(XDR *, int *);
 extern bool_t	xdr_u_int(XDR *, u_int *);
@@ -330,7 +331,9 @@ extern bool_t	xdr_hyper(XDR *, quad_t *);
 extern bool_t	xdr_u_hyper(XDR *, u_quad_t *);
 extern bool_t	xdr_longlong_t(XDR *, quad_t *);
 extern bool_t	xdr_u_longlong_t(XDR *, u_quad_t *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Common opaque bytes objects used by many rpc protocols;
@@ -348,7 +351,9 @@ extern bool_t   xdr_netobj(XDR *, struct netobj *);
  * These are the public routines for the various implementations of
  * xdr streams.
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 /* XDR using memory buffers */
 extern void   xdrmem_create(XDR *, char *, u_int, enum xdr_op);
 
@@ -369,6 +374,8 @@ extern bool_t xdrrec_skiprecord(XDR *);
 /* true if no more input */
 extern bool_t xdrrec_eof(XDR *);
 extern u_int xdrrec_readbytes(XDR *, caddr_t, u_int);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !_TIRPC_XDR_H */

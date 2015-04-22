@@ -31,7 +31,6 @@
  * Copyright (c) 1986-1991 by Sun Microsystems Inc.
  */
 
-#include <sys/cdefs.h>
 
 /*
  * svc_dg.c, Server side for connectionless RPC.

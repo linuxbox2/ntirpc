@@ -1,5 +1,4 @@
 
-#include <sys/cdefs.h>
 #include <pthread.h>
 #include <reentrant.h>
 #include <rpc/rpc.h>

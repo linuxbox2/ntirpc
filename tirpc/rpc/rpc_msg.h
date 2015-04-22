@@ -161,7 +161,9 @@ struct rpc_msg {
 #define	acpted_rply	ru.RM_rmb.ru.RP_ar
 #define	rjcted_rply	ru.RM_rmb.ru.RP_dr
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 /*
  * XDR routine to handle a rpc message.
  * xdr_callmsg(xdrs, cmsg)
@@ -210,6 +212,8 @@ extern bool_t	xdr_rejected_reply(XDR *, struct rejected_reply *);
  * 	struct rpc_err *error;
  */
 extern void	_seterr_reply(struct rpc_msg *, struct rpc_err *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !_TIRPC_RPC_MSG_H */

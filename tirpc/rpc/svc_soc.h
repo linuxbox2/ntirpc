@@ -38,7 +38,6 @@
 
 #ifndef _RPC_SVC_SOC_H
 #define _RPC_SVC_SOC_H
-#include <sys/cdefs.h>
 
 /* #pragma ident   "@(#)svc_soc.h  1.11    94/04/25 SMI" */
 /*      svc_soc.h 1.8 89/05/01 SMI      */
@@ -64,10 +63,14 @@
  *	void (*dispatch)();
  *	int protocol;    like TCP or UDP, zero means do not register 
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern bool_t	svc_register(SVCXPRT *, u_long, u_long,
 		    void (*)(struct svc_req *, SVCXPRT *), int);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Service un-registration
@@ -76,44 +79,64 @@ __END_DECLS
  *	u_long prog;
  *	u_long vers;
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern void	svc_unregister(u_long, u_long);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 
 /*
  * Memory based rpc for testing and timing.
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern SVCXPRT *svcraw_create(void);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 
 /*
  * Udp based rpc.
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern SVCXPRT *svcudp_create(int);
 extern SVCXPRT *svcudp_bufcreate(int, u_int, u_int);
 extern int svcudp_enablecache(SVCXPRT *, u_long);
 extern SVCXPRT *svcudp6_create(int);
 extern SVCXPRT *svcudp6_bufcreate(int, u_int, u_int);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 
 /*
  * Tcp based rpc.
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern SVCXPRT *svctcp_create(int, u_int, u_int);
 extern SVCXPRT *svctcp6_create(int, u_int, u_int);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Fd based rpc.
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern SVCXPRT *svcfd_create(int, u_int, u_int);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !_RPC_SVC_SOC_H */

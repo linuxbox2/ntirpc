@@ -34,7 +34,6 @@
  * when serialized using XDR.
  */
 
-#include <sys/cdefs.h>
 
 #include <rpc/types.h>
 #include <rpc/xdr.h>

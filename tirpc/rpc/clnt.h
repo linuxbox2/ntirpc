@@ -42,7 +42,6 @@
 #include <rpc/clnt_stat.h>
 #include <rpc/auth.h>
 
-#include <sys/cdefs.h>
 #include <netconfig.h>
 #include <sys/un.h>
 
@@ -267,7 +266,9 @@ struct rpc_timers {
  * Generic client creation routine. Supported protocols are those that
  * belong to the nettype namespace (/etc/netconfig).
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern CLIENT *clnt_create(const char *, const rpcprog_t, const rpcvers_t,
 			   const char *);
 /*
@@ -414,32 +415,46 @@ extern CLIENT *clnt_dg_create(const int, const struct netbuf *,
  */
 extern CLIENT *clnt_raw_create(rpcprog_t, rpcvers_t);
 
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 
 /*
  * Print why creation failed
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern void clnt_pcreateerror(const char *);			/* stderr */
 extern char *clnt_spcreateerror(const char *);			/* string */
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Like clnt_perror(), but is more verbose in its output
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern void clnt_perrno(enum clnt_stat);		/* stderr */
 extern char *clnt_sperrno(enum clnt_stat);		/* string */
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * Print an English error message, given the client error code
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern void clnt_perror(CLIENT *, const char *);	 	/* stderr */
 extern char *clnt_sperror(CLIENT *, const char *);		/* string */
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 
 /*
@@ -450,9 +465,13 @@ struct rpc_createerr {
 	struct rpc_err cf_error; /* useful when cf_stat == RPC_PMAPFAILURE */
 };
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern struct rpc_createerr	*__rpc_createerr(void);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 #define get_rpc_createerr()	(*(__rpc_createerr()))
 #define rpc_createerr		(*(__rpc_createerr()))
 
@@ -469,12 +488,16 @@ __END_DECLS
  *	char *out;
  *	const char *nettype;
  */
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern enum clnt_stat rpc_call(const char *, const rpcprog_t,
 			       const rpcvers_t, const rpcproc_t,
 			       const xdrproc_t, const char *,
 			       const xdrproc_t, char *, const char *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /*
  * RPC broadcast interface
@@ -522,7 +545,9 @@ __END_DECLS
 
 typedef bool_t (*resultproc_t)(caddr_t, ...);
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern enum clnt_stat rpc_broadcast(const rpcprog_t, const rpcvers_t,
 				    const rpcproc_t, const xdrproc_t,
 				    caddr_t, const xdrproc_t, caddr_t,
@@ -532,7 +557,9 @@ extern enum clnt_stat rpc_broadcast_exp(const rpcprog_t, const rpcvers_t,
 					caddr_t, const xdrproc_t, caddr_t,
 					const resultproc_t, const int,
 					const int, const char *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 /* For backward compatibility */
 #include <rpc/clnt_soc.h>

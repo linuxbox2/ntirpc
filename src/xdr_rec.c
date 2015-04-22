@@ -27,8 +27,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#include <sys/cdefs.h>
 
 /*
  * xdr_rec.c, Implements TCP/IP based XDR streams with a "record marking"

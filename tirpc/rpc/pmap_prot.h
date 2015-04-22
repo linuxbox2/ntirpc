@@ -71,7 +71,6 @@
 
 #ifndef _RPC_PMAP_PROT_H
 #define _RPC_PMAP_PROT_H
-#include <sys/cdefs.h>
 
 #define PMAPPORT		((u_short)111)
 #define PMAPPROG		((u_long)100000)
@@ -97,10 +96,14 @@ struct pmaplist {
 	struct pmaplist *pml_next;
 };
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern bool_t xdr_pmap(XDR *, struct pmap *);
 extern bool_t xdr_pmaplist(XDR *, struct pmaplist **);
 extern bool_t xdr_pmaplist_ptr(XDR *, struct pmaplist *);
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !_RPC_PMAP_PROT_H */

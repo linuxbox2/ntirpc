@@ -25,13 +25,11 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include <sys/cdefs.h>
 
 /*
  * Copyright (c) 1989 by Sun Microsystems, Inc.
  */
 
-#include <sys/cdefs.h>
 #include <stdio.h>
 #include <errno.h>
 #include <netconfig.h>

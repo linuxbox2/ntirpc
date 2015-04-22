@@ -41,7 +41,6 @@
 #ifndef _RPC_RPCCOM_H
 #define	_RPC_RPCCOM_H
 
-#include <sys/cdefs.h>
 
 /* #pragma ident	"@(#)rpc_com.h	1.11	93/07/05 SMI" */
 
@@ -55,7 +54,9 @@
 #define __RPC_GETXID(now) ((u_int32_t)getpid() ^ (u_int32_t)(now)->tv_sec ^ \
     (u_int32_t)(now)->tv_usec)
 
-__BEGIN_DECLS
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern u_int __rpc_get_a_size(int);
 extern int __rpc_dtbsize(void);
 extern int _rpc_dtablesize(void);
@@ -77,6 +78,8 @@ bool_t rpc_control(int,void *);
 
 char *_get_next_token(char *, int);
 
-__END_DECLS
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _RPC_RPCCOM_H */

@@ -26,8 +26,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#include <sys/cdefs.h>
 
 /*
  * xdr_reference.c, Generic XDR routines impelmentation.

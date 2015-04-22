@@ -30,7 +30,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 
 #include <err.h>
 #include <sys/types.h>
