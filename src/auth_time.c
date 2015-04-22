@@ -31,8 +31,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <netdb.h>
-#include <sys/signal.h>
-#include <sys/errno.h>
+#include <signal.h>
+#include <errno.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>

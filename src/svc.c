@@ -40,7 +40,7 @@
 
 #include <reentrant.h>
 #include <sys/types.h>
-#include <sys/poll.h>
+#include <poll.h>
 #include <assert.h>
 #include <errno.h>
 #include <stdlib.h>

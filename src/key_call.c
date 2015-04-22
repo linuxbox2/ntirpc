@@ -56,7 +56,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <sys/wait.h>
-#include <sys/fcntl.h>
+#include <fcntl.h>
 
 #include "dump.h"
 

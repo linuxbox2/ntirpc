@@ -40,7 +40,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/param.h>
-#include <sys/poll.h>
+#include <poll.h>
 #include <sys/un.h>
 #include <sys/time.h>
 #include <sys/uio.h>
