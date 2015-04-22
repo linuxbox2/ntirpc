@@ -10,7 +10,9 @@ GENERIC_MANS		= rpc.3t rpc_xdr.3t
 RPCSEC_MANS		= rpcsec_gss.3t rpc_gss_get_error.3t \
 			  rpc_gss_get_mechanisms.3t rpc_gss_get_mech_info.3t \
 			  rpc_gss_get_versions.3t rpc_gss_is_installed.3t \
-			  rpc_gss_mech_to_oid.3t rpc_gss_qop_to_num.3t
+			  rpc_gss_mech_to_oid.3t rpc_gss_qop_to_num.3t \
+			  rpc_gss_max_data_length.3t rpc_gss_seccreate.3t \
+			  rpc_gss_set_defaults.3t
 
 dist_man5_MANS		= netconfig.5
 dist_man3_MANS		= $(LOOKUP_MANS) $(NETCONFIG_MANS) \

@@ -45,9 +45,9 @@
 #include <rpc/xdr.h>
 #include <rpc/auth.h>
 #include <rpc/auth_gss.h>
+#include <rpc/rpcsec_gss.h>
 #include <rpc/clnt.h>
 #include <netinet/in.h>
-#include <gssapi/gssapi.h>
 
 #include "debug.h"
 
@@ -60,6 +60,9 @@ static void	authgss_destroy_context(AUTH *);
 static bool_t	authgss_wrap(AUTH *, XDR *, xdrproc_t, caddr_t);
 static bool_t	authgss_unwrap(AUTH *, XDR *, xdrproc_t, caddr_t);
 
+void rpc_gss_set_error(int);
+void rpc_gss_clear_error(void);
+bool_t rpc_gss_oid_to_mech(rpc_gss_OID, char **);
 
 /*
  * from mit-krb5-1.2.1 mechglue/mglueP.h:
@@ -666,4 +669,241 @@ authgss_unwrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr)
 	return (xdr_rpc_gss_data(xdrs, xdr_func, xdr_ptr,
 				 gd->ctx, gd->sec.qop,
 				 gd->sec.svc, gd->gc.gc_seq));
+}
+
+static AUTH *
+_rpc_gss_seccreate_error(int system_error)
+{
+	rpc_gss_set_error(system_error);
+	return NULL;
+}
+
+/*
+ * External API: Create a GSS security context for this "clnt"
+ *
+ * clnt: a valid RPC CLIENT structure
+ * principal: NUL-terminated C string containing GSS principal
+ * mechanism: NUL-terminated C string containing GSS mechanism name
+ * service: GSS security value to use
+ * qop: NUL-terminated C string containing QOP name
+ * req: pointer to additional request parameters, or NULL
+ * ret: pointer to additional results, or NULL
+ *
+ * Returns pointer to a filled in RPC AUTH structure or NULL.
+ * Caller must free returned structure with AUTH_DESTROY.
+ */
+AUTH *
+rpc_gss_seccreate(CLIENT *clnt, char *principal, char *mechanism,
+		rpc_gss_service_t service, char *qop,
+		rpc_gss_options_req_t *req, rpc_gss_options_ret_t *ret)
+{
+	rpc_gss_options_ret_t options_ret;
+	OM_uint32 maj_stat, min_stat;
+	struct rpc_gss_sec sec = {
+		.req_flags	= GSS_C_MUTUAL_FLAG,
+		.cred		= GSS_C_NO_CREDENTIAL,
+	};
+	struct rpc_gss_data *gd;
+	AUTH *auth, *save_auth;
+	gss_buffer_desc sname;
+
+	if (clnt == NULL || principal == NULL)
+		return _rpc_gss_seccreate_error(EINVAL);
+
+	if (rpc_gss_mech_to_oid(mechanism, &sec.mech) == FALSE)
+		return NULL;
+
+	sec.qop = GSS_C_QOP_DEFAULT;
+	if (qop != NULL) {
+		u_int qop_num;
+		if (rpc_gss_qop_to_num(qop, mechanism, &qop_num) == FALSE)
+			return NULL;
+		sec.qop = qop_num;
+	}
+
+	switch (service) {
+	case rpcsec_gss_svc_none:
+		sec.svc = RPCSEC_GSS_SVC_NONE;
+		break;
+	case rpcsec_gss_svc_integrity:
+		sec.svc = RPCSEC_GSS_SVC_INTEGRITY;
+		break;
+	case rpcsec_gss_svc_privacy:
+		sec.svc = RPCSEC_GSS_SVC_PRIVACY;
+		break;
+	case rpcsec_gss_svc_default:
+		sec.svc = RPCSEC_GSS_SVC_INTEGRITY;
+		break;
+	default:
+		return _rpc_gss_seccreate_error(ENOENT);
+	}
+
+	if (req != NULL) {
+		sec.req_flags = req->req_flags;
+		sec.cred = req->my_cred;
+	}
+
+	if (ret == NULL)
+		ret = &options_ret;
+	memset(ret, 0, sizeof(*ret));
+
+	auth = calloc(1, sizeof(*auth));
+	gd = calloc(1, sizeof(*gd));
+	if (auth == NULL || gd == NULL) {
+		free(gd);
+		free(auth);
+		return _rpc_gss_seccreate_error(ENOMEM);
+	}
+
+	sname.value = principal;
+	sname.length = strlen(principal);
+	maj_stat = gss_import_name(&min_stat, &sname,
+					(gss_OID)GSS_C_NT_HOSTBASED_SERVICE,
+					&gd->name);
+	if (maj_stat != GSS_S_COMPLETE) {
+		ret->major_status = maj_stat;
+		ret->minor_status = min_stat;
+		free(gd);
+		free(auth);
+		return _rpc_gss_seccreate_error(ENOMEM);
+	}
+
+	gd->clnt = clnt;
+	gd->ctx = GSS_C_NO_CONTEXT;
+	gd->sec = sec;
+
+	gd->gc.gc_v = RPCSEC_GSS_VERSION;
+	gd->gc.gc_proc = RPCSEC_GSS_INIT;
+	gd->gc.gc_svc = sec.svc;
+
+	auth->ah_ops = &authgss_ops;
+	auth->ah_private = (caddr_t)gd;
+
+	save_auth = clnt->cl_auth;
+	clnt->cl_auth = auth;
+
+	if (authgss_refresh(auth, NULL) == FALSE) {
+		authgss_destroy(auth);
+		auth = NULL;
+	} else {
+		rpc_gss_clear_error();
+		auth_get(auth);
+	}
+
+	clnt->cl_auth = save_auth;
+
+	return auth;
+}
+
+/*
+ * External API: Modify an AUTH's service and QOP settings
+ *
+ * auth: a valid RPC AUTH structure
+ * service: GSS security value to use
+ * qop: NUL-terminated C string containing QOP name
+ *
+ * Returns TRUE if successful, otherwise FALSE is returned.
+ */
+bool_t
+rpc_gss_set_defaults(AUTH *auth, rpc_gss_service_t service, char *qop)
+{
+	struct rpc_gss_data *gd;
+	char *mechanism;
+	u_int qop_num;
+
+	if (auth == NULL) {
+		rpc_gss_set_error(EINVAL);
+		return FALSE;
+	}
+
+	gd = AUTH_PRIVATE(auth);
+	if (gd == NULL) {
+		rpc_gss_set_error(EINVAL);
+		return FALSE;
+	}
+
+	if (rpc_gss_oid_to_mech(gd->sec.mech, &mechanism) == FALSE)
+		return FALSE;
+
+	qop_num = GSS_C_QOP_DEFAULT;
+	if (qop != NULL) {
+		if (rpc_gss_qop_to_num(qop, mechanism, &qop_num) == FALSE)
+			return FALSE;
+	}
+
+	switch (service) {
+	case rpcsec_gss_svc_none:
+		gd->gc.gc_svc = gd->sec.svc = RPCSEC_GSS_SVC_NONE;
+		break;
+	case rpcsec_gss_svc_integrity:
+		gd->gc.gc_svc = gd->sec.svc = RPCSEC_GSS_SVC_INTEGRITY;
+		break;
+	case rpcsec_gss_svc_privacy:
+		gd->gc.gc_svc = gd->sec.svc = RPCSEC_GSS_SVC_PRIVACY;
+		break;
+	case rpcsec_gss_svc_default:
+		gd->gc.gc_svc = gd->sec.svc = RPCSEC_GSS_SVC_INTEGRITY;
+		break;
+	default:
+		rpc_gss_set_error(ENOENT);
+		return FALSE;
+	}
+
+	gd->sec.qop = (gss_qop_t)qop_num;
+	rpc_gss_clear_error();
+	return TRUE;
+}
+
+/*
+ * External API: Return maximum data size for a security mechanism and transport
+ *
+ * auth: a valid RPC AUTH structure
+ * maxlen: transport's maximum data size, in bytes
+ *
+ * Returns maximum data size given transformations done by current
+ * security setting of "auth", in bytes, or zero if that value
+ * cannot be determined.
+ */
+int
+rpc_gss_max_data_length(AUTH *auth, int maxlen)
+{
+	OM_uint32 max_input_size, maj_stat, min_stat;
+	struct rpc_gss_data *gd;
+	int conf_req_flag;
+	int result;
+
+	if (auth == NULL) {
+		rpc_gss_set_error(EINVAL);
+		return 0;
+	}
+
+	gd = AUTH_PRIVATE(auth);
+	if (gd == NULL) {
+		rpc_gss_set_error(EINVAL);
+		return 0;
+	}
+
+	switch (gd->sec.svc) {
+	case RPCSEC_GSS_SVC_NONE:
+		rpc_gss_clear_error();
+		return maxlen;
+	case RPCSEC_GSS_SVC_INTEGRITY:
+		conf_req_flag = 0;
+		break;
+	case RPCSEC_GSS_SVC_PRIVACY:
+		conf_req_flag = 1;
+		break;
+	default:
+		rpc_gss_set_error(ENOENT);
+		return 0;
+	}
+
+	result = 0;
+	maj_stat = gss_wrap_size_limit(&min_stat, gd->ctx, conf_req_flag,
+					gd->sec.qop, maxlen, &max_input_size);
+	if (maj_stat == GSS_S_COMPLETE)
+		if ((int)max_input_size > 0)
+			result = (int)max_input_size;
+	rpc_gss_clear_error();
+	return result;
 }
