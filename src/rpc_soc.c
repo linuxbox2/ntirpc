@@ -520,6 +520,7 @@ clnt_broadcast(prog, vers, proc, xargs, argsp, xresults, resultsp, eachresult)
 	    (resultproc_t) rpc_wrap_bcast, "udp");
 }
 
+#if HAVE_AUTHDES
 /*
  * Create the client des authentication object. Obsoleted by
  * authdes_seccreate().
@@ -551,6 +552,7 @@ fallback:
 	dummy = authdes_seccreate(servername, window, NULL, ckey);
 	return (dummy);
 }
+#endif
 
 /*
  * Create a client handle for a unix connection. Obsoleted by clnt_vc_create()

@@ -42,6 +42,7 @@ lib_LTLIBRARIES = libtirpc.la
 # misunderstanding of the purpose of library versions."
 #
 libtirpc_la_LDFLAGS = -lpthread -version-info 1:10:0
+libtirpc_la_CFLAGS =
 
 libtirpc_la_SOURCES = auth_none.c auth_unix.c authunix_prot.c bindresvport.c clnt_bcast.c \
         clnt_dg.c clnt_generic.c clnt_perror.c clnt_raw.c clnt_simple.c \
@@ -51,7 +52,7 @@ libtirpc_la_SOURCES = auth_none.c auth_unix.c authunix_prot.c bindresvport.c cln
         rpc_callmsg.c rpc_generic.c rpc_soc.c rpcb_clnt.c rpcb_prot.c \
         rpcb_st_xdr.c svc.c svc_auth.c svc_dg.c svc_auth_unix.c svc_auth_none.c \
         svc_generic.c svc_raw.c svc_run.c svc_simple.c svc_vc.c getpeereid.c \
-        auth_time.c auth_des.c authdes_prot.c debug.c
+        auth_time.c debug.c
 
 ## XDR
 libtirpc_la_SOURCES += xdr.c xdr_rec.c xdr_array.c xdr_float.c xdr_mem.c xdr_reference.c xdr_stdio.c
@@ -60,8 +61,15 @@ libtirpc_la_SOURCES += xdr.c xdr_rec.c xdr_array.c xdr_float.c xdr_mem.c xdr_ref
 if GSS
     libtirpc_la_SOURCES += auth_gss.c authgss_prot.c svc_auth_gss.c
     libtirpc_la_LDFLAGS += $(GSSAPI_LIBS)
-    libtirpc_la_CFLAGS = -DHAVE_RPCSEC_GSS $(GSSAPI_CFLAGS)
+    libtirpc_la_CFLAGS += -DHAVE_RPCSEC_GSS $(GSSAPI_CFLAGS)
 endif
+
+## DES authentication
+if AUTHDES
+    libtirpc_la_SOURCES += auth_des.c authdes_prot.c
+    libtirpc_la_CFLAGS += -DHAVE_AUTHDES
+endif
+
 
 ## libtirpc_a_SOURCES += key_call.c key_prot_xdr.c getpublickey.c
 ## libtirpc_a_SOURCES += netname.c netnamer.c rpcdname.c \
