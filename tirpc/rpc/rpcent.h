@@ -49,7 +49,7 @@ extern "C" {
 #endif
 
 /* These are defined in /usr/include/rpc/netdb.h */
-#if 0
+#if !defined(__GLIBC__)
 struct rpcent {
 	char	*r_name;	/* name of server for this rpc program */
 	char	**r_aliases;	/* alias list */
