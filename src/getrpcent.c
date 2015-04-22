@@ -50,6 +50,10 @@
 #include <libc_private.h>
 #endif
 
+#if HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 /*
  * Internet version.
  */
@@ -89,7 +93,7 @@ _rpcdata()
 	return (d);
 }
 
-#ifdef GQ
+#if !HAVE_GETRPCBYNYMBER
 struct rpcent *
 getrpcbynumber(number)
 	int number;
@@ -135,7 +139,9 @@ no_yp:
 	endrpcent();
 	return (p);
 }
+#endif /* !HAVE_GETRPCBYNUMBER */
 
+#if !HAVE_GETRPCBYNAME
 struct rpcent *
 getrpcbyname(name)
 	const char *name;
@@ -158,7 +164,7 @@ done:
 	endrpcent();
 	return (rpc);
 }
-#endif /* GQ */
+#endif /* !HAVE_GETRPCBYNAME */
 
 void
 setrpcent(f)
