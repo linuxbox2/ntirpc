@@ -422,12 +422,15 @@ authgss_validate(AUTH *auth, struct opaque_auth *verf)
 }
 
 static bool_t
-authgss_refresh(AUTH *auth, void *dummy)
+_rpc_gss_refresh(AUTH *auth, rpc_gss_options_ret_t *options_ret)
 {
 	struct rpc_gss_data	*gd;
 	struct rpc_gss_init_res	 gr;
 	gss_buffer_desc		*recv_tokenp, send_token;
-	OM_uint32		 maj_stat, min_stat, call_stat, ret_flags;
+	OM_uint32		 maj_stat, min_stat, call_stat, ret_flags,
+				 time_ret;
+	gss_OID			 actual_mech_type;
+	char			*mechanism;
 
 	gss_log_debug("in authgss_refresh()");
 
@@ -458,10 +461,10 @@ authgss_refresh(AUTH *auth, void *dummy)
 						0,		/* time req */
 						NULL,		/* channel */
 						recv_tokenp,
-						NULL,		/* used mech */
+						&actual_mech_type,
 						&send_token,
 						&ret_flags,
-						NULL);		/* time rec */
+						&time_ret);
 
 		if (recv_tokenp != GSS_C_NO_BUFFER) {
 			gss_release_buffer(&min_stat, &gr.gr_token);
@@ -469,8 +472,9 @@ authgss_refresh(AUTH *auth, void *dummy)
 		}
 		if (maj_stat != GSS_S_COMPLETE &&
 		    maj_stat != GSS_S_CONTINUE_NEEDED) {
-			gss_log_status("authgss_refresh: gss_init_sec_context", 
-				maj_stat, min_stat);
+			gss_log_status("gss_init_sec_context", maj_stat, min_stat);
+			options_ret->major_status = maj_stat;
+			options_ret->minor_status = min_stat;
 			break;
 		}
 		if (send_token.length != 0) {
@@ -491,8 +495,11 @@ authgss_refresh(AUTH *auth, void *dummy)
 
 			if (call_stat != RPC_SUCCESS ||
 			    (gr.gr_major != GSS_S_COMPLETE &&
-			     gr.gr_major != GSS_S_CONTINUE_NEEDED))
+			     gr.gr_major != GSS_S_CONTINUE_NEEDED)) {
+				options_ret->major_status = gr.gr_major;
+				options_ret->minor_status = gr.gr_minor;
 				return FALSE;
+			}
 
 			if (gr.gr_ctx.length != 0) {
 				if (gd->gc.gc_ctx.value)
@@ -533,8 +540,25 @@ authgss_refresh(AUTH *auth, void *dummy)
 					gd->established = FALSE;
 					authgss_destroy_context(auth);
 				}
+				rpc_gss_set_error(EPERM);
+				options_ret->major_status = maj_stat;
+				options_ret->minor_status = min_stat;
 				return (FALSE);
 			}
+
+			options_ret->major_status = GSS_S_COMPLETE;
+			options_ret->minor_status = 0;
+			options_ret->rpcsec_version = gd->gc.gc_v;
+			options_ret->ret_flags = ret_flags;
+			options_ret->time_ret = time_ret;
+			options_ret->gss_context = gd->ctx;
+			options_ret->actual_mechanism[0] = '\0';
+			if (rpc_gss_oid_to_mech(actual_mech_type, &mechanism)) {
+				strncpy(options_ret->actual_mechanism,
+					mechanism,
+					sizeof(options_ret->actual_mechanism));
+			}
+
 			gd->established = TRUE;
 			gd->gc.gc_proc = RPCSEC_GSS_DATA;
 			gd->gc.gc_seq = 0;
@@ -550,10 +574,20 @@ authgss_refresh(AUTH *auth, void *dummy)
 		authgss_destroy(auth);
 		auth = NULL;
 		rpc_createerr.cf_stat = RPC_AUTHERROR;
+		rpc_gss_set_error(EPERM);
 
 		return (FALSE);
 	}
 	return (TRUE);
+}
+
+static bool_t
+authgss_refresh(AUTH *auth, void *dummy)
+{
+	rpc_gss_options_ret_t ret;
+
+	memset(&ret, 0, sizeof(ret));
+	return _rpc_gss_refresh(auth, &ret);
 }
 
 bool_t
@@ -782,7 +816,7 @@ rpc_gss_seccreate(CLIENT *clnt, char *principal, char *mechanism,
 	save_auth = clnt->cl_auth;
 	clnt->cl_auth = auth;
 
-	if (authgss_refresh(auth, NULL) == FALSE) {
+	if (_rpc_gss_refresh(auth, ret) == FALSE) {
 		authgss_destroy(auth);
 		auth = NULL;
 	} else {
