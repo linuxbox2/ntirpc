@@ -222,6 +222,39 @@ __rpc_broadenable(int af, int s, struct broadif *bip)
 	return 0;
 }
 
+/*
+ * Some rpcbind implementations use an IPv6 socket to serve both 
+ * IPv4 and IPv6 messages, but neglect to check for the caller's
+ * address family when sending broadcast replies. These rpcbind
+ * implementations return an IPv6 address in reply to an IPv4
+ * broadcast. We can either ignore them, or try to patch them up.
+ */
+static struct netbuf *
+__ipv6v4_fixup(struct sockaddr_storage *ss, const char *uaddr)
+{
+	struct sockaddr_in sin;
+	struct netbuf *np;
+
+	/* ss is the remote rpcbind server's address */
+	if (ss->ss_family != AF_INET)
+		return NULL;
+	memcpy(&sin, ss, sizeof(sin));
+
+	np = __rpc_uaddr2taddr_af(AF_INET6, uaddr);
+	if (np == NULL)
+		return NULL;
+
+	/* Overwrite the port with that of the service we
+	 * wanted to talk to. */
+	sin.sin_port = ((struct sockaddr_in6 *) np)->sin6_port;
+
+	/* We know netbuf holds a sockaddr_in6, so it can easily
+	 * hold a sockaddr_in as well. */
+	memcpy(np->buf, &sin, sizeof(sin));
+	np->len = sizeof(sin);
+
+	return np;
+}
 
 enum clnt_stat
 rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
@@ -588,6 +621,13 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 						LIBTIRPC_DEBUG(3, ("rpc_broadcast_exp: uaddr %s\n", uaddrp));
 						np = uaddr2taddr(
 						    fdlist[i].nconf, uaddrp);
+						/* Some misguided rpcbind implemenations
+						 * seem to return an IPv6 uaddr in IPv4
+						 * responses. */
+						if (np == NULL)
+							np = __ipv6v4_fixup(
+								&fdlist[i].raddr,
+								uaddrp);
 						if (np != NULL) {
 							done = (*eachresult)(resultsp,
 							    np, fdlist[i].nconf);
