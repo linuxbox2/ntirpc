@@ -282,6 +282,18 @@ getclnthandle(host, nconf, targaddr)
 	struct address_cache *ad_cache;
 	char *tmpaddr;
 
+	if (nconf == NULL) {
+		rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
+		return NULL;
+	}
+
+	if (nconf->nc_protofmly != NULL &&
+	    strcmp(nconf->nc_protofmly, NC_LOOPBACK) != 0 &&
+	    host == NULL) {
+		rpc_createerr.cf_stat = RPC_UNKNOWNHOST;
+		return NULL;
+	}
+
 /* VARIABLES PROTECTED BY rpcbaddr_cache_lock:  ad_cache */
 
 	/* Get the address of the rpcbind.  Check cache first */
@@ -291,6 +303,7 @@ getclnthandle(host, nconf, targaddr)
 	addr_to_delete.len = 0;
 	rwlock_rdlock(&rpcbaddr_cache_lock);
 	ad_cache = NULL;
+
 	if (host != NULL)
 		ad_cache = check_cache(host, nconf->nc_netid);
 	if (ad_cache != NULL) {
@@ -298,7 +311,7 @@ getclnthandle(host, nconf, targaddr)
 		client = clnt_tli_create(RPC_ANYFD, nconf, addr,
 		    (rpcprog_t)RPCBPROG, (rpcvers_t)RPCBVERS4, 0, 0);
 		if (client != NULL) {
-			if (targaddr)
+			if (targaddr && ad_cache->ac_uaddr)
 				*targaddr = strdup(ad_cache->ac_uaddr);
 			rwlock_unlock(&rpcbaddr_cache_lock);
 			return (client);
@@ -345,9 +358,11 @@ getclnthandle(host, nconf, targaddr)
 		} else {
 			struct sockaddr_un sun;
 
-			*targaddr = malloc(sizeof(sun.sun_path));
-			strncpy(*targaddr, _PATH_RPCBINDSOCK,
-			    sizeof(sun.sun_path));
+			if (targaddr) {
+				*targaddr = malloc(sizeof(sun.sun_path));
+				strncpy(*targaddr, _PATH_RPCBINDSOCK,
+				    sizeof(sun.sun_path));
+			}
 			return (client);
 		}
 	} else {
@@ -387,7 +402,8 @@ getclnthandle(host, nconf, targaddr)
 
 		if (client) {
 			tmpaddr = targaddr ? taddr2uaddr(nconf, &taddr) : NULL;
-			add_cache(host, nconf->nc_netid, &taddr, tmpaddr);
+			if (host)
+				add_cache(host, nconf->nc_netid, &taddr, tmpaddr);
 			if (targaddr)
 				*targaddr = tmpaddr;
 			break;
