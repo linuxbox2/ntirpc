@@ -108,7 +108,7 @@ getrpcbynumber(number)
 	if (d == 0)
 		return (0);
 #ifdef	YP
-        if (!__yp_nomap && _yp_check(&d->domain)) {
+        if (!__yp_nomap && __yp_check(&d->domain)) {
                 sprintf(adrstr, "%d", number);
                 reason = yp_match(d->domain, "rpc.bynumber", adrstr, strlen(adrstr),
                                   &d->current, &d->currentlen);
@@ -175,7 +175,7 @@ setrpcent(f)
 	if (d == 0)
 		return;
 #ifdef	YP
-        if (!__yp_nomap && _yp_check(NULL)) {
+        if (!__yp_nomap && __yp_check(NULL)) {
                 if (d->current)
                         free(d->current);
                 d->current = NULL;
@@ -199,7 +199,7 @@ endrpcent()
 	if (d == 0)
 		return;
 #ifdef	YP
-        if (!__yp_nomap && _yp_check(NULL)) {
+        if (!__yp_nomap && __yp_check(NULL)) {
         	if (d->current && !d->stayopen)
                         free(d->current);
                 d->current = NULL;
@@ -228,7 +228,7 @@ getrpcent()
 	if (d == 0)
 		return(NULL);
 #ifdef	YP
-        if (!__yp_nomap && _yp_check(&d->domain)) {
+        if (!__yp_nomap && __yp_check(&d->domain)) {
                 if (d->current == NULL && d->currentlen == 0) {
                         reason = yp_first(d->domain, "rpc.bynumber",
                                           &d->current, &d->currentlen,
