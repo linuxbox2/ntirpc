@@ -77,6 +77,8 @@ static bool_t	authdes_marshal(AUTH *, XDR *);
 static bool_t	authdes_validate(AUTH *, struct opaque_auth *);
 static bool_t	authdes_refresh(AUTH *, void *);
 static void	authdes_destroy(AUTH *);
+extern int key_gendes(des_block *deskey);
+extern int getpublickey (const char *, char *);
 
 static struct auth_ops *authdes_ops(void);
 

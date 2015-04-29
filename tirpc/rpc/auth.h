@@ -369,38 +369,6 @@ extern void passwd2des ( char *, char * );
 }
 #endif
 
-/*
- *
- * These routines interface to the keyserv daemon
- *
- */
-#ifdef __cplusplus
-extern "C" {
-#endif
-extern int key_decryptsession(const char *, des_block *);
-extern int key_encryptsession(const char *, des_block *);
-#ifdef HAVE_AUTHDES
-extern int key_gendes(des_block *);
-#endif /* HAVE_AUTHDES */
-extern int key_setsecret(const char *);
-extern int key_secretkey_is_set(void);
-#ifdef __cplusplus
-}
-#endif
-
-/*
- * Publickey routines.
- */
-#ifdef __cplusplus
-extern "C" {
-#endif
-extern int getpublickey (const char *, char *);
-extern int getpublicandprivatekey (char *, char *);
-extern int getsecretkey (char *, char *, char *);
-#ifdef __cplusplus
-}
-#endif
-
 #ifdef KERBEROS
 /*
  * Kerberos style authentication
