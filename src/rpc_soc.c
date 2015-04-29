@@ -520,7 +520,7 @@ clnt_broadcast(prog, vers, proc, xargs, argsp, xresults, resultsp, eachresult)
 	    (resultproc_t) rpc_wrap_bcast, "udp");
 }
 
-#if HAVE_AUTHDES
+#ifdef HAVE_AUTHDES
 /*
  * Create the client des authentication object. Obsoleted by
  * authdes_seccreate().

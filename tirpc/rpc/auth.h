@@ -163,6 +163,8 @@ union des_block {
 	char c[8];
 };
 typedef union des_block des_block;
+
+#ifdef HAVE_AUTHDES
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -170,6 +172,7 @@ extern bool_t xdr_des_block(XDR *, des_block *);
 #ifdef __cplusplus
 }
 #endif
+#endif /* HAVE_AUTHDES */
 
 /*
  * Authentication info.  Opaque to client.
@@ -316,6 +319,8 @@ extern AUTH *authnone_create(void);		/* takes no parameters */
 #ifdef __cplusplus
 }
 #endif
+
+#ifdef HAVE_AUTHDES
 /*
  * DES style authentication
  * AUTH *authsecdes_create(servername, window, timehost, ckey)
@@ -333,6 +338,7 @@ extern AUTH *authdes_seccreate (const char *, const u_int, const  char *,
 #ifdef __cplusplus
 }
 #endif
+#endif /* HAVE_AUTHDES */
 
 #ifdef __cplusplus
 extern "C" {
@@ -356,7 +362,9 @@ extern int host2netname(char *, const char *, const char *);
 extern int user2netname(char *, const uid_t, const char *);
 extern int netname2user(char *, uid_t *, gid_t *, int *, gid_t *);
 extern int netname2host(char *, char *, const int);
+#ifdef HAVE_AUTHDES
 extern void passwd2des ( char *, char * );
+#endif /* HAVE_AUTHDES */
 #ifdef __cplusplus
 }
 #endif
@@ -371,7 +379,9 @@ extern "C" {
 #endif
 extern int key_decryptsession(const char *, des_block *);
 extern int key_encryptsession(const char *, des_block *);
+#ifdef HAVE_AUTHDES
 extern int key_gendes(des_block *);
+#endif /* HAVE_AUTHDES */
 extern int key_setsecret(const char *);
 extern int key_secretkey_is_set(void);
 #ifdef __cplusplus

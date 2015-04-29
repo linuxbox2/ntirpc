@@ -68,7 +68,6 @@ endif
 ## DES authentication
 if AUTHDES
     libtirpc_la_SOURCES += auth_des.c authdes_prot.c
-    libtirpc_la_CFLAGS += -DHAVE_AUTHDES
 endif
 
 
