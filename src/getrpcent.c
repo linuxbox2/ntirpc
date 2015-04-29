@@ -30,6 +30,10 @@
  * Copyright (c) 1984 by Sun Microsystems, Inc.
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <sys/types.h>
 
 #include <netinet/in.h>
@@ -48,10 +52,6 @@
 #endif
 #if defined(__FreeBSD__) || defined(__NetBSD__)
 #include <libc_private.h>
-#endif
-
-#if HAVE_CONFIG_H
-#include "config.h"
 #endif
 
 /*
