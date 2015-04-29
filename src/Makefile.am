@@ -71,10 +71,5 @@ if AUTHDES
 endif
 
 
-## libtirpc_a_SOURCES += key_call.c key_prot_xdr.c getpublickey.c
-## libtirpc_a_SOURCES += netname.c netnamer.c rpcdname.c \
-## libtirpc_a_SOURCES += rtime.c \
-## auth_time.c auth_des.c authdes_prot.c 
-
 CLEANFILES	       = cscope.* *~
 DISTCLEANFILES	       = Makefile.in
