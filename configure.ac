@@ -43,7 +43,7 @@ AC_PREFIX_DEFAULT(/usr)
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h libintl.h limits.h locale.h netdb.h netinet/in.h stddef.h stdint.h stdlib.h string.h sys/ioctl.h sys/param.h sys/socket.h sys/time.h syslog.h unistd.h features.h])
 AC_CHECK_LIB([pthread], [pthread_create])
 AC_CHECK_LIB([nsl], [yp_get_default_domain])
-AC_CHECK_FUNCS([getrpcbyname getrpcbynumber])
+AC_CHECK_FUNCS([getrpcbyname getrpcbynumber setrpcent endrpcent getrpcent])
 
 AC_CONFIG_FILES([Makefile src/Makefile man/Makefile doc/Makefile])
 AC_OUTPUT(libtirpc.pc)

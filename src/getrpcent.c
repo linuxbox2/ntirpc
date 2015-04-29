@@ -54,6 +54,13 @@
 #include <libc_private.h>
 #endif
 
+#if HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#if !HAVE_GETRPCBYNAME || !HAVE_GETRPCBYNUMBER || \
+	!HAVE_SETRPCENT || !HAVE_ENDRPCENT || !HAVE_GETRPCENT
+
 /*
  * Internet version.
  */
@@ -166,6 +173,7 @@ done:
 }
 #endif /* !HAVE_GETRPCBYNAME */
 
+#if !HAVE_SETRPCENT
 void
 setrpcent(f)
 	int f;
@@ -190,7 +198,9 @@ setrpcent(f)
 		rewind(d->rpcf);
 	d->stayopen |= f;
 }
+#endif
 
+#if !HAVE_ENDRPCENT
 void
 endrpcent()
 {
@@ -213,7 +223,9 @@ endrpcent()
 		d->rpcf = NULL;
 	}
 }
+#endif
 
+#if !HAVE_GETRPCENT
 struct rpcent *
 getrpcent()
 {
@@ -264,6 +276,7 @@ no_yp:
 		return (NULL);
 	return (interpret(d->line, strlen(d->line)));
 }
+#endif
 
 static struct rpcent *
 interpret(val, len)
@@ -316,3 +329,4 @@ interpret(val, len)
 	return (&d->rpc);
 }
 
+#endif
