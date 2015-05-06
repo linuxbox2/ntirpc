@@ -41,8 +41,6 @@ static char sccsid[] = "@(#)des_crypt.c	2.2 88/08/10 4.0 RPCSRC; from 1.13 88/02
 #endif
 
 static int common_crypt( char *, char *, unsigned, unsigned, struct desparams * );
-int (*__des_crypt_LOCAL)() = 0;
-extern int _des_crypt_call(char *, int, struct desparams *);
 /*
  * Copy 8 bytes
  */
@@ -52,7 +50,7 @@ extern int _des_crypt_call(char *, int, struct desparams *);
 	*a++ = *b++; *a++ = *b++; *a++ = *b++; *a++ = *b++; \
 	*a++ = *b++; *a++ = *b++; *a++ = *b++; *a++ = *b++; \
 }
- 
+
 /*
  * Copy multiple of 8 bytes
  */
@@ -75,7 +73,7 @@ cbc_crypt(key, buf, len, mode, ivec)
 	char *buf;
 	unsigned len;
 	unsigned mode;
-	char *ivec;	
+	char *ivec;
 {
 	int err;
 	struct desparams dp;
@@ -120,8 +118,8 @@ ecb_crypt(key, buf, len, mode)
  * Common code to cbc_crypt() & ecb_crypt()
  */
 static int
-common_crypt(key, buf, len, mode, desp)	
-	char *key;	
+common_crypt(key, buf, len, mode, desp)
+	char *key;
 	char *buf;
 	unsigned len;
 	unsigned mode;
@@ -137,17 +135,12 @@ common_crypt(key, buf, len, mode, desp)
 
 	desdev = mode & DES_DEVMASK;
 	COPY8(key, desp->des_key);
-	/* 
+	/*
 	 * software
 	 */
-	if (__des_crypt_LOCAL != NULL) {
-		if (!__des_crypt_LOCAL(buf, len, desp)) {
-			return (DESERR_HWERROR);
-		}
-	} else {
-		if (!_des_crypt_call(buf, len, desp)) {
-			return (DESERR_HWERROR);
-		}
+	if (!_des_crypt(buf, len, desp)) {
+	        return (DESERR_HWERROR);
 	}
+
 	return(desdev == DES_SW ? DESERR_NONE : DESERR_NOHWDEVICE);
 }
