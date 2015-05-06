@@ -7,9 +7,9 @@ AC_CONFIG_MACRO_DIR([m4])
 AC_ARG_ENABLE(gssapi,
 	[AC_HELP_STRING([--disable-gssapi], [Disable GSSAPI support @<:@default=no@:>@])],
       [],[enable_gssapi=yes])
-AM_CONDITIONAL(GSS, test x$enable_gssapi = xyes)
+AM_CONDITIONAL(GSS, test "x$enable_gssapi" = xyes)
 
-if test x$enable_gssapi = xyes; then
+if test "x$enable_gssapi" = xyes; then
 	GSSAPI_CFLAGS=`krb5-config --cflags gssapi`
 	GSSAPI_LIBS=`krb5-config --libs gssapi`
 	AC_SUBST([GSSAPI_CFLAGS])
@@ -19,8 +19,8 @@ fi
 AC_ARG_ENABLE(authdes,
 	[AC_HELP_STRING([--enable-authdes], [Enable DES authentication @<:@default=no@:>@])],
       [],[enable_authdes=no])
-AM_CONDITIONAL(AUTHDES, test x$enable_authdes = xyes)
-if test x$enable_authdes = xyes; then
+AM_CONDITIONAL(AUTHDES, test "x$enable_authdes" = xyes)
+if test "x$enable_authdes" = xyes; then
 	AC_DEFINE([HAVE_AUTHDES], [1],
 		  [Define to 1 if DES authentication is enabled])
 	CFLAG_AUTHDES="-DHAVE_AUTHDES=1"
@@ -34,6 +34,11 @@ AM_CONDITIONAL(INET6, test "x$disable_ipv6" != xno)
 if test "x$enable_ipv6" != xno; then
 	AC_DEFINE(INET6, 1, [Define to 1 if IPv6 is available])
 fi
+
+AC_ARG_ENABLE(symvers,
+	[AC_HELP_STRING([--disable-symvers], [Disable symbol versioning @<:@default=no@:>@])],
+      [],[enable_symvers=yes])
+AM_CONDITIONAL(SYMVERS, test "x$enable_symvers" = xyes)
 
 AC_PROG_CC
 AC_CONFIG_HEADERS([config.h])

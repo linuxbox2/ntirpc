@@ -57,6 +57,10 @@ libtirpc_la_SOURCES = auth_none.c auth_unix.c authunix_prot.c bindresvport.c cln
 ## XDR
 libtirpc_la_SOURCES += xdr.c xdr_rec.c xdr_array.c xdr_float.c xdr_mem.c xdr_reference.c xdr_stdio.c
 
+if SYMVERS
+    libtirpc_la_LDFLAGS += -Wl,--version-script=$(srcdir)/libtirpc.map
+endif
+
 ## Secure-RPC
 if GSS
     libtirpc_la_SOURCES += auth_gss.c authgss_prot.c svc_auth_gss.c \
