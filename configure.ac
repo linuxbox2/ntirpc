@@ -17,8 +17,8 @@ if test x$enable_gssapi = xyes; then
 fi
 
 AC_ARG_ENABLE(authdes,
-	[AC_HELP_STRING([--disable-authdes], [Disable DES authentication @<:@default=no@:>@])],
-      [],[enable_authdes=yes])
+	[AC_HELP_STRING([--enable-authdes], [Enable DES authentication @<:@default=no@:>@])],
+      [],[enable_authdes=no])
 AM_CONDITIONAL(AUTHDES, test x$enable_authdes = xyes)
 if test x$enable_authdes = xyes; then
 	AC_DEFINE([HAVE_AUTHDES], [1],
