@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Linux Box Corporation.
+ * Copyright (c) 2013-2015 CohortFS, LLC.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -23,56 +23,58 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef THRDPOOL_H
-#define THRDPOOL_H
+/**
+ * @file work_pool.h
+ * @author William Allen Simpson <bill@cohortfs.com>
+ * @brief Pthreads-based work queue package
+ *
+ * @section DESCRIPTION
+ *
+ * This provides simple work queues using pthreads and TAILQ primitives.
+ *
+ * @note    Loosely based upon previous thrdpool by
+ *          Matt Benjamin <matt@cohortfs.com>
+ */
 
-#include <misc/queue.h>
-#include <misc/wait_queue.h>
+#ifndef WORK_POOL_H
+#define WORK_POOL_H
 
-#define THRD_FLAG_NONE        0x0000
-#define THRD_FLAG_SHUTDOWN    0x0001
-#define THRD_FLAG_ACTIVE      0x0002
+#include <rpc/pool_queue.h>
 
-struct work {
-	TAILQ_ENTRY(work) tailq;
-	void (*func) (void*);
+struct work_pool_entry;
+typedef void (*work_pool_fun_t) (struct work_pool_entry *);
+
+struct work_pool_entry {
+	struct poolq_entry pqe;		/*** 1st ***/
+	work_pool_fun_t fun;
 	void *arg;
 };
 
-struct thrdpool;
-
-struct thrd {
-	TAILQ_ENTRY(thrd) tailq;
-	struct thrd_context {
-		pthread_t id;
-		struct wait_entry we;
-		struct work *work;
-	} ctx;
-	struct thrdpool *pool;
-	bool idle;
-};
-
-struct thrdpool_params {
+struct work_pool_params {
 	int32_t thrd_max;
 	int32_t thrd_min;
 };
 
-struct thrdpool {
+struct work_pool {
+	struct poolq_head pqh;
 	char *name;
-	uint32_t flags;
-	struct thrdpool_params params;
 	pthread_attr_t attr;
-	struct wait_entry we;
-	 TAILQ_HEAD(idle_tailq, thrd) idle_q;
-	 TAILQ_HEAD(work_tailq, work) work_q;
-	int32_t n_idle;
-	int32_t n_threads;
+	struct work_pool_params params;
+	uint32_t n_threads;
 };
 
-typedef void (*thrd_func_t) (void *);
+struct work_pool_thread {
+	struct poolq_entry pqe;		/*** 1st ***/
+	pthread_cond_t pqcond;
 
-int thrdpool_init(struct thrdpool *, const char *, struct thrdpool_params *);
-int thrdpool_submit_work(struct thrdpool *, thrd_func_t, void *);
-int thrdpool_shutdown(struct thrdpool *);
+	struct work_pool *pool;
+	struct work_pool_entry *work;
+	pthread_t id;
+	uint32_t worker_index;
+};
 
-#endif				/* THRDPOOL_H */
+int work_pool_init(struct work_pool *, const char *, struct work_pool_params *);
+int work_pool_submit(struct work_pool *, struct work_pool_entry *);
+int work_pool_shutdown(struct work_pool *);
+
+#endif				/* WORK_POOL_H */

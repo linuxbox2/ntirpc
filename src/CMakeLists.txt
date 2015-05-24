@@ -80,7 +80,7 @@ SET(ntirpc_common_SRCS
   xdr_inrec.c
   xdr_ioq.c
   svc_ioq.c
-  thrdpool.c
+  work_pool.c
 )
 
 if(USE_DES)

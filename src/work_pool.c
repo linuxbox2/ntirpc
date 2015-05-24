@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Linux Box Corporation.
+ * Copyright (c) 2013-2015 CohortFS, LLC.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -23,6 +23,19 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * @file work_pool.c
+ * @author William Allen Simpson <bill@cohortfs.com>
+ * @brief Pthreads-based work queue package
+ *
+ * @section DESCRIPTION
+ *
+ * This provides simple work queues using pthreads and TAILQ primitives.
+ *
+ * @note    Loosely based upon previous thrdpool by
+ *          Matt Benjamin <matt@cohortfs.com>
+ */
+
 #include <config.h>
 
 #include <sys/types.h>
@@ -34,229 +47,286 @@
 #include <rpc/types.h>
 #include "rpc_com.h"
 #include <sys/types.h>
-#include <reentrant.h>
+#include <misc/abstract_atomic.h>
 #include <misc/portable.h>
 #include <stddef.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <intrinsic.h>
-#include <misc/thrdpool.h>
+
+#include <rpc/work_pool.h>
+
+#define WORK_POOL_STACK_SIZE (65535)
+#define WORK_POOL_TIMEOUT_MS (120000)
+
+/* forward declaration in lieu of moving code, was inline */
+
+static int work_pool_spawn(struct work_pool *pool);
 
 int
-thrdpool_init(struct thrdpool *pool, const char *name,
-		  struct thrdpool_params *params)
+work_pool_init(struct work_pool *pool, const char *name,
+		struct work_pool_params *params)
 {
-	memset(pool, 0, sizeof(struct thrdpool));
-	init_wait_entry(&pool->we);
-
-	mutex_lock(&pool->we.mtx);
-	pool->name = rpc_strdup(name);
-	pool->params = *params;
-	TAILQ_INIT(&pool->idle_q);
-	TAILQ_INIT(&pool->work_q);
-
-	(void)pthread_attr_init(&pool->attr);
-	(void)pthread_attr_setscope(&pool->attr, PTHREAD_SCOPE_SYSTEM);
-	(void)pthread_attr_setdetachstate(&pool->attr, PTHREAD_CREATE_DETACHED);
-
-	mutex_unlock(&pool->we.mtx);
-
-	return 0;
-}
-
-static bool
-thrd_wait(struct thrd *thrd)
-{
-	bool code = false;
-	struct thrdpool *pool = thrd->pool;
-	struct timespec ts;
-	struct work *work;
 	int rc;
 
-	mutex_lock(&pool->we.mtx);
-	if (pool->flags & THRD_FLAG_SHUTDOWN) {
-		mutex_unlock(&pool->we.mtx);
-		goto out;
-	}
-	TAILQ_FOREACH(work, &pool->work_q, tailq) {
-		TAILQ_REMOVE(&pool->work_q, work, tailq);
-		thrd->ctx.work = work;
-		code = true;
-		mutex_unlock(&pool->we.mtx);
-		goto out;
-	}
+	memset(pool, 0, sizeof(*pool));
+	poolq_head_setup(&pool->pqh);
 
-	TAILQ_INSERT_TAIL(&pool->idle_q, thrd, tailq);
-	++(pool->n_idle);
+	pool->name = rpc_strdup(name);
+	pool->params = *params;
 
-	mutex_lock(&thrd->ctx.we.mtx);
-	thrd->idle = true;
-	mutex_unlock(&pool->we.mtx);
+	if (pool->params.thrd_max < 1) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() thrd_max (%d) < 1",
+			__func__, pool->params.thrd_max);
+		pool->params.thrd_max = 1;
+	};
 
-	while (1) {
-		clock_gettime(CLOCK_REALTIME_FAST, &ts);
-		timespec_addms(&ts, 1000 * 120);
-		if (pool->flags & THRD_FLAG_SHUTDOWN) {
-			rc = ETIMEDOUT;
-		} else {
-			rc = cond_timedwait(&thrd->ctx.we.cv, &thrd->ctx.we.mtx, &ts);
-		}
-		if (rc == ETIMEDOUT) {
-			mutex_unlock(&thrd->ctx.we.mtx);
-			mutex_lock(&pool->we.mtx);
-			mutex_lock(&thrd->ctx.we.mtx);
-			if (!thrd->idle) {
-				/* raced */
-				code = true;
-				mutex_unlock(&thrd->ctx.we.mtx);
-				mutex_unlock(&pool->we.mtx);
-				goto out;
-			}
-			code = false;
-			TAILQ_REMOVE(&pool->idle_q, thrd, tailq);
-			--(pool->n_idle);
-			thrd->idle = false;
-			mutex_unlock(&thrd->ctx.we.mtx);
-			mutex_unlock(&pool->we.mtx);
-			goto out;
-		}
-		/* signalled */
-		code = !thrd->idle;
-		mutex_unlock(&thrd->ctx.we.mtx);
-		break;
+	if (pool->params.thrd_min < 1) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() thrd_min (%d) < 1",
+			__func__, pool->params.thrd_max);
+		pool->params.thrd_min = 1;
+	};
+
+	rc = pthread_attr_init(&pool->attr);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() can't init pthread's attributes: %s (%d)",
+			__func__, strerror(rc), rc);
+		return rc;
 	}
 
- out:
-	return (code);
+	rc = pthread_attr_setscope(&pool->attr, PTHREAD_SCOPE_SYSTEM);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() can't set pthread's scope: %s (%d)",
+			__func__, strerror(rc), rc);
+		return rc;
+	}
+
+	rc = pthread_attr_setdetachstate(&pool->attr, PTHREAD_CREATE_DETACHED);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() can't set pthread's join state: %s (%d)",
+			__func__, strerror(rc), rc);
+		return rc;
+	}
+
+	rc = pthread_attr_setstacksize(&pool->attr, WORK_POOL_STACK_SIZE);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() can't set pthread's stack size: %s (%d)",
+			__func__, strerror(rc), rc);
+		return rc;
+	}
+
+	/* initial spawn will spawn more threads as needed */
+	return work_pool_spawn(pool);
 }
 
-static void *thrdpool_start_routine(void *arg)
+static inline int
+work_pool_wait(struct work_pool *pool, struct work_pool_thread *wpt)
 {
-	struct thrd *thrd = arg;
-	struct thrdpool *pool = thrd->pool;
-	bool reschedule;
+	struct timespec ts;
+	int rc;
+
+	clock_gettime(CLOCK_REALTIME_FAST, &ts);
+	timespec_addms(&ts, WORK_POOL_TIMEOUT_MS);
+
+	/* Note: the mutex is the pool _head,
+	 * but the condition is per worker,
+	 * making the signal efficient!
+	 */
+	rc = pthread_cond_timedwait(&wpt->pqcond, &pool->pqh.qmutex, &ts);
+	if (rc) {
+		if (!wpt->work) {
+			/* Allow for possible timing race: work entry can be
+			 * set by another thread with the timeout result?
+			 * Then, has already been removed there.
+			 * Only remove with no work here.
+			 */
+			TAILQ_REMOVE(&pool->pqh.qh, &wpt->pqe, q);
+			++(pool->pqh.qcount);
+		}
+		if (rc != ETIMEDOUT) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() cond_timedwait failed (%d)\n",
+				__func__, rc);
+			return (rc);
+		}
+	}
+
+	return (0);
+}
+
+/**
+ * @brief The worker thread
+ *
+ * This is the body of the worker thread. The argument is a pointer to
+ * its working context, kept in a list for each pool.
+ *
+ * @param[in] arg 	thread context
+ */
+
+static void *
+work_pool_thread(void *arg)
+{
+	struct work_pool_thread *wpt = arg;
+	struct work_pool *pool = wpt->pool;
+	struct poolq_entry *have;
+
+	atomic_inc_uint32_t(&pool->n_threads);
+	pthread_cond_init(&wpt->pqcond, NULL);
 
 	do {
-		struct work *work = thrd->ctx.work;
-		work->func(work->arg);
-		thrd->ctx.work = 0;
-		mem_free(work, sizeof(struct work));
-		reschedule = thrd_wait(thrd);
-	} while (reschedule);
+		/* testing at top of loop allows pre-specification of work,
+		 * and thread termination after timeout with no work (below).
+		 */
+		if (wpt->work) {
+			if (pool->pqh.qcount > -pool->params.thrd_min
+			 && pool->n_threads < pool->params.thrd_max) {
+				/* busy, so dynamically add another thread */
+				(void)work_pool_spawn(pool);
+			}
+	
+			__warnx(TIRPC_DEBUG_FLAG_EVENT,
+				"%s() %s task %p",
+				__func__, pool->name, wpt->work);
+			wpt->work->fun(wpt->work);
+			wpt->work = NULL;
+		}
+
+		pthread_mutex_lock(&pool->pqh.qmutex);
+
+		if (0 < pool->pqh.qcount--) {
+			/* positive for task(s) */
+			have = TAILQ_FIRST(&pool->pqh.qh);
+			TAILQ_REMOVE(&pool->pqh.qh, have, q);
+
+			wpt->work = (struct work_pool_entry *)have;
+		} else {
+			/* negative for waiting worker(s):
+			 * use the otherwise empty pool to hold them,
+			 * simplifying mutex and pointer setup.
+			 */
+			TAILQ_INSERT_TAIL(&pool->pqh.qh, &wpt->pqe, q);
+
+			__warnx(TIRPC_DEBUG_FLAG_EVENT,
+				"%s() %s waiting for task",
+				__func__, pool->name);
+
+			if (unlikely(work_pool_wait(pool, wpt))) {
+				/* failed, not timeout */
+				pthread_mutex_unlock(&pool->pqh.qmutex);
+				break;
+			}
+		}
+
+		pthread_mutex_unlock(&pool->pqh.qmutex);
+	} while (wpt->work || pool->n_threads <= pool->params.thrd_min);
 
 	/* cleanup thread context */
-	destroy_wait_entry(&thrd->ctx.we);
-	--(thrd->pool->n_threads);
-	mutex_lock(&pool->we.mtx);
-	cond_signal(&pool->we.cv);
-	mutex_unlock(&pool->we.mtx);
-	mem_free(thrd, 0);
+	atomic_dec_uint32_t(&pool->n_threads);
+	cond_destroy(&wpt->pqcond);
+	mem_free(wpt, sizeof(*wpt));
 
 	return (NULL);
 }
 
-static inline bool thrdpool_dispatch(struct thrdpool *pool, struct work *work)
+static inline void
+work_pool_dispatch(struct work_pool *pool, struct work_pool_entry *work)
 {
-	struct thrd *thrd;
-	TAILQ_FOREACH(thrd, &pool->idle_q, tailq) {
-		mutex_lock(&thrd->ctx.we.mtx);
-		TAILQ_REMOVE(&pool->idle_q, thrd, tailq);
-		--(pool->n_idle);
-		thrd->idle = false;
-		thrd->ctx.work = work;
-		cond_signal(&thrd->ctx.we.cv);
-		mutex_unlock(&thrd->ctx.we.mtx);
-		break;
-	}
-	return (true);
+	struct work_pool_thread *wpt = (struct work_pool_thread *)
+		TAILQ_FIRST(&pool->pqh.qh);
+
+	TAILQ_REMOVE(&pool->pqh.qh, &wpt->pqe, q);
+	wpt->work = work;
+
+	/* Note: the mutex is the pool _head,
+	 * but the condition is per worker,
+	 * making the signal efficient!
+	 */
+	pthread_cond_signal(&wpt->pqcond);
 }
 
-static inline bool thrdpool_spawn(struct thrdpool *pool, struct work *work)
+static int
+work_pool_spawn(struct work_pool *pool)
 {
-	int code;
-	struct thrd *thrd = mem_alloc(sizeof(struct thrd));
-	memset(thrd, 0, sizeof(struct thrd));
-	init_wait_entry(&thrd->ctx.we);
-	thrd->pool = pool;
-	thrd->ctx.work = work;
-	++(pool->n_threads);
+	int rc;
+	struct work_pool_thread *wpt = mem_zalloc(sizeof(*wpt));
 
-	code =
-	    pthread_create(&thrd->ctx.id, &pool->attr, thrdpool_start_routine,
-			   thrd);
-	if (code != 0) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC, "pthread_create failed %d\n",
-			__func__, errno);
+	if (!wpt) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() mem_zalloc failed (%d)\n",
+			__func__, rc);
+		return rc;
+	}
+	wpt->pool = pool;
+
+	rc = pthread_create(&wpt->id, &pool->attr, work_pool_thread, wpt);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() pthread_create failed (%d)\n",
+			__func__, rc);
+		return rc;
 	}
 
-	return (true);
+	return (0);
 }
 
-int thrdpool_submit_work(struct thrdpool *pool, thrd_func_t func, void *arg)
+int
+work_pool_submit(struct work_pool *pool, struct work_pool_entry *work)
 {
-	int code = 0;
-	struct work *work;
+	int rc = 0;
 
-	/* queue is draining */
-	mutex_lock(&pool->we.mtx);
-	if (unlikely(pool->flags & THRD_FLAG_SHUTDOWN))
-		goto unlock;
-
-	work = mem_zalloc(sizeof(struct work));
-	if (unlikely(!work)) {
-		code = -1;
-		goto unlock;
+	if (unlikely(!pool->params.thrd_max)) {
+		/* queue is draining */
+		return (0);
 	}
-	work->func = func;
-	work->arg = arg;
-	/* idle thread(s) available */
-	if (pool->n_idle > 0) {
-		if (thrdpool_dispatch(pool, work))
-			goto unlock;
+	pthread_mutex_lock(&pool->pqh.qmutex);
+
+	if (likely(0 > pool->pqh.qcount++)) {
+		/* negative for waiting worker(s) */
+		work_pool_dispatch(pool, work);
+	} else {
+		/* positive for task(s) */
+		TAILQ_INSERT_TAIL(&pool->pqh.qh, &work->pqe, q);
 	}
 
-	/* need a thread */
-	if ((pool->params.thrd_max == 0)
-	    || (pool->n_threads < pool->params.thrd_max)) {
-		code = thrdpool_spawn(pool, work);
-		goto unlock;
-	}
-	TAILQ_INSERT_TAIL(&pool->work_q, work, tailq);
-
- unlock:
-	mutex_unlock(&pool->we.mtx);
-
-	return (code);
+	pthread_mutex_unlock(&pool->pqh.qmutex);
+	return rc;
 }
 
-int thrdpool_shutdown(struct thrdpool *pool)
+int
+work_pool_shutdown(struct work_pool *pool)
 {
-	struct timespec ts;
-	int wait = 1;
-	struct thrd *thrd;
-	struct work *work;
+	struct timespec ts = {
+		.tv_sec = 5,
+		.tv_nsec = 0,
+	};
 
-	mutex_lock(&pool->we.mtx);
-	pool->flags |= THRD_FLAG_SHUTDOWN;
-	TAILQ_FOREACH(thrd, &pool->idle_q, tailq) {
-		cond_signal(&thrd->ctx.we.cv);
+	pthread_mutex_lock(&pool->pqh.qmutex);
+
+	pool->params.thrd_max =
+	pool->params.thrd_min = 0;
+
+	while (0 > pool->pqh.qcount) {
+		/* unlike _submit, only increment negatives */
+		pool->pqh.qcount++;
+		work_pool_dispatch(pool, NULL);
 	}
-	TAILQ_FOREACH(work, &pool->work_q, tailq) {
-		work->func(work->arg);
-	}
+
+	pthread_mutex_unlock(&pool->pqh.qmutex);
+
 	while (pool->n_threads > 0) {
-		clock_gettime(CLOCK_REALTIME_FAST, &ts);
-		timespec_addms(&ts, 1000 * wait);
-		(void)cond_timedwait(&pool->we.cv, &pool->we.mtx, &ts);
-		/* wait a bit longer */
-		wait = 5;
+		nanosleep(&ts, NULL);
 	}
 
 	mem_free(pool->name, 0);
-	mutex_unlock(&pool->we.mtx);
-	destroy_wait_entry(&pool->we);
+	poolq_head_destroy(&pool->pqh);
 
 	return (0);
 }

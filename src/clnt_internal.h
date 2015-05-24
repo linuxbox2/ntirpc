@@ -48,6 +48,7 @@ struct ct_wait_entry
 };
 
 #include <misc/rbtree_x.h>
+#include <rpc/work_pool.h>
 #include <rpc/xdr_ioq.h>
 #include <misc/wait_queue.h>
 
@@ -220,9 +221,10 @@ struct cx_data {
 };
 
 struct x_vc_data {
+	struct work_pool_entry wpe;	/*** 1st ***/
+	struct rpc_dplx_rec *rec;	/* unified sync */
 	uint32_t flags;
 	uint32_t refcnt;
-	struct rpc_dplx_rec *rec;	/* unified sync */
 	struct {
 		struct ct_data data;
 		struct {

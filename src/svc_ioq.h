@@ -26,13 +26,10 @@
 #ifndef SVC_IOQ_H
 #define SVC_IOQ_H
 
-struct svc_ioq_args {
-	SVCXPRT *xprt;
-	struct x_vc_data *xd;
-};
+#include <rpc/svc.h>
+#include <rpc/xdr.h>
+#include "clnt_internal.h"
 
-void svc_ioq_init(void);
 void svc_ioq_append(SVCXPRT *, struct x_vc_data *, XDR *);
-void svc_ioq_shutdown(void);
 
 #endif				/* SVC_IOQ_H */

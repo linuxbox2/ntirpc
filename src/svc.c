@@ -112,6 +112,19 @@ extern rwlock_t svc_fd_lock;
 static struct svc_callout *svc_find(rpcprog_t, rpcvers_t, struct svc_callout **,
 				    char *);
 
+struct work_pool svc_work_pool;
+
+static void
+svc_work_pool_init()
+{
+	struct work_pool_params params = {
+		.thrd_max = __svc_params->ioq.thrd_max,
+		.thrd_min = 2
+	};
+
+	(void)work_pool_init(&svc_work_pool, "svc_work_pool", &params);
+}
+
 /* Package init function.
  * It is intended that applications which must make use of global state
  * will call svc_init() before accessing such state and before executing
@@ -154,8 +167,6 @@ svc_init(svc_init_params *params)
 	__svc_params->svc_ioq_maxbuf =
 	    (params->svc_ioq_maxbuf) ? (params->svc_ioq_maxbuf) : 262144;
 
-	svc_ioq_init();
-
 	/* allow consumers to manage all xprt registration */
 	if (params->flags & SVC_INIT_NOREG_XPRTS)
 		__svc_params->flags |= SVC_FLAG_NOREG_XPRTS;
@@ -164,6 +175,9 @@ svc_init(svc_init_params *params)
 		__svc_params->ioq.thrd_max = params->ioq_thrd_max;
 	else
 		__svc_params->ioq.thrd_max = 200;
+
+	/* uses ioq.thrd_max */
+	svc_work_pool_init();
 
 	if (params->gss_ctx_hash_partitions)
 		__svc_params->gss.ctx_hash_partitions =
@@ -991,7 +1005,7 @@ svc_shutdown(u_long flags)
 	int code = 0;
 
 	/* finalize ioq */
-	svc_ioq_shutdown();
+	work_pool_shutdown(&svc_work_pool);
 
 	/* dispose all xprts and support */
 	svc_xprt_shutdown();

@@ -42,6 +42,7 @@
 #define _TIRPC_SVC_H
 #include <sys/cdefs.h>
 #include <rpc/types.h>
+#include <rpc/work_pool.h>
 #include "reentrant.h"
 
 /*
@@ -447,6 +448,8 @@ struct svc_req {
  */
 
 __BEGIN_DECLS
+extern struct work_pool svc_work_pool;
+
 void svc_init(struct svc_init_params *);
 __END_DECLS
 /*

@@ -63,23 +63,9 @@
 #include <rpc/xdr_inrec.h>
 #include <rpc/xdr_ioq.h>
 #include <getpeereid.h>
-#include <misc/thrdpool.h>
 #include <misc/opr.h>
 #include "svc_ioq.h"
 
-static struct thrdpool pool;
-static uint32_t ioq_shutdown;
-
-void
-svc_ioq_init()
-{
-	struct thrdpool_params params = {
-		.thrd_max = __svc_params->ioq.thrd_max,
-		.thrd_min = 2
-	};
-
-	(void)thrdpool_init(&pool, "svc_ioq", &params);
-}
 
 static inline void
 cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
@@ -193,18 +179,21 @@ ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd,
 	}
 }
 
-void
-svc_ioq(void *a)
+static void
+svc_ioq_callback(struct work_pool_entry *wpe)
 {
-	struct svc_ioq_args *arg = (struct svc_ioq_args *)a;
-	SVCXPRT *xprt = arg->xprt;
-	struct x_vc_data *xd = arg->xd;
-	struct xdr_ioq *xioq = NULL;
+	struct x_vc_data *xd = (struct x_vc_data *)wpe;
+	SVCXPRT *xprt = (SVCXPRT *)wpe->arg;
+	struct poolq_entry *have;
+	struct xdr_ioq *xioq;
 
-	mem_free(arg, sizeof(struct svc_ioq_args));
+	/* xp_lock instead of ioq_mutex avoids second lock for SVC_RELEASE.
+	 * xprt and xd are one-to-one.
+	 */
 	for (;;) {
 		mutex_lock(&xprt->xp_lock);
-		if (unlikely((!xd->shared.ioq.size) || ioq_shutdown)) {
+		if (unlikely((!xd->shared.ioq.size)
+		 || !svc_work_pool.params.thrd_max)) {
 			xd->shared.ioq.active = false;
 			SVC_RELEASE(xprt, SVC_RELEASE_FLAG_LOCKED);
 			goto out;
@@ -226,33 +215,25 @@ void
 svc_ioq_append(SVCXPRT *xprt, struct x_vc_data *xd, XDR *xdrs)
 {
 	struct xdr_ioq *xioq = xdrs->x_private;
-	bool qdrain = atomic_fetch_uint32_t(&ioq_shutdown);
 
-	/* discard */
-	if (unlikely(qdrain)) {
+	if (unlikely(!svc_work_pool.params.thrd_max)) {
+		/* discard */
 		XDR_DESTROY(xioq->xdrs);
 		return;
 	}
 
-	/* submit */
+	/* xp_lock instead of ioq_mutex avoids second lock for SVC_REF.
+	 * xprt and xd are one-to-one.
+	 */
 	mutex_lock(&xprt->xp_lock);
 	TAILQ_INSERT_TAIL(&xd->shared.ioq.q, xioq, ioq_s);
 	(xd->shared.ioq.size)++;
 	if (!xd->shared.ioq.active) {
-		struct svc_ioq_args *arg =
-		    mem_alloc(sizeof(struct svc_ioq_args));
-		arg->xprt = xprt;
-		arg->xd = xd;
+		xd->wpe.fun = svc_ioq_callback;
+		xd->wpe.arg = xprt;
 		xd->shared.ioq.active = true;
 		SVC_REF(xprt, SVC_REF_FLAG_LOCKED);	/* !LOCKED */
-		thrdpool_submit_work(&pool, svc_ioq, arg);
+		work_pool_submit(&svc_work_pool, &xd->wpe);
 	} else
 		mutex_unlock(&xprt->xp_lock);
-}
-
-void
-svc_ioq_shutdown()
-{
-	atomic_store_uint32_t(&ioq_shutdown, true);
-	thrdpool_shutdown(&pool);
 }
