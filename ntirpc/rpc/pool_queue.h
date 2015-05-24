@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Linux Box Corporation.
+ * Copyright (c) 2013-2015 CohortFS, LLC.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -23,60 +23,55 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef WAIT_QUEUE_H
-#define WAIT_QUEUE_H
+/**
+ * @file pool_queue.h
+ * @author William Allen Simpson <bill@cohortfs.com>
+ * @brief Pthreads-based TAILQ package
+ *
+ * @section DESCRIPTION
+ *
+ * This provides simple queues using pthreads and TAILQ primitives.
+ *
+ * @note    Loosely based upon previous wait_queue by
+ *          Matt Benjamin <matt@cohortfs.com>
+ */
 
-#include <errno.h>
+#ifndef POOL_QUEUE_H
+#define POOL_QUEUE_H
+
 #include <pthread.h>
-#include <stdint.h>
-#include <stdbool.h>
+#include <sys/types.h>
 #include <misc/queue.h>
-#include <reentrant.h>
 
-typedef struct wait_entry {
-	mutex_t mtx;
-	cond_t cv;
-} wait_entry_t;
+struct poolq_entry {
+	TAILQ_ENTRY(poolq_entry) q;	/*** 1st ***/
+	u_int qsize;			/* allocated size of q entry,
+					 * 0: default size */
+	u_int qflags;
+};
 
-#define Wqe_LFlag_None        0x0000
-#define Wqe_LFlag_WaitSync    0x0001
-#define Wqe_LFlag_SyncDone    0x0002
+struct poolq_head {
+	TAILQ_HEAD(q_head, poolq_entry) qh;
+	pthread_mutex_t qmutex;
 
-/* thread wait queue */
-typedef struct wait_q_entry {
-	uint32_t flags;
-	uint32_t waiters;
-	wait_entry_t lwe;	/* left */
-	wait_entry_t rwe;	/* right */
-	 TAILQ_HEAD(we_tailq, waiter) waitq;
-} wait_q_entry_t;
+	u_int qsize;			/* default size of q entries,
+					 * 0: static size */
+	int qcount;			/* number of entries,
+					 * < 0: has waiting workers. */
+};
 
-static inline void init_wait_entry(wait_entry_t *we)
+static inline void
+poolq_head_destroy(struct poolq_head *qh)
 {
-	mutex_init(&we->mtx, NULL);
-	pthread_cond_init(&we->cv, NULL);
+	pthread_mutex_destroy(&qh->qmutex);
 }
 
-static inline void destroy_wait_entry(wait_entry_t *we)
+static inline void
+poolq_head_setup(struct poolq_head *qh)
 {
-	mutex_destroy(&we->mtx);
-	cond_destroy(&we->cv);
+	TAILQ_INIT(&qh->qh);
+	pthread_mutex_init(&qh->qmutex, NULL);
+	qh->qcount = 0;
 }
 
-static inline void init_wait_q_entry(wait_q_entry_t *wqe)
-{
-	TAILQ_INIT(&wqe->waitq);
-	init_wait_entry(&wqe->lwe);
-	init_wait_entry(&wqe->rwe);
-}
-
-static inline void thread_delay_ms(unsigned long ms)
-{
-	struct timespec then = {
-		.tv_sec = ms / 1000,
-		.tv_nsec = ms % 1000000UL
-	};
-	nanosleep(&then, NULL);
-}
-
-#endif				/* WAIT_QUEUE_H */
+#endif				/* POOL_QUEUE_H */
