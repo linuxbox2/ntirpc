@@ -79,37 +79,43 @@ cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
 #define MAXALLOCA (256)
 
 static inline void
-ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd,
-	   struct xdr_ioq *xioq)
+ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd, struct xdr_ioq *xioq)
 {
 	struct iovec *iov, *tiov, *wiov;
-	struct v_rec *vrec = NULL;
+	struct poolq_entry *have;
+	struct xdr_ioq_uv *data;
 	ssize_t result;
 	u_int32_t frag_header;
 	u_int32_t fbytes;
-	u_int32_t remaining = xioq->ioq.frag_len;
-	u_int32_t vsize = (xioq->ioq.size + 1) * sizeof(struct iovec);
+	u_int32_t remaining = 0;
+	u_int32_t vsize = (xioq->ioq_uv.uvqh.qcount + 1) * sizeof(struct iovec);
 	int iw = 0;
 	int ix = 1;
 
 	if (unlikely(vsize > MAXALLOCA)) {
 		iov = mem_alloc(vsize);
-                if (unlikely(iov == NULL)) {
-                        __warnx(TIRPC_DEBUG_FLAG_SVC_VC, "malloc failed %d\n",
-                                __func__, errno);
-                        cfconn_set_dead(xprt, xd);
-                        return;
-                }
+		if (unlikely(iov == NULL)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() malloc failed (%d)\n",
+				__func__, errno);
+			cfconn_set_dead(xprt, xd);
+			return;
+		}
 	} else {
 		iov = alloca(vsize);
 	}
 	wiov = iov; /* position at initial fragment header */
 
+	/* update the most recent data length, just in case */
+	xdr_tail_update(xioq->xdrs);
+
 	/* build list after initial fragment header (ix = 1 above) */
-	TAILQ_FOREACH(vrec, &(xioq->ioq.q), ioq) {
+	TAILQ_FOREACH(have, &(xioq->ioq_uv.uvqh.qh), q) {
+		data = IOQ_(have);
 		tiov = iov + ix;
-		tiov->iov_base = vrec->base;
-		tiov->iov_len = vrec->len;
+		tiov->iov_base = data->v.vio_head;
+		tiov->iov_len = ioquv_length(data);
+		remaining += tiov->iov_len;
 		ix++;
 	}
 
@@ -154,7 +160,8 @@ ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd,
 			continue;
 		}
 		if (unlikely(result < 0)) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC_VC, "writev failed %d\n",
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() writev failed (%d)\n",
 				__func__, errno);
 			cfconn_set_dead(xprt, xd);
 			break;
@@ -192,33 +199,32 @@ svc_ioq_callback(struct work_pool_entry *wpe)
 	 */
 	for (;;) {
 		mutex_lock(&xprt->xp_lock);
-		if (unlikely((!xd->shared.ioq.size)
-		 || !svc_work_pool.params.thrd_max)) {
-			xd->shared.ioq.active = false;
+		have = TAILQ_FIRST(&xd->shared.ioq.qh);
+		if (unlikely(!have || !svc_work_pool.params.thrd_max)) {
+			xd->shared.active = false;
 			SVC_RELEASE(xprt, SVC_RELEASE_FLAG_LOCKED);
-			goto out;
+			return;
 		}
-		xioq = TAILQ_FIRST(&xd->shared.ioq.q);
-		TAILQ_REMOVE(&xd->shared.ioq.q, xioq, ioq_s);
-		(xd->shared.ioq.size)--;
+
+		TAILQ_REMOVE(&xd->shared.ioq.qh, have, q);
+		(xd->shared.ioq.qcount)--;
 		/* do i/o unlocked */
 		mutex_unlock(&xprt->xp_lock);
+
+		xioq = _IOQ(have);
 		ioq_flushv(xprt, xd, xioq);
 		XDR_DESTROY(xioq->xdrs);
 	}
 
- out:
 	return;
 }
 
 void
 svc_ioq_append(SVCXPRT *xprt, struct x_vc_data *xd, XDR *xdrs)
 {
-	struct xdr_ioq *xioq = xdrs->x_private;
-
 	if (unlikely(!svc_work_pool.params.thrd_max)) {
 		/* discard */
-		XDR_DESTROY(xioq->xdrs);
+		XDR_DESTROY(xdrs);
 		return;
 	}
 
@@ -226,12 +232,13 @@ svc_ioq_append(SVCXPRT *xprt, struct x_vc_data *xd, XDR *xdrs)
 	 * xprt and xd are one-to-one.
 	 */
 	mutex_lock(&xprt->xp_lock);
-	TAILQ_INSERT_TAIL(&xd->shared.ioq.q, xioq, ioq_s);
-	(xd->shared.ioq.size)++;
-	if (!xd->shared.ioq.active) {
+	(xd->shared.ioq.qcount)++;
+	TAILQ_INSERT_TAIL(&xd->shared.ioq.qh, &(XIOQ(xdrs)->ioq_s), q);
+
+	if (!xd->shared.active) {
+		xd->shared.active = true;
 		xd->wpe.fun = svc_ioq_callback;
 		xd->wpe.arg = xprt;
-		xd->shared.ioq.active = true;
 		SVC_REF(xprt, SVC_REF_FLAG_LOCKED);	/* !LOCKED */
 		work_pool_submit(&svc_work_pool, &xd->wpe);
 	} else

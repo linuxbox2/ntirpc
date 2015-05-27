@@ -48,6 +48,7 @@
 #include <netinet/in.h>
 #endif
 #include <rpc/types.h>
+#include <intrinsic.h>
 
 /*
  * XDR provides a conventional way for converting between C data
@@ -108,32 +109,38 @@ enum xdr_op {
 		   * BYTES_PER_XDR_UNIT)
 #endif
 
-#define XBS_FLAG_NONE   0x0000
-#define XBS_FLAG_GIFT   0x0001
+/* XDR buffer vector descriptors */
+typedef struct xdr_vio {
+	void *vio_base;
+	void *vio_head;	/* minimum vio_tail (header offset) */
+	void *vio_tail;
+	void *vio_wrap;	/* maximum vio_tail */
+} xdr_vio;
 
-/* XDR buffer descriptors. */
-typedef struct xdr_iovec {
-	char *iov_base;
-	size_t iov_len;
-	void *iov_p1; /* XDR private data */
-	void *iov_u1; /* user data */
-	void *iov_u2;
-} xdr_iovec;
+/* vio_wrap >= vio_tail >= vio_head >= vio_base */
+
+#define UIO_FLAG_NONE		0x0000
+#define UIO_FLAG_GIFT		0x0001
+#define UIO_FLAG_FREE		0x0002
+#define UIO_FLAG_BUFQ		0x0004
+#define UIO_FLAG_REALLOC	0x0008
 
 struct xdr_uio;
-typedef void (*xdr_iov_release)(struct xdr_uio *, u_int);
+typedef void (*xdr_uio_release)(struct xdr_uio *, u_int);
 
 typedef struct xdr_uio {
-	xdr_iovec *uio_iov;
-	int       uio_iovcnt;     /* count of buffers */
-	size_t    uio_offset;
-	size_t    uio_resid;   /* residual bytes */
-	u_int     uio_flags;
-	u_int     uio_uflags;  /* user flags */
-	xdr_iov_release uio_rele;
-	void      *uio_p1;
-	void      *uio_u1;
-	void      *uio_u2;
+	struct xdr_uio	*uio_refer;
+	xdr_uio_release uio_release;
+	void	*uio_p1;
+	void	*uio_p2;
+	void	*uio_u1;
+	void	*uio_u2;
+
+	size_t	uio_count;	/* count of entries in vio array,
+				 * 0: not allocated */
+	u_int	uio_flags;
+	int32_t uio_references;
+	xdr_vio	uio_vio[0];	/* appended vectors */
 } xdr_uio;
 
 /* Op flags */
@@ -142,12 +149,14 @@ typedef struct xdr_uio {
 
 #define XDR_FLAG_NONE    0x0000
 #define XDR_FLAG_CKSUM   0x0001
+#define XDR_FLAG_VIO     0x0002
 
 /*
  * The XDR handle.
  * Contains operation which is being applied to the stream,
  * an operations vector for the particular implementation (e.g. see xdr_mem.c),
  * and two private fields for the use of the particular implementation.
+ * XXX: w/64-bit pointers, u_int not enough!
  */
 typedef struct rpc_xdr {
 	enum xdr_op x_op;  /* operation; fast additional param */
@@ -177,9 +186,33 @@ typedef struct rpc_xdr {
 	void *x_private; /* pointer to private data */
 	void *x_lib[2]; /* RPC library private */
 	void *x_base;  /* private used for position info */
+	struct xdr_vio x_v; /* private buffer vector */
 	u_int x_handy; /* extra private word */
 	u_int x_flags; /* shared flags */
 } XDR;
+
+#define XDR_VIO(x) ((xdr_vio *)((x)->x_base))
+
+static inline size_t
+xdr_size_inline(XDR *xdrs)
+{
+	return (xdrs->x_v.vio_wrap - xdrs->x_private);
+}
+
+static inline size_t
+xdr_tail_inline(XDR *xdrs)
+{
+	return (xdrs->x_v.vio_tail - xdrs->x_private);
+}
+
+static inline void
+xdr_tail_update(XDR *xdrs)
+{
+	if (xdrs->x_v.vio_tail < xdrs->x_private) {
+		xdrs->x_v.vio_tail = xdrs->x_private;
+		XDR_VIO(xdrs)->vio_tail = xdrs->x_private;
+	}
+}
 
 /*
  * A xdrproc_t exists for each data type which is to be encoded or decoded.

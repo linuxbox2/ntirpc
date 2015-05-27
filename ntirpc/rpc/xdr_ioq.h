@@ -28,50 +28,97 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <misc/opr.h>
 #include <misc/queue.h>
+#include <rpc/pool_queue.h>
+#include <rpc/xdr.h>
 
-struct v_rec
+struct xdr_ioq_uv
 {
-	TAILQ_ENTRY(v_rec) ioq;
-	uint32_t refcnt;
-	char *base;
-	u_int off;
-	u_int len;
-	u_int size;
-	u_int flags;
+	struct poolq_entry uvq;
+
 	/* spliced buffers, if any */
-	struct xdr_uio x_uio;
+	struct xdr_uio u;
+
+	/* Each xdr_ioq_uv can have a different kind of buffer or data source,
+	 * as indicated by the uio_flags, needing different release techniques.
+	 * Note: overloads uio_release with uio_p1 for pool.
+	 */
+	struct xdr_vio v;	/* immediately follows u (uio_vio[0]) */
 };
 
-struct vpos_t {
-	struct v_rec *vrec;
-	int32_t loff;	     /* logical byte offset  */
-	int32_t bpos;	     /* buffer index (offset) in the current stream */
-	int32_t boff;	     /* byte offset in buffer */
+#define IOQ_(p) (opr_containerof((p), struct xdr_ioq_uv, uvq))
+#define IOQU(p) (opr_containerof((p), struct xdr_ioq_uv, u))
+#define IOQV(p) (opr_containerof((p), struct xdr_ioq_uv, v))
+
+#define ioquv_length(uv) \
+	((uintptr_t)((uv)->v.vio_tail) - (uintptr_t)((uv)->v.vio_head))
+#define ioquv_size(uv) \
+	((uintptr_t)((uv)->v.vio_wrap) - (uintptr_t)((uv)->v.vio_base))
+
+struct xdr_ioq;
+
+struct xdr_ioq_uv_head {
+	struct poolq_head uvqh;
+
+	/* Each xdr_ioq_uv can have a different kind of buffer or data source,
+	 * as indicated by the uio_flags, needing different create techniques.
+	 */
+	struct poolq_entry *(*uvq_fetch)(struct xdr_ioq *xioq,
+					 struct poolq_head *ioqh,
+					 char *comment, u_int count,
+					 u_int ioq_flags);
+
+	u_int plength;		/* sub-total of previous lengths, not including
+				 * any length in this xdr_ioq_uv */
+	u_int pcount;		/* fill index (0..m) in the current stream */
+	u_int min_bsize;	/* multiple of pagesize */
+	u_int max_bsize;	/* multiple of min_bsize */
 };
 
 struct xdr_ioq {
 	XDR xdrs[1];
-	 TAILQ_ENTRY(xdr_ioq) ioq_s;
-	struct {
-		TAILQ_HEAD(vrq_tailq, v_rec) q;
-		struct vpos_t fpos;	/* fill position, GET|SETPOS */
-		int size;	/* count of buffer segments */
-		uint32_t frag_len;
-	} ioq;
-	u_int def_bsize;
-	u_int max_bsize;
-	u_int flags;
+	struct poolq_entry ioq_s;	/* segment of stream */
+	pthread_cond_t ioq_cond;
+
+	struct poolq_head *ioq_pool;
+	void *ioq_p2;
+	void *ioq_u1;
+	void *ioq_u2;
+	struct xdr_ioq_uv_head ioq_uv;	/* header/vectors */
+
 	uint64_t id;
 };
 
-#define IOQ_FLAG_NONE          0x0000
-#define IOQ_FLAG_RECLAIM       0x0001
-#define IOQ_FLAG_BUFQ          0x0002
-#define IOQ_FLAG_XTENDQ        0x0004
-#define IOQ_FLAG_BALLOC        0x0008
-#define IOQ_FLAG_REALLOC       0x0010
+#define _IOQ(p) (opr_containerof((p), struct xdr_ioq, ioq_s))
+#define XIOQ(p) (opr_containerof((p), struct xdr_ioq, xdrs))
 
-extern XDR *xdr_ioq_create(u_int def_bsize, u_int max_bsize, u_int flags);
+/* avoid conflicts with UIO_FLAG */
+#define IOQ_FLAG_NONE		0x0000
+#define IOQ_FLAG_BALLOC		0x4000
+#define IOQ_FLAG_XTENDQ		0x8000
+
+extern struct xdr_ioq_uv *xdr_ioq_uv_create(u_int size, u_int uio_flags);
+extern struct poolq_entry *xdr_ioq_uv_fetch(struct xdr_ioq *xioq,
+					     struct poolq_head *ioqh,
+					     char *comment,
+					     u_int count,
+					     u_int ioq_flags);
+extern struct poolq_entry *xdr_ioq_uv_fetch_nothing(struct xdr_ioq *xioq,
+						     struct poolq_head *ioqh,
+						     char *comment,
+						     u_int count,
+						     u_int ioq_flags);
+extern void xdr_ioq_uv_release(struct xdr_ioq_uv *uv);
+
+extern XDR *xdr_ioq_create(u_int min_bsize, u_int max_bsize, u_int uio_flags);
+extern void xdr_ioq_release(struct poolq_head *ioqh);
+extern void xdr_ioq_reset(struct xdr_ioq *xioq, u_int wh_pos);
+extern void xdr_ioq_setup(struct xdr_ioq *xioq);
+
+extern void xdr_ioq_destroy(struct xdr_ioq *xioq, size_t qsize);
+extern void xdr_ioq_destroy_pool(struct poolq_head *ioqh);
+
+extern const struct xdr_ops xdr_ioq_ops;
 
 #endif				/* XDR_IOQ_H */

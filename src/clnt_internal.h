@@ -238,11 +238,8 @@ struct x_vc_data {
 		int32_t maxrec;
 	} sx;
 	struct {
-		struct {
-			TAILQ_HEAD(xdr_tailq, xdr_ioq) q;
-			int32_t size;
-			bool active;
-		} ioq;
+		struct poolq_head ioq;
+		bool active;
 		bool nonblock;
 		u_int sendsz;
 		u_int recvsz;
@@ -260,7 +257,7 @@ static inline struct x_vc_data *
 alloc_x_vc_data(void)
 {
 	struct x_vc_data *xd = mem_zalloc(sizeof(struct x_vc_data));
-	TAILQ_INIT(&xd->shared.ioq.q);
+	TAILQ_INIT(&xd->shared.ioq.qh);
 	return (xd);
 }
 

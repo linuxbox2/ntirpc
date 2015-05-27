@@ -36,8 +36,6 @@
 #include <errno.h>
 
 #include <rpc/types.h>
-#include <sys/types.h>
-#include <reentrant.h>
 #include <misc/portable.h>
 #include <rpc/xdr.h>
 #include <rpc/rpc.h>
@@ -54,50 +52,7 @@
 
 #include <rpc/xdr_ioq.h>
 
-static bool xdr_ioq_getlong(XDR *xdrs, long *lp);
-static bool xdr_ioq_putlong(XDR *xdrs, const long *lp);
-static bool xdr_ioq_getbytes(XDR *xdrs, char *addr, u_int len);
-static bool xdr_ioq_putbytes(XDR *xdrs, const char *addr, u_int len);
-static bool xdr_ioq_getbufs(XDR *xdrs, xdr_uio *uio, u_int flags);
-static bool xdr_ioq_putbufs(XDR *xdrs, xdr_uio *uio, u_int flags);
-static u_int xdr_ioq_getpos(XDR *xdrs);
-static bool xdr_ioq_setpos(XDR *xdrs, u_int pos);
-static int32_t *xdr_ioq_inline(XDR *xdrs, u_int len);
-static void xdr_ioq_destroy(XDR *xdrs);
-static bool xdr_ioq_control(XDR *xdrs, /* const */ int rq, void *in);
 static bool xdr_ioq_noop(void) __attribute__ ((unused));
-
-static const struct xdr_ops xdr_ioq_ops = {
-	xdr_ioq_getlong,
-	xdr_ioq_putlong,
-	xdr_ioq_getbytes,
-	xdr_ioq_putbytes,
-	xdr_ioq_getpos,
-	xdr_ioq_setpos,
-	xdr_ioq_inline,
-	xdr_ioq_destroy,
-	xdr_ioq_control,
-	xdr_ioq_getbufs,
-	xdr_ioq_putbufs
-};
-
-#define LAST_FRAG ((u_int32_t)(1 << 31))
-
-#define reset_pos(pos) \
-	do { \
-		(pos)->loff = 0; \
-		(pos)->bpos = 0; \
-		(pos)->boff = 0; \
-	} while (0)
-
-/* not intended to be general--we know fpos->vrec is head of queue */
-#define init_lpos(lpos, fpos) \
-	do { \
-		(lpos)->vrec = (fpos)->vrec; \
-		(lpos)->loff = 0; \
-		(lpos)->bpos = 0; \
-		(lpos)->boff = 0; \
-	} while (0)
 
 #define VREC_MAXBUFS 24
 
@@ -108,282 +63,405 @@ static uint64_t next_id;
 #else
 #define alloc_buffer(size) mem_alloc((size))
 #endif				/* 0 */
-#define free_buffer(addr) mem_free((addr), 0)
+#define free_buffer(addr,size) mem_free((addr), size)
 
-#define vrec_qlen(q) ((q)->size)
-#define vrec_fpos(xioq) (&xioq->ioq.fpos)
+struct xdr_ioq_uv *
+xdr_ioq_uv_create(u_int size, u_int uio_flags)
+{
+	struct xdr_ioq_uv *uv = mem_zalloc(sizeof(struct xdr_ioq_uv));
 
-enum vrec_cursor {
-	VREC_FPOS,
-	VREC_RESET_POS
-};
+	if (!uv)
+		return (NULL);
+
+	if (size) {
+		uv->v.vio_base = alloc_buffer(size);
+		if (!uv->v.vio_base) {
+			mem_free(uv, sizeof(struct xdr_ioq_uv));
+			return (NULL);
+		}
+		uv->v.vio_head = uv->v.vio_base;
+		uv->v.vio_tail = uv->v.vio_base;
+		uv->v.vio_wrap = uv->v.vio_base + size;
+		/* ensure not wrapping to zero */
+		assert(uv->v.vio_base < uv->v.vio_wrap);
+	}
+	uv->u.uio_flags = uio_flags;
+	uv->u.uio_references = 1;	/* starting one */
+
+	return (uv);
+}
+
+struct poolq_entry *
+xdr_ioq_uv_fetch(struct xdr_ioq *xioq, struct poolq_head *ioqh,
+		 char *comment, u_int count, u_int ioq_flags)
+{
+	struct poolq_entry *have;
+
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s() %u %s",
+		__func__, count, comment);
+	pthread_mutex_lock(&ioqh->qmutex);
+
+	while (count--) {
+		if (likely(0 < ioqh->qcount--)) {
+			/* positive for buffer(s) */
+			have = TAILQ_FIRST(&ioqh->qh);
+			TAILQ_REMOVE(&ioqh->qh, have, q);
+
+			/* added directly to the queue.
+			 * this lock is needed for context header queues,
+			 * but is not a burden on uncontested data queues.
+			 */
+			pthread_mutex_lock(&xioq->ioq_uv.uvqh.qmutex);
+			(xioq->ioq_uv.uvqh.qcount)++;
+			TAILQ_INSERT_TAIL(&xioq->ioq_uv.uvqh.qh, have, q);
+			pthread_mutex_unlock(&xioq->ioq_uv.uvqh.qmutex);
+		} else {
+			u_int saved = xioq->xdrs[0].x_handy;
+
+			/* negative for waiting worker(s):
+			 * use the otherwise empty pool to hold them,
+			 * simplifying mutex and pointer setup.
+			 */
+			TAILQ_INSERT_TAIL(&ioqh->qh, &xioq->ioq_s, q);
+
+			__warnx(TIRPC_DEBUG_FLAG_XDR,
+				"%s() waiting for %u %s",
+				__func__, count, comment);
+
+			/* Note: the mutex is the pool _head,
+			 * but the condition is per worker,
+			 * making the signal efficient!
+			 *
+			 * Nota Bene: count was already decremented,
+			 * will be zero for last one needed,
+			 * then will wrap as unsigned.
+			 */
+			xioq->xdrs[0].x_handy = count;
+			pthread_cond_wait(&xioq->ioq_cond, &ioqh->qmutex);
+			xioq->xdrs[0].x_handy = saved;
+
+			/* entry was already added directly to the queue */
+			have = TAILQ_LAST(&xioq->ioq_uv.uvqh.qh, q_head);
+		}
+	}
+
+	pthread_mutex_unlock(&ioqh->qmutex);
+	return have;
+}
+
+struct poolq_entry *
+xdr_ioq_uv_fetch_nothing(struct xdr_ioq *xioq, struct poolq_head *ioqh,
+			 char *comment, u_int count, u_int ioq_flags)
+{
+	return NULL;
+}
+
+static inline void
+xdr_ioq_uv_recycle(struct poolq_head *ioqh, struct poolq_entry *have)
+{
+	pthread_mutex_lock(&ioqh->qmutex);
+
+	if (likely(0 <= ioqh->qcount++)) {
+		/* positive for buffer(s) */
+		TAILQ_INSERT_TAIL(&ioqh->qh, have, q);
+	} else {
+		/* negative for waiting worker(s) */
+		struct xdr_ioq *wait = _IOQ(TAILQ_FIRST(&ioqh->qh));
+
+		/* added directly to the queue.
+		 * no need to lock here, the mutex is the pool _head.
+		 */
+		(wait->ioq_uv.uvqh.qcount)++;
+		TAILQ_INSERT_TAIL(&wait->ioq_uv.uvqh.qh, have, q);
+
+		/* Nota Bene: x_handy was decremented count,
+		 * will be zero for last one needed,
+		 * then will wrap as unsigned.
+		 */
+		if (0 < wait->xdrs[0].x_handy--) {
+			/* not removed */
+			ioqh->qcount--;
+		} else {
+			TAILQ_REMOVE(&ioqh->qh, &wait->ioq_s, q);
+			pthread_cond_signal(&wait->ioq_cond);
+		}
+	}
+
+	pthread_mutex_unlock(&ioqh->qmutex);
+}
+
+void
+xdr_ioq_uv_release(struct xdr_ioq_uv *uv)
+{
+	if (uv->u.uio_refer) {
+		/* not optional in this case! */
+		uv->u.uio_refer->uio_release(uv->u.uio_refer, UIO_FLAG_NONE);
+		uv->u.uio_refer = NULL;
+	}
+
+	if (!(--uv->u.uio_references)) {
+		if (uv->u.uio_release) {
+			/* handle both xdr_ioq_uv and vio */
+			uv->u.uio_release(&uv->u, UIO_FLAG_NONE);
+		} else if (uv->u.uio_flags & UIO_FLAG_FREE) {
+			free_buffer(uv->v.vio_base, ioquv_size(uv));
+			mem_free(uv, sizeof(*uv));
+		} else if (uv->u.uio_flags & UIO_FLAG_BUFQ) {
+			uv->u.uio_references = 1;	/* keeping one */
+			xdr_ioq_uv_recycle(uv->u.uio_p1, &uv->uvq);
+		} else {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() memory leak, no release flags (%u)\n",
+				__func__, uv->u.uio_flags);
+			abort();
+		}
+	}
+}
 
 /*
  * Set initial read/insert or fill position.
+ *
+ * Note: must be done before any XDR_[GET|SET]POS()
  */
-static inline void
-ioq_stream_reset(struct xdr_ioq *xioq, enum vrec_cursor wh_pos)
+void
+xdr_ioq_reset(struct xdr_ioq *xioq, u_int wh_pos)
 {
-	struct vpos_t *pos;
+	struct xdr_ioq_uv *uv = IOQ_(TAILQ_FIRST(&xioq->ioq_uv.uvqh.qh));
 
-	switch (wh_pos) {
-	case VREC_FPOS:
-		pos = vrec_fpos(xioq);
-		break;
-	case VREC_RESET_POS:
-		ioq_stream_reset(xioq, VREC_FPOS);
-		/* XXX */
-		pos = vrec_fpos(xioq);
-		pos->vrec->off = 0;
-		pos->vrec->len = 0;
-		return;
-		break;
-	default:
-		abort();
-		break;
+	xioq->ioq_uv.plength =
+	xioq->ioq_uv.pcount = 0;
+
+	if (wh_pos >= ioquv_size(uv)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() xioq %p wh_pos %d too big, ignored!\n",
+			__func__, xioq, wh_pos);
+	} else {
+		uv->v.vio_head = uv->v.vio_base + wh_pos;
 	}
+	xioq->xdrs[0].x_v = uv->v;
+	xioq->xdrs[0].x_base = &uv->v;
+	xioq->xdrs[0].x_private = uv->v.vio_head;
 
-	reset_pos(pos);
-	pos->vrec = TAILQ_FIRST(&xioq->ioq.q);
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s() xioq %p head %p wh_pos %d",
+		__func__, xioq, uv->v.vio_head, wh_pos);
 }
 
-static inline struct v_rec *
-get_vrec(struct xdr_ioq *xioq)
+void
+xdr_ioq_setup(struct xdr_ioq *xioq)
 {
-	struct v_rec *vrec;
-	vrec = mem_zalloc(sizeof(struct v_rec));
-	TAILQ_INIT_ENTRY(vrec, ioq);
-	return (vrec);
-}
+	XDR *xdrs = xioq->xdrs;
 
-static inline void
-ioq_append_rec(struct xdr_ioq *xioq, struct v_rec *vrec)
-{
-	TAILQ_INSERT_TAIL(&xioq->ioq.q, vrec, ioq);
-	(xioq->ioq.size)++;
-}
+	/* the XDR is the top element of struct xdr_ioq */
+	assert((void *)xdrs == (void *)xioq);
 
-static inline void
-vrec_rele(struct xdr_ioq *xioq, struct v_rec *vrec)
-{
-	(vrec->refcnt)--;
-	if (unlikely(vrec->refcnt == 0)) {
-		if (vrec->flags & IOQ_FLAG_RECLAIM) {
-			free_buffer(vrec->base);
-		} else {
-			if (vrec->x_uio.uio_rele) {
-				vrec->x_uio.uio_rele(&vrec->x_uio,
-						     XDR_FLAG_NONE);
-			}
-		}
-		mem_free(vrec, 0);
-	}
-}
+	TAILQ_INIT_ENTRY(&xioq->ioq_s, q);
+	xioq->ioq_s.qflags = IOQ_FLAG_NONE;
 
-static inline void
-init_ioq(struct xdr_ioq *xioq)
-{
-	struct v_rec *vrec;
+	poolq_head_setup(&xioq->ioq_uv.uvqh);
+	pthread_cond_init(&xioq->ioq_cond, NULL);
 
-	TAILQ_INIT_ENTRY(xioq, ioq_s);
-	TAILQ_INIT(&xioq->ioq.q);
-	xioq->ioq.size = 0;
-	xioq->ioq.frag_len = 0;
-	vrec = get_vrec(xioq);
-	vrec->size = xioq->def_bsize;
-	vrec->refcnt = 1;
-	vrec->base = alloc_buffer(vrec->size);
-	vrec->flags = IOQ_FLAG_RECLAIM;
-	ioq_append_rec(xioq, vrec);
-	ioq_stream_reset(xioq, VREC_RESET_POS);
+	xdrs->x_ops = &xdr_ioq_ops;
+	xdrs->x_op = XDR_ENCODE;
+	xdrs->x_public = NULL;
+	xdrs->x_private = NULL;
+	xdrs->x_base = NULL;
+	xdrs->x_flags = XDR_FLAG_VIO;
+
+	xioq->id = atomic_inc_uint64_t(&next_id);
 }
 
 XDR *
-xdr_ioq_create(u_int def_bsize, u_int max_bsize, u_int flags)
+xdr_ioq_create(u_int min_bsize, u_int max_bsize, u_int uio_flags)
 {
-	struct xdr_ioq *xioq = mem_alloc(sizeof(struct xdr_ioq));
+	struct xdr_ioq *xioq = mem_zalloc(sizeof(struct xdr_ioq));
 
-	XDR *xdrs = xioq->xdrs;
-	xdrs->x_ops = &xdr_ioq_ops;
-	xdrs->x_op = XDR_ENCODE;
-	xdrs->x_lib[0] = NULL;
-	xdrs->x_lib[1] = NULL;
-	xdrs->x_public = NULL;
-	xdrs->x_private = xioq;
+	xdr_ioq_setup(xioq);
+	xioq->ioq_uv.min_bsize = min_bsize;
+	xioq->ioq_uv.max_bsize = max_bsize;
 
-	xioq->def_bsize = def_bsize;	/* XXX small multiple of pagesize */
-	xioq->max_bsize = max_bsize;
-	xioq->flags = flags;
-	init_ioq(xioq);
+	if (!(uio_flags & UIO_FLAG_BUFQ)) {
+		struct xdr_ioq_uv *uv = xdr_ioq_uv_create(min_bsize, uio_flags);
+		xioq->ioq_uv.uvqh.qcount = 1;
+		TAILQ_INSERT_HEAD(&xioq->ioq_uv.uvqh.qh, &uv->uvq, q);
+		xdr_ioq_reset(xioq, 0);
+	}
 
-	xioq->id = atomic_inc_uint64_t(&next_id);
-
-	return (xdrs);
+	return (xioq->xdrs);
 }
 
 /*
  * Advance read/insert or fill position.
+ *
+ * Update the logical and physical offsets and lengths,
+ * based upon the most recent position information.
+ * All such updates are consolidated here and getpos/setpos,
+ * reducing computations in the get/put/inline routines.
  */
-static inline bool
-vrec_next(struct xdr_ioq *xioq, u_int flags)
+static inline struct xdr_ioq_uv *
+xdr_ioq_uv_next(struct xdr_ioq *xioq, u_int ioq_flags)
 {
-	struct vpos_t *pos;
-	struct v_rec *vrec;
+	struct xdr_ioq_uv *uv = IOQV(xioq->xdrs[0].x_base);
+	size_t len;
 
-	pos = vrec_fpos(xioq);
+	/* update the most recent data length */
+	xdr_tail_update(xioq->xdrs);
+
+	len = ioquv_length(uv);
+	xioq->ioq_uv.plength += len;
 
 	/* next buffer, if any */
-	vrec = TAILQ_NEXT(pos->vrec, ioq);
+	uv = IOQ_(TAILQ_NEXT(&uv->uvq, q));
 
 	/* append new segments, iif requested */
-	if ((!vrec) && likely(flags & IOQ_FLAG_XTENDQ)) {
-		/* alloc a buffer, iif requested */
-		if (flags & IOQ_FLAG_BALLOC) {
+	if ((!uv) && likely(ioq_flags & IOQ_FLAG_XTENDQ)) {
+		uv = IOQV(xioq->xdrs[0].x_base);
+
+		if (xioq->ioq_uv.uvq_fetch) {
+			/* more of the same kind */
+			struct poolq_entry *have =
+				xioq->ioq_uv.uvq_fetch(xioq, uv->u.uio_p1,
+							"next buffer", 1,
+							IOQ_FLAG_NONE);
+
+			/* poolq_entry is the top element of xdr_ioq_uv */
+			uv = IOQ_(have);
+			assert((void *)uv == (void *)have);
+		} else if (ioq_flags & IOQ_FLAG_BALLOC) {
 			/* XXX workaround for lack of segmented buffer
 			 * interfaces in some callers (e.g, GSS_WRAP) */
-			if (xioq->flags & IOQ_FLAG_REALLOC) {
+			if (uv->u.uio_flags & UIO_FLAG_REALLOC) {
 				void *base;
-				vrec = pos->vrec;
+				size_t size = ioquv_size(uv);
+				size_t delta = xdr_tail_inline(xioq->xdrs);
+
 				/* bail if we have reached max bufsz */
-				if (vrec->size >= xioq->max_bsize)
-					return false;
-				base = mem_alloc(xioq->max_bsize);
-				memcpy(base, vrec->base, vrec->len);
-				mem_free(vrec->base, vrec->size);
-				vrec->base = base;
-				vrec->size = xioq->max_bsize;
-				assert(vrec->flags & IOQ_FLAG_RECLAIM);
-				goto done;
-			} else {
-				vrec = get_vrec(xioq);
-				vrec->size = xioq->def_bsize;
-				vrec->base = alloc_buffer(vrec->size);
-				vrec->flags = IOQ_FLAG_RECLAIM;
+				if (size >= xioq->ioq_uv.max_bsize)
+					return (NULL);
+
+				/* backtrack */
+				xioq->ioq_uv.plength -= len;
+				assert(uv->u.uio_flags & UIO_FLAG_FREE);
+
+				base = mem_alloc(xioq->ioq_uv.max_bsize);
+				memcpy(base, uv->v.vio_head, len);
+				mem_free(uv->v.vio_base, size);
+				uv->v.vio_base =
+				uv->v.vio_head = base + 0;
+				uv->v.vio_tail = base + len;
+				uv->v.vio_wrap = base
+						+ xioq->ioq_uv.max_bsize;
+				xioq->xdrs[0].x_v = uv->v;
+				xioq->xdrs[0].x_private = uv->v.vio_tail
+							- delta;
+				return (uv);
 			}
+			uv = xdr_ioq_uv_create(xioq->ioq_uv.min_bsize,
+						   UIO_FLAG_FREE);
 		} else {
 			/* XXX empty buffer slot (not supported for now) */
-			vrec = get_vrec(xioq);
-			vrec->size = 0;
-			vrec->base = NULL;
-			vrec->flags = IOQ_FLAG_NONE;
+			uv = xdr_ioq_uv_create(0, UIO_FLAG_NONE);
 		}
 	}
 
-	/* new vrec */
-	vrec->refcnt = 1;
-	vrec->off = 0;
-	vrec->len = 0;
-	ioq_append_rec(xioq, vrec);
+	if (uv) {
+		if (!xioq->ioq_uv.uvq_fetch) {
+			/* new xdr_ioq_uv */
+			(xioq->ioq_uv.uvqh.qcount)++;
+			TAILQ_INSERT_TAIL(&xioq->ioq_uv.uvqh.qh, &uv->uvq, q);
+		}
 
-	/* advance iterator */
-	pos->vrec = vrec;
-	(pos->bpos)++;
-	pos->boff = 0;
-	/* pos->loff is unchanged */
+		/* advance iterator */
+		xioq->xdrs[0].x_private = uv->v.vio_head;
+		xioq->xdrs[0].x_base = &uv->v;
+		xioq->xdrs[0].x_v = uv->v;
+		(xioq->ioq_uv.pcount)++;
+		/* xioq->ioq_uv.plength is unchanged (calculated above) */
+	}
 
- done:
-	return (true);
+	return (uv);
 }
 
 static bool
 xdr_ioq_getlong(XDR *xdrs, long *lp)
 {
-	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
-	struct vpos_t *pos = vrec_fpos(xioq);
-	int32_t *buf = NULL;
+	struct xdr_ioq_uv *uv;
+	void *future = xdrs->x_private + sizeof(uint32_t);
 
-	switch (xdrs->x_op) {
-	case XDR_ENCODE:
-		/* CASE 1:  we can only be re-consuming bytes in a stream
-		 * (after SETPOS/rewind) */
-		if (pos->loff < xioq->ioq.frag_len) {
- restart:
-			/* CASE 1.1: first try the inline, fast case */
-			if ((pos->boff + sizeof(int32_t)) <= pos->vrec->len) {
-				buf =
-				    (int32_t *) (void *)(pos->vrec->base +
-							 pos->boff);
-				*lp = (long)ntohl(*buf);
-				pos->boff += sizeof(int32_t);
-				pos->loff += sizeof(int32_t);
-			} else {
-				/* CASE 1.2: vrec_next */
-				(void)vrec_next(xioq, IOQ_FLAG_NONE);
-				goto restart;
-			}
-		} else
+	while (future > xdrs->x_v.vio_tail) {
+		if (unlikely(xdrs->x_private != xdrs->x_v.vio_tail)) {
+			/* FIXME: insufficient data or unaligned? stop! */
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() x_private != x_v.vio_tail\n",
+				__func__);
 			return (false);
-		break;
-	case XDR_DECODE:
-	default:
-		abort();
-		break;
-	}			/* switch */
+		}
+		uv = xdr_ioq_uv_next(XIOQ(xdrs), IOQ_FLAG_NONE);
+		if (!uv) {
+			return (false);
+		}
+		/* fill pointer has changed */
+		future = xdrs->x_private + sizeof(uint32_t);
+	}
 
-	/* assert(len == 0); */
+	*lp = (long)ntohl(*((uint32_t *) (xdrs->x_private)));
+	xdrs->x_private = future;
 	return (true);
 }
 
 static bool
 xdr_ioq_putlong(XDR *xdrs, const long *lp)
 {
-	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
-	struct vpos_t *pos = vrec_fpos(xioq);
+	struct xdr_ioq_uv *uv;
+	void *future = xdrs->x_private + sizeof(uint32_t);
 
-	if (unlikely((pos->vrec->len + sizeof(int32_t)) > pos->vrec->size)) {
-		/* advance fill pointer */
-		if (!vrec_next(xioq, IOQ_FLAG_XTENDQ | IOQ_FLAG_BALLOC))
+	while (future > xdrs->x_v.vio_wrap) {
+		/* advance fill pointer, skipping unaligned */
+		uv = xdr_ioq_uv_next(XIOQ(xdrs),
+				IOQ_FLAG_XTENDQ | IOQ_FLAG_BALLOC);
+		if (!uv) {
 			return (false);
+		}
+		/* fill pointer has changed */
+		future = xdrs->x_private + sizeof(uint32_t);
 	}
 
-	*((int32_t *) (pos->vrec->base + pos->vrec->off)) =
-	    (int32_t) htonl((u_int32_t) (*lp));
-
-	pos->vrec->off += sizeof(int32_t);
-	pos->vrec->len += sizeof(int32_t);
-	pos->boff += sizeof(int32_t);
-	pos->loff += sizeof(int32_t);
-	if (pos->loff > xioq->ioq.frag_len)
-		xioq->ioq.frag_len = pos->loff;
-
+	*((int32_t *) (xdrs->x_private)) = (int32_t) htonl((int32_t) (*lp));
+	xdrs->x_private = future;
 	return (true);
 }
+
+/* in glibc 2.14+ x86_64, memcpy no longer tries to handle overlapping areas,
+ * see Fedora Bug 691336 (NOTABUG); we dont permit overlapping segments,
+ * so memcpy may be a small win over memmove.
+ */
 
 static bool
 xdr_ioq_getbytes(XDR *xdrs, char *addr, u_int len)
 {
-	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
-	struct vpos_t *pos;
-	uint32_t off = 0;
+	struct xdr_ioq_uv *uv;
+	ssize_t delta;
 
-	switch (xdrs->x_op) {
-	case XDR_ENCODE:
-		/* consuming bytes in a stream (after SETPOS/rewind) */
- restart:
-		pos = vrec_fpos(xioq);
-		while ((len > 0) && (pos->loff < xioq->ioq.frag_len)) {
-			int delta = MIN(len, (pos->vrec->len - pos->boff));
-			if (unlikely(!delta)) {
-				if (!vrec_next(xioq, IOQ_FLAG_NONE))
-					return (false);
-				goto restart;
+	while (len > 0
+		&& XIOQ(xdrs)->ioq_uv.pcount < XIOQ(xdrs)->ioq_uv.uvqh.qcount) {
+		delta = (uintptr_t)xdrs->x_v.vio_tail
+			- (uintptr_t)xdrs->x_private;
+
+		if (unlikely(delta > len)) {
+			delta = len;
+		} else if (unlikely(!delta)) {
+			/* advance fill pointer */
+			uv = xdr_ioq_uv_next(XIOQ(xdrs), IOQ_FLAG_NONE);
+			if (!uv) {
+				return (false);
 			}
-			/* in glibc 2.14+ x86_64, memcpy no longer tries to
-			 * handle overlapping areas, see Fedora Bug 691336
-			 * (NOTABUG); we dont permit overlapping segments,
-			 * so memcpy may be a small win over memmove */
-			memcpy(addr + off, (pos->vrec->base + pos->boff),
-			       delta);
-			pos->loff += delta;
-			pos->boff += delta;
-			off += delta;
-			len -= delta;
+			continue;
 		}
-		break;
-	case XDR_DECODE:
-	default:
-		abort();
-		break;
+		memcpy(addr, xdrs->x_private, delta);
+		xdrs->x_private += delta;
+		addr += delta;
+		len -= delta;
 	}
 
 	/* assert(len == 0); */
@@ -393,32 +471,27 @@ xdr_ioq_getbytes(XDR *xdrs, char *addr, u_int len)
 static bool
 xdr_ioq_putbytes(XDR *xdrs, const char *addr, u_int len)
 {
-	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
-	struct vpos_t *pos;
-	uint32_t off = 0;
-	int delta;
+	struct xdr_ioq_uv *uv;
+	ssize_t delta;
 
 	while (len > 0) {
-		pos = vrec_fpos(xioq);
-		delta = MIN(len, pos->vrec->size - pos->vrec->len);
-		if (unlikely(!delta)) {
+		delta = (uintptr_t)xdrs->x_v.vio_wrap
+			- (uintptr_t)xdrs->x_private;
+
+		if (unlikely(delta > len)) {
+			delta = len;
+		} else if (!delta) {
 			/* advance fill pointer */
-			if (unlikely
-			    (!vrec_next
-			     (xioq, IOQ_FLAG_XTENDQ | IOQ_FLAG_BALLOC))) {
+			uv = xdr_ioq_uv_next(XIOQ(xdrs),
+					IOQ_FLAG_XTENDQ | IOQ_FLAG_BALLOC);
+			if (!uv) {
 				return (false);
 			}
 			continue;
 		}
-		/* see note above */
-		memcpy((pos->vrec->base + pos->vrec->off), addr + off, delta);
-		pos->vrec->off += delta;
-		pos->vrec->len += delta;
-		pos->boff += delta;
-		pos->loff += delta;
-		off += delta;
-		if (pos->loff > xioq->ioq.frag_len)
-			xioq->ioq.frag_len = pos->loff;
+		memcpy(xdrs->x_private, addr, delta);
+		xdrs->x_private += delta;
+		addr += delta;
 		len -= delta;
 	}
 	return (true);
@@ -431,13 +504,15 @@ xdr_ioq_getbufs(XDR *xdrs, xdr_uio *uio, u_int flags)
     /* XXX finalize */
 #if 0
 
-	struct xdr_ioq *xioq = (struct xdr_ioq *) xdrs->x_private;
-	struct vpos_t *pos = vrec_fpos(xioq);
-
+	struct xdr_ioq_uv *uv;
+	ssize_t delta;
 	int ix;
 
 	/* allocate sufficient slots to empty the queue, else MAX */
-	uio->xbs_cnt = MIN(VREC_MAXBUFS, (vrec_qlen(&xioq->ioq) - pos->bpos));
+	uio->xbs_cnt = XIOQ(xdrs)->ioq_uv.uvqh.qsize - XIOQ(xdrs)->ioq_uv.pcount;
+	if (uio->xbs_cnt > VREC_MAXBUFS) {
+		uio->xbs_cnt = VREC_MAXBUFS;
+	}
 
 	/* fail if no segments available */
 	if (unlikely(! uio->xbs_cnt))
@@ -447,21 +522,25 @@ xdr_ioq_getbufs(XDR *xdrs, xdr_uio *uio, u_int flags)
 	uio->xbs_resid = 0;
 	ix = 0;
 
-restart:
 	/* re-consuming bytes in a stream (after SETPOS/rewind) */
-	while ((len > 0) &&
-	       (pos->loff < xioq->ioq.frag_len)) {
-		u_int delta = MIN(len, (pos->vrec->len - pos->boff));
-		if (unlikely(! delta)) {
-			if (! vrec_next(xioq, IOQ_FLAG_NONE))
-				return (FALSE);
-			goto restart;
+	while (len > 0
+		&& XIOQ(xdrs)->ioq_uv.pcount < XIOQ(xdrs)->ioq_uv.uvqh.qcount) {
+		delta = (uintptr_t)XDR_VIO(xioq->xdrs)->vio_tail
+			- (uintptr_t)xdrs->x_private;
+
+		if (unlikely(delta > len)) {
+			delta = len;
+		} else if (unlikely(!delta)) {
+			uv = xdr_ioq_uv_next(XIOQ(xdrs), IOQ_FLAG_NONE);
+			if (!uv)
+				return (false);
+			continue;
 		}
-		(uio->xbs_buf[ix]).xb_p1 = pos->vrec;
-		(pos->vrec->refcnt)++;
-		(uio->xbs_buf[ix]).xb_base = (pos->vrec->base + pos->boff);
-		pos->loff += delta;
-		pos->boff += delta;
+		(uio->xbs_buf[ix]).xb_p1 = uv;
+		uv->u.uio_references)++;
+		(uio->xbs_buf[ix]).xb_base = xdrs->x_private;
+		XIOQ(xdrs)->ioq_uv.plength += delta;
+		xdrs->x_private += delta;
 		len -= delta;
 	}
 #endif /* 0 */
@@ -475,98 +554,111 @@ restart:
 static bool
 xdr_ioq_putbufs(XDR *xdrs, xdr_uio *uio, u_int flags)
 {
-	struct xdr_ioq *xioq = (struct xdr_ioq *) xdrs->x_private;
-	struct vpos_t *pos = vrec_fpos(xioq);
-	xdr_iovec *iov;
+	struct xdr_ioq_uv *uv;
+	xdr_vio *v;
 	int ix;
 
-	for (ix = 0; ix < uio->uio_iovcnt; ++ix) {
+	for (ix = 0; ix < uio->uio_count; ++ix) {
 		/* advance fill pointer, do not allocate buffers, refs =1 */
-		if (! vrec_next(xioq, IOQ_FLAG_XTENDQ))
+		if (!(flags & IOQ_FLAG_XTENDQ))
+			return (FALSE);
+		uv = xdr_ioq_uv_next(XIOQ(xdrs), flags);
+		if (!uv)
 			return (FALSE);
 
-		iov = &(uio->uio_iov[ix]);
-		xioq->ioq.frag_len += iov->iov_len;
-		pos->loff += iov->iov_len;
-		pos->vrec->flags = IOQ_FLAG_NONE; /* !RECLAIM */
-		pos->vrec->base = iov->iov_base;
-		pos->vrec->size = iov->iov_len;
-		pos->vrec->len = iov->iov_len;
-		pos->vrec->off = 0;
+		v = &(uio->uio_vio[ix]);
+		uv->u.uio_flags = UIO_FLAG_NONE; /* !RECLAIM */
+		uv->v = *v;
 
 #if 0
 Saved for later golden buttery results -- Matt
-	switch (flags & XDR_PUTBUFS_FLAG_BRELE) {
-	case true:
+	if (flags & XDR_PUTBUFS_FLAG_BRELE) {
 		/* the caller is returning buffers */
 		for (ix = 0; ix < uio->xbs_cnt; ++ix) {
-			struct v_rec *vrec =
-			    (struct v_rec *)(uio->xbs_buf[ix]).xb_p1;
-			vrec_rele(xioq, vrec);
+			uv = (struct xdr_ioq_uv *)(uio->xbs_buf[ix]).xb_p1;
+			xdr_ioq_uv_release(uv);
 		}
 		mem_free(uio->xbs_buf, 0);
 		break;
-	case false:
-	default:
+	} else {
 		for (ix = 0; ix < uio->xbs_cnt; ++ix) {
 			/* advance fill pointer, do not allocate buffers */
-			if (!vrec_next(xioq, IOQ_FLAG_XTENDQ))
+			*uv = xdr_ioq_uv_next(XIOQ(xdrs), IOQ_FLAG_XTENDQ);
+			if (!uv)
 				return (false);
 			xbuf = &(uio->xbs_buf[ix]);
-			xioq->ioq.frag_len += xbuf->xb_len;
-			pos->loff += xbuf->xb_len;
-			pos->vrec->flags = IOQ_FLAG_NONE;	/* !RECLAIM */
-			pos->vrec->refcnt =
-			    (xbuf->xb_flags & XBS_FLAG_GIFT) ? 0 : 1;
-			pos->vrec->base = xbuf->xb_base;
-			pos->vrec->size = xbuf->xb_len;
-			pos->vrec->len = xbuf->xb_len;
-			pos->vrec->off = 0;
+			XIOQ(xdrs)->ioq_uv.plength += xbuf->xb_len;
+			uv->u.uio_flags = UIO_FLAG_NONE;	/* !RECLAIM */
+			uv->u.uio_references =
+			    (xbuf->xb_flags & UIO_FLAG_GIFT) ? 0 : 1;
+			uv->v.vio_base = xbuf->xb_base;
+			uv->v.vio_wrap = xbuf->xb_len;
+			uv->v.vio_tail = xbuf->xb_len;
+			uv->v.vio_head = 0;
 		}
-		break;
+	}
 #endif
 		/* save original buffer sequence for rele */
 		if (ix == 0) {
-			pos->vrec->x_uio = *uio;
+			uv->u.uio_refer = uio;
+			(uio->uio_references)++;
 		}
 	}
 
 	return (TRUE);
 }
 
+/*
+ * Get read/insert or fill position.
+ *
+ * Update the logical and physical offsets and lengths,
+ * based upon the most recent position information.
+ * All such updates are consolidated here and xdr_ioq_uv_next,
+ * reducing computations in the get/put/inline routines.
+ */
 static u_int
 xdr_ioq_getpos(XDR *xdrs)
 {
-	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
-	struct vpos_t *pos = vrec_fpos(xioq);
-	/* == frag_len except after XDR_SETPOS */
-	return (pos->loff);
+	/* update the most recent data length, just in case */
+	xdr_tail_update(xdrs);
+
+	return (XIOQ(xdrs)->ioq_uv.plength
+		+ ((uintptr_t)xdrs->x_private
+		   - (uintptr_t)xdrs->x_v.vio_head));
 }
 
+/*
+ * Set read/insert or fill position.
+ *
+ * Update the logical and physical offsets and lengths,
+ * based upon the most recent position information.
+ * All such updates are consolidated here and xdr_ioq_uv_next,
+ * reducing computations in the get/put/inline routines.
+ */
 static bool
 xdr_ioq_setpos(XDR *xdrs, u_int pos)
 {
-	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
-	struct vpos_t *fpos = vrec_fpos(xioq);
-	struct v_rec *vrec;
-	u_int resid;
-	int ix;
+	struct poolq_entry *have;
 
-	ix = 0;
-	resid = 0;
-	TAILQ_FOREACH(vrec, &(xioq->ioq.q), ioq) {
-		if ((vrec->size + resid) >= pos) {
-			fpos->vrec = vrec;
-			fpos->bpos = ix;
-			fpos->loff = pos;
-			fpos->boff = (pos - resid);
-			/* XXX oops, redundant */
-			fpos->vrec->off = fpos->loff;
-			fpos->vrec->len = fpos->loff;
+	/* update the most recent data length, just in case */
+	xdr_tail_update(xdrs);
+
+	XIOQ(xdrs)->ioq_uv.plength =
+	XIOQ(xdrs)->ioq_uv.pcount = 0;
+
+	TAILQ_FOREACH(have, &(XIOQ(xdrs)->ioq_uv.uvqh.qh), q) {
+		struct xdr_ioq_uv *uv = IOQ_(have);
+		size_t len = ioquv_length(uv);
+		size_t off = pos - XIOQ(xdrs)->ioq_uv.plength;
+
+		if (len >= off) {
+			xdrs->x_private = uv->v.vio_head + off;
+			xdrs->x_base = &uv->v;
+			xdrs->x_v = uv->v;
 			return (true);
 		}
-		resid += vrec->len;
-		++ix;
+		XIOQ(xdrs)->ioq_uv.plength += len;
+		XIOQ(xdrs)->ioq_uv.pcount++;
 	}
 
 	return (false);
@@ -575,37 +667,93 @@ xdr_ioq_setpos(XDR *xdrs, u_int pos)
 static int32_t *
 xdr_ioq_inline(XDR *xdrs, u_int len)
 {
-	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
-	struct vpos_t *pos = vrec_fpos(xioq);
-	int32_t *buf = NULL;
+	/* bugfix:  return fill pointer, not head! */
+	int32_t *buf = (int32_t *)xdrs->x_private;
+	void *future = xdrs->x_private + len;
 
-	if ((pos->boff + len) <= pos->vrec->size) {
-		buf = (int32_t *) (void *)(pos->vrec->base + pos->vrec->off);
-		pos->vrec->off += len;
-		pos->vrec->len += len;
-		pos->boff += len;
-		pos->loff += len;
-		if (pos->loff > xioq->ioq.frag_len)
-			xioq->ioq.frag_len = pos->loff;
+	/* bugfix: do not move fill position beyond tail or wrap */
+	switch (xdrs->x_op) {
+	case XDR_ENCODE:
+		if (future <= xdrs->x_v.vio_wrap) {
+			/* bugfix:  do not move head! */
+			xdrs->x_private = future;
+			/* bugfix: do not move tail beyond pfoff or wrap! */
+			xdr_tail_update(xdrs);
+			return (buf);
+		}
+		break;
+	case XDR_DECODE:
+		/* re-consuming bytes in a stream
+		 * (after SETPOS/rewind) */
+		if (future <= xdrs->x_v.vio_tail) {
+			/* bugfix:  do not move head! */
+			xdrs->x_private = future;
+			/* bugfix:  do not move tail! */
+			return (buf);
+		}
+		break;
+	default:
+		abort();
+		break;
+	};
+
+	return (NULL);
+}
+
+void
+xdr_ioq_release(struct poolq_head *ioqh)
+{
+	struct poolq_entry *have = TAILQ_FIRST(&ioqh->qh);
+
+	/* release queued buffers */
+	while (have) {
+		struct poolq_entry *next = TAILQ_NEXT(have, q);
+
+		TAILQ_REMOVE(&ioqh->qh, have, q);
+		(ioqh->qcount)--;
+
+		xdr_ioq_uv_release(IOQ_(have));
+		have = next;
 	}
+	assert(ioqh->qcount == 0);
+}
 
-	return (buf);
+void
+xdr_ioq_destroy(struct xdr_ioq *xioq, size_t qsize)
+{
+	xdr_ioq_release(&xioq->ioq_uv.uvqh);
+
+	if (xioq->ioq_pool) {
+		xdr_ioq_uv_recycle(xioq->ioq_pool, &xioq->ioq_s);
+	} else {
+		poolq_head_destroy(&xioq->ioq_uv.uvqh);
+		mem_free(xioq, qsize);
+	}
 }
 
 static void
-xdr_ioq_destroy(XDR *xdrs)
+xdr_ioq_destroy_internal(XDR *xdrs)
 {
-	struct xdr_ioq *xioq = (struct xdr_ioq *)xdrs->x_private;
-	struct v_rec *vrec;
+	xdr_ioq_destroy(XIOQ(xdrs), sizeof(struct xdr_ioq));
+}
 
-	/* release queued buffers */
-	while (xioq->ioq.size > 0) {
-		vrec = TAILQ_FIRST(&xioq->ioq.q);
-		TAILQ_REMOVE(&xioq->ioq.q, vrec, ioq);
-		(xioq->ioq.size)--;
-		vrec_rele(xioq, vrec);
+void
+xdr_ioq_destroy_pool(struct poolq_head *ioqh)
+{
+	struct poolq_entry *have = TAILQ_FIRST(&ioqh->qh);
+
+	while (have) {
+		struct poolq_entry *next = TAILQ_NEXT(have, q);
+
+		TAILQ_REMOVE(&ioqh->qh, have, q);
+		(ioqh->qcount)--;
+
+		_IOQ(have)->ioq_pool = NULL;
+		xdr_ioq_destroy(_IOQ(have), have->qsize);
+		have = next;
 	}
-	mem_free(xioq, sizeof(struct xdr_ioq));
+	assert(ioqh->qcount == 0);
+	poolq_head_destroy(ioqh);
 }
 
 static bool
@@ -619,3 +767,17 @@ xdr_ioq_noop(void)
 {
 	return (false);
 }
+
+const struct xdr_ops xdr_ioq_ops = {
+	xdr_ioq_getlong,
+	xdr_ioq_putlong,
+	xdr_ioq_getbytes,
+	xdr_ioq_putbytes,
+	xdr_ioq_getpos,
+	xdr_ioq_setpos,
+	xdr_ioq_inline,
+	xdr_ioq_destroy_internal,
+	xdr_ioq_control,
+	xdr_ioq_getbufs,
+	xdr_ioq_putbufs
+};
