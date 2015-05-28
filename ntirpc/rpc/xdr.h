@@ -240,38 +240,39 @@ typedef bool(*xdrproc_t) (XDR *, ...);
  * u_int  len;
  * u_int  pos;
  */
-#define XDR_GETLONG(xdrs, longp)		\
-	(*(xdrs)->x_ops->x_getlong)(xdrs, longp)
-#define xdr_getlong(xdrs, longp)		\
-	(*(xdrs)->x_ops->x_getlong)(xdrs, longp)
 
-#define XDR_PUTLONG(xdrs, longp)		\
-	(*(xdrs)->x_ops->x_putlong)(xdrs, longp)
-#define xdr_putlong(xdrs, longp)		\
-	(*(xdrs)->x_ops->x_putlong)(xdrs, longp)
-
-static inline int
-xdr_getint32(XDR *xdrs, int32_t *ip)
+static inline bool
+xdr_getlong(XDR *xdrs, long *lp)
 {
-	long l;
+	void *future;
 
-	if (!xdr_getlong(xdrs, &l))
-		return (false);
-	*ip = (int32_t) l;
+	if (!(xdrs->x_flags & XDR_FLAG_VIO)
+	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+						> xdrs->x_v.vio_tail)) {
+		return (*xdrs->x_ops->x_getlong)(xdrs, lp);
+	}
+	*lp = (long)ntohl(*((uint32_t *) (xdrs->x_private)));
+	xdrs->x_private = future;
 	return (true);
 }
 
-static inline int
-xdr_putint32(XDR *xdrs, int32_t *ip)
+static inline bool
+xdr_putlong(XDR *xdrs, const long *lp)
 {
-	long l;
+	void *future;
 
-	l = (long)*ip;
-	return xdr_putlong(xdrs, &l);
+	if (!(xdrs->x_flags & XDR_FLAG_VIO)
+	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+						> xdrs->x_v.vio_wrap)) {
+		return (*xdrs->x_ops->x_putlong)(xdrs, lp);
+	}
+	*((int32_t *) (xdrs->x_private)) = (int32_t) htonl((int32_t) (*lp));
+	xdrs->x_private = future;
+	return (true);
 }
 
-#define XDR_GETINT32(xdrs, int32p) xdr_getint32(xdrs, int32p)
-#define XDR_PUTINT32(xdrs, int32p) xdr_putint32(xdrs, int32p)
+#define XDR_GETLONG(xdrs, lp) xdr_getlong(xdrs, lp)
+#define XDR_PUTLONG(xdrs, lp) xdr_putlong(xdrs, lp)
 
 #define XDR_GETBYTES(xdrs, addr, len)   \
 	(*(xdrs)->x_ops->x_getbytes)(xdrs, addr, len)
@@ -350,7 +351,7 @@ struct xdr_discrim {
  * In-line routines for fast encode/decode of primitive data types.
  * Caveat emptor: these use single memory cycles to get the
  * data from the underlying buffer, and will fail to operate
- * properly if the data is not aligned.  The standard way to use these
+ * properly where the data is not aligned.  The standard way to use these
  * is to say:
  * if ((buf = XDR_INLINE(xdrs, count)) == NULL)
  *  return (false);
@@ -380,6 +381,221 @@ struct xdr_discrim {
 #define IXDR_PUT_U_LONG(buf, v)  IXDR_PUT_LONG((buf), (v))
 #define IXDR_PUT_SHORT(buf, v)  IXDR_PUT_LONG((buf), (v))
 #define IXDR_PUT_U_SHORT(buf, v) IXDR_PUT_LONG((buf), (v))
+
+/*
+ * In-line routines for vector encode/decode of primitive data types.
+ * Intermediate speed, avoids function calls in most cases, at the expense of
+ * checking the remaining space available for each item.
+ *
+ * Caveat emptor: these use single memory cycles to get the
+ * data from the underlying buffer, and will fail to operate
+ * properly where the data is not aligned.
+ *
+ * if (!FUNCTION(xdrs, &variable)) {
+ *  print(warning);
+ *  return (false);
+ * }
+ *
+ * N.B. and frozen for all time: each data type here uses 4 bytes
+ * of external representation.
+ */
+
+static inline bool
+xdr_getuint32(XDR *xdrs, uint32_t *ip)
+{
+	void *future;
+
+	if (!(xdrs->x_flags & XDR_FLAG_VIO)
+	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+						> xdrs->x_v.vio_tail)) {
+		long l;
+
+		if (!(*xdrs->x_ops->x_getlong)(xdrs, &l))
+			return (false);
+		*ip = (uint32_t) l;
+		return (true);
+	}
+	*ip = ntohl(*((uint32_t *) (xdrs->x_private)));
+	xdrs->x_private = future;
+	return (true);
+}
+
+static inline bool
+xdr_putuint32(XDR *xdrs, uint32_t *ip)
+{
+	void *future;
+
+	if (!(xdrs->x_flags & XDR_FLAG_VIO)
+	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+						> xdrs->x_v.vio_wrap)) {
+		long l = (long)*ip;
+
+		return (*xdrs->x_ops->x_putlong)(xdrs, &l);
+	}
+	*((int32_t *) (xdrs->x_private)) = htonl(*ip);
+	xdrs->x_private = future;
+	return (true);
+}
+
+#define XDR_GETUINT32(xdrs, uint32p) xdr_getuint32(xdrs, uint32p)
+#define XDR_PUTUINT32(xdrs, uint32p) xdr_putuint32(xdrs, uint32p)
+
+static inline bool
+xdr_getint32(XDR *xdrs, int32_t *ip)
+{
+	return xdr_getuint32(xdrs, (uint32_t *)ip);
+}
+
+static inline bool
+xdr_putint32(XDR *xdrs, int32_t *ip)
+{
+	return xdr_putuint32(xdrs, (uint32_t *)ip);
+}
+
+#define XDR_GETINT32(xdrs, int32p) xdr_getint32(xdrs, int32p)
+#define XDR_PUTINT32(xdrs, int32p) xdr_putint32(xdrs, int32p)
+
+static inline bool
+xdr_getuint16(XDR *xdrs, uint16_t *ip)
+{
+	void *future;
+
+	if (!(xdrs->x_flags & XDR_FLAG_VIO)
+	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+						> xdrs->x_v.vio_tail)) {
+		long l;
+
+		if (!(*xdrs->x_ops->x_getlong)(xdrs, &l))
+			return (false);
+		*ip = (uint16_t) l;
+		return (true);
+	}
+	*ip = (uint16_t)ntohl(*((uint32_t *) (xdrs->x_private)));
+	xdrs->x_private = future;
+	return (true);
+}
+
+static inline bool
+xdr_putuint16(XDR *xdrs, uint32_t uint16v)
+{
+	void *future;
+
+	if (!(xdrs->x_flags & XDR_FLAG_VIO)
+	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+						> xdrs->x_v.vio_wrap)) {
+		long l = (long)uint16v;
+
+		return (*xdrs->x_ops->x_putlong)(xdrs, &l);
+	}
+	*((int32_t *) (xdrs->x_private)) = htonl(uint16v);
+	xdrs->x_private = future;
+	return (true);
+}
+
+#define XDR_GETUINT16(xdrs, uint16p) xdr_getuint16(xdrs, uint16p)
+#define XDR_PUTUINT16(xdrs, uint16v) xdr_putuint16(xdrs, uint16v)
+
+static inline bool
+xdr_getint16(XDR *xdrs, int16_t *ip)
+{
+	return xdr_getuint16(xdrs, (uint16_t *)ip);
+}
+
+/* extend sign before storage */
+static inline bool
+xdr_putint16(XDR *xdrs, int32_t int16v)
+{
+	return xdr_putuint16(xdrs, int16v);
+}
+
+#define XDR_GETINT16(xdrs, int16p) xdr_getint16(xdrs, int16p)
+#define XDR_PUTINT16(xdrs, int16v) xdr_putint16(xdrs, int16v)
+
+static inline bool
+xdr_getuint8(XDR *xdrs, uint8_t *ip)
+{
+	void *future;
+
+	if (!(xdrs->x_flags & XDR_FLAG_VIO)
+	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+						> xdrs->x_v.vio_tail)) {
+		long l;
+
+		if (!(*xdrs->x_ops->x_getlong)(xdrs, &l))
+			return (false);
+		*ip = (uint8_t) l;
+		return (true);
+	}
+	*ip = (uint8_t)ntohl(*((uint32_t *) (xdrs->x_private)));
+	xdrs->x_private = future;
+	return (true);
+}
+
+static inline bool
+xdr_putuint8(XDR *xdrs, uint32_t uint8v)
+{
+	void *future;
+
+	if (!(xdrs->x_flags & XDR_FLAG_VIO)
+	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+						> xdrs->x_v.vio_wrap)) {
+		long l = (long)uint8v;
+
+		return (*xdrs->x_ops->x_putlong)(xdrs, &l);
+	}
+	*((int32_t *) (xdrs->x_private)) = htonl(uint8v);
+	xdrs->x_private = future;
+	return (true);
+}
+
+#define XDR_GETUINT8(xdrs, uint8p) xdr_getuint8(xdrs, uint8p)
+#define XDR_PUTUINT8(xdrs, uint8v) xdr_putuint8(xdrs, uint8v)
+
+static inline bool
+xdr_getint8(XDR *xdrs, int8_t *ip)
+{
+	return xdr_getuint8(xdrs, (uint8_t *)ip);
+}
+
+/* extend sign before storage */
+static inline bool
+xdr_putint8(XDR *xdrs, int32_t int8v)
+{
+	return xdr_putuint8(xdrs, int8v);
+}
+
+#define XDR_GETINT8(xdrs, int8p) xdr_getint8(xdrs, int8p)
+#define XDR_PUTINT8(xdrs, int8v) xdr_putint8(xdrs, int8v)
+
+static inline bool
+xdr_getenum(XDR *xdrs, enum_t *ip)
+{
+	return xdr_getuint32(xdrs, (uint32_t *)ip);
+}
+
+static inline bool
+xdr_putenum(XDR *xdrs, enum_t enumv)
+{
+	return xdr_putuint16(xdrs, (uint32_t)enumv);
+}
+
+#define XDR_GETENUM(xdrs, enump) xdr_getenum(xdrs, enump)
+#define XDR_PUTENUM(xdrs, enumv) xdr_putenum(xdrs, enumv)
+
+static inline bool
+xdr_getbool(XDR *xdrs, bool_t *ip)
+{
+	return xdr_getuint32(xdrs, (uint32_t *)ip);
+}
+
+static inline bool
+xdr_putbool(XDR *xdrs, bool_t boolv)
+{
+	return xdr_putuint16(xdrs, (uint32_t)boolv);
+}
+
+#define XDR_GETBOOL(xdrs, boolp) xdr_getbool(xdrs, boolp)
+#define XDR_PUTBOOL(xdrs, boolv) xdr_putbool(xdrs, boolv)
 
 /*
  * These are the "generic" xdr routines.
