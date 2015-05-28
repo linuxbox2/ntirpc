@@ -416,20 +416,14 @@ inline_xdr_enum(XDR *xdrs, enum_t *ep)
 }
 
 /*
- * XDR opaque data
+ * decode opaque data
  * Allows the specification of a fixed size sequence of opaque bytes.
  * cp points to the opaque object and cnt gives the byte length.
  */
 static inline bool
-inline_xdr_opaque(XDR *xdrs, caddr_t cp, u_int cnt)
+inline_xdr_getopaque(XDR *xdrs, caddr_t cp, u_int cnt)
 {
 	u_int rndup;
-	static int crud[BYTES_PER_XDR_UNIT];
-
-	/*
-	 * for unit alignment
-	 */
-	static const char inline_xdr_zero[BYTES_PER_XDR_UNIT] = { 0, 0, 0, 0 };
 
 	/*
 	 * if no data we are done
@@ -438,31 +432,104 @@ inline_xdr_opaque(XDR *xdrs, caddr_t cp, u_int cnt)
 		return (true);
 
 	/*
+	 * XDR_INLINE is just as likely to do a function call,
+	 * so don't bother with it here.
+	 */
+	if (!XDR_GETBYTES(xdrs, cp, cnt)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR opaque",
+			__func__, __LINE__);
+		return (false);
+	}
+
+	/*
 	 * round byte count to full xdr units
 	 */
-	rndup = cnt % BYTES_PER_XDR_UNIT;
-	if (rndup > 0)
-		rndup = BYTES_PER_XDR_UNIT - rndup;
+	rndup = cnt & (BYTES_PER_XDR_UNIT - 1);
 
-	if (xdrs->x_op == XDR_DECODE) {
-		if (!XDR_GETBYTES(xdrs, cp, cnt))
+	if (rndup > 0) {
+		uint32_t crud;
+
+		if (!XDR_GETBYTES(xdrs, (caddr_t) &crud,
+				  BYTES_PER_XDR_UNIT - rndup)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR crud",
+				__func__, __LINE__);
 			return (false);
-		if (rndup == 0)
-			return (true);
-		return (XDR_GETBYTES(xdrs, (caddr_t) (void *)crud, rndup));
+		}
 	}
 
-	if (xdrs->x_op == XDR_ENCODE) {
-		if (!XDR_PUTBYTES(xdrs, cp, cnt))
-			return (false);
-		if (rndup == 0)
-			return (true);
-		return (XDR_PUTBYTES(xdrs, inline_xdr_zero, rndup));
+	return (true);
+}
+
+/*
+ * encode opaque data
+ * Allows the specification of a fixed size sequence of opaque bytes.
+ * cp points to the opaque object and cnt gives the byte length.
+ */
+static inline bool
+inline_xdr_putopaque(XDR *xdrs, caddr_t cp, u_int cnt)
+{
+	u_int rndup;
+
+	/*
+	 * if no data we are done
+	 */
+	if (cnt == 0)
+		return (true);
+
+	/*
+	 * XDR_INLINE is just as likely to do a function call,
+	 * so don't bother with it here.
+	 */
+	if (!XDR_PUTBYTES(xdrs, cp, cnt)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR opaque",
+			__func__, __LINE__);
+		return (false);
 	}
+
+	/*
+	 * round byte count to full xdr units
+	 */
+	rndup = cnt & (BYTES_PER_XDR_UNIT - 1);
+
+	if (rndup > 0) {
+		uint32_t zero = 0;
+
+		if (!XDR_PUTBYTES(xdrs, (caddr_t) &zero,
+				  BYTES_PER_XDR_UNIT - rndup)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR zero",
+				__func__, __LINE__);
+			return (false);
+		}
+	}
+
+	return (true);
+}
+
+/*
+ * XDR opaque data
+ * Allows the specification of a fixed size sequence of opaque bytes.
+ * cp points to the opaque object and cnt gives the byte length.
+ */
+static inline bool
+inline_xdr_opaque(XDR *xdrs, caddr_t cp, u_int cnt)
+{
+	if (xdrs->x_op == XDR_DECODE)
+		return (inline_xdr_getopaque(xdrs, cp, cnt));
+
+	if (xdrs->x_op == XDR_ENCODE)
+		return (inline_xdr_putopaque(xdrs, cp, cnt));
 
 	if (xdrs->x_op == XDR_FREE)
 		return (true);
 
+	__warnx(TIRPC_DEBUG_FLAG_ERROR,
+		"%s:%u ERROR xdrs->x_op (%u)",
+		__func__, __LINE__,
+		xdrs->x_op);
 	return (false);
 }
 
@@ -502,10 +569,10 @@ inline_xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep,
 				"xdr_bytes: out of memory");
 			return (false);
 		}
-		/* FALLTHROUGH */
+		return (inline_xdr_getopaque(xdrs, sp, nodesize));
 
 	case XDR_ENCODE:
-		return (inline_xdr_opaque(xdrs, sp, nodesize));
+		return (inline_xdr_putopaque(xdrs, sp, nodesize));
 
 	case XDR_FREE:
 		if (sp != NULL) {
@@ -634,10 +701,10 @@ inline_xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 			return (false);
 		}
 		sp[size] = 0;
-		/* FALLTHROUGH */
+		return (inline_xdr_getopaque(xdrs, sp, size));
 
 	case XDR_ENCODE:
-		return (inline_xdr_opaque(xdrs, sp, size));
+		return (inline_xdr_putopaque(xdrs, sp, size));
 
 	case XDR_FREE:
 		mem_free(sp, nodesize);

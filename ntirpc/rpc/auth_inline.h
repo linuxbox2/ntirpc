@@ -44,55 +44,147 @@
  */
 
 #ifndef _TIRPC_AUTH_INLINE_H
-#define _TIRPC_AUTH__INLINE_H
+#define _TIRPC_AUTH_INLINE_H
 
 #include <rpc/xdr_inline.h>
 #include <rpc/auth.h>
 
 /*
- * XDR xdr_opaque_auth
+ * encode auth opaque
+ */
+static inline bool
+inline_auth_encode_opaque(XDR *xdrs, struct opaque_auth *oa)
+{
+	if (oa->oa_length > MAX_AUTH_BYTES) {
+		/* duplicate test, usually done earlier by caller */
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR oa_length (%u) > %u",
+			__func__, __LINE__,
+			MAX_AUTH_BYTES);
+		return (false);
+	}
+
+	return (inline_xdr_putopaque(xdrs, oa->oa_base, oa->oa_length));
+}
+
+/*
+ * encode an auth message
+ */
+static inline bool
+inline_auth_encode(XDR *xdrs, struct opaque_auth *oa)
+{
+	/*
+	 * XDR_INLINE is just as likely to do a function call,
+	 * so don't bother with it here.
+	 */
+	if (!xdr_putenum(xdrs, oa->oa_flavor)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR oa_flavor",
+			__func__, __LINE__);
+		return (false);
+	}
+	if (!xdr_putuint32(xdrs, &oa->oa_length)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR oa_length",
+			__func__, __LINE__);
+		return (false);
+	}
+
+	if (oa->oa_length) {
+		/* only call and alloc for > 0 length */
+		return (inline_auth_encode_opaque(xdrs, oa));
+	}
+	return (true);	/* 0 length succeeds */
+}
+
+/*
+ * decode auth opaque
+ */
+static inline bool
+inline_auth_decode_opaque(XDR *xdrs, struct opaque_auth *oa)
+{
+	if (oa->oa_length > MAX_AUTH_BYTES) {
+		/* duplicate test, usually done earlier by caller */
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR oa_length (%u) > %u",
+			__func__, __LINE__,
+			MAX_AUTH_BYTES);
+		return (false);
+	}
+	if (oa->oa_base == NULL) {
+		oa->oa_base = (caddr_t)mem_alloc(oa->oa_length);
+		if (oa->oa_base == NULL) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR mem_alloc(oa->oa_length)",
+				__func__, __LINE__);
+			return (false);
+		}
+	}
+
+	return (inline_xdr_getopaque(xdrs, oa->oa_base, oa->oa_length));
+}
+
+/*
+ * decode an auth message
+ *
+ * param[IN]	buf	2 more inline
+ */
+static inline bool
+inline_auth_decode(XDR *xdrs, struct opaque_auth *oa, int32_t *buf)
+{
+	if (buf != NULL) {
+		oa->oa_flavor = IXDR_GET_ENUM(buf, enum_t);
+		oa->oa_length = (u_int) IXDR_GET_U_INT32(buf);
+	} else if (!xdr_getenum(xdrs, (enum_t *)&oa->oa_flavor)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR oa_flavor",
+			__func__, __LINE__);
+		return (false);
+	} else if (!xdr_getuint32(xdrs, &oa->oa_length)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR oa_length",
+			__func__, __LINE__);
+		return (false);
+	}
+
+	if (oa->oa_length) {
+		/* only call and alloc for > 0 length */
+		return inline_auth_decode_opaque(xdrs, oa);
+	}
+	return (true);	/* 0 length succeeds */
+}
+
+/*
+ * free an auth message
+ */
+static inline bool
+inline_auth_free(XDR *xdrs, struct opaque_auth *oa)
+{
+	if (oa->oa_base != NULL) {
+		mem_free(oa->oa_base, oa->oa_length);
+		oa->oa_base = NULL;
+	}
+	return (true);
+}
+
+/*
+ * XDR an auth message
  */
 static inline bool
 inline_xdr_opaque_auth(XDR *xdrs, struct opaque_auth *oa)
 {
-	if (!
-	    (inline_xdr_enum(xdrs, &oa->oa_flavor)
-	     && (inline_xdr_u_int(xdrs, &oa->oa_length))))
-		return (false);
-
 	switch (xdrs->x_op) {
-	case XDR_DECODE:
-		if (oa->oa_length) {
-			if (oa->oa_length > MAX_AUTH_BYTES)
-				return (false);
-			if (oa->oa_base == NULL) {
-				oa->oa_base =
-				    (caddr_t) mem_alloc(oa->oa_length);
-				if (oa->oa_base == NULL)
-					return (false);
-			}
-			return (inline_xdr_opaque
-				(xdrs, oa->oa_base, oa->oa_length));
-		}
-		return (true);	/* 0 length succeeds */
-		break;
 	case XDR_ENCODE:
-		if (oa->oa_length) {
-			if (oa->oa_length > MAX_AUTH_BYTES)
-				return (false);
-			return (inline_xdr_opaque
-				(xdrs, oa->oa_base, oa->oa_length));
-		}
-		return (true);	/* 0 length succeeds */
-		break;
+		return (inline_auth_encode(xdrs, oa));
+	case XDR_DECODE:
+		return (inline_auth_decode(xdrs, oa, NULL));
 	case XDR_FREE:
-		if (oa->oa_base != NULL) {
-			mem_free(oa->oa_base, oa->oa_length);
-			oa->oa_base = NULL;
-		}
-		return (true);
-		break;
+		return (inline_auth_free(xdrs, oa));
 	default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR xdrs->x_op (%u)",
+			__func__, __LINE__,
+			xdrs->x_op);
 		break;
 	}			/* x_op */
 

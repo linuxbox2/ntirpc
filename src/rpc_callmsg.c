@@ -44,151 +44,266 @@
 
 #include <sys/select.h>
 
+/* in glibc 2.14+ x86_64, memcpy no longer tries to handle overlapping areas,
+ * see Fedora Bug 691336 (NOTABUG); we dont permit overlapping segments,
+ * so memcpy may be a small win over memmove.
+ */
+
 /*
- * XDR a call message
+ * encode a call message, log error messages
+ */
+bool
+xdr_call_encode(XDR *xdrs, struct rpc_msg *cmsg)
+{
+	struct opaque_auth *oa;
+	int32_t *buf;
+
+	if (cmsg->rm_call.cb_cred.oa_length > MAX_AUTH_BYTES) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR cb_cred.oa_length (%u) > %u",
+			__func__, __LINE__,
+			MAX_AUTH_BYTES);
+		return (false);
+	}
+	if (cmsg->rm_call.cb_verf.oa_length > MAX_AUTH_BYTES) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR cb_verf.oa_length (%u) > %u",
+			__func__, __LINE__,
+			MAX_AUTH_BYTES);
+		return (false);
+	}
+	buf = XDR_INLINE(xdrs, 8 * BYTES_PER_XDR_UNIT
+			+ RNDUP(cmsg->rm_call.cb_cred.oa_length)
+			+ 2 * BYTES_PER_XDR_UNIT
+			+ RNDUP(cmsg->rm_call.cb_verf.oa_length));
+	if (buf != NULL) {
+		__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+			"%s:%u INLINE",
+			__func__, __LINE__);
+		IXDR_PUT_INT32(buf, cmsg->rm_xid);
+		IXDR_PUT_ENUM(buf, cmsg->rm_direction);
+		IXDR_PUT_INT32(buf, cmsg->rm_call.cb_rpcvers);
+		if (cmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_call.cb_rpcvers %u != %u",
+				__func__, __LINE__,
+				cmsg->rm_call.cb_rpcvers,
+				RPC_MSG_VERSION);
+			return (false);
+		}
+		IXDR_PUT_INT32(buf, cmsg->rm_call.cb_prog);
+		IXDR_PUT_INT32(buf, cmsg->rm_call.cb_vers);
+		IXDR_PUT_INT32(buf, cmsg->rm_call.cb_proc);
+		oa = &cmsg->rm_call.cb_cred;
+		IXDR_PUT_ENUM(buf, oa->oa_flavor);
+		IXDR_PUT_INT32(buf, oa->oa_length);
+		if (oa->oa_length) {
+			memcpy(buf, oa->oa_base, oa->oa_length);
+			buf += RNDUP(oa->oa_length) / sizeof (int32_t);
+		}
+		oa = &cmsg->rm_call.cb_verf;
+		IXDR_PUT_ENUM(buf, oa->oa_flavor);
+		IXDR_PUT_INT32(buf, oa->oa_length);
+		if (oa->oa_length) {
+			memcpy(buf, oa->oa_base, oa->oa_length);
+			/* no real need....
+			buf += RNDUP(oa->oa_length) / sizeof (int32_t);
+			*/
+		}
+	} else {
+		/* nTI-RPC handles multiple buffers */
+		__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+			"%s:%u non-INLINE",
+			__func__, __LINE__);
+		if (!xdr_putuint32(xdrs, &(cmsg->rm_xid))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_xid %u",
+				__func__, __LINE__,
+				cmsg->rm_xid);
+			return (false);
+		}
+		if (!xdr_putenum(xdrs, cmsg->rm_direction)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_direction %u",
+				__func__, __LINE__,
+				cmsg->rm_direction);
+			return (false);
+		}
+		if (!xdr_putuint32(xdrs, &(cmsg->rm_call.cb_rpcvers))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_call.cb_rpcvers %u",
+				__func__, __LINE__,
+				cmsg->rm_call.cb_rpcvers);
+			return (false);
+		}
+		if (cmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_call.cb_rpcvers %u != %u",
+				__func__, __LINE__,
+				cmsg->rm_call.cb_rpcvers,
+				RPC_MSG_VERSION);
+			return (false);
+		}
+		if (!xdr_putuint32(xdrs, &(cmsg->rm_call.cb_prog))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_call.cb_prog %u",
+				__func__, __LINE__,
+				cmsg->rm_call.cb_prog);
+			return (false);
+		}
+		if (!xdr_putuint32(xdrs, &(cmsg->rm_call.cb_vers))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_call.cb_vers %u",
+				__func__, __LINE__,
+				cmsg->rm_call.cb_vers);
+			return (false);
+		}
+		if (!xdr_putuint32(xdrs, &(cmsg->rm_call.cb_proc))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_call.cb_proc %u",
+				__func__, __LINE__,
+				cmsg->rm_call.cb_proc);
+			return (false);
+		}
+		if (!inline_auth_encode(xdrs, &(cmsg->rm_call.cb_cred))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR (return)",
+				__func__, __LINE__);
+			return (false);
+		}
+		if (!inline_auth_encode(xdrs, &(cmsg->rm_call.cb_verf))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR (return)",
+				__func__, __LINE__);
+			return (false);
+		}
+	}
+	return (true);
+}
+
+/*
+ * decode a call message, log error messages
+ *
+ * param[IN]	buf	3 more inline
+ */
+bool
+xdr_call_decode(XDR *xdrs, struct rpc_msg *cmsg, int32_t *buf)
+{
+	if (buf != NULL) {
+		__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+			"%s:%u INLINE",
+			__func__, __LINE__);
+		cmsg->rm_call.cb_rpcvers = IXDR_GET_U_INT32(buf);
+	} else {
+		__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+			"%s:%u non-INLINE",
+			__func__, __LINE__);
+		if (!xdr_getuint32(xdrs, &cmsg->rm_call.cb_rpcvers)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_call.cb_rpcvers",
+				__func__, __LINE__);
+			return (false);
+		}
+	}
+	if (cmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR rm_call.cb_rpcvers %u != %u",
+			__func__, __LINE__,
+			cmsg->rm_call.cb_rpcvers,
+			RPC_MSG_VERSION);
+		return (false);
+	}
+
+	if (buf != NULL) {
+		cmsg->rm_call.cb_prog = IXDR_GET_U_INT32(buf);
+		cmsg->rm_call.cb_vers = IXDR_GET_U_INT32(buf);
+	} else if (!xdr_getuint32(xdrs, &(cmsg->rm_call.cb_prog))) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR rm_call.cb_prog",
+			__func__, __LINE__);
+		return (false);
+	} else if (!xdr_getuint32(xdrs, &(cmsg->rm_call.cb_vers))) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR rm_call.cb_vers",
+			__func__, __LINE__);
+		return (false);
+	}
+
+	buf = XDR_INLINE(xdrs, 3 * BYTES_PER_XDR_UNIT);
+	if (buf != NULL) {
+		cmsg->rm_call.cb_proc = IXDR_GET_U_INT32(buf);
+		if (!inline_auth_decode(xdrs, &(cmsg->rm_call.cb_cred), buf)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR (return)",
+				__func__, __LINE__);
+			return (false);
+		}
+	} else if (!xdr_getuint32(xdrs, &(cmsg->rm_call.cb_proc))) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR rm_call.cb_proc",
+			__func__, __LINE__);
+		return (false);
+	} else if (!inline_auth_decode(xdrs, &(cmsg->rm_call.cb_cred), NULL)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR (return)",
+			__func__, __LINE__);
+		return (false);
+	}
+
+	if (!inline_auth_decode(xdrs, &(cmsg->rm_call.cb_verf), NULL)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR (return)",
+			__func__, __LINE__);
+		return (false);
+	}
+	return (true);
+}
+
+/*
+ * XDR a call message, log error messages
  */
 bool
 xdr_ncallmsg(XDR *xdrs, struct rpc_msg *cmsg)
 {
-	int32_t *buf;
-	struct opaque_auth *oa;
-
 	assert(xdrs != NULL);
 	assert(cmsg != NULL);
 
-	if (xdrs->x_op == XDR_ENCODE) {
-		if (cmsg->rm_call.cb_cred.oa_length > MAX_AUTH_BYTES)
+	switch (xdrs->x_op) {
+	case XDR_ENCODE:
+		if (cmsg->rm_direction != CALL) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR cmsg->rm_direction %u != %u",
+				__func__, __LINE__,
+				cmsg->rm_direction,
+				CALL);
 			return (false);
-		if (cmsg->rm_call.cb_verf.oa_length > MAX_AUTH_BYTES)
-			return (false);
-		buf =
-		    XDR_INLINE(xdrs,
-			       8 * BYTES_PER_XDR_UNIT +
-			       RNDUP(cmsg->rm_call.cb_cred.oa_length)
-			       + 2 * BYTES_PER_XDR_UNIT +
-			       RNDUP(cmsg->rm_call.cb_verf.oa_length));
-		if (buf != NULL) {
-			IXDR_PUT_INT32(buf, cmsg->rm_xid);
-			IXDR_PUT_ENUM(buf, cmsg->rm_direction);
-			if (cmsg->rm_direction != CALL)
+		}
+		return (xdr_call_encode(xdrs, cmsg));
+	case XDR_DECODE:
+		if (xdr_dplx_decode(xdrs, cmsg)) {
+			if (cmsg->rm_direction != CALL) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s:%u ERROR cmsg->rm_direction %u != %u",
+					__func__, __LINE__,
+					cmsg->rm_direction,
+					CALL);
 				return (false);
-			IXDR_PUT_INT32(buf, cmsg->rm_call.cb_rpcvers);
-			if (cmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION)
-				return (false);
-			IXDR_PUT_INT32(buf, cmsg->rm_call.cb_prog);
-			IXDR_PUT_INT32(buf, cmsg->rm_call.cb_vers);
-			IXDR_PUT_INT32(buf, cmsg->rm_call.cb_proc);
-			oa = &cmsg->rm_call.cb_cred;
-			IXDR_PUT_ENUM(buf, oa->oa_flavor);
-			IXDR_PUT_INT32(buf, oa->oa_length);
-			if (oa->oa_length) {
-				memmove(buf, oa->oa_base, oa->oa_length);
-				buf += RNDUP(oa->oa_length) / sizeof(int32_t);
-			}
-			oa = &cmsg->rm_call.cb_verf;
-			IXDR_PUT_ENUM(buf, oa->oa_flavor);
-			IXDR_PUT_INT32(buf, oa->oa_length);
-			if (oa->oa_length) {
-				memmove(buf, oa->oa_base, oa->oa_length);
-				/* no real need....
-				   buf += RNDUP(oa->oa_length) /
-				 * sizeof (int32_t); */
 			}
 			return (true);
 		}
+		break;
+	case XDR_FREE:
+		__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+			"%s:%u xdrs->x_op XDR_FREE",
+			__func__, __LINE__);
+		return (true);
+	default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR xdrs->x_op (%u)",
+			__func__, __LINE__,
+			xdrs->x_op);
+		break;
 	}
-	if (xdrs->x_op == XDR_DECODE) {
-		buf = XDR_INLINE(xdrs, 8 * BYTES_PER_XDR_UNIT);
-		if (buf != NULL) {
-			cmsg->rm_xid = IXDR_GET_U_INT32(buf);
-			cmsg->rm_direction = IXDR_GET_ENUM(buf, enum msg_type);
-			if (cmsg->rm_direction != CALL)
-				return (false);
-			cmsg->rm_call.cb_rpcvers = IXDR_GET_U_INT32(buf);
-			if (cmsg->rm_call.cb_rpcvers != RPC_MSG_VERSION)
-				return (false);
-			cmsg->rm_call.cb_prog = IXDR_GET_U_INT32(buf);
-			cmsg->rm_call.cb_vers = IXDR_GET_U_INT32(buf);
-			cmsg->rm_call.cb_proc = IXDR_GET_U_INT32(buf);
-			oa = &cmsg->rm_call.cb_cred;
-			oa->oa_flavor = IXDR_GET_ENUM(buf, enum_t);
-			oa->oa_length = (u_int) IXDR_GET_U_INT32(buf);
-			if (oa->oa_length) {
-				if (oa->oa_length > MAX_AUTH_BYTES)
-					return (false);
-				if (oa->oa_base == NULL) {
-					oa->oa_base = (caddr_t)
-					    mem_alloc(oa->oa_length);
-					if (oa->oa_base == NULL)
-						return (false);
-				}
-				buf = XDR_INLINE(xdrs, RNDUP(oa->oa_length));
-				if (buf == NULL) {
-					if (xdr_opaque
-					    (xdrs, oa->oa_base,
-					     oa->oa_length) == false) {
-						return (false);
-					}
-				} else {
-					memmove(oa->oa_base, buf,
-						oa->oa_length);
-					/* no real need....
-					   buf += RNDUP(oa->oa_length) /
-					   sizeof (int32_t);
-					 */
-				}
-			}
-			oa = &cmsg->rm_call.cb_verf;
-			buf = XDR_INLINE(xdrs, 2 * BYTES_PER_XDR_UNIT);
-			if (buf == NULL) {
-				if (inline_xdr_enum(xdrs, &oa->oa_flavor) ==
-				    false
-				    || inline_xdr_u_int(xdrs,
-							&oa->oa_length) ==
-				    false) {
-					return (false);
-				}
-			} else {
-				oa->oa_flavor = IXDR_GET_ENUM(buf, enum_t);
-				oa->oa_length = (u_int) IXDR_GET_U_INT32(buf);
-			}
-			if (oa->oa_length) {
-				if (oa->oa_length > MAX_AUTH_BYTES)
-					return (false);
-				if (oa->oa_base == NULL) {
-					oa->oa_base = (caddr_t)
-					    mem_alloc(oa->oa_length);
-					if (oa->oa_base == NULL)
-						return (false);
-				}
-				buf = XDR_INLINE(xdrs, RNDUP(oa->oa_length));
-				if (buf == NULL) {
-					if (inline_xdr_opaque
-					    (xdrs, oa->oa_base,
-					     oa->oa_length) == false) {
-						return (false);
-					}
-				} else {
-					memmove(oa->oa_base, buf,
-						oa->oa_length);
-					/* no real need...
-					   buf += RNDUP(oa->oa_length) /
-					   sizeof (int32_t);
-					 */
-				}
-			}
-			return (true);
-		}
-	}
-	if (inline_xdr_u_int32_t(xdrs, &(cmsg->rm_xid))
-	    && inline_xdr_enum(xdrs, (enum_t *) &(cmsg->rm_direction))
-	    && (cmsg->rm_direction == CALL)
-	    && inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_rpcvers))
-	    && (cmsg->rm_call.cb_rpcvers == RPC_MSG_VERSION)
-	    && inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_prog))
-	    && inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_vers))
-	    && inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_proc))
-	    && inline_xdr_opaque_auth(xdrs, &(cmsg->rm_call.cb_cred)))
-		return (inline_xdr_opaque_auth(xdrs, &(cmsg->rm_call.cb_verf)));
+
 	return (false);
-}
+}					/* xdr_ncallmsg */

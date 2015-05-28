@@ -29,6 +29,9 @@
 /*
  * rpc_dplx_msg.c
  *
+ * Based upon/copied from:
+ * rpc_callmsg.c
+ *
  * Copyright (C) 1984, Sun Microsystems, Inc.
  *
  */
@@ -51,626 +54,401 @@ static const struct xdr_discrim reply_dscrm[3] = {
 	{__dontcare__, NULL_xdrproc_t}
 };
 
+/* in glibc 2.14+ x86_64, memcpy no longer tries to handle overlapping areas,
+ * see Fedora Bug 691336 (NOTABUG); we dont permit overlapping segments,
+ * so memcpy may be a small win over memmove.
+ */
+
 /*
- * XDR a duplex call message
+ * encode a reply message, log error messages
+ */
+bool
+xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
+{
+	struct opaque_auth *oa;
+	int32_t *buf;
+
+	if (dmsg->rm_call.cb_cred.oa_length > MAX_AUTH_BYTES) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR cb_cred.oa_length (%u) > %u",
+			__func__, __LINE__,
+			MAX_AUTH_BYTES);
+		return (false);
+	}
+	if (dmsg->rm_call.cb_verf.oa_length > MAX_AUTH_BYTES) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR cb_verf.oa_length (%u) > %u",
+			__func__, __LINE__,
+			MAX_AUTH_BYTES);
+		return (false);
+	}
+
+	/* This is untested code. */
+
+	switch (dmsg->rm_reply.rp_stat) {
+	case MSG_ACCEPTED:
+	{
+		struct accepted_reply *ar = (struct accepted_reply *)
+						&(dmsg->rm_reply.ru);
+
+		oa = &ar->ar_verf;
+		buf = XDR_INLINE(xdrs,
+				 6 * BYTES_PER_XDR_UNIT +
+				 RNDUP(oa->oa_length));
+
+		if (buf != NULL) {
+			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+				"%s:%u INLINE",
+				__func__, __LINE__);
+			IXDR_PUT_INT32(buf, dmsg->rm_xid);
+			IXDR_PUT_ENUM(buf, dmsg->rm_direction);
+			IXDR_PUT_ENUM(buf, dmsg->rm_reply.rp_stat);
+			IXDR_PUT_ENUM(buf, oa->oa_flavor);
+			IXDR_PUT_INT32(buf, oa->oa_length);
+			if (oa->oa_length) {
+				memcpy(buf, oa->oa_base, oa->oa_length);
+				buf += RNDUP(oa->oa_length) / sizeof(int32_t);
+			}
+
+			IXDR_PUT_ENUM(buf, ar->ar_stat);
+			switch (ar->ar_stat) {
+			case SUCCESS:
+				return ((*(ar->ar_results.proc))(xdrs,
+						ar->ar_results.where));
+
+			case PROG_MISMATCH:
+				buf = XDR_INLINE(xdrs,
+					2 * BYTES_PER_XDR_UNIT);
+				if (buf != NULL) {
+					IXDR_PUT_ENUM(buf, ar->ar_vers.low);
+					IXDR_PUT_ENUM(buf, ar->ar_vers.high);
+				} else if (!xdr_putuint32(xdrs,
+						&(ar->ar_vers.low))) {
+					__warnx(TIRPC_DEBUG_FLAG_ERROR,
+						"%s:%u ERROR ar_vers.low %u",
+						__func__, __LINE__,
+						ar->ar_vers.low);
+					return (false);
+				} else if (!xdr_putuint32(xdrs,
+						&(ar->ar_vers.high))) {
+					__warnx(TIRPC_DEBUG_FLAG_ERROR,
+						"%s:%u ERROR ar_vers.high %u",
+						__func__, __LINE__,
+						ar->ar_vers.high);
+					return (false);
+				}
+				/* fallthru */
+			case GARBAGE_ARGS:
+			case SYSTEM_ERR:
+			case PROC_UNAVAIL:
+			case PROG_UNAVAIL:
+				break;
+			};
+			return (true);
+		} else {
+			return (inline_xdr_union(xdrs,
+				(enum_t *) &(dmsg->rm_reply.rp_stat),
+				(caddr_t)(void *)&(dmsg->rm_reply.ru),
+				reply_dscrm, NULL_xdrproc_t));
+		}
+		/* never arrives here */
+		break;
+	}
+	case MSG_DENIED:
+	{
+		struct rejected_reply *rr = (struct rejected_reply *)
+						&(dmsg->rm_reply.ru);
+		switch (rr->rj_stat) {
+		case RPC_MISMATCH:
+			buf = XDR_INLINE(xdrs, 3 * BYTES_PER_XDR_UNIT);
+
+			if (buf != NULL) {
+				IXDR_PUT_ENUM(buf, rr->rj_stat);
+				IXDR_PUT_U_INT32(buf, rr->rj_vers.low);
+				IXDR_PUT_U_INT32(buf, rr->rj_vers.high);
+			} else if (!xdr_putenum(xdrs, rr->rj_stat)) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s:%u ERROR rj_stat %u",
+					__func__, __LINE__,
+					rr->rj_stat);
+				return (false);
+			} else if (!xdr_putuint32(xdrs,
+						&(rr->rj_vers.low))) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s:%u ERROR rj_vers.low %u",
+					__func__, __LINE__,
+					rr->rj_vers.low);
+				return (false);
+			} else if (!xdr_putuint32(xdrs,
+						&(rr->rj_vers.high))) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s:%u ERROR rj_vers.high %u",
+					__func__, __LINE__,
+					rr->rj_vers.high);
+				return (false);
+			}
+			return (true); /* bugfix */
+		case AUTH_ERROR:
+			buf = XDR_INLINE(xdrs, 2 * BYTES_PER_XDR_UNIT);
+
+			if (buf != NULL) {
+				IXDR_PUT_ENUM(buf, rr->rj_stat);
+				IXDR_PUT_ENUM(buf, rr->rj_why);
+			} else if (!xdr_putenum(xdrs, rr->rj_stat)) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s:%u ERROR rj_stat %u",
+					__func__, __LINE__,
+					rr->rj_stat);
+				return (false);
+			} else if (!xdr_putenum(xdrs, rr->rj_why)) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s:%u ERROR rj_why %u",
+					__func__, __LINE__,
+					rr->rj_why);
+				return (false);
+			}
+			return (true); /* bugfix */
+		default:
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rr->rj_stat (%u)",
+				__func__, __LINE__,
+				rr->rj_stat);
+			break;
+		};
+		break;
+	}
+	default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR dmsg->rm_reply.rp_stat (%u)",
+			__func__, __LINE__,
+			dmsg->rm_reply.rp_stat);
+		break;
+	};
+
+	return (false);
+}			/* XDR_ENCODE */
+
+/*
+ * decode a reply message
+ *
+ * param[IN]	buf	3 more inline
+ */
+bool
+xdr_reply_decode(XDR *xdrs, struct rpc_msg *dmsg, int32_t *buf)
+{
+	if (buf != NULL) {
+		__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+			"%s:%u INLINE",
+			__func__, __LINE__);
+		dmsg->rm_reply.rp_stat = IXDR_GET_ENUM(buf, enum_t);
+	} else {
+		__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+			"%s:%u non-INLINE",
+			__func__, __LINE__);
+		if (!xdr_getenum(xdrs, (enum_t *)&(dmsg->rm_reply.rp_stat))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_reply.rp_stat",
+				__func__, __LINE__);
+			return (false);
+		}
+	}
+
+	switch (dmsg->rm_reply.rp_stat) {
+	case MSG_ACCEPTED:
+	{
+		struct accepted_reply *ar = (struct accepted_reply *)
+						&(dmsg->rm_reply.ru);
+
+		if (!inline_auth_decode(xdrs, &ar->ar_verf, buf)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR (return)",
+				__func__, __LINE__);
+			return (false);
+		}
+
+		if (!xdr_getenum(xdrs, (enum_t *)&(ar->ar_stat))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR ar_stat",
+				__func__, __LINE__);
+			return (false);
+		}
+
+		switch (ar->ar_stat) {
+		case SUCCESS:
+			return ((*(ar->ar_results.proc))(xdrs,
+						&(ar->ar_results.where)));
+
+		case PROG_MISMATCH:
+			if (!xdr_getuint32(xdrs, &(ar->ar_vers.low))) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s:%u ERROR ar_vers.low",
+					__func__, __LINE__);
+				return (false);
+			}
+			if (!xdr_getuint32(xdrs, &(ar->ar_vers.high))) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s:%u ERROR ar_vers.high",
+					__func__, __LINE__);
+				return (false);
+			}
+
+		case GARBAGE_ARGS:
+		case SYSTEM_ERR:
+		case PROC_UNAVAIL:
+		case PROG_UNAVAIL:
+			/* true */
+			break;
+		default:
+			break;
+		};	/* ar_stat */
+		return (true);
+	}	/* MSG_ACCEPTED */
+	case MSG_DENIED:
+	{
+		/* XXX branch not verified */
+		struct rejected_reply *rr = (struct rejected_reply *)
+						&(dmsg->rm_reply.ru);
+
+		__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+			"%s:%u MSG_DENIED not verified",
+			__func__, __LINE__);
+
+		if (buf != NULL) {
+			rr->rj_stat = IXDR_GET_ENUM(buf, enum_t);
+		} else if (!xdr_getenum(xdrs, (enum_t *)&(rr->rj_stat))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rj_stat",
+				__func__, __LINE__);
+			return (false);
+		}
+
+		switch (rr->rj_stat) {
+		case RPC_MISMATCH:
+			if (buf != NULL) {
+				rr->rj_vers.low = IXDR_GET_U_INT32(buf);
+			} else if (!xdr_getuint32(xdrs, &(rr->rj_vers.low))) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s:%u ERROR rj_vers.low",
+					__func__, __LINE__);
+				return (false);
+			}
+			if (!xdr_getuint32(xdrs, &(rr->rj_vers.high))) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s:%u ERROR rj_vers.high",
+					__func__, __LINE__);
+				return (false);
+			}
+			break;
+
+		case AUTH_ERROR:
+			if (buf != NULL) {
+				rr->rj_why = IXDR_GET_ENUM(buf, enum_t);
+			} else if (!xdr_getenum(xdrs,
+					(enum_t *)&(rr->rj_why))) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s:%u ERROR rj_why",
+					__func__, __LINE__);
+				return (false);
+			}
+			break;
+		};
+		return (true);
+	}	/* MSG_DENIED */
+	default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR dmsg->rm_reply.rp_stat %u",
+			__func__, __LINE__,
+			dmsg->rm_reply.rp_stat);
+		break;
+	};	/* rm_reply.rp_stat */
+
+	return (false);
+}
+
+/*
+ * decode a duplex message, log error messages
+ */
+bool
+xdr_dplx_decode(XDR *xdrs, struct rpc_msg *dmsg)
+{
+	int32_t *buf;
+
+	/*
+	 * NOTE: 5 here, 3 more in each _decode
+	 */
+	buf = XDR_INLINE(xdrs, 5 * BYTES_PER_XDR_UNIT);
+	if (buf != NULL) {
+		dmsg->rm_xid = IXDR_GET_U_INT32(buf);
+		dmsg->rm_direction = IXDR_GET_ENUM(buf, enum msg_type);
+	} else {
+		if (!xdr_getuint32(xdrs, &(dmsg->rm_xid))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_xid",
+				__func__, __LINE__);
+			return (false);
+		}
+		if (!xdr_getenum(xdrs, (enum_t *)&(dmsg->rm_direction))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_direction",
+				__func__, __LINE__);
+			return (false);
+		}
+	}
+
+	switch (dmsg->rm_direction) {
+	case CALL:
+		return (xdr_call_decode(xdrs, dmsg, buf));
+	case REPLY:
+		return (xdr_reply_decode(xdrs, dmsg, buf));
+	default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR dmsg->rm_direction (%u)",
+			__func__, __LINE__,
+			dmsg->rm_direction);
+		break;
+	};
+
+	return (false);
+}
+
+/*
+ * XDR a duplex message
  */
 bool
 xdr_dplx_msg(XDR *xdrs, struct rpc_msg *dmsg)
 {
-	int32_t *buf;
-	struct opaque_auth *oa;
-
 	assert(xdrs != NULL);
 	assert(dmsg != NULL);
 
-	if (xdrs->x_op == XDR_ENCODE) {
-		if (dmsg->rm_call.cb_cred.oa_length > MAX_AUTH_BYTES)
-			return (false);
-		if (dmsg->rm_call.cb_verf.oa_length > MAX_AUTH_BYTES)
-			return (false);
-
+	switch (xdrs->x_op) {
+	case XDR_ENCODE:
 		switch (dmsg->rm_direction) {
 		case CALL:
-			buf = XDR_INLINE(xdrs,
-					 8 * BYTES_PER_XDR_UNIT +
-					 RNDUP(dmsg->rm_call.cb_cred.oa_length)
-					 + 2 * BYTES_PER_XDR_UNIT +
-					 RNDUP(dmsg->rm_call.cb_verf.oa_length));
-			if (buf != NULL) {
-				__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
-					"%s 1: XDR_ENCODE INLINE CALL",
-					__func__);
-				IXDR_PUT_INT32(buf, dmsg->rm_xid);
-				IXDR_PUT_ENUM(buf, dmsg->rm_direction);
-				IXDR_PUT_INT32(buf, dmsg->rm_call.cb_rpcvers);
-				if (dmsg->rm_call.cb_rpcvers !=
-				    RPC_MSG_VERSION) {
-					return (false);
-				}
-				IXDR_PUT_INT32(buf, dmsg->rm_call.cb_prog);
-				IXDR_PUT_INT32(buf, dmsg->rm_call.cb_vers);
-				IXDR_PUT_INT32(buf, dmsg->rm_call.cb_proc);
-				oa = &dmsg->rm_call.cb_cred;
-				IXDR_PUT_ENUM(buf, oa->oa_flavor);
-				IXDR_PUT_INT32(buf, oa->oa_length);
-				if (oa->oa_length) {
-					memmove(buf, oa->oa_base,
-						oa->oa_length);
-					buf +=
-					    RNDUP(oa->oa_length) /
-					    sizeof(int32_t);
-				}
-				oa = &dmsg->rm_call.cb_verf;
-				IXDR_PUT_ENUM(buf, oa->oa_flavor);
-				IXDR_PUT_INT32(buf, oa->oa_length);
-				if (oa->oa_length) {
-					memmove(buf, oa->oa_base,
-						oa->oa_length);
-					/* no real need.... XXX next line
-					 * uncommented (matt) */
-					buf +=
-						RNDUP(oa->oa_length) /
-						sizeof(int32_t);
-				}
-				return (true);
-			} else {
-				__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
-					"%s 3: non-INLINE inline XDR_ENCODE CALL",
-					__func__);
-				if (inline_xdr_u_int32_t(xdrs, &(dmsg->rm_xid))
-				    && inline_xdr_enum(
-					    xdrs, (enum_t *)
-					    &(dmsg->rm_direction))) {
-
-					if (inline_xdr_u_int32_t
-					    (xdrs, &(dmsg->rm_call.cb_rpcvers))
-					    && (dmsg->rm_call.cb_rpcvers ==
-						RPC_MSG_VERSION)
-					    && inline_xdr_u_int32_t(xdrs,
-								    &(dmsg->
-								      rm_call.
-								      cb_prog))
-					    && inline_xdr_u_int32_t(xdrs,
-								    &(dmsg->
-								      rm_call.
-								      cb_vers))
-					    && inline_xdr_u_int32_t(xdrs,
-								    &(dmsg->
-								      rm_call.
-								      cb_proc))
-					    && inline_xdr_opaque_auth(
-						    xdrs,
-						    &(dmsg->rm_call.cb_cred)))
-						return (inline_xdr_opaque_auth
-							(xdrs,
-							 &(dmsg->rm_call.
-							   cb_verf)));
-				}
-			}
-			break;
+			return (xdr_call_encode(xdrs, dmsg));
 		case REPLY:
-			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
-				"%s 2: INLINE. XDR_ENCODE REPLY",
-				__func__);
-			/* This is untested code. */
-
-			switch (dmsg->rm_reply.rp_stat) {
-			case MSG_ACCEPTED:
-			{
-
-				struct accepted_reply *ar =
-					(struct accepted_reply *)
-					&(dmsg->rm_reply.ru);
-
-				oa = &ar->ar_verf;
-				buf = XDR_INLINE(xdrs,
-						 6 * BYTES_PER_XDR_UNIT +
-						 RNDUP(oa->oa_length));
-
-				if (buf) {
-					IXDR_PUT_INT32(buf, dmsg->rm_xid);
-					IXDR_PUT_ENUM(buf, dmsg->rm_direction);
-					IXDR_PUT_ENUM(buf,
-						      dmsg->rm_reply.rp_stat);
-					IXDR_PUT_ENUM(buf, oa->oa_flavor);
-					IXDR_PUT_INT32(buf, oa->oa_length);
-					if (oa->oa_length) {
-						memmove(buf, oa->oa_base,
-							oa->oa_length);
-						buf += RNDUP(oa->oa_length) /
-							sizeof(int32_t);
-					}
-
-					IXDR_PUT_ENUM(buf, ar->ar_stat);
-					switch (ar->ar_stat) {
-					case SUCCESS:
-						return ((*(ar->ar_results.proc))(
-								xdrs,
-								ar->ar_results
-								.where));
-
-					case PROG_MISMATCH:
-						buf = XDR_INLINE(
-							xdrs,
-							2 * BYTES_PER_XDR_UNIT);
-						if (buf) {
-							IXDR_PUT_ENUM(
-								buf,
-								ar->ar_vers.low);
-							IXDR_PUT_ENUM(
-								buf,
-								ar->ar_vers.high);
-						} else {
-							if (inline_xdr_u_int32_t(
-								    xdrs,
-								    &(ar->ar_vers.low)))
-								return (inline_xdr_u_int32_t(
-										xdrs, &(ar->ar_vers.high)));
-							else
-								return (false);
-						}
-					case GARBAGE_ARGS:
-					case SYSTEM_ERR:
-					case PROC_UNAVAIL:
-					case PROG_UNAVAIL:
-						break;
-					}
-					return (true);
-					break;
-				} else {
-					return (inline_xdr_union
-						(xdrs,
-						 (enum_t *) &(dmsg->rm_reply.
-							      rp_stat),
-						 (caddr_t) (void *)
-						 &(dmsg->rm_reply.ru),
-						 reply_dscrm, NULL_xdrproc_t));
-				}
-
-			}
-			case MSG_DENIED:
-			{
-				struct rejected_reply *rr =
-					(struct rejected_reply *)
-					&(dmsg->rm_reply.ru);
-				switch (rr->rj_stat) {
-				case RPC_MISMATCH:
-					buf = XDR_INLINE(
-						xdrs, 3 * BYTES_PER_XDR_UNIT);
-
-					if (buf) {
-						IXDR_PUT_ENUM(buf,
-							      rr->rj_stat);
-						IXDR_PUT_U_INT32(
-							buf,
-							rr->rj_vers.low);
-						IXDR_PUT_U_INT32(
-							buf,
-							rr->rj_vers.high);
-					} else {
-						if (!inline_xdr_enum(
-							    xdrs,
-							    (enum_t *) &(rr->rj_stat)))
-							return (false);
-						if (!inline_xdr_u_int32_t(
-							    xdrs,
-							    &(rr->rj_vers.low)))
-							return (false);
-						return (inline_xdr_u_int32_t(
-								xdrs,
-								&(rr->rj_vers.high)));
-					}
-					break;
-				case AUTH_ERROR:
-					buf = XDR_INLINE(
-						xdrs, 2 * BYTES_PER_XDR_UNIT);
-
-					if (buf) {
-						IXDR_PUT_ENUM(buf,
-							      rr->rj_stat);
-						IXDR_PUT_ENUM(buf,
-							      rr->rj_why);
-					} else {
-						if (!inline_xdr_enum(xdrs, (enum_t *) &(rr->rj_stat)))
-							return (false);
-						return (inline_xdr_enum(xdrs, (enum_t *) &(rr->rj_why)));
-					}
-				}
-				break;
-			}
-
-			default:
-				return (false);
-				break;
-			}
+			return (xdr_reply_encode(xdrs, dmsg));
 		default:
-			/* unlikely */
-			return (false);
-		}
-	}			/* XDR_ENCODE */
-	if (xdrs->x_op == XDR_DECODE) {
-		buf = XDR_INLINE(xdrs, 5 * BYTES_PER_XDR_UNIT);
-		if (buf != NULL) {
-			dmsg->rm_xid = IXDR_GET_U_INT32(buf); /* 4 */
-			dmsg->rm_direction = IXDR_GET_ENUM(buf, enum
-							   msg_type); /* 3 */
-			switch (dmsg->rm_direction) {
-			case CALL:
-				__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
-					"%s 5: XDR_DECODE INLINE CALL",
-					__func__);
-				dmsg->rm_call.cb_rpcvers =
-					IXDR_GET_U_INT32(buf); /* 2 */
-				if (dmsg->rm_call.cb_rpcvers !=
-				    RPC_MSG_VERSION) {
-					return (false);
-				}
-				dmsg->rm_call.cb_prog =
-					IXDR_GET_U_INT32(buf); /* 1 */
-				dmsg->rm_call.cb_vers =
-					IXDR_GET_U_INT32(buf); /* 0 */
-				buf = XDR_INLINE(xdrs, 3 * BYTES_PER_XDR_UNIT);
-				oa = &dmsg->rm_call.cb_cred;
-				if (buf) {
-					dmsg->rm_call.cb_proc /* 2 */
-						= IXDR_GET_U_INT32(buf);
-					oa->oa_flavor /* 1 */
-						= IXDR_GET_ENUM(buf, enum_t);
-					oa->oa_length /* 0 */
-						= (u_int) IXDR_GET_U_INT32(buf);
-				} else {
-					if (!(inline_xdr_u_int32_t(
-						      xdrs,
-						      &(dmsg->rm_call
-							.cb_proc))
-					      && inline_xdr_enum(
-						      xdrs,
-						      (enum_t *)&oa->oa_flavor)
-					      && inline_xdr_u_int(
-						      xdrs,
-						      &oa->oa_length))) {
-						return (false);
-					}
-				}
-				if (oa->oa_length) {
-					if (oa->oa_length > MAX_AUTH_BYTES)
-						return (false);
-					if (oa->oa_base == NULL) {
-						oa->oa_base = (caddr_t)
-						    mem_alloc(oa->oa_length);
-						if (oa->oa_base == NULL)
-							return (false);
-					}
-					buf =
-					    XDR_INLINE(xdrs,
-						       RNDUP(oa->oa_length));
-					if (buf == NULL) {
-						if (inline_xdr_opaque
-						    (xdrs, oa->oa_base,
-						     oa->oa_length) == false) {
-							return (false);
-						}
-					} else {
-						memmove(oa->oa_base, buf,
-							oa->oa_length);
-						/* no real need...
-						 * XXX uncommented (matt) */
-						buf +=
-						    RNDUP(oa->oa_length) /
-						    sizeof(int32_t);
-					}
-				}
-				oa = &dmsg->rm_call.cb_verf;
-				buf = XDR_INLINE(xdrs, 2 * BYTES_PER_XDR_UNIT);
-				if (buf == NULL) {
-					if (inline_xdr_enum
-					    (xdrs, &oa->oa_flavor) == false
-					    || inline_xdr_u_int(xdrs,
-								&oa->oa_length)
-					    == false) {
-						return (false);
-					}
-				} else {
-					oa->oa_flavor =
-					    IXDR_GET_ENUM(buf, enum_t);
-					oa->oa_length =
-					    (u_int) IXDR_GET_U_INT32(buf);
-				}
-				if (oa->oa_length) {
-					if (oa->oa_length > MAX_AUTH_BYTES)
-						return (false);
-					if (oa->oa_base == NULL) {
-						oa->oa_base = (caddr_t)
-						    mem_alloc(oa->oa_length);
-						if (oa->oa_base == NULL)
-							return (false);
-					}
-					buf =
-					    XDR_INLINE(xdrs,
-						       RNDUP(oa->oa_length));
-					if (buf == NULL) {
-						if (inline_xdr_opaque
-						    (xdrs, oa->oa_base,
-						     oa->oa_length) == false) {
-							return (false);
-						}
-					} else {
-						memmove(oa->oa_base, buf,
-							oa->oa_length);
-						/* no real need... */
-						buf +=
-						    RNDUP(oa->oa_length) /
-						    sizeof(int32_t);
-					}
-				}
-				return (true);
-				break;
-			case REPLY:
-				__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
-					"%s 6: INLINE XDR_DECODE REPLY ",
-					__func__);
-				dmsg->rm_reply.rp_stat =
-					IXDR_GET_ENUM(buf, enum_t);
-				switch (dmsg->rm_reply.rp_stat) {
-				case MSG_ACCEPTED:
-				{
-					struct accepted_reply *ar =
-						(struct accepted_reply *)
-						&(dmsg->rm_reply.ru);
-					oa = &ar->ar_verf;
-					oa->oa_flavor = IXDR_GET_ENUM(buf,
-								      enum_t);
-					oa->oa_length = IXDR_GET_U_INT32(buf);
-					if (oa->oa_length) {
-						if (oa->oa_length >
-						    MAX_AUTH_BYTES)
-							return (false);
-						if (oa->oa_base == NULL) {
-							oa->oa_base = mem_alloc(oa->oa_length);
-							if (oa->oa_base
-							    == NULL)
-								return (false);
-						}
-						buf = XDR_INLINE(
-							xdrs,
-							RNDUP(oa->oa_length));
-						if (buf == NULL) {
-							if (!inline_xdr_opaque(
-								    xdrs,
-								    oa->oa_base,
-								    oa->oa_length)) {
-								return (false);
-							}
-						} else {
-							memmove(oa->oa_base,
-								buf,
-								oa->oa_length);
-							/* no real need...
-							 * XXX uncommented (matt) */
-							buf += RNDUP(oa->oa_length) /
-								sizeof(int32_t);
-						}
-					}
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR dmsg->rm_direction (%u)",
+				__func__, __LINE__,
+				dmsg->rm_direction);
+			break;
+		};
+		break;
+	case XDR_DECODE:
+		return (xdr_dplx_decode(xdrs, dmsg));
+	case XDR_FREE:
+		__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+			"%s:%u xdrs->x_op XDR_FREE",
+			__func__, __LINE__);
+		return (true);
+	default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR xdrs->x_op (%u)",
+			__func__, __LINE__,
+			xdrs->x_op);
+		break;
+	};
 
-					buf = XDR_INLINE(xdrs, 1
-							 * BYTES_PER_XDR_UNIT);
-
-					ar->ar_stat = IXDR_GET_ENUM(buf,
-								    enum_t);
-					switch (ar->ar_stat) {
-					case SUCCESS:
-						return ((*(ar->ar_results.proc))(
-								xdrs,
-								&(ar->ar_results.where)));
-
-					case PROG_MISMATCH:
-						buf =XDR_INLINE(
-							xdrs, 2 *
-							BYTES_PER_XDR_UNIT);
-
-						ar->ar_vers.low
-							= IXDR_GET_U_INT32(buf);
-						ar->ar_vers.high
-							= IXDR_GET_U_INT32(buf);
-
-					case GARBAGE_ARGS:
-					case SYSTEM_ERR:
-					case PROC_UNAVAIL:
-					case PROG_UNAVAIL:
-						/* true */
-						break;
-					default:
-						break;
-					}	/* ar_stat */
-					return (true);
-				}	/* MSG_ACCEPTED */
-				break;
-				case MSG_DENIED:
-				{
-					/* XXX branch not verified */
-					__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
-						"non-inline MSG_DENIED not verified");
-					struct rejected_reply *rr =
-						(struct rejected_reply *)
-						&(dmsg->rm_reply.
-						  ru);
-					rr->rj_stat =
-						IXDR_GET_ENUM(buf, enum_t);
-					switch (rr->rj_stat) {
-					case RPC_MISMATCH:
-						rr->rj_vers.low
-							= IXDR_GET_U_INT32(buf);
-						rr->rj_vers.high
-							= IXDR_GET_U_INT32(buf);
-						break;
-
-					case AUTH_ERROR:
-						rr->rj_why =
-							IXDR_GET_ENUM(buf,
-								      enum_t);
-						break;
-					}
-					return (true);
-				}
-				break;
-				default:
-					return (false);
-					break;
-				}	/* rm_reply.rp_stat */
-
-				break;
-			default:
-				/* unlikely */
-				__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
-					"%s: dmsg->rm_xid %u", __func__,
-					dmsg->rm_xid);
-				return (false);
-			}
-		} else {
-			/* ! inline */
-			if (inline_xdr_u_int32_t(xdrs, &(dmsg->rm_xid))
-			    && inline_xdr_enum(xdrs,
-					       (enum_t *) &(dmsg->
-							     rm_direction))) {
-				switch (dmsg->rm_direction) {
-				case CALL:
-					__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
-						"%s 7: non-inline CALL",
-						__func__);
-					if (inline_xdr_u_int32_t
-					    (xdrs, &(dmsg->rm_call.cb_rpcvers))
-					    && (dmsg->rm_call.cb_rpcvers ==
-						RPC_MSG_VERSION)
-					    && inline_xdr_u_int32_t(xdrs,
-								    &(dmsg->
-								      rm_call.
-								      cb_prog))
-					    && inline_xdr_u_int32_t(xdrs,
-								    &(dmsg->
-								      rm_call.
-								      cb_vers))
-					    && inline_xdr_u_int32_t(xdrs,
-								    &(dmsg->
-								      rm_call.
-								      cb_proc))
-					    && inline_xdr_opaque_auth(
-						    xdrs,
-						    &(dmsg->rm_call.cb_cred)))
-						return (inline_xdr_opaque_auth
-							(xdrs,
-							 &(dmsg->rm_call.
-							   cb_verf)));
-					break;
-				case REPLY:
-					__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
-						"%s 8: non-INLINE REPLY",
-						__func__);
-					if (!inline_xdr_enum
-					    (xdrs,
-					     (enum_t *) &(dmsg->rm_reply.
-							  rp_stat)))
-						return (false);
-					switch (dmsg->rm_reply.rp_stat) {
-					case MSG_ACCEPTED:
-						{
-							struct accepted_reply
-							*ar =
-							    (struct
-							     accepted_reply *)
-							    &(dmsg->rm_reply.
-							      ru);
-							if (!inline_xdr_opaque_auth(xdrs, &(ar->ar_verf)))
-								return (false);
-							if (!inline_xdr_enum
-							    (xdrs,
-							     (enum_t *) & (ar->
-									   ar_stat)))
-								return (false);
-							switch (ar->ar_stat) {
-							case SUCCESS:
-								return ((*
-									 (ar->
-									  ar_results.
-									  proc))
-									(xdrs,
-									 &(ar->
-									   ar_results.
-									   where)));
-
-							case PROG_MISMATCH:
-								if (!inline_xdr_u_int32_t(xdrs, &(ar->ar_vers.low)))
-									return
-									    (false);
-								return
-								    (inline_xdr_u_int32_t
-								     (xdrs,
-								      &(ar->
-									ar_vers.
-									high)));
-
-							case GARBAGE_ARGS:
-							case SYSTEM_ERR:
-							case PROC_UNAVAIL:
-							case PROG_UNAVAIL:
-								/* true */
-								break;
-							default:
-								break;
-							}	/* ar_stat */
-							return (true);
-						}	/* MSG_ACCEPTED */
-						break;
-					case MSG_DENIED:
-						{
-							/* XXX branch not verified */
-							__warnx
-							    (TIRPC_DEBUG_FLAG_RPC_MSG,
-							     "non-inline MSG_DENIED not verified");
-							struct rejected_reply
-							*rr =
-							    (struct
-							     rejected_reply *)
-							    &(dmsg->rm_reply.
-							      ru);
-							if (!inline_xdr_enum
-							    (xdrs,
-							     (enum_t *) & (rr->
-									   rj_stat)))
-								return (false);
-							switch (rr->rj_stat) {
-
-							case RPC_MISMATCH:
-								if (!inline_xdr_u_int32_t(xdrs, &(rr->rj_vers.low)))
-									return
-									    (false);
-								return
-								    (inline_xdr_u_int32_t
-								     (xdrs,
-								      &(rr->
-									rj_vers.
-									high)));
-
-							case AUTH_ERROR:
-								return
-								    (inline_xdr_enum
-								     (xdrs,
-								      (enum_t *)
-								      &(rr->
-									rj_why)));
-							}
-							return (true);
-						}
-						break;
-					default:
-						return (false);
-						break;
-					}	/* rm_reply.rp_stat */
-				default:
-					/* unlikely */
-					return (false);
-				}
-			}
-		}
-	}			/* XDR_DECODE */
 	return (false);
-}				/* new */
+}					/* xdr_dplx_msg */

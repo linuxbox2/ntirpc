@@ -1159,7 +1159,7 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
 	 * into the stream. */
 	(void)xdr_inrec_readahead(xdrs, 1024);
 
-	if (xdr_dplx_msg(xdrs, req->rq_msg)) {
+	if (xdr_dplx_decode(xdrs, req->rq_msg)) {
 		switch (req->rq_msg->rm_direction) {
 		case CALL:
 			/* an ordinary call header */
@@ -1183,7 +1183,7 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
 		return (FALSE);
 	}
 	__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-		"%s: xdr_dplx_msg failed (will set dead)", __func__);
+		"%s: xdr_dplx_msg_decode failed (will set dead)", __func__);
 	return (FALSE);
 }
 

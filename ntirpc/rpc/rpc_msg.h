@@ -178,16 +178,19 @@ __BEGIN_DECLS
  *  struct rpc_msg *cmsg;
  */
 extern bool xdr_ncallmsg(XDR *, struct rpc_msg *);
+extern bool xdr_call_decode(XDR *, struct rpc_msg *, int32_t *buf);
+extern bool xdr_call_encode(XDR *, struct rpc_msg *);
 
 /*
  * XDR routine to handle a duplex rpc message.
- * xdr_callmsg(xdrs, cmsg)
+ * xdr_dplx_msg(xdrs, cmsg)
  *  XDR *xdrs;
  *  struct rpc_msg *cmsg;
  */
 extern bool xdr_dplx_msg(XDR *, struct rpc_msg *);
-extern bool xdr_dplx_msg_decode_start(XDR *, struct rpc_msg *);
-extern bool xdr_dplx_msg_decode_continue(XDR *, struct rpc_msg *);
+extern bool xdr_dplx_decode(XDR *, struct rpc_msg *);
+extern bool xdr_reply_decode(XDR *, struct rpc_msg *, int32_t *buf);
+extern bool xdr_reply_encode(XDR *, struct rpc_msg *);
 
 /*
  * XDR routine to pre-serialize the static part of a rpc message.

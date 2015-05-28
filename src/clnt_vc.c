@@ -503,9 +503,9 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 			}
 
 			/* now decode and validate the response header */
-			if (!xdr_dplx_msg(xdrs, ctx->msg)) {
+			if (!xdr_dplx_decode(xdrs, ctx->msg)) {
 				__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
-					"%s: error at xdr_dplx_msg_start",
+					"%s: error at xdr_dplx_decode",
 					__func__);
 				vc_call_return_rlocked(ctx->error.re_status);
 			}
