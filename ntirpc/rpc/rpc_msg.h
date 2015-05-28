@@ -161,11 +161,15 @@ struct rpc_msg {
 	} ru;
 #define rm_call  ru.RM_cmb
 #define rm_reply ru.RM_rmb
-	caddr_t fr_vec[1];
+
 	int32_t *rm_ibuf;
 	uint32_t rm_flags;
 	/* queue of msgs for control xfer */
 	 TAILQ_ENTRY(rpc_msg) msg_q;
+	/* avoid separate alloc/free */
+	char cb_cred_body[MAX_AUTH_BYTES];
+	char cb_verf_body[MAX_AUTH_BYTES];
+	char rq_cred_body[MAX_AUTH_BYTES];	/* size is excessive */
 };
 #define acpted_rply ru.RM_rmb.ru.RP_ar
 #define rjcted_rply ru.RM_rmb.ru.RP_dr

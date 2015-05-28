@@ -71,8 +71,6 @@
 #include <rpc/svc_rqst.h>
 #include "svc_ioq.h"
 
-#define RQCRED_SIZE 400		/* this size is excessive */
-
 #define SVC_VERSQUIET 0x0001	/* keep quiet about vers mismatch */
 #define version_keepquiet(xp) ((u_long)(xp)->xp_p3 & SVC_VERSQUIET)
 
@@ -218,18 +216,10 @@ alloc_rpc_msg(void)
 		goto out;
 
 	TAILQ_INIT_ENTRY(msg, msg_q);
-	msg->rm_call.cb_cred.oa_base =
-	    mem_alloc(2 * MAX_AUTH_BYTES + RQCRED_SIZE);
-	if (!msg->rm_call.cb_cred.oa_base) {
-		mem_free(msg, sizeof(struct rpc_msg));
-		msg = NULL;
-		goto out;
-	}
 
-	/* save original address */
-	msg->fr_vec[0] = msg->rm_call.cb_cred.oa_base;
-	msg->rm_call.cb_verf.oa_base =
-	    msg->rm_call.cb_cred.oa_base + MAX_AUTH_BYTES;
+	/* avoid separate alloc/free */
+	msg->rm_call.cb_cred.oa_base = msg->cb_cred_body;
+	msg->rm_call.cb_verf.oa_base = msg->cb_verf_body;
 
 	/* required for REPLY decodes */
 	msg->acpted_rply.ar_verf = _null_auth;
@@ -243,7 +233,6 @@ alloc_rpc_msg(void)
 void
 free_rpc_msg(struct rpc_msg *msg)
 {
-	mem_free(msg->fr_vec[0], 2 * MAX_AUTH_BYTES + RQCRED_SIZE);
 	mem_free(msg, sizeof(struct rpc_msg));
 }
 
@@ -252,7 +241,6 @@ free_req_rpc_msg(struct svc_req *req)
 {
 	if (req->rq_msg) {
 		struct rpc_msg *msg = req->rq_msg;
-		mem_free(msg->fr_vec[0], 2 * MAX_AUTH_BYTES + RQCRED_SIZE);
 		mem_free(msg, sizeof(struct rpc_msg));
 		req->rq_msg = NULL;
 	}

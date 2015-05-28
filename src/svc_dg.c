@@ -312,8 +312,7 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 	req->rq_vers = req->rq_msg->rm_call.cb_vers;
 	req->rq_proc = req->rq_msg->rm_call.cb_proc;
 	req->rq_xid = req->rq_msg->rm_xid;
-	req->rq_clntcred =
-	    req->rq_msg->rm_call.cb_cred.oa_base + (2 * MAX_AUTH_BYTES);
+	req->rq_clntcred = req->rq_msg->rq_cred_body;
 
 	/* save remote address */
 	alen = xprt->xp_rtaddr.len;

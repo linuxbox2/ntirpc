@@ -1152,8 +1152,7 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
 	(void)xdr_inrec_skiprecord(xdrs);
 
 	req->rq_msg = alloc_rpc_msg();
-	req->rq_clntcred =
-	    req->rq_msg->rm_call.cb_cred.oa_base + (2 * MAX_AUTH_BYTES);
+	req->rq_clntcred = req->rq_msg->rq_cred_body;
 
 	/* Advances to next record, will read up to 1024 bytes
 	 * into the stream. */
