@@ -457,12 +457,7 @@ svc_dg_unlock(SVCXPRT *xprt, uint32_t flags, const char *file,
 static bool
 svc_dg_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
-	XDR xdrs = {
-		.x_public = NULL,
-		.x_lib = {NULL, NULL}
-	};
-	xdrmem_create(&xdrs, args_ptr, ~0, XDR_FREE);
-	return (*xdr_args) (&xdrs, args_ptr);
+	return xdr_free(xdr_args, args_ptr);
 }
 
 static void

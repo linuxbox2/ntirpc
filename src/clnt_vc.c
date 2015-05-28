@@ -593,13 +593,8 @@ clnt_vc_geterr(CLIENT *clnt, struct rpc_err *errp)
 static bool
 clnt_vc_freeres(CLIENT *clnt, xdrproc_t xdr_res, void *res_ptr)
 {
-	XDR xdrs = {
-		.x_public = NULL,
-		.x_lib = {NULL, NULL}
-	};
 	sigset_t mask, newmask;
 	bool rslt;
-	xdrmem_create(&xdrs, res_ptr, ~0, XDR_FREE);
 
 	/* XXX is this (legacy) signalling/barrier logic needed? */
 
@@ -611,7 +606,7 @@ clnt_vc_freeres(CLIENT *clnt, xdrproc_t xdr_res, void *res_ptr)
 	/* barrier recv channel */
 	rpc_dplx_rwc(clnt, rpc_flag_clear);
 
-	rslt = (*xdr_res) (&xdrs, res_ptr);
+	rslt = xdr_free(xdr_res, res_ptr);
 
 	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 

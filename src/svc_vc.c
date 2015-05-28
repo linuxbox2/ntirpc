@@ -1191,22 +1191,21 @@ static bool
 svc_vc_getargs(SVCXPRT *xprt, struct svc_req *req,
 	       xdrproc_t xdr_args, void *args_ptr, void *u_data)
 {
-	bool rslt = TRUE;
 	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
 	XDR *xdrs = &xd->shared.xdrs_in;	/* recv queue */
+	bool rslt;
 
 	/* threads u_data for advanced decoders */
 	xdrs->x_public = u_data;
 
-	if (!SVCAUTH_UNWRAP(req->rq_auth, req, xdrs, xdr_args, args_ptr))
-		rslt = FALSE;
+	rslt = SVCAUTH_UNWRAP(req->rq_auth, req, xdrs, xdr_args, args_ptr);
 
 	/* XXX Upstream TI-RPC lacks this call, but -does- call svc_dg_freeargs
 	 * in svc_dg_getargs if SVCAUTH_UNWRAP fails. */
-	if (!rslt)
-		svc_vc_freeargs(xprt, xdr_args, args_ptr);
-	else
+	if (rslt)
 		req->rq_cksum = xdr_inrec_cksum(xdrs);
+	else
+		svc_vc_freeargs(xprt, xdr_args, args_ptr);
 
 	return (rslt);
 }
@@ -1214,12 +1213,7 @@ svc_vc_getargs(SVCXPRT *xprt, struct svc_req *req,
 static bool
 svc_vc_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 {
-	XDR xdrs = {
-		.x_public = NULL,
-		.x_lib = {NULL, NULL}
-	};
-	xdrmem_create(&xdrs, args_ptr, ~0, XDR_FREE);
-	return ((*xdr_args) (&xdrs, args_ptr));
+	return xdr_free(xdr_args, args_ptr);
 }
 
 static bool

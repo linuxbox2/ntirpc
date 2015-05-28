@@ -64,17 +64,16 @@ typedef u_quad_t u_longlong_t;	/* ANSI unsigned long long type */
 static const char xdr_zero[BYTES_PER_XDR_UNIT] = { 0, 0, 0, 0 };
 
 /*
- * Free a data structure using XDR
- * Not a filter, but a convenient utility nonetheless
+ * for cleanup
  */
-void
-xdr_nfree(xdrproc_t proc, void *objp)
-{
-	XDR x;
-
-	x.x_op = XDR_FREE;
-	(*proc) (&x, objp);
-}
+XDR xdr_free_null_stream = {
+	.x_op = XDR_FREE,
+	.x_public = NULL,
+	.x_private = NULL,
+	.x_lib = {NULL, NULL},
+	.x_base = NULL,
+	.x_v = {NULL, NULL, NULL, NULL},
+};
 
 /*
  * XDR nothing

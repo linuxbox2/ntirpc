@@ -601,6 +601,8 @@ xdr_putbool(XDR *xdrs, bool_t boolv)
  * These are the "generic" xdr routines.
  */
 __BEGIN_DECLS
+extern XDR xdr_free_null_stream;
+
 extern bool xdr_void(void);
 extern bool xdr_int(XDR *, int *);
 extern bool xdr_u_int(XDR *, u_int *);
@@ -633,7 +635,6 @@ extern bool xdr_quadruple(XDR *, long double *);
 extern bool xdr_reference(XDR *, char **, u_int, xdrproc_t);
 extern bool xdr_pointer(XDR *, char **, u_int, xdrproc_t);
 extern bool xdr_wrapstring(XDR *, char **);
-extern void xdr_nfree(xdrproc_t, void *);
 extern bool xdr_hyper(XDR *, quad_t *);
 extern bool xdr_u_hyper(XDR *, u_quad_t *);
 extern bool xdr_longlong_t(XDR *, quad_t *);
@@ -643,6 +644,17 @@ extern bool xdr_u_longlong_t(XDR *, u_quad_t *);
 #define xdr_uquad_t xdr_uint64_t
 
 __END_DECLS
+
+/*
+ * Free a data structure using XDR
+ * Not a filter, but a convenient utility nonetheless
+ */
+static inline bool
+xdr_nfree(xdrproc_t proc, void *objp)
+{
+	return (*proc) (&xdr_free_null_stream, objp);
+}
+
 /*
  * Common opaque bytes objects used by many rpc protocols;
  * declared here due to commonality.
