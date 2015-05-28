@@ -53,23 +53,203 @@
 #include <rpc/xdr.h>
 #include "un-namespace.h"
 
-static void xdrmem_destroy(XDR *);
-static bool xdrmem_getlong_aligned(XDR *, long *);
-static bool xdrmem_putlong_aligned(XDR *, const long *);
-static bool xdrmem_getlong_unaligned(XDR *, long *);
-static bool xdrmem_putlong_unaligned(XDR *, const long *);
-static bool xdrmem_getbytes(XDR *, char *, u_int);
-static bool xdrmem_putbytes(XDR *, const char *, u_int);
-/* XXX: w/64-bit pointers, u_int not enough! */
-static u_int xdrmem_getpos(XDR *);
-static bool xdrmem_setpos(XDR *, u_int);
-static int32_t *xdrmem_inline_aligned(XDR *, u_int);
-static int32_t *xdrmem_inline_unaligned(XDR *, u_int);
-static bool xdrmem_noop(void);
-
 typedef bool (*dummyfunc3)(XDR *, int, void *);
 typedef bool (*dummy_getbufs)(XDR *, xdr_uio *, u_int);
 typedef bool (*dummy_putbufs)(XDR *, xdr_uio *, u_int);
+
+static const struct xdr_ops xdrmem_ops_aligned;
+static const struct xdr_ops xdrmem_ops_unaligned;
+
+/*
+ * The procedure xdrmem_create initializes a stream descriptor for a
+ * memory buffer.
+ */
+void
+xdrmem_ncreate(XDR *xdrs, char *addr, u_int size, enum xdr_op op)
+{
+	xdrs->x_op = op;
+	if ((uintptr_t)addr & (sizeof(int32_t) - 1)) {
+		xdrs->x_ops = &xdrmem_ops_unaligned;
+	} else {
+		xdrs->x_ops = &xdrmem_ops_aligned;
+		xdrs->x_flags = XDR_FLAG_VIO;
+	}
+	xdrs->x_lib[0] = NULL;
+	xdrs->x_lib[1] = NULL;
+	xdrs->x_public = NULL;
+	xdrs->x_private = addr;
+	xdrs->x_v.vio_base = addr;
+	xdrs->x_v.vio_head = addr;
+	switch (op) {
+	case XDR_ENCODE:
+		xdrs->x_v.vio_tail = addr;
+		break;
+	case XDR_DECODE:
+		xdrs->x_v.vio_tail = addr + size;
+		break;
+	default:
+		abort();
+		break;
+	};
+	xdrs->x_v.vio_wrap = addr + size;
+	xdrs->x_base = &xdrs->x_v;
+}
+
+static bool
+xdrmem_getlong_aligned(XDR *xdrs, long *lp)
+{
+	void *future = xdrs->x_private + sizeof(uint32_t);
+
+	if (future > xdrs->x_v.vio_tail)
+		return (false);
+	*lp = ntohl(*(u_int32_t *) xdrs->x_private);
+	xdrs->x_private = future;
+	return (true);
+}
+
+static bool
+xdrmem_putlong_aligned(XDR *xdrs, const long *lp)
+{
+	void *future = xdrs->x_private + sizeof(uint32_t);
+
+	if (future > xdrs->x_v.vio_wrap)
+		return (false);
+	*(u_int32_t *) xdrs->x_private = htonl((u_int32_t) *lp);
+	xdrs->x_private = future;
+	return (true);
+}
+
+/* in glibc 2.14+ x86_64, memcpy no longer tries to handle overlapping areas,
+ * see Fedora Bug 691336 (NOTABUG); we dont permit overlapping segments,
+ * so memcpy may be a small win over memmove.
+ */
+
+static bool
+xdrmem_getlong_unaligned(XDR *xdrs, long *lp)
+{
+	u_int32_t l;
+	void *future = xdrs->x_private + sizeof(uint32_t);
+
+	if (future > xdrs->x_v.vio_tail)
+		return (false);
+	memcpy(&l, xdrs->x_private, sizeof(int32_t));
+	*lp = ntohl(l);
+	xdrs->x_private = future;
+	return (true);
+}
+
+static bool
+xdrmem_putlong_unaligned(XDR *xdrs, const long *lp)
+{
+	u_int32_t l;
+	void *future = xdrs->x_private + sizeof(uint32_t);
+
+	if (future > xdrs->x_v.vio_wrap)
+		return (false);
+	l = htonl((u_int32_t) *lp);
+	memcpy(xdrs->x_private, &l, sizeof(int32_t));
+	xdrs->x_private = future;
+	return (true);
+}
+
+static bool
+xdrmem_getbytes(XDR *xdrs, char *addr, u_int len)
+{
+	void *future = xdrs->x_private + len;
+
+	if (future > xdrs->x_v.vio_tail)
+		return (false);
+	memmove(addr, xdrs->x_private, len);
+	xdrs->x_private = future;
+	return (true);
+}
+
+static bool
+xdrmem_putbytes(XDR *xdrs, const char *addr, u_int len)
+{
+	void *future = xdrs->x_private + len;
+
+	if (future > xdrs->x_v.vio_wrap)
+		return (false);
+	memmove(xdrs->x_private, addr, len);
+	xdrs->x_private = future;
+	return (true);
+}
+
+static u_int
+xdrmem_getpos(XDR *xdrs)
+{
+	/* update the most recent data length, just in case */
+	xdr_tail_update(xdrs);
+
+	return ((uintptr_t)xdrs->x_private - (uintptr_t)xdrs->x_v.vio_head);
+}
+
+static bool
+xdrmem_setpos(XDR *xdrs, u_int pos)
+{
+	void *newaddr = xdrs->x_v.vio_head + pos;
+
+	/* update the most recent data length, just in case */
+	xdr_tail_update(xdrs);
+
+	if (newaddr > xdrs->x_v.vio_tail)
+		return (false);
+	xdrs->x_private = newaddr;
+	return (true);
+}
+
+static int32_t *
+xdrmem_inline_aligned(XDR *xdrs, u_int len)
+{
+	int32_t *buf = (int32_t *)xdrs->x_private;
+	void *future = xdrs->x_private + len;
+
+	switch (xdrs->x_op) {
+	case XDR_ENCODE:
+		if (future <= xdrs->x_v.vio_wrap) {
+			xdrs->x_private = future;
+			xdr_tail_update(xdrs);
+			/* temporarily backward compatible */
+			xdrs->x_handy = xdrs->x_v.vio_wrap - xdrs->x_private;
+			return (buf);
+		}
+		break;
+	case XDR_DECODE:
+		/* re-consuming bytes in a stream
+		 * (after SETPOS/rewind) */
+		if (future <= xdrs->x_v.vio_tail) {
+			xdrs->x_private = future;
+			/* temporarily backward compatible */
+			xdrs->x_handy = xdrs->x_v.vio_tail - xdrs->x_private;
+			return (buf);
+		}
+		break;
+	default:
+		abort();
+		break;
+	};
+
+	return (NULL);
+}
+
+/* ARGSUSED */
+static int32_t *
+xdrmem_inline_unaligned(XDR *xdrs, u_int len)
+{
+	return (NULL);
+}
+
+/* ARGSUSED */
+static void xdrmem_destroy(XDR *xdrs)
+{
+}
+
+static bool
+xdrmem_noop(void)
+{
+	return (false);
+}
 
 static const struct xdr_ops xdrmem_ops_aligned = {
 	xdrmem_getlong_aligned,
@@ -82,7 +262,7 @@ static const struct xdr_ops xdrmem_ops_aligned = {
 	xdrmem_destroy,
 	(dummyfunc3) xdrmem_noop,	/* x_control */
 	(dummy_getbufs) xdrmem_noop,	/* x_getbufs */
-	(dummy_putbufs) xdrmem_noop	/* x_putbufs */
+	(dummy_putbufs) xdrmem_noop,	/* x_putbufs */
 };
 
 static const struct xdr_ops xdrmem_ops_unaligned = {
@@ -94,148 +274,7 @@ static const struct xdr_ops xdrmem_ops_unaligned = {
 	xdrmem_setpos,
 	xdrmem_inline_unaligned,
 	xdrmem_destroy,
-	NULL,			/* getbufs */
-	NULL			/* putbufs   */
+	(dummyfunc3) xdrmem_noop,	/* x_control */
+	(dummy_getbufs) xdrmem_noop,	/* x_getbufs */
+	(dummy_putbufs) xdrmem_noop,	/* x_putbufs */
 };
-
-/*
- * The procedure xdrmem_create initializes a stream descriptor for a
- * memory buffer.
- */
-void
-xdrmem_ncreate(XDR *xdrs, char *addr, u_int size, enum xdr_op op)
-{
-	xdrs->x_op = op;
-	xdrs->x_ops = (PtrToUlong(addr) & (sizeof(int32_t) - 1))
-	    ? &xdrmem_ops_unaligned : &xdrmem_ops_aligned;
-	xdrs->x_lib[0] = NULL;
-	xdrs->x_lib[1] = NULL;
-	xdrs->x_public = NULL;
-	xdrs->x_private = xdrs->x_base = addr;
-	xdrs->x_handy = size;
-}
-
- /*ARGSUSED*/
-static void xdrmem_destroy(XDR *xdrs)
-{
-}
-
-static bool
-xdrmem_getlong_aligned(XDR *xdrs, long *lp)
-{
-	if (xdrs->x_handy < sizeof(int32_t))
-		return (false);
-	xdrs->x_handy -= sizeof(int32_t);
-	*lp = ntohl(*(u_int32_t *) xdrs->x_private);
-	xdrs->x_private = (char *)xdrs->x_private + sizeof(int32_t);
-	return (true);
-}
-
-static bool
-xdrmem_putlong_aligned(XDR *xdrs, const long *lp)
-{
-	if (xdrs->x_handy < sizeof(int32_t))
-		return (false);
-	xdrs->x_handy -= sizeof(int32_t);
-	*(u_int32_t *) xdrs->x_private = htonl((u_int32_t) *lp);
-	xdrs->x_private = (char *)xdrs->x_private + sizeof(int32_t);
-	return (true);
-}
-
-static bool
-xdrmem_getlong_unaligned(XDR *xdrs, long *lp)
-{
-	u_int32_t l;
-
-	if (xdrs->x_handy < sizeof(int32_t))
-		return (false);
-	xdrs->x_handy -= sizeof(int32_t);
-	memmove(&l, xdrs->x_private, sizeof(int32_t));
-	*lp = ntohl(l);
-	xdrs->x_private = (char *)xdrs->x_private + sizeof(int32_t);
-	return (true);
-}
-
-static bool
-xdrmem_putlong_unaligned(XDR *xdrs, const long *lp)
-{
-	u_int32_t l;
-
-	if (xdrs->x_handy < sizeof(int32_t))
-		return (false);
-	xdrs->x_handy -= sizeof(int32_t);
-	l = htonl((u_int32_t) *lp);
-	memmove(xdrs->x_private, &l, sizeof(int32_t));
-	xdrs->x_private = (char *)xdrs->x_private + sizeof(int32_t);
-	return (true);
-}
-
-static bool
-xdrmem_getbytes(XDR *xdrs, char *addr, u_int len)
-{
-
-	if (xdrs->x_handy < len)
-		return (false);
-	xdrs->x_handy -= len;
-	memmove(addr, xdrs->x_private, len);
-	xdrs->x_private = (char *)xdrs->x_private + len;
-	return (true);
-}
-
-static bool
-xdrmem_putbytes(XDR *xdrs, const char *addr, u_int len)
-{
-
-	if (xdrs->x_handy < len)
-		return (false);
-	xdrs->x_handy -= len;
-	memmove(xdrs->x_private, addr, len);
-	xdrs->x_private = (char *)xdrs->x_private + len;
-	return (true);
-}
-
-static u_int
-xdrmem_getpos(XDR *xdrs)
-{
-	return (u_int) (xdrs->x_private - xdrs->x_base);
-}
-
-static bool
-xdrmem_setpos(XDR *xdrs, u_int pos)
-{
-	char *newaddr = xdrs->x_base + pos;
-	char *lastaddr = (char *)xdrs->x_private + xdrs->x_handy;
-
-	if (newaddr > lastaddr)
-		return (false);
-	xdrs->x_private = newaddr;
-	xdrs->x_handy = (u_int) (lastaddr - newaddr);
-		/* XXX sizeof(u_int) <? sizeof(ptrdiff_t) */
-	return (true);
-}
-
-static int32_t *
-xdrmem_inline_aligned(XDR *xdrs, u_int len)
-{
-	int32_t *buf = 0;
-
-	if (xdrs->x_handy >= len) {
-		xdrs->x_handy -= len;
-		buf = (int32_t *) xdrs->x_private;
-		xdrs->x_private = (char *)xdrs->x_private + len;
-	}
-	return (buf);
-}
-
-/* ARGSUSED */
-static int32_t *
-xdrmem_inline_unaligned(XDR *xdrs, u_int len)
-{
-	return (0);
-}
-
-static bool
-xdrmem_noop(void)
-{
-	return (false);
-}
