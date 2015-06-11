@@ -172,12 +172,10 @@ typedef struct svc_init_params {
  * Don't confuse with (currently incomplete) transport type, nee
  * socktype. */
 typedef enum xprt_type {
-	XPRT_UNKNOWN,
+	XPRT_UNKNOWN = 0,
 	XPRT_UDP,
 	XPRT_TCP,
 	XPRT_TCP_RENDEZVOUS,
-	/* 6 types? */
-	/* placeholders */
 	XPRT_SCTP,
 	XPRT_RDMA
 } xprt_type_t;
@@ -201,8 +199,6 @@ struct SVCAUTH;			/* forward decl. */
  * Server side transport handle
  */
 typedef struct rpc_svcxprt {
-	int xp_fd;
-	u_short xp_port;	/* associated port number */
 	struct xp_ops {
 		/* receive incoming requests */
 		bool(*xp_recv) (struct rpc_svcxprt *, struct svc_req *);
@@ -240,9 +236,6 @@ typedef struct rpc_svcxprt {
 
 	} *xp_ops;
 
-	int xp_addrlen;		/* length of remote address */
-	struct sockaddr_in6 xp_raddr;	/* remote addr (backward ABI compat) */
-
 	struct xp_ops2 {
 		/* catch-all function */
 		bool(*xp_control) (struct rpc_svcxprt *, const u_int, void *);
@@ -262,12 +255,13 @@ typedef struct rpc_svcxprt {
 	struct netbuf xp_ltaddr;	/* local transport address */
 	struct netbuf xp_rtaddr;	/* remote transport address */
 
+	struct sockaddr_in6 xp_raddr;	/* remote addr (backward ABI compat) */
+
 	/* auth */
 	mutex_t xp_auth_lock;	/* lock owned by installed authenticator */
 
 	/* serialize private data */
 	mutex_t xp_lock;
-	uint32_t xp_refcnt;	/* handle refcnt */
 
 	void *xp_ev;		/* event handle */
 	void *xp_p1;		/* private: for use by svc ops */
@@ -276,11 +270,19 @@ typedef struct rpc_svcxprt {
 	void *xp_p4;		/* private: for use by svc lib */
 	void *xp_p5;		/* private: for use by svc lib */
 	void *xp_u1;		/* client user data */
+	void *xp_u2;		/* client user data */
+
+	uint64_t xp_gen;	/* handle generation number */
+	uint32_t xp_refcnt;	/* handle reference count */
+	uint32_t xp_requests;	/* related requests count */
+
+	int xp_fd;
 	int xp_si_type;		/* si type */
 	int xp_type;		/* xprt type */
 	u_int xp_flags;		/* flags */
-	uint64_t xp_gen;	/* svc_xprt generation number */
 
+	int xp_addrlen;		/* length of remote address */
+	u_short xp_port;	/* associated port number */
 } SVCXPRT;
 
 /* Service record used by exported search routines */
@@ -330,11 +332,12 @@ struct svc_req {
 	caddr_t rq_svcname;	/* read only cooked service cred */
 
 	/* New with N TI-RPC */
-	u_int32_t rq_xid;	/* xid */
 	struct rpc_msg *rq_msg;	/* decoded rpc_msg */
-	uint64_t rq_cksum;
+	void *rq_context;	/* private context */
 	void *rq_u1;		/* user data */
 	void *rq_u2;		/* user data */
+	uint64_t rq_cksum;
+	u_int32_t rq_xid;	/* xid */
 
 	/* Moved in N TI-RPC */
 	struct opaque_auth rq_verf;	/* raw response verifier */
