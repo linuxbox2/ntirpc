@@ -692,9 +692,10 @@ rendezvous_request(SVCXPRT *xprt, struct svc_req *req)
 #endif
 	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
 
-	/* if parent has xp_rdvs, use it */
-	if (xprt->xp_ops2->xp_rdvs)
-		xprt->xp_ops2->xp_rdvs(xprt, newxprt, SVC_RQST_FLAG_NONE, NULL);
+	/* if parent has xp_recv_user_data, use it */
+	if (xprt->xp_ops->xp_recv_user_data)
+		xprt->xp_ops->xp_recv_user_data(xprt, newxprt,
+						SVC_RQST_FLAG_NONE, NULL);
 
 	return (FALSE);	/* there is never an rpc msg to be processed */
 }
@@ -746,9 +747,10 @@ rdvs_dodestroy(SVCXPRT *xprt)
 	if (xprt->xp_fd != RPC_ANYFD)
 		(void)close(xprt->xp_fd);
 
-	/* call free hook */
-	if (xprt->xp_ops2->xp_free_xprt)
-		xprt->xp_ops2->xp_free_xprt(xprt);
+	if (xprt->xp_ops->xp_free_user_data) {
+		/* call free hook */
+		xprt->xp_ops->xp_free_user_data(xprt);
+	}
 
 	REC_LOCK(rec);
 
@@ -991,42 +993,42 @@ svc_vc_control(SVCXPRT *xprt, const u_int rq, void *in)
 		break;
 	case SVCGET_XP_GETREQ:
 		mutex_lock(&ops_lock);
-		*(xp_getreq_t *) in = xprt->xp_ops2->xp_getreq;
+		*(xp_getreq_t *) in = xprt->xp_ops->xp_getreq;
 		mutex_unlock(&ops_lock);
 		break;
 	case SVCSET_XP_GETREQ:
 		mutex_lock(&ops_lock);
-		xprt->xp_ops2->xp_getreq = *(xp_getreq_t) in;
+		xprt->xp_ops->xp_getreq = *(xp_getreq_t) in;
 		mutex_unlock(&ops_lock);
 		break;
 	case SVCGET_XP_DISPATCH:
 		mutex_lock(&ops_lock);
-		*(xp_dispatch_t *) in = xprt->xp_ops2->xp_dispatch;
+		*(xp_dispatch_t *) in = xprt->xp_ops->xp_dispatch;
 		mutex_unlock(&ops_lock);
 		break;
 	case SVCSET_XP_DISPATCH:
 		mutex_lock(&ops_lock);
-		xprt->xp_ops2->xp_dispatch = *(xp_dispatch_t) in;
+		xprt->xp_ops->xp_dispatch = *(xp_dispatch_t) in;
 		mutex_unlock(&ops_lock);
 		break;
-	case SVCGET_XP_RDVS:
+	case SVCGET_XP_RECV_USER_DATA:
 		mutex_lock(&ops_lock);
-		*(xp_rdvs_t *) in = xprt->xp_ops2->xp_rdvs;
+		*(xp_recv_user_data_t *) in = xprt->xp_ops->xp_recv_user_data;
 		mutex_unlock(&ops_lock);
 		break;
-	case SVCSET_XP_RDVS:
+	case SVCSET_XP_RECV_USER_DATA:
 		mutex_lock(&ops_lock);
-		xprt->xp_ops2->xp_rdvs = *(xp_rdvs_t) in;
+		xprt->xp_ops->xp_recv_user_data = *(xp_recv_user_data_t) in;
 		mutex_unlock(&ops_lock);
 		break;
-	case SVCGET_XP_FREE_XPRT:
+	case SVCGET_XP_FREE_USER_DATA:
 		mutex_lock(&ops_lock);
-		*(xp_free_xprt_t *) in = xprt->xp_ops2->xp_free_xprt;
+		*(xp_free_user_data_t *) in = xprt->xp_ops->xp_free_user_data;
 		mutex_unlock(&ops_lock);
 		break;
-	case SVCSET_XP_FREE_XPRT:
+	case SVCSET_XP_FREE_USER_DATA:
 		mutex_lock(&ops_lock);
-		xprt->xp_ops2->xp_free_xprt = *(xp_free_xprt_t) in;
+		xprt->xp_ops->xp_free_user_data = *(xp_free_user_data_t) in;
 		mutex_unlock(&ops_lock);
 		break;
 	default:
@@ -1062,42 +1064,42 @@ svc_vc_rendezvous_control(SVCXPRT *xprt, const u_int rq, void *in)
 		break;
 	case SVCGET_XP_GETREQ:
 		mutex_lock(&ops_lock);
-		*(xp_getreq_t *) in = xprt->xp_ops2->xp_getreq;
+		*(xp_getreq_t *) in = xprt->xp_ops->xp_getreq;
 		mutex_unlock(&ops_lock);
 		break;
 	case SVCSET_XP_GETREQ:
 		mutex_lock(&ops_lock);
-		xprt->xp_ops2->xp_getreq = *(xp_getreq_t) in;
+		xprt->xp_ops->xp_getreq = *(xp_getreq_t) in;
 		mutex_unlock(&ops_lock);
 		break;
 	case SVCGET_XP_DISPATCH:
 		mutex_lock(&ops_lock);
-		*(xp_dispatch_t *) in = xprt->xp_ops2->xp_dispatch;
+		*(xp_dispatch_t *) in = xprt->xp_ops->xp_dispatch;
 		mutex_unlock(&ops_lock);
 		break;
 	case SVCSET_XP_DISPATCH:
 		mutex_lock(&ops_lock);
-		xprt->xp_ops2->xp_dispatch = *(xp_dispatch_t) in;
+		xprt->xp_ops->xp_dispatch = *(xp_dispatch_t) in;
 		mutex_unlock(&ops_lock);
 		break;
-	case SVCGET_XP_RDVS:
+	case SVCGET_XP_RECV_USER_DATA:
 		mutex_lock(&ops_lock);
-		*(xp_rdvs_t *) in = xprt->xp_ops2->xp_rdvs;
+		*(xp_recv_user_data_t *) in = xprt->xp_ops->xp_recv_user_data;
 		mutex_unlock(&ops_lock);
 		break;
-	case SVCSET_XP_RDVS:
+	case SVCSET_XP_RECV_USER_DATA:
 		mutex_lock(&ops_lock);
-		xprt->xp_ops2->xp_rdvs = *(xp_rdvs_t) in;
+		xprt->xp_ops->xp_recv_user_data = *(xp_recv_user_data_t) in;
 		mutex_unlock(&ops_lock);
 		break;
-	case SVCGET_XP_FREE_XPRT:
+	case SVCGET_XP_FREE_USER_DATA:
 		mutex_lock(&ops_lock);
-		*(xp_free_xprt_t *) in = xprt->xp_ops2->xp_free_xprt;
+		*(xp_free_user_data_t *) in = xprt->xp_ops->xp_free_user_data;
 		mutex_unlock(&ops_lock);
 		break;
-	case SVCSET_XP_FREE_XPRT:
+	case SVCSET_XP_FREE_USER_DATA:
 		mutex_lock(&ops_lock);
-		xprt->xp_ops2->xp_free_xprt = *(xp_free_xprt_t) in;
+		xprt->xp_ops->xp_free_user_data = *(xp_free_user_data_t) in;
 		mutex_unlock(&ops_lock);
 		break;
 	default:
@@ -1288,50 +1290,50 @@ static void
 svc_vc_ops(SVCXPRT *xprt)
 {
 	static struct xp_ops ops;
-	static struct xp_ops2 ops2;
 
-	/* VARIABLES PROTECTED BY ops_lock: ops, ops2, xp_type */
+	/* VARIABLES PROTECTED BY ops_lock: ops, xp_type */
 	mutex_lock(&ops_lock);
+
 	xprt->xp_type = XPRT_TCP;
+
 	if (ops.xp_recv == NULL) {
 		ops.xp_recv = svc_vc_recv;
 		ops.xp_stat = svc_vc_stat;
 		ops.xp_getargs = svc_vc_getargs;
-		ops.xp_lock = svc_vc_lock;
-		ops.xp_unlock = svc_vc_unlock;
 		ops.xp_reply = svc_vc_reply;
 		ops.xp_freeargs = svc_vc_freeargs;
-		ops.xp_ref = svc_vc_ref;
-		ops.xp_release = svc_vc_release;
 		ops.xp_destroy = svc_vc_destroy;
-		ops2.xp_control = svc_vc_control;
-		ops2.xp_getreq = svc_getreq_default;
-		ops2.xp_dispatch = svc_dispatch_default;
-		ops2.xp_rdvs = NULL;	/* no default */
+		ops.xp_control = svc_vc_control;
+		ops.xp_release = svc_vc_release;
+		ops.xp_ref = svc_vc_ref;
+		ops.xp_lock = svc_vc_lock;
+		ops.xp_unlock = svc_vc_unlock;
+		ops.xp_getreq = svc_getreq_default;
+		ops.xp_dispatch = svc_dispatch_default;
+		ops.xp_recv_user_data = NULL;	/* no default */
+		ops.xp_free_user_data = NULL;	/* no default */
 	}
 	xprt->xp_ops = &ops;
-	xprt->xp_ops2 = &ops2;
 	mutex_unlock(&ops_lock);
 }
 
 static void
 svc_vc_override_ops(SVCXPRT *xprt, SVCXPRT *newxprt)
 {
-	if (xprt->xp_ops2->xp_getreq)
-		newxprt->xp_ops2->xp_getreq = xprt->xp_ops2->xp_getreq;
-	if (xprt->xp_ops2->xp_dispatch)
-		newxprt->xp_ops2->xp_dispatch = xprt->xp_ops2->xp_dispatch;
-	if (xprt->xp_ops2->xp_rdvs)
-		newxprt->xp_ops2->xp_rdvs = xprt->xp_ops2->xp_rdvs;
-	if (xprt->xp_ops2->xp_free_xprt)
-		newxprt->xp_ops2->xp_free_xprt = xprt->xp_ops2->xp_free_xprt;
+	if (xprt->xp_ops->xp_getreq)
+		newxprt->xp_ops->xp_getreq = xprt->xp_ops->xp_getreq;
+	if (xprt->xp_ops->xp_dispatch)
+		newxprt->xp_ops->xp_dispatch = xprt->xp_ops->xp_dispatch;
+	if (xprt->xp_ops->xp_recv_user_data)
+		newxprt->xp_ops->xp_recv_user_data = xprt->xp_ops->xp_recv_user_data;
+	if (xprt->xp_ops->xp_free_user_data)
+		newxprt->xp_ops->xp_free_user_data = xprt->xp_ops->xp_free_user_data;
 }
 
 static void
 svc_vc_rendezvous_ops(SVCXPRT *xprt)
 {
 	static struct xp_ops ops;
-	static struct xp_ops2 ops2;
 	extern mutex_t ops_lock;
 
 	mutex_lock(&ops_lock);
@@ -1339,8 +1341,6 @@ svc_vc_rendezvous_ops(SVCXPRT *xprt)
 	if (ops.xp_recv == NULL) {
 		ops.xp_recv = rendezvous_request;
 		ops.xp_stat = rendezvous_stat;
-		ops.xp_lock = svc_vc_lock;
-		ops.xp_unlock = svc_vc_unlock;
 		/* XXX wow */
 		ops.xp_getargs = (bool(*)
 				  (SVCXPRT *, struct svc_req *, xdrproc_t,
@@ -1349,15 +1349,18 @@ svc_vc_rendezvous_ops(SVCXPRT *xprt)
 				(SVCXPRT *, struct svc_req *req,
 				 struct rpc_msg *))abort;
 		ops.xp_freeargs = (bool(*)(SVCXPRT *, xdrproc_t, void *))abort;
-		ops.xp_ref = svc_vc_ref;
-		ops.xp_release = svc_rdvs_release;
 		ops.xp_destroy = svc_rdvs_destroy;
-		ops2.xp_control = svc_vc_rendezvous_control;
-		ops2.xp_getreq = svc_getreq_default;
-		ops2.xp_dispatch = svc_dispatch_default;
+		ops.xp_control = svc_vc_rendezvous_control;
+		ops.xp_release = svc_rdvs_release;
+		ops.xp_ref = svc_vc_ref;
+		ops.xp_lock = svc_vc_lock;
+		ops.xp_unlock = svc_vc_unlock;
+		ops.xp_getreq = svc_getreq_default;
+		ops.xp_dispatch = svc_dispatch_default;
+		ops.xp_recv_user_data = NULL;	/* no default */
+		ops.xp_free_user_data = NULL;	/* no default */
 	}
 	xprt->xp_ops = &ops;
-	xprt->xp_ops2 = &ops2;
 	mutex_unlock(&ops_lock);
 }
 

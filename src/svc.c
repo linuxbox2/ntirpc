@@ -794,7 +794,7 @@ svc_getreqset_epoll(struct epoll_event *events, int nfds)
 	for (ix = 0; ix < nfds; ++ix) {
 		/* XXX should do constant-time validity check */
 		xprt = (SVCXPRT *) events[ix].data.ptr;
-		code = xprt->xp_ops2->xp_getreq(xprt);
+		code = xprt->xp_ops->xp_getreq(xprt);
 	}
 }
 #endif				/* TIRPC_EPOLL */
@@ -810,7 +810,7 @@ svc_getreq_common(int fd)
 	if (xprt == NULL)
 		return;
 
-	code = xprt->xp_ops2->xp_getreq(xprt);
+	code = xprt->xp_ops->xp_getreq(xprt);
 
 	return;
 }

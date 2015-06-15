@@ -235,7 +235,6 @@ static void
 svc_raw_ops(SVCXPRT *xprt)
 {
 	static struct xp_ops ops;
-	static struct xp_ops2 ops2;
 	extern mutex_t ops_lock;
 
 	/* VARIABLES PROTECTED BY ops_lock: ops */
@@ -247,15 +246,17 @@ svc_raw_ops(SVCXPRT *xprt)
 		ops.xp_getargs = svc_raw_getargs;
 		ops.xp_reply = svc_raw_reply;
 		ops.xp_freeargs = svc_raw_freeargs;
-		ops.xp_ref = svc_raw_ref;
-		ops.xp_release = svc_raw_release;
 		ops.xp_destroy = svc_raw_destroy;
-		ops2.xp_control = svc_raw_control;
-		ops2.xp_getreq = svc_getreq_default;
-		ops2.xp_dispatch = svc_dispatch_default;
-		ops2.xp_rdvs = NULL;	/* no default */
+		ops.xp_control = svc_raw_control;
+		ops.xp_release = svc_raw_release;
+		ops.xp_ref = svc_raw_ref;
+		ops.xp_lock = NULL;	/* no default */
+		ops.xp_unlock = NULL;	/* no default */
+		ops.xp_getreq = svc_getreq_default;
+		ops.xp_dispatch = svc_dispatch_default;
+		ops.xp_recv_user_data = NULL;	/* no default */
+		ops.xp_free_user_data = NULL;	/* no default */
 	}
 	xprt->xp_ops = &ops;
-	xprt->xp_ops2 = &ops2;
 	mutex_unlock(&ops_lock);
 }

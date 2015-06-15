@@ -79,22 +79,22 @@
 /*
  *      Service control requests
  */
-#define SVCGET_VERSQUIET 1
-#define SVCSET_VERSQUIET 2
-#define SVCGET_CONNMAXREC 3
-#define SVCSET_CONNMAXREC 4
-#define SVCGET_XP_RECV  5
-#define SVCSET_XP_RECV  6
-#define SVCGET_XP_FLAGS  7
-#define SVCSET_XP_FLAGS  8
+#define SVCGET_VERSQUIET        1
+#define SVCSET_VERSQUIET        2
+#define SVCGET_CONNMAXREC       3
+#define SVCSET_CONNMAXREC       4
+#define SVCGET_XP_RECV          5
+#define SVCSET_XP_RECV          6
+#define SVCGET_XP_FLAGS         7
+#define SVCSET_XP_FLAGS         8
 #define SVCGET_XP_GETREQ        9
 #define SVCSET_XP_GETREQ        10
 #define SVCGET_XP_DISPATCH      11
 #define SVCSET_XP_DISPATCH      12
-#define SVCGET_XP_RDVS          13
-#define SVCSET_XP_RDVS          14
-#define SVCGET_XP_FREE_XPRT     15
-#define SVCSET_XP_FREE_XPRT     16
+#define SVCGET_XP_RECV_USER_DATA        13
+#define SVCSET_XP_RECV_USER_DATA        14
+#define SVCGET_XP_FREE_USER_DATA        15
+#define SVCSET_XP_FREE_USER_DATA        16
 
 /*
  * Operations for rpc_control().
@@ -201,54 +201,56 @@ struct SVCAUTH;			/* forward decl. */
 typedef struct rpc_svcxprt {
 	struct xp_ops {
 		/* receive incoming requests */
-		bool(*xp_recv) (struct rpc_svcxprt *, struct svc_req *);
+		bool (*xp_recv) (struct rpc_svcxprt *, struct svc_req *);
 
 		/* get transport status */
 		enum xprt_stat (*xp_stat) (struct rpc_svcxprt *);
 
 		/* get arguments, thread u_data in arg4 */
-		bool(*xp_getargs) (struct rpc_svcxprt *, struct svc_req *,
+		bool (*xp_getargs) (struct rpc_svcxprt *, struct svc_req *,
 				    xdrproc_t, void *, void *);
 
 		/* send reply */
-		bool(*xp_reply) (struct rpc_svcxprt *, struct svc_req *,
+		bool (*xp_reply) (struct rpc_svcxprt *, struct svc_req *,
 				  struct rpc_msg *);
 
 		/* free mem allocated for args */
-		 bool(*xp_freeargs) (struct rpc_svcxprt *, xdrproc_t, void *);
+		bool (*xp_freeargs) (struct rpc_svcxprt *, xdrproc_t, void *);
 
-		/* take lifecycle ref */
-		bool(*xp_ref) (struct rpc_svcxprt *, u_int,
-			       const char *, const int);
+		/* release and mark destroyed */
+		void (*xp_destroy) (struct rpc_svcxprt *);
+
+		/* catch-all function */
+		bool (*xp_control) (struct rpc_svcxprt *, const u_int, void *);
 
 		/* release ref (destroy if no refs) */
 		void (*xp_release) (struct rpc_svcxprt *, u_int,
 				    const char *, const int);
 
-		/* release and mark destroyed */
-		void (*xp_destroy) (struct rpc_svcxprt *);
+		/* take lifecycle ref */
+		bool (*xp_ref) (struct rpc_svcxprt *, u_int,
+				const char *, const int);
 
-		/* xprt locking (may be duplex-aware, etc) */
+		/* transport locking (may be duplex-aware, etc) */
 		void (*xp_lock) (struct rpc_svcxprt *, uint32_t,
 				 const char *, int);
 		void (*xp_unlock) (struct rpc_svcxprt *, uint32_t,
 				   const char *, int);
 
-	} *xp_ops;
-
-	struct xp_ops2 {
-		/* catch-all function */
-		bool(*xp_control) (struct rpc_svcxprt *, const u_int, void *);
 		/* handle incoming requests (calls xp_recv) */
-		bool(*xp_getreq) (struct rpc_svcxprt *);
+		bool (*xp_getreq) (struct rpc_svcxprt *);
+
 		/* call dispatch strategy function */
 		void (*xp_dispatch) (struct rpc_svcxprt *, struct rpc_msg **);
+
 		/* rendezvous (epilogue) */
-		 u_int(*xp_rdvs) (struct rpc_svcxprt *, struct rpc_svcxprt *,
-				  const u_int, void *);
-		/* xprt free hook */
-		 bool(*xp_free_xprt) (struct rpc_svcxprt *);
-	} *xp_ops2;
+		u_int (*xp_recv_user_data) (struct rpc_svcxprt *,
+					    struct rpc_svcxprt *,
+					    const u_int, void *);
+
+		/* free client user data */
+		bool (*xp_free_user_data) (struct rpc_svcxprt *);
+	} *xp_ops;
 
 	char *xp_tp;		/* transport provider device name */
 	char *xp_netid;		/* network token */
@@ -307,13 +309,13 @@ typedef enum svc_lookup_result {
 } svc_lookup_result_t;
 
 /* functions which can be installed using a control function, e.g.,
- * xp_ops2->xp_control */
+ * xp_ops->xp_control */
 typedef bool(*xp_recv_t) (struct rpc_svcxprt *, struct svc_req *);
 typedef bool(*xp_getreq_t) (struct rpc_svcxprt *);
 typedef void (*xp_dispatch_t) (struct rpc_svcxprt *, struct rpc_msg **);
-typedef u_int(*xp_rdvs_t) (struct rpc_svcxprt *, struct rpc_svcxprt *,
-			   const u_int, void *);
-typedef bool(*xp_free_xprt_t) (struct rpc_svcxprt *);
+typedef u_int(*xp_recv_user_data_t) (struct rpc_svcxprt *, struct rpc_svcxprt *,
+				     const u_int, void *);
+typedef bool(*xp_free_user_data_t) (struct rpc_svcxprt *);
 
 /*
  * Service request
@@ -428,7 +430,7 @@ struct svc_req {
 	(*(xprt)->xp_ops->xp_destroy)(xprt)
 
 #define SVC_CONTROL(xprt, rq, in)			\
-	(*(xprt)->xp_ops2->xp_control)((xprt), (rq), (in))
+	(*(xprt)->xp_ops->xp_control)((xprt), (rq), (in))
 
 #define XP_LOCK_NONE    0x0000
 #define XP_LOCK_SEND    0x0001

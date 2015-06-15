@@ -327,9 +327,10 @@ vc_shared_destroy(struct x_vc_data *xd)
 		if (xprt->xp_netid)
 			mem_free(xprt->xp_netid, 0);
 
-		/* call free hook */
-		if (xprt->xp_ops2->xp_free_xprt)
-			xprt->xp_ops2->xp_free_xprt(xprt);
+		if (xprt->xp_ops->xp_free_user_data) {
+			/* call free hook */
+			xprt->xp_ops->xp_free_user_data(xprt);
+		}
 
 		mem_free(xprt, sizeof(SVCXPRT));
 	}
