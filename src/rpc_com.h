@@ -88,7 +88,6 @@ bool __svc_clean_idle(fd_set *, int, bool);
 bool __xdrrec_setnonblock(XDR *, int);
 bool __xdrrec_getrec(XDR *, enum xprt_stat *, bool);
 void __xprt_unregister_unlocked(SVCXPRT *);
-void __xprt_set_raddr(SVCXPRT *, const struct sockaddr_storage *);
 
 /*
  * Uses allocator with indirections, if any.

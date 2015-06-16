@@ -49,12 +49,10 @@
  */
 
 /*
- *  Approved way of getting address of caller
+ *  Approved way of getting addresses
  */
-#define svc_getcaller(x) (&(x)->xp_raddr)
-/* Getting address of a caller using netbuf xp_rtaddr */
-#define svc_getcaller_netbuf(x) (&(x)->xp_rtaddr)
-#define svc_getlocal_netbuf(x) (&(x)->xp_ltaddr)
+#define svc_getcaller_netbuf(x) (&(x)->xp_remote.nb)
+#define svc_getlocal_netbuf(x) (&(x)->xp_local.nb)
 
 /*
  * Service registration

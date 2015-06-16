@@ -244,36 +244,43 @@ free_req_rpc_msg(struct svc_req *req)
 		mem_free(msg, sizeof(struct rpc_msg));
 		req->rq_msg = NULL;
 	}
-	if (req->rq_rtaddr.buf) {
-		mem_free(req->rq_rtaddr.buf, req->rq_rtaddr.maxlen);
-		req->rq_rtaddr.buf = 0;
-		req->rq_rtaddr.len = req->rq_rtaddr.maxlen = 0;
-	}
 }
 
 /* ***************  SVCXPRT related stuff **************** */
 
 /*
- * This is used to set xprt->xp_raddr in a way legacy
- * apps can deal with
+ * This is used to set local and remote addresses in a way legacy
+ * apps can deal with, at the same time setting up a corresponding
+ * netbuf -- with no alloc/free needed.
  */
 void
-__xprt_set_raddr(SVCXPRT *xprt, const struct sockaddr_storage *ss)
+__rpc_set_address(struct rpc_address *rpca, const struct sockaddr_storage *ss,
+		  socklen_t sl)
 {
+	socklen_t l;
+
 	switch (ss->ss_family) {
 	case AF_INET6:
-		memcpy(&xprt->xp_raddr, ss, sizeof(struct sockaddr_in6));
-		xprt->xp_addrlen = sizeof(struct sockaddr_in6);
+		l = sl ? sl : sizeof(struct sockaddr_in6);
+		memcpy(&rpca->ss, ss, l);
 		break;
 	case AF_INET:
-		memcpy(&xprt->xp_raddr, ss, sizeof(struct sockaddr_in));
-		xprt->xp_addrlen = sizeof(struct sockaddr_in);
+		l = sl ? sl : sizeof(struct sockaddr_in);
+		memcpy(&rpca->ss, ss, l);
+		break;
+	case AF_LOCAL:
+		l = sl ? sl : sizeof(struct sockaddr);
+		memcpy(&rpca->ss, ss, l);
 		break;
 	default:
-		xprt->xp_raddr.sin6_family = AF_UNSPEC;
-		xprt->xp_addrlen = sizeof(struct sockaddr);
+		memset(&rpca->ss, 0xfe, sizeof(struct sockaddr_storage));
+		l = sl ? sl : sizeof(struct sockaddr);
+		rpca->ss.ss_family = AF_UNSPEC;
 		break;
 	}
+	rpca->nb.buf = &rpca->ss;
+	rpca->nb.len = l;
+	rpca->nb.maxlen = sizeof(struct sockaddr_storage);
 }
 
 /*
@@ -346,7 +353,7 @@ svc_reg(SVCXPRT *xprt, const rpcprog_t prog, const rpcvers_t vers,
 		/*LINTED const castaway */
 		dummy =
 		    rpcb_set(prog, vers, (struct netconfig *)nconf,
-			     &((SVCXPRT *) xprt)->xp_ltaddr);
+			     &((SVCXPRT *) xprt)->xp_local.nb);
 		return (dummy);
 	}
 	return (true);

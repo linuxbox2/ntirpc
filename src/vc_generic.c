@@ -318,10 +318,6 @@ vc_shared_destroy(struct x_vc_data *xd)
 			XDR_DESTROY(&(xd->shared.xdrs_out));
 		}
 
-		if (xprt->xp_rtaddr.buf)
-			mem_free(xprt->xp_rtaddr.buf, xprt->xp_rtaddr.maxlen);
-		if (xprt->xp_ltaddr.buf)
-			mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
 		if (xprt->xp_tp)
 			mem_free(xprt->xp_tp, 0);
 		if (xprt->xp_netid)

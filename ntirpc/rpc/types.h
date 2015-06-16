@@ -43,6 +43,7 @@
 #else
 #include <stdint.h>
 #endif
+#include <sys/socket.h>
 #include <sys/types.h>
 
 #if defined(_WIN32)
@@ -211,6 +212,11 @@ struct netbuf {
 	unsigned int maxlen;
 	unsigned int len;
 	void *buf;
+};
+
+struct rpc_address {
+	struct netbuf nb;
+	struct sockaddr_storage ss;	/* address buffer */
 };
 
 /*

@@ -295,7 +295,7 @@ svc_com_ncreate(int fd, u_int sendsize, u_int recvsize, char *netid)
 			(void)close(fd);
 		return (NULL);
 	}
-	port = (((struct sockaddr_in *)svc->xp_ltaddr.buf)->sin_port);
+	port = (((struct sockaddr_in *)&svc->xp_local.ss)->sin_port);
 	svc->xp_port = ntohs(port);
 
 	return (svc);

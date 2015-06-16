@@ -135,10 +135,9 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 		return (NULL);
 	}
 
-	xprt = mem_alloc(sizeof(SVCXPRT));
+	xprt = mem_zalloc(sizeof(SVCXPRT));
 	if (xprt == NULL)
 		goto freedata;
-	memset(xprt, 0, sizeof(SVCXPRT));
 
 	/* Init SVCXPRT locks, etc */
 	mutex_init(&xprt->xp_lock, NULL);
@@ -147,10 +146,12 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 	su = mem_alloc(sizeof(*su));
 	if (su == NULL)
 		goto freedata;
+
 	su->su_iosz = ((MAX(sendsize, recvsize) + 3) / 4) * 4;
 	rpc_buffer(xprt) = mem_alloc(su->su_iosz);
 	if (!rpc_buffer(xprt))
 		goto freedata;
+
 	xdrmem_create(&(su->su_xdrs), rpc_buffer(xprt), su->su_iosz,
 		      XDR_DECODE);
 
@@ -160,13 +161,12 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 	xprt->xp_fd = fd;
 	xprt->xp_p2 = su;
 	svc_dg_ops(xprt);
-	xprt->xp_rtaddr.maxlen = sizeof(struct sockaddr_storage);
 
 	slen = sizeof(ss);
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0)
 		goto freedata;
 
-	__rpc_set_netbuf(&xprt->xp_ltaddr, &ss, slen);
+	__rpc_set_address(&xprt->xp_local, &ss, slen);
 
 	switch (ss.ss_family) {
 	case AF_INET:
@@ -259,7 +259,6 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 	struct iovec iov;
 	size_t replylen;
 	ssize_t rlen;
-	unsigned int alen;
 
 	memset(&ss, 0xff, sizeof(struct sockaddr_storage));
 
@@ -290,7 +289,7 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 	if (rlen == -1 || (rlen < (ssize_t) (4 * sizeof(u_int32_t))))
 		return (false);
 
-	__rpc_set_netbuf(&xprt->xp_rtaddr, &ss, mesgp->msg_namelen);
+	__rpc_set_address(&xprt->xp_remote, &ss, mesgp->msg_namelen);
 
 	/* Check whether there's an IP_PKTINFO or IP6_PKTINFO control message.
 	 * If yes, preserve it for svc_dg_reply; otherwise just zap any cmsgs */
@@ -299,8 +298,6 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 		mesgp->msg_controllen = 0;
 		req->rq_daddr_len = 0;
 	}
-
-	__xprt_set_raddr(xprt, &ss);
 
 	xdrs->x_op = XDR_DECODE;
 	XDR_SETPOS(xdrs, 0);
@@ -315,13 +312,8 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 	req->rq_clntcred = req->rq_msg->rq_cred_body;
 
 	/* save remote address */
-	alen = xprt->xp_rtaddr.len;
-	req->rq_rtaddr.buf = mem_zalloc(alen);
-	if (req->rq_rtaddr.buf != NULL) {
-		req->rq_rtaddr.maxlen = req->rq_rtaddr.len = alen;
-		memcpy(req->rq_rtaddr.buf, xprt->xp_rtaddr.buf, alen);
-	} else
-		return (false);
+	req->rq_raddr_len = xprt->xp_remote.nb.len;
+	memcpy(&req->rq_raddr, xprt->xp_remote.nb.buf, req->rq_raddr_len);
 
 	/* the checksum */
 	req->rq_cksum =
@@ -384,7 +376,7 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 	xdrs->x_op = XDR_ENCODE;
 	XDR_SETPOS(xdrs, 0);
 
-	if (xdr_replymsg(xdrs, msg) && req->rq_rtaddr.len
+	if (xdr_replymsg(xdrs, msg) && req->rq_raddr_len
 	    && (!has_args
 		||
 		(SVCAUTH_WRAP
@@ -397,8 +389,8 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 		iov.iov_len = slen = XDR_GETPOS(xdrs);
 		msg->msg_iov = &iov;
 		msg->msg_iovlen = 1;
-		msg->msg_name = (struct sockaddr *)(void *)req->rq_rtaddr.buf;
-		msg->msg_namelen = xprt->xp_rtaddr.len;
+		msg->msg_name = (struct sockaddr *)&req->rq_raddr;
+		msg->msg_namelen = req->rq_raddr_len;
 
 		/* Set source IP address of the reply message in PKTINFO */
 		if (req->rq_daddr_len != 0) {
@@ -473,10 +465,6 @@ svc_dg_dodestroy(SVCXPRT *xprt)
 	XDR_DESTROY(&(su->su_xdrs));
 	(void)mem_free(rpc_buffer(xprt), su->su_iosz);
 	(void)mem_free(su, sizeof(*su));
-	if (xprt->xp_rtaddr.buf)
-		(void)mem_free(xprt->xp_rtaddr.buf, xprt->xp_rtaddr.maxlen);
-	if (xprt->xp_ltaddr.buf)
-		(void)mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
 	if (xprt->xp_tp)
 		(void)free(xprt->xp_tp);
 	rpc_dplx_unref((struct rpc_dplx_rec *)xprt->xp_p5, RPC_DPLX_FLAG_NONE);
@@ -753,7 +741,7 @@ svc_dg_cache_set(SVCXPRT *xprt, size_t replylen)
 	if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_RPC_CACHE) {
 		nconf = getnetconfigent(xprt->xp_netid);
 		if (nconf) {
-			uaddr = taddr2uaddr(nconf, &xprt->xp_rtaddr);
+			uaddr = taddr2uaddr(nconf, &xprt->xp_remote.nb);
 			freenetconfigent(nconf);
 			__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
 				"cache set for xid= %x prog=%d vers=%d proc=%d "
@@ -771,10 +759,10 @@ svc_dg_cache_set(SVCXPRT *xprt, size_t replylen)
 	victim->cache_proc = uc->uc_proc;
 	victim->cache_vers = uc->uc_vers;
 	victim->cache_prog = uc->uc_prog;
-	victim->cache_addr = xprt->xp_rtaddr;
-	victim->cache_addr.buf = ALLOC(char, xprt->xp_rtaddr.len);
-	(void)memcpy(victim->cache_addr.buf, xprt->xp_rtaddr.buf,
-		     (size_t) xprt->xp_rtaddr.len);
+	victim->cache_addr = xprt->xp_remote.nb;
+	victim->cache_addr.buf = ALLOC(char, xprt->xp_remote.nb.len);
+	(void)memcpy(victim->cache_addr.buf, xprt->xp_remote.nb.buf,
+		     (size_t) xprt->xp_remote.nb.len);
 	loc = CACHE_LOC(xprt, victim->cache_xid);
 	victim->cache_next = uc->uc_entries[loc];
 	uc->uc_entries[loc] = victim;
@@ -805,18 +793,18 @@ svc_dg_cache_get(SVCXPRT *xprt, struct rpc_msg *msg, char **replyp,
 		    && ent->cache_proc == msg->rm_call.cb_proc
 		    && ent->cache_vers == msg->rm_call.cb_vers
 		    && ent->cache_prog == msg->rm_call.cb_prog
-		    && ent->cache_addr.len == xprt->xp_rtaddr.len
+		    && ent->cache_addr.len == xprt->xp_remote.nb.len
 		    &&
 		    (memcmp
-		     (ent->cache_addr.buf, xprt->xp_rtaddr.buf,
-		      xprt->xp_rtaddr.len) == 0)) {
+		     (ent->cache_addr.buf, xprt->xp_remote.nb.buf,
+		      xprt->xp_remote.nb.len) == 0)) {
 			if (__pkg_params.
 			    debug_flags & TIRPC_DEBUG_FLAG_RPC_CACHE) {
 				nconf = getnetconfigent(xprt->xp_netid);
 				if (nconf) {
 					uaddr =
 					    taddr2uaddr(nconf,
-							&xprt->xp_rtaddr);
+							&xprt->xp_remote.nb);
 					freenetconfigent(nconf);
 					__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
 						"cache entry found for xid=%x prog=%d "

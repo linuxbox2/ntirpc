@@ -101,20 +101,6 @@ static SVCXPRT *makefd_xprt(int, u_int, u_int, bool *);
 
 extern pthread_mutex_t svc_ctr_lock;
 
-static void map_ipv4_to_ipv6(sin, sin6)
-struct sockaddr_in *sin;
-struct sockaddr_in6 *sin6;
-{
-#if defined(__linux__)
-	sin6->sin6_family = AF_INET6;
-	sin6->sin6_port = sin->sin_port;
-	sin6->sin6_addr.s6_addr32[0] = 0;
-	sin6->sin6_addr.s6_addr32[1] = 0;
-	sin6->sin6_addr.s6_addr32[2] = htonl(0xffff);
-	sin6->sin6_addr.s6_addr32[3] = *(uint32_t *) &sin->sin_addr;
-#endif
-}
-
 /*
  * Usage:
  * xprt = svc_vc_ncreate(sock, send_buf_size, recv_buf_size);
@@ -248,11 +234,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 		xprt->xp_port = ntohs(salocal_in6->sin6_port);
 		break;
 	}
-	if (!__rpc_set_netbuf(&xprt->xp_ltaddr, &sslocal, sizeof(sslocal))) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_vc_ncreate: no mem for local addr");
-		goto err;
-	}
+	__rpc_set_address(&xprt->xp_local, &sslocal, slen);
 
 	/* make reachable from rec */
 	rec->hdl.xprt = xprt;
@@ -320,11 +302,7 @@ svc_fd_ncreate(int fd, u_int sendsize, u_int recvsize)
 			"svc_fd_create: could not retrieve local addr");
 		goto freedata;
 	}
-	if (!__rpc_set_netbuf(&xprt->xp_ltaddr, &ss, sizeof(ss))) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_fd_create: no mem for local addr");
-		goto freedata;
-	}
+	__rpc_set_address(&xprt->xp_local, &ss, slen);
 
 	slen = sizeof(struct sockaddr_storage);
 	if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
@@ -332,121 +310,54 @@ svc_fd_ncreate(int fd, u_int sendsize, u_int recvsize)
 			"svc_fd_create: could not retrieve remote addr");
 		goto freedata;
 	}
-	if (!__rpc_set_netbuf(&xprt->xp_rtaddr, &ss, sizeof(ss))) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_fd_create: no mem for local addr");
-		goto freedata;
-	}
-
-	/* Set xp_raddr for compatibility */
-	__xprt_set_raddr(xprt, &ss);
+	__rpc_set_address(&xprt->xp_remote, &ss, slen);
 
  done:
 	return (xprt);
 
  freedata:
-	if (xprt->xp_ltaddr.buf != NULL)
-		mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
-
 	return (NULL);
 }
 
 /*
- * Like sv_fd_ncreate(), except export flags for additional control.  Add
- * special handling for AF_INET and AFS_INET6.  Possibly not needed,
- * because no longer called in Ganesha.
+ * Like sv_fd_ncreate(), except export flags for additional control.
  */
 SVCXPRT *
 svc_fd_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 {
 	struct sockaddr_storage ss;
-	struct sockaddr_in6 sin6;
-	struct netbuf *addr;
 	socklen_t slen;
 	SVCXPRT *xprt;
 	bool xprt_allocd;
-	int af;
 
 	assert(fd != -1);
 
 	xprt = makefd_xprt(fd, sendsize, recvsize, &xprt_allocd);
 	if ((!xprt) || (!xprt_allocd))	/* ref'd existing xprt handle */
-		goto done;
+		return (xprt);
 
 	slen = sizeof(struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 			"svc_fd_ncreate: could not retrieve local addr");
-		goto err;
+		return (NULL);
 	}
-	if (!__rpc_set_netbuf(&xprt->xp_ltaddr, &ss, sizeof(ss))) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_fd_ncreate: no mem for local addr");
-		goto err;
-	}
+	__rpc_set_address(&xprt->xp_local, &ss, slen);
 
 	slen = sizeof(struct sockaddr_storage);
 	if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 			"svc_fd_ncreate: could not retrieve remote addr");
-		goto err;
+		return (NULL);
 	}
-	af = ss.ss_family;
+	__rpc_set_address(&xprt->xp_remote, &ss, slen);
 
-	/* XXX Ganesha concepts, and apparently no longer used, check */
-	if (flags & SVC_VCCR_MAP6_V1) {
-		if (af == AF_INET) {
-			map_ipv4_to_ipv6((struct sockaddr_in *)&ss, &sin6);
-			addr =
-			    __rpc_set_netbuf(&xprt->xp_rtaddr, &ss, sizeof(ss));
-		} else
-			addr =
-			    __rpc_set_netbuf(&xprt->xp_rtaddr, &sin6,
-					     sizeof(struct sockaddr_in6));
-	} else
-		addr = __rpc_set_netbuf(&xprt->xp_rtaddr, &ss, sizeof(ss));
-	if (!addr) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_fd_ncreate: no mem for local addr");
-		goto err;
-	}
-
-	/* XXX Ganesha concepts, check */
-	if (flags & SVC_VCCR_RADDR) {
-		switch (af) {
-		case AF_INET:
-			if (!(flags & SVC_VCCR_RADDR_INET))
-				goto reg;
-			break;
-		case AF_INET6:
-			if (!(flags & SVC_VCCR_RADDR_INET6))
-				goto reg;
-			break;
-		case AF_LOCAL:
-			if (!(flags & SVC_VCCR_RADDR_LOCAL))
-				goto reg;
-			break;
-		default:
-			break;
-		}
-		/* Set xp_raddr for compatibility */
-		__xprt_set_raddr(xprt, &ss);
-	}
-
- reg:
 	/* conditional xprt_register */
 	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
 	    && (!(flags & SVC_VC_CREATE_XPRT_NOREG)))
 		xprt_register(xprt);
 
- done:
 	return (xprt);
-
- err:
-	if (xprt->xp_ltaddr.buf != NULL)
-		mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
-
-	return (NULL);
 }
 
 static SVCXPRT *
@@ -641,12 +552,7 @@ rendezvous_request(SVCXPRT *xprt, struct svc_req *req)
 	/* move xprt_register() out of makefd_xprt */
 	(void)svc_rqst_xprt_register(xprt, newxprt);
 
-	if (!__rpc_set_netbuf(&newxprt->xp_rtaddr, &addr, len)) {
-		abort();
-		return (FALSE);
-	}
-
-	__xprt_set_raddr(newxprt, &addr);
+	__rpc_set_address(&newxprt->xp_remote, &addr, len);
 	XPRT_TRACE_RADDR(newxprt, __func__, __func__, __LINE__);
 
 	/* XXX fvdl - is this useful? (Yes.  Matt) */
@@ -661,11 +567,7 @@ rendezvous_request(SVCXPRT *xprt, struct svc_req *req)
 		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 			"%s: could not retrieve local addr", __func__);
 	} else {
-		if (!__rpc_set_netbuf(&newxprt->xp_ltaddr, &addr,
-				      sizeof(addr))) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-				"%s: no mem for local addr", __func__);
-		}
+		__rpc_set_address(&newxprt->xp_local, &addr, slen);
 	}
 
 	xd = (struct x_vc_data *)newxprt->xp_p1;
@@ -756,10 +658,6 @@ rdvs_dodestroy(SVCXPRT *xprt)
 
 	mutex_destroy(&xprt->xp_lock);
 
-	if (xprt->xp_rtaddr.buf)
-		mem_free(xprt->xp_rtaddr.buf, xprt->xp_rtaddr.maxlen);
-	if (xprt->xp_ltaddr.buf)
-		mem_free(xprt->xp_ltaddr.buf, xprt->xp_ltaddr.maxlen);
 	if (xprt->xp_tp)
 		mem_free(xprt->xp_tp, 0);
 	if (xprt->xp_netid)
@@ -840,7 +738,7 @@ xprt_trace_raddr(SVCXPRT *xprt, const char *func, const char *tag,
 		 const int line)
 {
 	struct sockaddr_storage *ss = (struct sockaddr_storage *)
-	    &(xprt->xp_raddr);
+	    &(xprt->xp_remote.ss);
 	int port;
 
 	switch (ss->ss_family) {
@@ -1377,7 +1275,7 @@ __rpc_get_local_uid(SVCXPRT *transp, uid_t *uid)
 	struct sockaddr *sa;
 
 	sock = transp->xp_fd;
-	sa = (struct sockaddr *)transp->xp_rtaddr.buf;
+	sa = (struct sockaddr *)&transp->xp_remote.ss;
 	if (sa->sa_family == AF_LOCAL) {
 		ret = getpeereid(sock, &euid, &egid);
 		if (ret == 0)
@@ -1538,7 +1436,7 @@ clnt_vc_ncreate_svc(SVCXPRT *xprt, const rpcprog_t prog,
 	 * is currently allocated */
 
 	clnt =
-	    clnt_vc_ncreate2(xprt->xp_fd, &xprt->xp_rtaddr, prog, vers,
+	    clnt_vc_ncreate2(xprt->xp_fd, &xprt->xp_remote.nb, prog, vers,
 			     xd->shared.sendsz, xd->shared.recvsz,
 			     CLNT_CREATE_FLAG_SVCXPRT);
 
@@ -1593,13 +1491,7 @@ svc_vc_ncreate_clnt(CLIENT *clnt, const u_int sendsz,
 	if ((!xprt) || (!xprt_allocd))	/* ref'd existing xprt handle */
 		goto unlock;
 
-	if (!__rpc_set_netbuf(&xprt->xp_rtaddr, &addr, len)) {
-		/* fatal */
-		svc_vc_destroy(xprt);
-		goto unlock;
-	}
-
-	__xprt_set_raddr(xprt, &addr);
+	__rpc_set_address(&xprt->xp_remote, &addr, len);
 
 	if (__rpc_fd2sockinfo(fd, &si) && si.si_proto == IPPROTO_TCP) {
 		len = 1;

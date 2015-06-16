@@ -111,11 +111,6 @@
  */
 
 #define SVC_VCCR_NONE             0x0000
-#define SVC_VCCR_RADDR            0x0001
-#define SVC_VCCR_RADDR_INET       0x0002
-#define SVC_VCCR_RADDR_INET6      0x0004
-#define SVC_VCCR_RADDR_LOCAL      0x0008
-#define SVC_VCCR_MAP6_V1          0x0010
 
 /* Svc event strategy */
 enum svc_event_type {
@@ -254,16 +249,6 @@ typedef struct rpc_svcxprt {
 
 	char *xp_tp;		/* transport provider device name */
 	char *xp_netid;		/* network token */
-	struct netbuf xp_ltaddr;	/* local transport address */
-	struct netbuf xp_rtaddr;	/* remote transport address */
-
-	struct sockaddr_in6 xp_raddr;	/* remote addr (backward ABI compat) */
-
-	/* auth */
-	mutex_t xp_auth_lock;	/* lock owned by installed authenticator */
-
-	/* serialize private data */
-	mutex_t xp_lock;
 
 	void *xp_ev;		/* event handle */
 	void *xp_p1;		/* private: for use by svc ops */
@@ -274,6 +259,15 @@ typedef struct rpc_svcxprt {
 	void *xp_u1;		/* client user data */
 	void *xp_u2;		/* client user data */
 
+	struct rpc_address xp_local;	/* local address, length, port */
+	struct rpc_address xp_remote;	/* remote address, length, port */
+
+	/* auth */
+	mutex_t xp_auth_lock;	/* lock owned by installed authenticator */
+
+	/* serialize private data */
+	mutex_t xp_lock;
+
 	uint64_t xp_gen;	/* handle generation number */
 	uint32_t xp_refcnt;	/* handle reference count */
 	uint32_t xp_requests;	/* related requests count */
@@ -283,7 +277,6 @@ typedef struct rpc_svcxprt {
 	int xp_type;		/* xprt type */
 	u_int xp_flags;		/* flags */
 
-	int xp_addrlen;		/* length of remote address */
 	u_short xp_port;	/* associated port number */
 } SVCXPRT;
 
@@ -347,17 +340,21 @@ struct svc_req {
 	void *rq_ap1;		/* auth private */
 	void *rq_ap2;		/* auth private */
 
-	struct netbuf rq_rtaddr;	/* remote transport address */
+	/* copy of remote transport address */
+	struct sockaddr_storage rq_raddr;
 
 	/* Store dest addr for UDP to send replys from */
 	struct sockaddr_storage rq_daddr;
+
+	size_t rq_raddr_len;
 	size_t rq_daddr_len;
 };
 
 /*
- *  Approved way of getting address of caller
+ *  Approved way of getting addresses
  */
-#define svc_getrpccaller(x) (&(x)->xp_rtaddr)
+#define svc_getrpccaller(x) (&(x)->xp_remote.ss)
+#define svc_getrpclocal(x) (&(x)->xp_local.ss)
 
 /*
  * Ganesha.  Get connected transport type.
@@ -507,16 +504,13 @@ __BEGIN_DECLS
 extern void xprt_unregister(SVCXPRT *);
 __END_DECLS
 /*
- * This is used to set xprt->xp_raddr in a way legacy
- * apps can deal with
- *
- * __xprt_set_raddr(xprt, ss)
- * SVCXPRT *xprt;
- *      const struct sockaddr_storage *ss;
+ * This is used to set local and remote addresses in a way legacy
+ * apps can deal with, at the same time setting up a corresponding
+ * netbuf -- with no alloc/free needed.
  */
 __BEGIN_DECLS
-extern void __xprt_set_raddr(SVCXPRT *,
-			     const struct sockaddr_storage *);
+extern void __rpc_set_address(struct rpc_address *,
+			      const struct sockaddr_storage *, socklen_t);
 __END_DECLS
 /*
  * When the service routine is called, it must first check to see if it
