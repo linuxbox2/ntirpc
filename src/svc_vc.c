@@ -76,26 +76,13 @@
 #include <getpeereid.h>
 #include "svc_ioq.h"
 
-static bool rendezvous_request(SVCXPRT *, struct svc_req *);
-static enum xprt_stat rendezvous_stat(SVCXPRT *);
-static bool svc_vc_ref(SVCXPRT *, u_int, const char *, const int);
-static void svc_vc_release(SVCXPRT *, u_int, const char *, const int);
-static void svc_vc_destroy(SVCXPRT *);
 int generic_read_vc(XDR *, void *, void *, int);
 int generic_write_vc(XDR *, void *, void *, int);
-static enum xprt_stat svc_vc_stat(SVCXPRT *);
-static bool svc_vc_recv(SVCXPRT *, struct svc_req *);
-static bool svc_vc_getargs(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
-			   void *);
-static void svc_vc_lock(SVCXPRT *, uint32_t, const char *, int);
-static void svc_vc_unlock(SVCXPRT *, uint32_t, const char *, int);
-static bool svc_vc_freeargs(SVCXPRT *, xdrproc_t, void *);
-static bool svc_vc_reply(SVCXPRT *, struct svc_req *, struct rpc_msg *);
+
 static void svc_vc_rendezvous_ops(SVCXPRT *);
 static void svc_vc_ops(SVCXPRT *);
 static void svc_vc_override_ops(SVCXPRT *, SVCXPRT *);
-static bool svc_vc_control(SVCXPRT *, const u_int, void *);
-static bool svc_vc_rendezvous_control(SVCXPRT *, const u_int, void *);
+
 bool __svc_clean_idle2(int, bool);
 static SVCXPRT *makefd_xprt(int, u_int, u_int, bool *);
 
@@ -1087,6 +1074,13 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
 }
 
 static bool
+svc_vc_freeargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
+		void *args_ptr)
+{
+	return xdr_free(xdr_args, args_ptr);
+}
+
+static bool
 svc_vc_getargs(SVCXPRT *xprt, struct svc_req *req,
 	       xdrproc_t xdr_args, void *args_ptr, void *u_data)
 {
@@ -1104,15 +1098,9 @@ svc_vc_getargs(SVCXPRT *xprt, struct svc_req *req,
 	if (rslt)
 		req->rq_cksum = xdr_inrec_cksum(xdrs);
 	else
-		svc_vc_freeargs(xprt, xdr_args, args_ptr);
+		svc_vc_freeargs(xprt, req, xdr_args, args_ptr);
 
 	return (rslt);
-}
-
-static bool
-svc_vc_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
-{
-	return xdr_free(xdr_args, args_ptr);
 }
 
 static bool
@@ -1246,7 +1234,9 @@ svc_vc_rendezvous_ops(SVCXPRT *xprt)
 		ops.xp_reply = (bool(*)
 				(SVCXPRT *, struct svc_req *req,
 				 struct rpc_msg *))abort;
-		ops.xp_freeargs = (bool(*)(SVCXPRT *, xdrproc_t, void *))abort;
+		ops.xp_freeargs = (bool(*)
+				   (SVCXPRT *, struct svc_req *, xdrproc_t,
+				    void *))abort;
 		ops.xp_destroy = svc_rdvs_destroy;
 		ops.xp_control = svc_vc_rendezvous_control;
 		ops.xp_release = svc_rdvs_release;

@@ -225,7 +225,7 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 				   &gd->client_name, &mech, &gr->gr_token,
 				   &ret_flags, &time_rec, NULL);
 
-	svc_freeargs(req->rq_xprt, (xdrproc_t) xdr_rpc_gss_init_args,
+	svc_freeargs(req->rq_xprt, req, (xdrproc_t) xdr_rpc_gss_init_args,
 		     (caddr_t) &recv_tok);
 
 	if ((gr->gr_major != GSS_S_COMPLETE)

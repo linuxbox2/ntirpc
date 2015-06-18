@@ -210,7 +210,8 @@ typedef struct rpc_svcxprt {
 				  struct rpc_msg *);
 
 		/* free mem allocated for args */
-		bool (*xp_freeargs) (struct rpc_svcxprt *, xdrproc_t, void *);
+		bool (*xp_freeargs) (struct rpc_svcxprt *, struct svc_req *,
+				     xdrproc_t, void *);
 
 		/* release and mark destroyed */
 		void (*xp_destroy) (struct rpc_svcxprt *);
@@ -396,10 +397,10 @@ struct svc_req {
 #define svc_reply(xprt, req, msg) \
 	(*(xprt)->xp_ops->xp_reply) ((xprt), (req), (msg))
 
-#define SVC_FREEARGS(xprt, xargs, argsp)			\
-	(*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
-#define svc_freeargs(xprt, xargs, argsp)			\
-	(*(xprt)->xp_ops->xp_freeargs)((xprt), (xargs), (argsp))
+#define SVC_FREEARGS(xprt, req, xargs, argsp)			\
+	(*(xprt)->xp_ops->xp_freeargs)((xprt), (req), (xargs), (argsp))
+#define svc_freeargs(xprt, req, xargs, argsp)			\
+	(*(xprt)->xp_ops->xp_freeargs)((xprt), (req), (xargs), (argsp))
 
 #define SVC_REF2(xprt, flags, tag, line)		\
 	(*(xprt)->xp_ops->xp_ref)(xprt, flags, tag, line)

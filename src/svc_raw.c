@@ -61,18 +61,7 @@ static struct svc_raw_private {
 
 extern mutex_t svcraw_lock;
 
-static enum xprt_stat svc_raw_stat(SVCXPRT *);
-static bool svc_raw_recv(SVCXPRT *, struct svc_req *);
-static bool svc_raw_reply(SVCXPRT *, struct svc_req *, struct rpc_msg *);
-static bool svc_raw_getargs(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
-			    void *);
-static bool svc_raw_freeargs(SVCXPRT *, xdrproc_t, void *);
-static void svc_raw_destroy(SVCXPRT *);
-static bool svc_raw_ref(SVCXPRT *, u_int, const char *, const int);
-static void svc_raw_release(SVCXPRT *, u_int, const char *,
-			    const int);
 static void svc_raw_ops(SVCXPRT *);
-static bool svc_raw_control(SVCXPRT *, const u_int, void *);
 
 char *__rpc_rawcombuf = NULL;
 
@@ -168,25 +157,9 @@ svc_raw_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 }
 
  /*ARGSUSED*/
-static bool svc_raw_getargs(SVCXPRT *xprt, struct svc_req *req,
-			    xdrproc_t xdr_args, void *args_ptr,
-			    void *u_data)
-{
-	struct svc_raw_private *srp;
-
-	mutex_lock(&svcraw_lock);
-	srp = svc_raw_private;
-	if (srp == NULL) {
-		mutex_unlock(&svcraw_lock);
-		return (false);
-	}
-	mutex_unlock(&svcraw_lock);
-	return (*xdr_args) (&srp->xdr_stream, args_ptr);
-}
-
- /*ARGSUSED*/
 static bool
-svc_raw_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
+svc_raw_freeargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
+		 void *args_ptr)
 {
 	struct svc_raw_private *srp;
 	XDR *xdrs;
@@ -203,6 +176,23 @@ svc_raw_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
 	xdrs->x_op = XDR_FREE;
 
 	return (*xdr_args) (xdrs, args_ptr);
+}
+
+ /*ARGSUSED*/
+static bool
+svc_raw_getargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
+		void *args_ptr, void *u_data)
+{
+	struct svc_raw_private *srp;
+
+	mutex_lock(&svcraw_lock);
+	srp = svc_raw_private;
+	if (srp == NULL) {
+		mutex_unlock(&svcraw_lock);
+		return (false);
+	}
+	mutex_unlock(&svcraw_lock);
+	return (*xdr_args) (&srp->xdr_stream, args_ptr);
 }
 
  /*ARGSUSED*/

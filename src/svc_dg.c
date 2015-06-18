@@ -76,24 +76,9 @@ extern struct svc_params __svc_params[1];
 #endif
 
 static void svc_dg_ops(SVCXPRT *);
-static enum xprt_stat svc_dg_stat(SVCXPRT *);
-static bool svc_dg_recv(SVCXPRT *, struct svc_req *);
 
-static bool svc_dg_reply(SVCXPRT *, struct svc_req *, struct rpc_msg *);
-static bool svc_dg_getargs(SVCXPRT *, struct svc_req *, xdrproc_t, void *,
-			   void *);
-static void svc_dg_lock(SVCXPRT *, uint32_t, const char *, int);
-static void svc_dg_unlock(SVCXPRT *, uint32_t, const char *, int);
-static bool svc_dg_freeargs(SVCXPRT *, xdrproc_t, void *);
-static bool svc_dg_ref(SVCXPRT *, u_int, const char *,
-		       const int);
-static void svc_dg_release(SVCXPRT *, u_int, const char *,
-			   const int);
-static void svc_dg_destroy(SVCXPRT *);
-static bool svc_dg_control(SVCXPRT *, const u_int, void *);
 static int svc_dg_cache_get(SVCXPRT *, struct rpc_msg *, char **, size_t *);
 static void svc_dg_cache_set(SVCXPRT *, size_t);
-int svc_dg_enablecache(SVCXPRT *, u_int);
 static void svc_dg_enable_pktinfo(int, const struct __rpc_sockinfo *);
 static int svc_dg_store_pktinfo(struct msghdr *, struct svc_req *);
 
@@ -410,23 +395,29 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 }
 
 static bool
+svc_dg_freeargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
+		void *args_ptr)
+{
+	return xdr_free(xdr_args, args_ptr);
+}
+
+static bool
 svc_dg_getargs(SVCXPRT *xprt, struct svc_req *req,
 	       xdrproc_t xdr_args, void *args_ptr, void *u_data)
 {
 	struct svc_dg_data *su = su_data(xprt);
 	XDR *xdrs = &(su->su_xdrs);
+	bool rslt;
 
 	/* threads u_data for advanced decoders */
 	xdrs->x_public = u_data;
 
-	if (!SVCAUTH_UNWRAP
-	    (req->rq_auth, req, &(su_data(xprt)->su_xdrs), xdr_args,
-	     args_ptr)) {
-		(void)svc_freeargs(xprt, xdr_args, args_ptr);
-		return false;
+	rslt = SVCAUTH_UNWRAP(req->rq_auth, req, xdrs, xdr_args, args_ptr);
+	if (!rslt) {
+		svc_dg_freeargs(xprt, req, xdr_args, args_ptr);
 	}
 
-	return (true);
+	return (rslt);
 }
 
 static void
@@ -443,12 +434,6 @@ svc_dg_unlock(SVCXPRT *xprt, uint32_t flags, const char *file,
 {
 	rpc_dplx_rux(xprt);
 	rpc_dplx_sux(xprt);
-}
-
-static bool
-svc_dg_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, void *args_ptr)
-{
-	return xdr_free(xdr_args, args_ptr);
 }
 
 static void

@@ -301,7 +301,7 @@ universal(struct svc_req *req, SVCXPRT *transp)
 				return;
 			}
 			/* free the decoded arguments */
-			(void)svc_freeargs(transp, pl->p_inproc, xdrbuf);
+			(void)svc_freeargs(transp, req, pl->p_inproc, xdrbuf);
 			mutex_unlock(&proglst_lock);
 			return;
 		}
