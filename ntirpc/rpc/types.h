@@ -45,6 +45,7 @@
 #endif
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <inttypes.h>
 
 #if defined(_WIN32)
 

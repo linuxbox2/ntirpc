@@ -142,7 +142,7 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 
 	su->su_cache = NULL;
 	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
-	xprt->xp_refcnt = 1;
+	xprt->xp_refs = 1;
 	xprt->xp_fd = fd;
 	xprt->xp_p2 = su;
 	svc_dg_ops(xprt);
@@ -187,7 +187,7 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 	if (xprt) {
 		if (su)
 			(void)mem_free(su, sizeof(*su));
-		svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
+		xprt_unregister(xprt);
 		(void)mem_free(xprt, sizeof(SVCXPRT));
 	}
 	return (NULL);
@@ -444,21 +444,28 @@ svc_dg_unlock(SVCXPRT *xprt, uint32_t flags, const char *file,
 }
 
 static void
-svc_dg_dodestroy(SVCXPRT *xprt)
+svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
 	struct svc_dg_data *su = su_data(xprt);
 
-	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYING)
-		return;
-	xprt->xp_flags |= SVC_XPRT_FLAG_DESTROYING;
+	/* clears xprt from the xprt table (eg, idle scans) */
+	xprt_unregister(xprt);
+
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
+		"%s() %p xp_refs %" PRIu32
+		" should actually destroy things @ %s:%d",
+		__func__, xprt, xprt->xp_refs, tag, line);
 
 	if (xprt->xp_fd != -1)
 		(void)close(xprt->xp_fd);
+
 	XDR_DESTROY(&(su->su_xdrs));
 	(void)mem_free(rpc_buffer(xprt), su->su_iosz);
 	(void)mem_free(su, sizeof(*su));
+
 	if (xprt->xp_tp)
 		(void)free(xprt->xp_tp);
+
 	rpc_dplx_unref((struct rpc_dplx_rec *)xprt->xp_p5, RPC_DPLX_FLAG_NONE);
 
 	if (xprt->xp_ops->xp_free_user_data) {
@@ -467,57 +474,6 @@ svc_dg_dodestroy(SVCXPRT *xprt)
 	}
 
 	(void)mem_free(xprt, sizeof(SVCXPRT));
-}
-
-static bool
-svc_dg_ref(SVCXPRT *xprt, u_int flags, const char *tag,
-	   const int line)
-{
-	if (!(flags & SVC_REF_FLAG_LOCKED))
-		mutex_lock(&xprt->xp_lock);
-
-	++(xprt->xp_refcnt);
-	mutex_unlock(&xprt->xp_lock);
-	return (true);
-}
-
-static void
-svc_dg_release(SVCXPRT *xprt, u_int flags, const char *tag,
-	       const int line)
-{
-	uint32_t refcnt;
-
-	if (!(flags & SVC_RELEASE_FLAG_LOCKED))
-		mutex_lock(&xprt->xp_lock);
-
-	refcnt = --(xprt->xp_refcnt);
-	mutex_unlock(&xprt->xp_lock);
-
-	if (refcnt == 0)
-		svc_dg_dodestroy(xprt);
-}
-
-static void
-svc_dg_destroy(SVCXPRT *xprt)
-{
-	mutex_lock(&xprt->xp_lock);
-	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
-		mutex_unlock(&xprt->xp_lock);
-		goto out;
-	}
-	xprt->xp_flags |= SVC_XPRT_FLAG_DESTROYED;
-	mutex_unlock(&xprt->xp_lock);
-
-	/* XXX prefer LOCKED? (would require lock order change) */
-	(void)svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
-
-	/* clears xprt from the xprt table (eg, idle scans) */
-	svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
-
-	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-
- out:
-	return;
 }
 
 extern mutex_t ops_lock;
@@ -598,8 +554,6 @@ svc_dg_ops(SVCXPRT *xprt)
 		ops.xp_freeargs = svc_dg_freeargs;
 		ops.xp_destroy = svc_dg_destroy;
 		ops.xp_control = svc_dg_control;
-		ops.xp_release = svc_dg_release;
-		ops.xp_ref = svc_dg_ref;
 		ops.xp_lock = svc_dg_lock;
 		ops.xp_unlock = svc_dg_unlock;
 		ops.xp_getreq = svc_getreq_default;

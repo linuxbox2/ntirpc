@@ -194,25 +194,28 @@ svc_ioq_callback(struct work_pool_entry *wpe)
 	struct poolq_entry *have;
 	struct xdr_ioq *xioq;
 
-	/* xp_lock instead of ioq_mutex avoids second lock for SVC_RELEASE.
-	 * xprt and xd are one-to-one.
-	 */
+	/* qmutex more fine grained than xp_lock */
 	for (;;) {
-		mutex_lock(&xprt->xp_lock);
+		mutex_lock(&xd->shared.ioq.qmutex);
 		have = TAILQ_FIRST(&xd->shared.ioq.qh);
-		if (unlikely(!have || !svc_work_pool.params.thrd_max)) {
+		if (unlikely(!have)) {
 			xd->shared.active = false;
-			SVC_RELEASE(xprt, SVC_RELEASE_FLAG_LOCKED);
+			mutex_unlock(&xd->shared.ioq.qmutex);
+			SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 			return;
 		}
 
 		TAILQ_REMOVE(&xd->shared.ioq.qh, have, q);
 		(xd->shared.ioq.qcount)--;
 		/* do i/o unlocked */
-		mutex_unlock(&xprt->xp_lock);
-
+		mutex_unlock(&xd->shared.ioq.qmutex);
 		xioq = _IOQ(have);
-		ioq_flushv(xprt, xd, xioq);
+
+		if (svc_work_pool.params.thrd_max
+		 && !(xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
+			/* all systems are go! */
+			ioq_flushv(xprt, xd, xioq);
+		}
 		XDR_DESTROY(xioq->xdrs);
 	}
 
@@ -222,16 +225,15 @@ svc_ioq_callback(struct work_pool_entry *wpe)
 void
 svc_ioq_append(SVCXPRT *xprt, struct x_vc_data *xd, XDR *xdrs)
 {
-	if (unlikely(!svc_work_pool.params.thrd_max)) {
+	if (unlikely(!svc_work_pool.params.thrd_max
+		  || (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED))) {
 		/* discard */
 		XDR_DESTROY(xdrs);
 		return;
 	}
 
-	/* xp_lock instead of ioq_mutex avoids second lock for SVC_REF.
-	 * xprt and xd are one-to-one.
-	 */
-	mutex_lock(&xprt->xp_lock);
+	/* qmutex more fine grained than xp_lock */
+	mutex_lock(&xd->shared.ioq.qmutex);
 	(xd->shared.ioq.qcount)++;
 	TAILQ_INSERT_TAIL(&xd->shared.ioq.qh, &(XIOQ(xdrs)->ioq_s), q);
 
@@ -239,8 +241,11 @@ svc_ioq_append(SVCXPRT *xprt, struct x_vc_data *xd, XDR *xdrs)
 		xd->shared.active = true;
 		xd->wpe.fun = svc_ioq_callback;
 		xd->wpe.arg = xprt;
-		SVC_REF(xprt, SVC_REF_FLAG_LOCKED);	/* !LOCKED */
+		mutex_unlock(&xd->shared.ioq.qmutex);
+		SVC_REF(xprt, SVC_REF_FLAG_NONE);
 		work_pool_submit(&svc_work_pool, &xd->wpe);
-	} else
-		mutex_unlock(&xprt->xp_lock);
+	} else {
+		/* queuing multiple output requests for worker efficiency */
+		mutex_unlock(&xd->shared.ioq.qmutex);
+	}
 }

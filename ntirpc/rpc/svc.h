@@ -40,9 +40,13 @@
 
 #ifndef _TIRPC_SVC_H
 #define _TIRPC_SVC_H
+
 #include <sys/cdefs.h>
 #include <rpc/types.h>
 #include <rpc/work_pool.h>
+#include <misc/portable.h>
+#include <misc/queue.h>
+#include <misc/rbtree.h>
 #include "reentrant.h"
 
 /*
@@ -140,28 +144,31 @@ typedef struct svc_init_params {
  * SVCXPRT xp_flags
  */
 
-#define SVC_XPRT_FLAG_NONE               0x0000
-#define SVC_XPRT_FLAG_SETNEWFDS          0x0001
-#define SVC_XPRT_FLAG_DONTCLOSE          0x0002
-#define SVC_XPRT_FLAG_EVCHAN             0x0004
-#define SVC_XPRT_FLAG_GCHAN              0x0008
-#define SVC_XPRT_FLAG_COPY               0x0010	/* XXX */
-#define SVC_XPRT_FLAG_DESTROYED          0x0020
-#define SVC_XPRT_FLAG_DESTROYING         0x0040
+#define SVC_XPRT_FLAG_NONE		0x0000
+/* uint16_t actually used */
+#define SVC_XPRT_FLAG_ADDED		0x0001
+#define SVC_XPRT_FLAG_BLOCKED		0x0002
+#define SVC_XPRT_FLAG_DESTROYED		0x0020	/* SVC_DESTROY() was called */
+#define SVC_XPRT_FLAG_DESTROYING	0x0040	/* (*xp_destroy) was called */
+
+/* uint32_t instructions */
+#define SVC_XPRT_FLAG_LOCK		SVC_XPRT_FLAG_NONE
+#define SVC_XPRT_FLAG_LOCKED		0x00010000
+#define SVC_XPRT_FLAG_UNLOCK		0x00020000
 
 /*
  * SVC_REF flags
  */
 
-#define SVC_REF_FLAG_NONE            0x0000
-#define SVC_REF_FLAG_LOCKED          0x0001
+#define SVC_REF_FLAG_NONE		SVC_XPRT_FLAG_NONE
+#define SVC_REF_FLAG_LOCKED		SVC_XPRT_FLAG_LOCKED
 
 /*
  * SVC_RELEASE flags
  */
 
-#define SVC_RELEASE_FLAG_NONE            0x0000
-#define SVC_RELEASE_FLAG_LOCKED          0x0001
+#define SVC_RELEASE_FLAG_NONE		SVC_XPRT_FLAG_NONE
+#define SVC_RELEASE_FLAG_LOCKED		SVC_XPRT_FLAG_LOCKED
 
 /* XXX Ganesha
  * Don't confuse with (currently incomplete) transport type, nee
@@ -213,19 +220,12 @@ typedef struct rpc_svcxprt {
 		bool (*xp_freeargs) (struct rpc_svcxprt *, struct svc_req *,
 				     xdrproc_t, void *);
 
-		/* release and mark destroyed */
-		void (*xp_destroy) (struct rpc_svcxprt *);
+		/* actually destroy after xp_destroy_it and xp_release_it */
+		void (*xp_destroy) (struct rpc_svcxprt *, u_int,
+				    const char *, const int);
 
 		/* catch-all function */
 		bool (*xp_control) (struct rpc_svcxprt *, const u_int, void *);
-
-		/* release ref (destroy if no refs) */
-		void (*xp_release) (struct rpc_svcxprt *, u_int,
-				    const char *, const int);
-
-		/* take lifecycle ref */
-		bool (*xp_ref) (struct rpc_svcxprt *, u_int,
-				const char *, const int);
 
 		/* transport locking (may be duplex-aware, etc) */
 		void (*xp_lock) (struct rpc_svcxprt *, uint32_t,
@@ -269,16 +269,33 @@ typedef struct rpc_svcxprt {
 	/* serialize private data */
 	mutex_t xp_lock;
 
-	uint64_t xp_gen;	/* handle generation number */
-	uint32_t xp_refcnt;	/* handle reference count */
+	/* event vector list */
+	TAILQ_ENTRY(rpc_svcxprt) xp_evq;
+
+	/* indexed by fd */
+	struct opr_rbtree_node xp_fd_node;
+
+	uint32_t xp_refs;	/* handle reference count */
 	uint32_t xp_requests;	/* related requests count */
 
 	int xp_fd;
 	int xp_si_type;		/* si type */
 	int xp_type;		/* xprt type */
-	u_int xp_flags;		/* flags */
 
+	uint16_t xp_flags;	/* flags */
 	u_short xp_port;	/* associated port number */
+
+	/*
+	 * union of event processor types
+	 */
+	enum svc_event_type ev_type;
+	union {
+#if defined(TIRPC_EPOLL)
+		struct {
+			struct epoll_event event;
+		} epoll;
+#endif
+	} ev_u;
 } SVCXPRT;
 
 /* Service record used by exported search routines */
@@ -368,6 +385,18 @@ struct svc_req {
 #define svc_get_xprt_si_type(x) ((x)->xp_si_type)
 
 /*
+ * Trace transport (de-)references, with remote address
+ */
+__BEGIN_DECLS
+extern void svc_xprt_trace(SVCXPRT *, const char *, const char *, const int);
+__END_DECLS
+
+#define XPRT_TRACE(xprt, func, tag, line)				\
+	if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_REFCNT) {	\
+		svc_xprt_trace((xprt), (func), (tag), (line));		\
+	}
+
+/*
  * Operations defined on an SVCXPRT handle
  *
  * SVCXPRT *xprt;
@@ -402,30 +431,88 @@ struct svc_req {
 #define svc_freeargs(xprt, req, xargs, argsp)			\
 	(*(xprt)->xp_ops->xp_freeargs)((xprt), (req), (xargs), (argsp))
 
-#define SVC_REF2(xprt, flags, tag, line)		\
-	(*(xprt)->xp_ops->xp_ref)(xprt, flags, tag, line)
-#define svc_ref2(xprt, flags, tag, line)		\
-	(*(xprt)->xp_ops->xp_ref)(xprt, flags, tag, line)
+/* Protect a SVCXPRT with a SVC_REF for each call or request.
+ */
+static inline void svc_ref_it(struct rpc_svcxprt *xprt, u_int flags,
+			      const char *tag, const int line)
+{
+	atomic_inc_uint32_t(&xprt->xp_refs);
 
-#define SVC_RELEASE2(xprt, flags, tag, line) \
-	(*(xprt)->xp_ops->xp_release)(xprt, flags, tag, line)
-#define svc_release2(xprt, flags, tag, line)			\
-	(*(xprt)->xp_ops->xp_release)(xprt, flags, tag, line)
+	if (flags & SVC_REF_FLAG_LOCKED)  {
+		/* unlock before warning trace */
+		mutex_unlock(&xprt->xp_lock);
+	}
+	XPRT_TRACE(xprt, __func__, tag, line);
+}
+#define SVC_REF2(xprt, flags, tag, line)				\
+	svc_ref_it(xprt, flags, tag, line)
+#define svc_ref2(xprt, flags, tag, line)				\
+	svc_ref_it(xprt, flags, tag, line)
+#define SVC_REF(xprt, flags)						\
+	svc_ref_it(xprt, flags, __func__, __LINE__)
+#define svc_ref(xprt, flags)						\
+	svc_ref_it(xprt, flags, __func__, __LINE__)
 
-#define SVC_REF(xprt, flags)					\
-	(*(xprt)->xp_ops->xp_ref)(xprt, flags, __func__, __LINE__)
-#define svc_ref(xprt, flags)					\
-	(*(xprt)->xp_ops->xp_ref)(xprt, flags, __func__, __LINE__)
+static inline void svc_release_it(struct rpc_svcxprt *xprt, u_int flags,
+				  const char *tag, const int line)
+{
+	uint32_t refs = atomic_dec_uint32_t(&xprt->xp_refs);
+	uint16_t xp_flags;
 
+	if (flags & SVC_RELEASE_FLAG_LOCKED) {
+		/* unlock before warning trace */
+		mutex_unlock(&xprt->xp_lock);
+	}
+	XPRT_TRACE(xprt, __func__, tag, line);
+
+	if (likely(refs > 0)) {
+		/* normal case */
+		return;
+	}
+
+	/* enforce once-only semantic, trace others */
+	xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags,
+						SVC_XPRT_FLAG_DESTROYING);
+
+	if (xp_flags & SVC_XPRT_FLAG_DESTROYING) {
+		XPRT_TRACE(xprt, "ERROR! already destroying!", tag, line);
+		return;
+	}
+
+	/* Releasing last reference */
+	(*(xprt)->xp_ops->xp_destroy)(xprt, flags, tag, line);
+}
+#define SVC_RELEASE2(xprt, flags, tag, line)				\
+	svc_release_it(xprt, flags, __func__, __LINE__)
+#define svc_release2(xprt, flags, tag, line)				\
+	svc_release_it(xprt, flags, __func__, __LINE__)
 #define SVC_RELEASE(xprt, flags)					\
-	(*(xprt)->xp_ops->xp_release)(xprt, flags, __func__, __LINE__)
+	svc_release_it(xprt, flags, __func__, __LINE__)
 #define svc_release(xprt, flags)					\
-	(*(xprt)->xp_ops->xp_release)(xprt, flags, __func__, __LINE__)
+	svc_release_it(xprt, flags, __func__, __LINE__)
 
-#define SVC_DESTROY(xprt)			\
-	(*(xprt)->xp_ops->xp_destroy)(xprt)
-#define svc_destroy(xprt)			\
-	(*(xprt)->xp_ops->xp_destroy)(xprt)
+/* SVC_DESTROY is SVC_RELEASE with once-only semantics.  Also, idempotent
+ * SVC_XPRT_FLAG_DESTROYED indicates that more references should not be taken.
+ */
+static inline void svc_destroy_it(struct rpc_svcxprt *xprt,
+				  const char *tag, const int line)
+{
+	uint16_t flags = atomic_postset_uint16_t_bits(&xprt->xp_flags,
+						      SVC_XPRT_FLAG_DESTROYED);
+
+	XPRT_TRACE(xprt, __func__, tag, line);
+
+	if (flags & SVC_XPRT_FLAG_DESTROYED) {
+		/* previously set, do nothing */
+		return;
+	}
+
+	svc_release_it(xprt, SVC_RELEASE_FLAG_NONE, tag, line);
+}
+#define SVC_DESTROY(xprt)						\
+	svc_destroy_it(xprt, __func__, __LINE__)
+#define svc_destroy(xprt)						\
+	svc_destroy_it(xprt, __func__, __LINE__)
 
 #define SVC_CONTROL(xprt, rq, in)			\
 	(*(xprt)->xp_ops->xp_control)((xprt), (rq), (in))
@@ -734,14 +821,6 @@ extern void free_rpc_msg(struct rpc_msg *);
 int svc_dg_enablecache(SVCXPRT *, const u_int);
 
 int __rpc_get_local_uid(SVCXPRT *, uid_t *);
-
-#define XPRT_TRACE_RADDR(xprt, func, tag, line)				\
-	if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_REFCNT) {	\
-		xprt_trace_raddr((xprt), (func), (tag), (line));	\
-	}
-
-void xprt_trace_raddr(SVCXPRT *, const char *, const char *,
-		      const int);
 
 __END_DECLS
 /* for backward compatibility */

@@ -46,7 +46,7 @@
 #include "rpc_com.h"
 
 #include <rpc/svc.h>
-#include <misc/rbtree.h>
+#include <misc/rbtree_x.h>
 #include <misc/opr_queue.h>
 #include "clnt_internal.h"
 #include "svc_internal.h"
@@ -62,16 +62,24 @@
  * are O(1) without any ordered or hashed representation.
  */
 
+#define SVC_RQST_PARTITIONS 7
+
 static bool initialized;
+
+struct svc_rqst_set {
+	mutex_t mtx;
+	struct rbtree_x xt;
+	uint32_t next_id;
+};
 
 static struct svc_rqst_set svc_rqst_set = {
 	MUTEX_INITIALIZER,	/* mtx */
 	{
 	 0,			/* npart */
 	 RBT_X_FLAG_NONE,	/* flags */
-	 8192,			/* cachesz */
+	 23,			/* cachesz */
 	 NULL			/* tree */
-	 },			/* xt */
+	},			/* xt */
 	0			/* next_id */
 };
 
@@ -83,6 +91,64 @@ extern struct svc_params __svc_params[1];
 				svc_rqst_init(); \
 		} while (0); \
 	}
+
+struct svc_rqst_rec {
+	struct opr_rbtree_node node_k;
+	TAILQ_HEAD(evq_head, rpc_svcxprt) xprt_q;	/* xprt handles */
+	pthread_mutex_t mtx;
+	void *u_data;		/* user-installable opaque data */
+	uint64_t gen;		/* generation number */
+
+	int sv[2];
+	uint32_t id_k;		/* chan id */
+	uint32_t states;
+	uint32_t signals;
+	uint32_t refcnt;
+	uint16_t flags;
+
+	/*
+	 * union of event processor types
+	 */
+	enum svc_event_type ev_type;
+	union {
+#if defined(TIRPC_EPOLL)
+		struct {
+			int epoll_fd;
+			struct epoll_event ctrl_ev;
+			struct epoll_event *events;
+			u_int max_events;	/* max epoll events */
+		} epoll;
+#endif
+		struct {
+			fd_set set;	/* select/fd_set (currently unhooked) */
+		} fd;
+	} ev_u;
+};
+
+static inline int rqst_thrd_cmpf(const struct opr_rbtree_node *lhs,
+				 const struct opr_rbtree_node *rhs)
+{
+	struct svc_rqst_rec *lk, *rk;
+
+	lk = opr_containerof(lhs, struct svc_rqst_rec, node_k);
+	rk = opr_containerof(rhs, struct svc_rqst_rec, node_k);
+
+	if (lk->id_k < rk->id_k)
+		return (-1);
+
+	if (lk->id_k == rk->id_k)
+		return (0);
+
+	return (1);
+}
+
+/* forward declaration in lieu of moving code {WAS} */
+
+static int
+svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
+
+static int svc_rqst_unhook_events(SVCXPRT *, struct svc_rqst_rec *);
+static int svc_rqst_hook_events(SVCXPRT *, struct svc_rqst_rec *);
 
 static inline void
 SetNonBlock(int fd)
@@ -102,14 +168,14 @@ svc_rqst_init()
 		goto unlock;
 
 	mutex_init(&svc_rqst_set.mtx, NULL);
-	code = rbtx_init(&svc_rqst_set.xt, rqst_thrd_cmpf, 7 /* partitions */ ,
+	code = rbtx_init(&svc_rqst_set.xt, rqst_thrd_cmpf, SVC_RQST_PARTITIONS,
 			 RBT_X_FLAG_ALLOC | RBT_X_FLAG_CACHE_RT);
 	if (code)
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST, "%s: rbtx_init failed",
 			__func__);
 
 	/* init read-through cache */
-	for (ix = 0; ix < 7 /* partitions */; ++ix) {
+	for (ix = 0; ix < SVC_RQST_PARTITIONS; ++ix) {
 		struct rbtree_x_part *xp = &(svc_rqst_set.xt.tree[ix]);
 		xp->cache =
 		    mem_zalloc(svc_rqst_set.xt.cachesz *
@@ -131,59 +197,19 @@ svc_rqst_init()
 void
 svc_rqst_init_xprt(SVCXPRT *xprt)
 {
-	struct svc_xprt_ev *xp_ev = mem_alloc(sizeof(struct svc_xprt_ev));
-
-	xp_ev->sr_rec = 0;
-	xp_ev->xprt = xprt;
-#if defined(TIRPC_EPOLL)
-	xp_ev->ev_type = SVC_EVENT_EPOLL;
-#else
-	xp_ev->ev_type = SVC_EVENT_FDSET;
-#endif
-	xp_ev->flags = XP_EV_FLAG_NONE;
-	xprt->xp_ev = xp_ev;
-
 	/* reachable */
-	svc_xprt_set(xprt, SVC_XPRT_FLAG_NONE);
-}
-
-void
-svc_rqst_finalize_xprt(SVCXPRT *xprt, uint32_t flags)
-{
-
-	uint32_t flags2 = SVC_XPRT_FLAG_NONE;
-
-	if (!xprt->xp_ev)
-		goto out;
-
-	if (!(flags & SVC_RQST_FLAG_MUTEX_LOCKED)) {
-		flags2 |= SVC_XPRT_FLAG_MUTEX_LOCKED;
-		mutex_lock(&xprt->xp_lock);
-	}
-
-	/* remove xprt from xprt table */
-	svc_xprt_clear(xprt, flags2);
-
-	/* free state */
-	if (xprt->xp_ev) {
-		mem_free(xprt->xp_ev, sizeof(struct svc_xprt_ev));
-		xprt->xp_ev = 0;
-	}
-
-	if (!(flags & SVC_RQST_FLAG_MUTEX_LOCKED))
-		mutex_unlock(&xprt->xp_lock);
-
- out:
-	return;
+	svc_xprt_set(xprt, SVC_XPRT_FLAG_UNLOCK);
+	/* !!! not checking for duplicate xp_fd ??? */
 }
 
 static inline struct svc_rqst_rec *
-svc_rqst_lookup_chan(uint32_t chan_id, struct rbtree_x_part
-		     **ref_t, uint32_t flags)
+svc_rqst_lookup_chan(uint32_t chan_id, struct rbtree_x_part **ref_t,
+		     uint32_t flags)
 {
-	struct svc_rqst_rec trec, *sr_rec = NULL;
+	struct svc_rqst_rec trec;
 	struct rbtree_x_part *t;
 	struct opr_rbtree_node *ns;
+	struct svc_rqst_rec *sr_rec = NULL;
 
 	cond_init_svc_rqst();
 
@@ -191,26 +217,25 @@ svc_rqst_lookup_chan(uint32_t chan_id, struct rbtree_x_part
 	t = rbtx_partition_of_scalar(&svc_rqst_set.xt, trec.id_k);
 	*ref_t = t;
 
-	if (flags & SVC_RQST_FLAG_LOCK)
+	if (!(flags & SVC_RQST_FLAG_PART_LOCKED))
 		mutex_lock(&t->mtx);
 
 	ns = rbtree_x_cached_lookup(&svc_rqst_set.xt, t, &trec.node_k,
 				    trec.id_k);
 	if (ns) {
 		sr_rec = opr_containerof(ns, struct svc_rqst_rec, node_k);
-		mutex_lock(&sr_rec->mtx);
+		if (!(flags & SVC_RQST_FLAG_SREC_LOCKED))
+			mutex_lock(&sr_rec->mtx);
 		++(sr_rec->refcnt);
-		if (!(flags & SVC_RQST_FLAG_REC_LOCK))
+		if (flags & SVC_RQST_FLAG_SREC_UNLOCK)
 			mutex_unlock(&sr_rec->mtx);
 	}
 
-	if (flags & SVC_RQST_FLAG_UNLOCK)
+	if (flags & SVC_RQST_FLAG_PART_UNLOCK)
 		mutex_unlock(&t->mtx);
 
 	return (sr_rec);
 }
-
-#define SVC_RQST_FLAG_MASK (SVC_RQST_FLAG_CHAN_AFFINITY)
 
 int
 svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
@@ -250,7 +275,6 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 #if defined(TIRPC_EPOLL)
 	if (flags & SVC_RQST_FLAG_EPOLL) {
 
-		/* XXX improve mask */
 		sr_rec->flags = flags & SVC_RQST_FLAG_MASK;
 
 		sr_rec->ev_type = SVC_EVENT_EPOLL;
@@ -314,7 +338,7 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 	sr_rec->refcnt = 1;	/* svc_rqst_set ref */
 	sr_rec->gen = 0;
 	mutex_init(&sr_rec->mtx, NULL);
-	opr_rbtree_init(&sr_rec->xprt_q, rqst_xprt_cmpf /* may be NULL */);
+	TAILQ_INIT(&sr_rec->xprt_q);
 
 	t = rbtx_partition_of_scalar(&svc_rqst_set.xt, sr_rec->id_k);
 	mutex_lock(&t->mtx);
@@ -333,49 +357,33 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 	return (code);
 }
 
-static int svc_rqst_unhook_events(SVCXPRT *, struct svc_rqst_rec *);
-static int svc_rqst_hook_events(SVCXPRT *, struct svc_rqst_rec *);
-
 static inline void
 evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
 {
-	struct svc_xprt_ev *xp_ev;
-	struct opr_rbtree_node *nx;
-	uint32_t refcnt;
-
-	if (!(flags & SVC_RQST_FLAG_MUTEX_LOCKED))
+	if (!(flags & SVC_RQST_FLAG_LOCKED))
 		mutex_lock(&xprt->xp_lock);
 
 	if (!(flags & SVC_RQST_FLAG_SREC_LOCKED))
 		mutex_lock(&sr_rec->mtx);
 
-	xp_ev = (struct svc_xprt_ev *)xprt->xp_ev;
-
-	nx = opr_rbtree_lookup(&sr_rec->xprt_q, &xp_ev->node_k);
-	if (nx)
-		opr_rbtree_remove(&sr_rec->xprt_q, &xp_ev->node_k);
-	else
-		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-			"%s: SVCXPRT %p found but cant be removed", __func__,
-			xprt);
+	TAILQ_REMOVE(&sr_rec->xprt_q, xprt, xp_evq);
 
 	/* clear events */
-	(void)svc_rqst_unhook_events(xprt, sr_rec);	/* XP LOCKED */
-
-	xprt->xp_flags &= ~SVC_XPRT_FLAG_EVCHAN;
+	(void)svc_rqst_unhook_events(xprt, sr_rec);	/* both LOCKED */
 
 	/* unlink from xprt */
-	xp_ev->sr_rec = NULL;
+	xprt->xp_ev = NULL;
 
-	refcnt = xprt->xp_refcnt;
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: before channel release %p %u",
-		__func__, xprt, refcnt);
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
+		"%s: %p xp_refs %" PRIu32
+		" after remove, before channel release",
+		__func__, xprt, xprt->xp_refs);
 
-	/* channel ref */
-	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_LOCKED); /* ! XP LOCKED */
-
-	if (!(flags & SVC_RQST_FLAG_SREC_LOCKED))
+	if (flags & SVC_RQST_FLAG_SREC_UNLOCK)
 		mutex_unlock(&sr_rec->mtx);
+
+	if (flags & SVC_RQST_FLAG_UNLOCK)
+		mutex_unlock(&xprt->xp_lock);
 }
 
 /*
@@ -427,18 +435,17 @@ sr_rec_release(struct svc_rqst_rec *sr_rec, uint32_t flags)
 	}
 }
 
-int
-svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
+static int
+svc_rqst_delete_evchan(uint32_t chan_id)
 {
 	struct svc_rqst_rec *sr_rec;
-	struct opr_rbtree_node *n;
 	struct rbtree_x_part *t;
+	SVCXPRT *next;
 	SVCXPRT *xprt = NULL;
 	int code = 0;
 
-	sr_rec =
-	    svc_rqst_lookup_chan(chan_id, &t,
-				 SVC_RQST_FLAG_LOCK | SVC_RQST_FLAG_REC_LOCK);
+	sr_rec = svc_rqst_lookup_chan(chan_id, &t, (SVC_RQST_FLAG_PART_LOCK |
+						    SVC_RQST_FLAG_SREC_LOCK));
 	if (!sr_rec) {
 		mutex_unlock(&t->mtx);
 		code = ENOENT;
@@ -447,14 +454,16 @@ svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
 
 	/* traverse sr_req->xprt_q inorder */
 	/* sr_rec LOCKED */
-	n = opr_rbtree_first(&sr_rec->xprt_q);
-	while (n != NULL) {
+	xprt = TAILQ_FIRST(&sr_rec->xprt_q);
+
+	while (xprt) {
+		next = TAILQ_NEXT(xprt, xp_evq);
+
 		/* indirect on xp_ev */
-		xprt = opr_containerof(n, struct svc_xprt_ev, node_k)->xprt;
 		/* stop processing events */
-		evchan_unreg_impl(sr_rec, xprt,
-				  (SVC_RQST_FLAG_LOCK |
-				   SVC_RQST_FLAG_SREC_LOCKED));
+		evchan_unreg_impl(sr_rec, xprt, (SVC_RQST_FLAG_LOCK |
+						 SVC_RQST_FLAG_UNLOCK |
+						 SVC_RQST_FLAG_SREC_LOCKED));
 
 		/* wake up */
 		ev_sig(sr_rec->sv[0], 0);
@@ -475,7 +484,7 @@ svc_rqst_delete_evchan(uint32_t chan_id, uint32_t flags)
 			break;
 		}
 
-		n = opr_rbtree_next(n);
+		xprt = next;
 	}
 
 	/* now remove sr_rec */
@@ -514,9 +523,7 @@ int
 svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 {
 	struct svc_rqst_rec *sr_rec;
-	struct svc_xprt_ev *xp_ev;
 	struct rbtree_x_part *t;
-	uint32_t refcnt;
 	int code = 0;
 
 	if (chan_id == 0) {
@@ -525,9 +532,8 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 		goto out;
 	}
 
-	sr_rec =
-	    svc_rqst_lookup_chan(chan_id, &t,
-				 SVC_RQST_FLAG_LOCK | SVC_RQST_FLAG_REC_LOCK);
+	sr_rec = svc_rqst_lookup_chan(chan_id, &t, (SVC_RQST_FLAG_PART_LOCK |
+						    SVC_RQST_FLAG_SREC_LOCK));
 	if (!sr_rec) {
 		mutex_unlock(&t->mtx);
 		code = ENOENT;
@@ -535,68 +541,61 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 	}
 
 	mutex_lock(&xprt->xp_lock);
+
 	if (flags & SVC_RQST_FLAG_XPRT_UREG) {
 		if (chan_id != __svc_params->ev_u.evchan.id) {
-			/* xprt_unregister */
-			(void)svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.
-						    id, xprt,
-						    SVC_RQST_FLAG_MUTEX_LOCKED);
-			/* SVC_RELEASE in svc_rqst_evchan_unreg released
-			 * xprt->xp_lock */
-			(void)svc_xprt_clear(xprt, SVC_XPRT_FLAG_NONE);
+			svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id,
+					      xprt,
+					      (SVC_RQST_FLAG_LOCKED |
+					       SVC_RQST_FLAG_SREC_LOCKED));
+			svc_xprt_clear(xprt, SVC_XPRT_FLAG_LOCKED);
 		}
 	}
 
-	xp_ev = (struct svc_xprt_ev *)xprt->xp_ev;
-	if (opr_rbtree_insert(&sr_rec->xprt_q, &xp_ev->node_k)) {
-		/* shouldn't happen */
-		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-			"%s: SVCXPRT %p already registered", __func__, xprt);
-	}
+	TAILQ_INSERT_TAIL(&sr_rec->xprt_q, xprt, xp_evq);
 	mutex_unlock(&t->mtx);
 
 	/* link from xprt */
-	xp_ev->sr_rec = sr_rec;
-
-	/* mark xprt */
-	if (xprt->xp_flags & SVC_RQST_FLAG_XPRT_GCHAN)
-		xprt->xp_flags |= SVC_XPRT_FLAG_GCHAN;
-	else
-		xprt->xp_flags |= SVC_XPRT_FLAG_EVCHAN;
+	xprt->xp_ev = sr_rec;
 
 	/* register on event channel */
 	(void)svc_rqst_hook_events(xprt, sr_rec);
 
 	sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED);
 
-	refcnt = xprt->xp_refcnt;
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: pre channel ref %p %u", __func__,
-		xprt, refcnt);
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
+		"%s: pre channel %p xp_refs %" PRIu32,
+		__func__, xprt, xprt->xp_refs);
 
-	/* channel ref */
-	SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
-	/* !LOCKED */
+	mutex_unlock(&xprt->xp_lock);
 
  out:
 	return (code);
 }
 
-int
+/**
+ * Note: returns with xp_lock locked!
+ */
+static int
 svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 {
 	struct svc_rqst_rec *sr_rec;
 	struct rbtree_x_part *t;
 	int code = EINVAL;
 
-	sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_RQST_FLAG_LOCK);
+	sr_rec = svc_rqst_lookup_chan(chan_id, &t, (flags |
+						    SVC_RQST_FLAG_PART_LOCK |
+						    SVC_RQST_FLAG_SREC_LOCK));
 	if (!sr_rec) {
 		code = ENOENT;
-		if (flags & SVC_RQST_FLAG_MUTEX_LOCKED)
+		if (flags & SVC_RQST_FLAG_UNLOCK)
 			mutex_unlock(&xprt->xp_lock);
 		goto unlock;
 	}
 
-	evchan_unreg_impl(sr_rec, xprt, SVC_RQST_FLAG_LOCK);
+	evchan_unreg_impl(sr_rec, xprt, (flags |
+					 SVC_RQST_FLAG_LOCK |
+					 SVC_RQST_FLAG_SREC_LOCKED));
 
  unlock:
 	mutex_unlock(&t->mtx);
@@ -611,38 +610,45 @@ static int
 svc_rqst_unhook_events(SVCXPRT *xprt /* LOCKED */ ,
 		       struct svc_rqst_rec *sr_rec /* LOCKED */)
 {
-	struct svc_xprt_ev *xp_ev;
 	int code;
 
 	cond_init_svc_rqst();
 
-	xp_ev = (struct svc_xprt_ev *)xprt->xp_ev;
-	xp_ev->flags |= XP_EV_FLAG_BLOCKED;
+	atomic_set_uint16_t_bits(&xprt->xp_flags, SVC_XPRT_FLAG_BLOCKED);
 
 	switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
 	case SVC_EVENT_EPOLL:
-		{
-			struct epoll_event *ev = &xp_ev->ev_u.epoll.event;
+	{
+		struct epoll_event *ev = &xprt->ev_u.epoll.event;
 
-			/* clear epoll vector */
-			code =
-			    epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
-				      EPOLL_CTL_DEL, xprt->xp_fd, ev);
-			if (code == -1) {
-				__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-					"%s: epoll del failed fd %d (%d)",
-					__func__, xprt->xp_fd, errno);
-				code = errno;
-			} else {
-				xp_ev->flags &= ~XP_EV_FLAG_ADDED;
-				__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-					"%s: epoll del fd %d epoll_fd %d",
-					__func__, xprt->xp_fd,
-					sr_rec->ev_u.epoll.epoll_fd);
-			}
+		/* clear epoll vector */
+		code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
+				 EPOLL_CTL_DEL, xprt->xp_fd, ev);
+		if (code) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: %p epoll del failed fd %d "
+				"sr_rec %p epoll_fd %d "
+				"control fd pair (%d:%d) (%d, %d)",
+				sr_rec, sr_rec->ev_u.epoll.epoll_fd,
+				sr_rec->sv[0], sr_rec->sv[1],
+				code, errno);
+			code = errno;
+		} else {
+			atomic_clear_uint16_t_bits(&xprt->xp_flags,
+						   SVC_XPRT_FLAG_ADDED);
+
+			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+				"%s: %p epoll del fd %d "
+				"sr_rec %p epoll_fd %d "
+				"control fd pair (%d:%d) (%d, %d)",
+				__func__, xprt, xprt->xp_fd,
+				sr_rec, sr_rec->ev_u.epoll.epoll_fd,
+				sr_rec->sv[0], sr_rec->sv[1],
+				code, errno);
 		}
 		break;
+	}
 #endif
 	default:
 		/* XXX formerly select/fd_set case, now placeholder for new
@@ -657,13 +663,11 @@ int
 svc_rqst_rearm_events(SVCXPRT *xprt, uint32_t __attribute__ ((unused)) flags)
 {
 	struct svc_rqst_rec *sr_rec;
-	struct svc_xprt_ev *xp_ev;
 	int code;
 
 	cond_init_svc_rqst();
 
-	xp_ev = (struct svc_xprt_ev *)xprt->xp_ev;
-	sr_rec = xp_ev->sr_rec;
+	sr_rec = (struct svc_rqst_rec *)xprt->xp_ev;
 
 	/* Don't rearm a destroyed (but not yet collected) xprx */
 	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
@@ -673,33 +677,32 @@ svc_rqst_rearm_events(SVCXPRT *xprt, uint32_t __attribute__ ((unused)) flags)
 	assert(sr_rec);
 
 	mutex_lock(&sr_rec->mtx);
-	if (xp_ev->flags & XP_EV_FLAG_ADDED) {
+	if (atomic_fetch_uint16_t(&xprt->xp_flags) & SVC_XPRT_FLAG_ADDED) {
 
 		switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
 		case SVC_EVENT_EPOLL:
-			{
-				struct epoll_event *ev =
-				    &xp_ev->ev_u.epoll.event;
+		{
+			struct epoll_event *ev = &xprt->ev_u.epoll.event;
 
-				/* set up epoll user data */
-				/* ev->data.ptr = xprt; *//* XXX already set */
-				ev->events = EPOLLIN | EPOLLONESHOT;
+			/* set up epoll user data */
+			/* ev->data.ptr = xprt; *//* XXX already set */
+			ev->events = EPOLLIN | EPOLLONESHOT;
 
-				/* rearm in epoll vector */
-				code =
-				    epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
-					      EPOLL_CTL_MOD, xprt->xp_fd, ev);
+			/* rearm in epoll vector */
+			code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
+					 EPOLL_CTL_MOD, xprt->xp_fd, ev);
 
-				__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-					"%s: rearm xprt %p fd %d sr_rec %p epoll_fd %d control fd "
-					"pair (%d:%d) (%d, %d)", __func__, xprt,
-					xprt->xp_fd, sr_rec,
-					sr_rec->ev_u.epoll.epoll_fd,
-					sr_rec->sv[0], sr_rec->sv[1], code,
-					errno);
-			}
+			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+				"%s: %p epoll arm fd %d "
+				"sr_rec %p epoll_fd %d "
+				"control fd pair (%d:%d) (%d, %d)",
+				__func__, xprt, xprt->xp_fd,
+				sr_rec, sr_rec->ev_u.epoll.epoll_fd,
+				sr_rec->sv[0], sr_rec->sv[1],
+				code, errno);
 			break;
+		}
 #endif
 		default:
 			/* XXX formerly select/fd_set case, now placeholder
@@ -718,42 +721,52 @@ static int
 svc_rqst_hook_events(SVCXPRT *xprt /* LOCKED */ ,
 		     struct svc_rqst_rec *sr_rec /* LOCKED */)
 {
-
-	struct svc_xprt_ev *xp_ev;
 	int code;
 
 	cond_init_svc_rqst();
 
-	xp_ev = (struct svc_xprt_ev *)xprt->xp_ev;
-	xp_ev->flags &= ~XP_EV_FLAG_BLOCKED;
+	atomic_clear_uint16_t_bits(&xprt->xp_flags, SVC_XPRT_FLAG_BLOCKED);
 
 	switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
 	case SVC_EVENT_EPOLL:
-		{
-			struct epoll_event *ev = &xp_ev->ev_u.epoll.event;
+	{
+		struct epoll_event *ev = &xprt->ev_u.epoll.event;
 
-			/* set up epoll user data */
-			ev->data.ptr = xprt;
+		/* set up epoll user data */
+		ev->data.ptr = xprt;
 
-			/* wait for read events, level triggered, oneshot */
-			ev->events = EPOLLIN | EPOLLONESHOT;
+		/* wait for read events, level triggered, oneshot */
+		ev->events = EPOLLIN | EPOLLONESHOT;
 
-			/* add to epoll vector */
-			code =
-			    epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
-				      EPOLL_CTL_ADD, xprt->xp_fd, ev);
-			if (!code)
-				xp_ev->flags |= XP_EV_FLAG_ADDED;
+		/* add to epoll vector */
+		code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
+				 EPOLL_CTL_ADD, xprt->xp_fd, ev);
+		if (code) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: %p epoll add failed fd %d "
+				"sr_rec %p epoll_fd %d "
+				"control fd pair (%d:%d) (%d, %d)",
+				__func__, xprt, xprt->xp_fd,
+				sr_rec, sr_rec->ev_u.epoll.epoll_fd,
+				sr_rec->sv[0], sr_rec->sv[1],
+				code, errno);
+			code = errno;
+		} else {
+			atomic_set_uint16_t_bits(&xprt->xp_flags,
+						 SVC_XPRT_FLAG_ADDED);
 
 			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-				"%s: add xprt %p fd %d sr_rec %p epoll_fd %d control fd "
-				"pair (%d:%d) (%d, %d)", __func__, xprt,
-				xprt->xp_fd, sr_rec,
-				sr_rec->ev_u.epoll.epoll_fd, sr_rec->sv[0],
-				sr_rec->sv[1], code, errno);
+				"%s: %p epoll add fd %d "
+				"sr_rec %p epoll_fd %d "
+				"control fd pair (%d:%d) (%d, %d)",
+				__func__, xprt, xprt->xp_fd,
+				sr_rec, sr_rec->ev_u.epoll.epoll_fd,
+				sr_rec->sv[0], sr_rec->sv[1],
+				code, errno);
 		}
 		break;
+	}
 #endif
 	default:
 		/* XXX formerly select/fd_set case, now placeholder for new
@@ -772,7 +785,6 @@ int
 svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt)
 {
 	struct svc_rqst_rec *sr_rec;
-	struct svc_xprt_ev *xp_ev;
 	int code = 0;
 
 	cond_init_svc_rqst();
@@ -787,8 +799,7 @@ svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt)
 		goto out;
 	}
 
-	xp_ev = (struct svc_xprt_ev *)xprt->xp_ev;
-	sr_rec = xp_ev->sr_rec;
+	sr_rec = (struct svc_rqst_rec *)xprt->xp_ev;
 
 	/* or if parent xprt has no dedicated event channel */
 	if (!sr_rec) {
@@ -807,42 +818,34 @@ svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt)
 	return (code);
 }
 
-int
-svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t
-			 __attribute__ ((unused)) flags)
+void
+xprt_unregister(SVCXPRT *xprt)
 {
-	struct svc_xprt_ev *xp_ev = (struct svc_xprt_ev *)xprt->xp_ev;
-	struct svc_rqst_rec *sr_rec = xp_ev->sr_rec;
-	int code = 0;
-	uint32_t drefcnt = xprt->xp_refcnt;
-
-	if (!sr_rec) {
-		__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-			"%s: xprt_unregister_1 %p unserialized xp_refcnt %u",
-			__func__, xprt, drefcnt);
-		xprt_unregister(xprt);
-		goto out;
-	}
+	struct svc_rqst_rec *sr_rec = (struct svc_rqst_rec *)xprt->xp_ev;
 
 	/* if xprt is is on a dedicated channel? */
-	if (sr_rec->id_k) {
+	if (sr_rec && sr_rec->id_k) {
 		__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-			"%s: before evchan_unreg_impl %p unserialized xp_refcnt %u",
-			__func__, xprt, drefcnt);
-		evchan_unreg_impl(sr_rec, xprt, SVC_RQST_FLAG_NONE);
-		drefcnt = xprt->xp_refcnt;
-		__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-			"%s: after evchan_unreg_impl %p unserialized xp_refcnt %u",
-			__func__, xprt, drefcnt);
+			"%s:%u %p xp_refs %" PRIu32,
+			__func__, __LINE__, xprt, xprt->xp_refs);
+		evchan_unreg_impl(sr_rec, xprt, (SVC_RQST_FLAG_LOCK |
+						 SVC_RQST_FLAG_SREC_LOCK |
+						 SVC_RQST_FLAG_SREC_UNLOCK));
 	} else {
 		__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-			"%s: xprt_unregister_2 %p unserialized xp_refcnt %u",
-			__func__, xprt, drefcnt);
-		xprt_unregister(xprt);
+			"%s:%u %p xp_refs %" PRIu32,
+			__func__, __LINE__, xprt, xprt->xp_refs);
+		(void)svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id, xprt,
+					    SVC_RQST_FLAG_LOCK);
 	}
 
- out:
-	return (code);
+	/* remove xprt from xprt table */
+	svc_xprt_clear(xprt, SVC_XPRT_FLAG_LOCKED);
+
+	/* free state */
+	xprt->xp_ev = NULL;
+
+	mutex_unlock(&xprt->xp_lock);
 }
 
 bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
@@ -853,50 +856,35 @@ static inline void
 svc_rqst_handle_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev,
 		      uint32_t wakeups)
 {
-	struct svc_xprt_ev *xp_ev;
-	uint32_t refcnt;
 	SVCXPRT *xprt;
 	int code __attribute__ ((unused));
 
 	if (ev->data.fd != sr_rec->sv[1]) {
 		xprt = (SVCXPRT *) ev->data.ptr;
-		xp_ev = (struct svc_xprt_ev *)xprt->xp_ev;
 
-		if (!(xp_ev->flags & XP_EV_FLAG_BLOCKED)) {
-			/* check for valid xprt */
-			mutex_lock(&xprt->xp_lock);
+		if (!(atomic_fetch_uint16_t(&xprt->xp_flags)
+			& (SVC_XPRT_FLAG_BLOCKED | SVC_XPRT_FLAG_DESTROYED))
+		 && (xprt->xp_refs > 0)) {
+			/* check for valid xprt. No need for lock;
+			 * (idempotent) xp_flags and xp_refs are set atomic.
+			 */
+			__warnx(TIRPC_DEBUG_FLAG_REFCNT |
+				TIRPC_DEBUG_FLAG_SVC_RQST,
+				"%s: %p xp_refs %" PRIu32
+				" fd %d or ptr %p EPOLL event %d",
+				__func__, xprt, xprt->xp_refs,
+				ev->data.fd, ev->data.ptr, ev->events);
 
-			if ((!(xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED))
-			    && (xprt->xp_refcnt > 0)) {
-				/* XXX take extra ref, callout will release */
-				refcnt = xprt->xp_refcnt;
+			/* take extra ref, callout will release */
+			SVC_REF(xprt, SVC_REF_FLAG_NONE);
 
-				__warnx
-					(TIRPC_DEBUG_FLAG_REFCNT,
-					 "%s: pre getreq ref %p %u",
-					 __func__, xprt,
-					 refcnt);
-
-				__warnx
-					(TIRPC_DEBUG_FLAG_SVC_RQST,
-					 "%s: fd or ptr (%d:%p) "
-					 "EPOLL event %d (refs %d)",
-					 __func__,
-					 ev->data.fd,
-					 ev->data.ptr,
-					 ev->events,
-					 refcnt);
-
-				SVC_REF(xprt, SVC_REF_FLAG_LOCKED);
-
-				/* ! LOCKED */
-				code = xprt->xp_ops->xp_getreq(xprt);
-				__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-					"%s: post getreq ref %p %u",
-					__func__, xprt,
-					refcnt);
-			} else
-				mutex_unlock(&xprt->xp_lock);
+			/* ! LOCKED */
+			code = xprt->xp_ops->xp_getreq(xprt);
+			__warnx(TIRPC_DEBUG_FLAG_REFCNT,
+				"%s: %p xp_refs %" PRIu32
+				" post xp_getreq",
+				__func__, xprt,
+				xprt->xp_refs);
 		}
 		/* XXX failsafe idle processing */
 		if ((wakeups % 1000) == 0)
@@ -978,9 +966,10 @@ svc_rqst_thrd_run(uint32_t chan_id, __attribute__ ((unused)) uint32_t flags)
 	struct rbtree_x_part *t;
 	int code = 0;
 
-	sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_RQST_FLAG_LOCK);
+	sr_rec = svc_rqst_lookup_chan(chan_id, &t, (SVC_RQST_FLAG_PART_LOCK |
+						    SVC_RQST_FLAG_PART_UNLOCK |
+						    SVC_RQST_FLAG_SREC_LOCK));
 	if (!sr_rec) {
-		mutex_unlock(&t->mtx);
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
 			"svc_rqst_thrd_run: unknown chan_id %d", chan_id);
 		code = ENOENT;
@@ -990,8 +979,6 @@ svc_rqst_thrd_run(uint32_t chan_id, __attribute__ ((unused)) uint32_t flags)
 	/* serialization model for srec is mutual exclusion on mutation only,
 	 * with a secondary state machine to detect inconsistencies (e.g.,
 	 * trying to unregister a channel when it is active) */
-	mutex_lock(&sr_rec->mtx);
-	mutex_unlock(&t->mtx);	/* !LOCK */
 	sr_rec->states |= SVC_RQST_STATE_ACTIVE;
 	mutex_unlock(&sr_rec->mtx);
 
@@ -1023,19 +1010,19 @@ svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags)
 	struct rbtree_x_part *t;
 	int code = 0;
 
-	sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_RQST_FLAG_LOCK);
+	sr_rec = svc_rqst_lookup_chan(chan_id, &t, (SVC_RQST_FLAG_PART_LOCK |
+						    SVC_RQST_FLAG_PART_UNLOCK |
+						    SVC_RQST_FLAG_SREC_LOCK));
 	if (!sr_rec) {
 		code = ENOENT;
 		goto out;
 	}
 
-	mutex_lock(&sr_rec->mtx);
-	sr_rec->signals |= (flags & ~SVC_RQST_SIGNAL_MASK);
+	sr_rec->signals |= (flags & SVC_RQST_SIGNAL_MASK);
 	ev_sig(sr_rec->sv[0], flags);	/* send wakeup */
 	mutex_unlock(&sr_rec->mtx);
 
  out:
-	mutex_unlock(&t->mtx);
 	if (sr_rec)
 		sr_rec_release(sr_rec, SVC_RQST_FLAG_NONE);
 	return (code);
@@ -1060,26 +1047,14 @@ xprt_register(SVCXPRT *xprt)
 	/* and bind xprt to it */
 	code =
 	    svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
-				(SVC_RQST_FLAG_XPRT_GCHAN |
-				 SVC_RQST_FLAG_CHAN_AFFINITY));
+				SVC_RQST_FLAG_CHAN_AFFINITY);
 }				/* xprt_register */
-
-void
-xprt_unregister(SVCXPRT *xprt)
-{
-	(void)svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id, xprt,
-				    SVC_RQST_FLAG_NONE);
-
-	/* xprt2 holds the address we displaced, it would be of interest
-	 * if xprt2 != xprt */
-	/* SVCXPRT *xprt2 = */ (void) svc_xprt_clear(xprt, SVC_XPRT_FLAG_NONE);
-}
 
 void
 svc_rqst_shutdown(void)
 {
 	if (__svc_params->ev_u.evchan.id) {
-		svc_rqst_delete_evchan(__svc_params->ev_u.evchan.id, 0);
+		svc_rqst_delete_evchan(__svc_params->ev_u.evchan.id);
 		__svc_params->ev_u.evchan.id = 0;
 	}
 }

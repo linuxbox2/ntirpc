@@ -26,28 +26,17 @@
 #ifndef TIRPC_SVC_XPRT_H
 #define TIRPC_SVC_XPRT_H
 
-struct svc_xprt_rec {
-	struct opr_rbtree_node node_k;
-	int fd_k;
-	SVCXPRT *xprt;
-	uint64_t gen;		/* generation number */
-	mutex_t mtx;
-};
+#include <rpc/svc.h>
+#include <misc/portable.h>
+#include <misc/rbtree_x.h>
 
-struct svc_xprt_set {
-	mutex_t lock;
-	struct rbtree_x xt;
-};
-
-#define SVC_XPRT_FLAG_NONE         0x0000
-#define SVC_XPRT_FLAG_CLEAR        0x0001
-#define SVC_XPRT_FLAG_WLOCKED      0x0002
-#define SVC_XPRT_FLAG_UNLOCK       0x0004
-#define SVC_XPRT_FLAG_MUTEX_LOCKED 0x0008
+/**
+ ** Maintains a tree of all extant transports by fd
+ **/
 
 SVCXPRT *svc_xprt_get(int);
 SVCXPRT *svc_xprt_set(SVCXPRT *, uint32_t);
-SVCXPRT *svc_xprt_clear(SVCXPRT *, uint32_t);
+void svc_xprt_clear(SVCXPRT *, uint32_t);
 
 /* iterator callback prototype */
 #define SVC_XPRT_FOREACH_NONE    0x0000

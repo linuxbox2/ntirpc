@@ -190,7 +190,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 		goto err;
 	}
 	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
-	xprt->xp_refcnt = 1;
+	xprt->xp_refs = 1;
 	svc_vc_rendezvous_ops(xprt);
 	xprt->xp_p1 = rdvs;
 	xprt->xp_p2 = xd;
@@ -454,7 +454,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 	mutex_init(&xprt->xp_lock, NULL);
 	/* XXX take xp_lock? */
 	mutex_init(&xprt->xp_auth_lock, NULL);
-	xprt->xp_refcnt = 1;
+	xprt->xp_refs = 1;
 	xprt->xp_fd = fd;
 
 	/* the SVCXPRT created in svc_vc_create accepts new connections
@@ -540,7 +540,7 @@ rendezvous_request(SVCXPRT *xprt, struct svc_req *req)
 	(void)svc_rqst_xprt_register(xprt, newxprt);
 
 	__rpc_set_address(&newxprt->xp_remote, &addr, len);
-	XPRT_TRACE_RADDR(newxprt, __func__, __func__, __LINE__);
+	XPRT_TRACE(newxprt, __func__, __func__, __LINE__);
 
 	/* XXX fvdl - is this useful? (Yes.  Matt) */
 	if (__rpc_fd2sockinfo(fd, &si) && si.si_proto == IPPROTO_TCP) {
@@ -596,27 +596,6 @@ rendezvous_stat(SVCXPRT *xprt)
 	return (XPRT_IDLE);
 }
 
-static bool
-svc_vc_ref(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
-{
-	uint32_t refcnt;
-
-	if (!(flags & SVC_REF_FLAG_LOCKED))
-		mutex_lock(&xprt->xp_lock);
-
-	refcnt = ++(xprt->xp_refcnt);
-
-	XPRT_TRACE_RADDR(xprt, __func__, tag, line);
-
-	mutex_unlock(&xprt->xp_lock);
-
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-		"%s: tag %s line %d postref %p xp_refcnt %u", __func__, tag,
-		line, xprt, refcnt);
-
-	return (true);
-}
-
 /* XXX pending further unification
  *
  * note:  currently, rdvs xprt handles have a rec structure,
@@ -625,13 +604,21 @@ svc_vc_ref(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
  *
  */
 
-static inline void
-rdvs_dodestroy(SVCXPRT *xprt)
+static void
+svc_rdvs_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
 	struct cf_rendezvous *rdvs = (struct cf_rendezvous *)xprt->xp_p1;
 	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p2;
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)xprt->xp_p5;
 	int refcnt;
+
+	/* clears xprt from the xprt table (eg, idle scans) */
+	xprt_unregister(xprt);
+
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
+		"%s() %p xp_refs %" PRIu32
+		" should actually destroy things @ %s:%d",
+		__func__, xprt, xprt->xp_refs, tag, line);
 
 	if (xprt->xp_fd != RPC_ANYFD)
 		(void)close(xprt->xp_fd);
@@ -653,183 +640,24 @@ rdvs_dodestroy(SVCXPRT *xprt)
 	mem_free(rdvs, sizeof(struct cf_rendezvous));
 	mem_free(xprt, sizeof(SVCXPRT));
 
-	refcnt = rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
+	refcnt = rpc_dplx_unref(rec,
+				RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
 	if (!refcnt)
 		mem_free(xd, sizeof(struct x_vc_data));
 }
 
 static void
-svc_rdvs_release(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
+svc_vc_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
-	uint32_t xp_refcnt;
-
-	if (!(flags & SVC_RELEASE_FLAG_LOCKED))
-		mutex_lock(&xprt->xp_lock);
-
-	xp_refcnt = --(xprt->xp_refcnt);
-	mutex_unlock(&xprt->xp_lock);
-
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: postunref %p xp_refcnt %u",
-		__func__, xprt, xp_refcnt);
-
-	/* conditional destroy */
-	if ((xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) && (xp_refcnt == 0)) {
-		__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-			"%s: %p xp_refcnt %u calling rdvs_dodestroy", __func__,
-			xprt, xp_refcnt);
-		rdvs_dodestroy(xprt);
-	}
-}
-
-static void
-svc_rdvs_destroy(SVCXPRT *xprt)
-{
-	uint32_t drefcnt = 0;	/* debugging only */
-
-	mutex_lock(&xprt->xp_lock);
-	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
-		mutex_unlock(&xprt->xp_lock);
-		goto out;
-	}
-
-	xprt->xp_flags |= SVC_XPRT_FLAG_DESTROYED;
-	mutex_unlock(&xprt->xp_lock);
-
-	drefcnt = xprt->xp_refcnt;
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: preunreg %p xp_refcnt %u",
-		__func__, xprt, drefcnt);
-
-	/* XXX prefer LOCKED? (would require lock order change) */
-	(void)svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
-
-	drefcnt = xprt->xp_refcnt;
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: prefinalize %p xp_refcnt %u",
-		__func__, xprt, drefcnt);
-
-	/* clears xprt from the xprt table (eg, idle scans) */
-	svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
-
-	drefcnt = xprt->xp_refcnt;
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-		"%s: postfinalize %p unserialized xp_refcnt %u", __func__, xprt,
-		drefcnt);
-
-	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-
- out:
-	return;
-}
-
-void
-xprt_trace_raddr(SVCXPRT *xprt, const char *func, const char *tag,
-		 const int line)
-{
-	struct sockaddr_storage *ss = (struct sockaddr_storage *)
-	    &(xprt->xp_remote.ss);
-	int port;
-
-	switch (ss->ss_family) {
-	case AF_INET6:
-		port = ntohs(((struct sockaddr_in6 *)ss)->sin6_port);
-		break;
-	case AF_INET:
-		port = ntohs(((struct sockaddr_in *)ss)->sin_port);
-		break;
-	default:
-		port = -1;
-		break;
-	}
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-		"%s: %s: %s %d %p fd %d port %d xp_refcnt %u", __func__, func,
-		tag, line, xprt, xprt->xp_fd, port, xprt->xp_refcnt);
-}
-
-static void
-svc_vc_release(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
-{
-	uint32_t xp_refcnt;
-
-	if (!(flags & SVC_RELEASE_FLAG_LOCKED))
-		mutex_lock(&xprt->xp_lock);
-
-	xp_refcnt = --(xprt->xp_refcnt);
-
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-		"%s: tag %s line %d postunref %p xp_refcnt %u", __func__, tag,
-		line, xprt, xp_refcnt);
-
-	XPRT_TRACE_RADDR(xprt, __func__, tag, line);
-
-	/* conditional destroy */
-	if ((xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) && (xp_refcnt == 0)) {
-
-		struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
-		struct rpc_dplx_rec *rec = xd->rec;
-		uint32_t xd_refcnt;
-
-		mutex_unlock(&xprt->xp_lock);
-		REC_LOCK(rec);
-
-		xd_refcnt = xd->refcnt;
-		if (xd_refcnt == 0) {
-			__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-				"%s: tag %s line %d xd_refcnt %u on destroyed %p "
-				"calling vc_shared_destroy", __func__, tag,
-				line, xd_refcnt, xprt);
-			vc_shared_destroy(xd);	/* RECLOCKED */
-		} else {
-			__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-				"%s: tag %s line %d xd_refcnt %u on destroyed %p omit "
-				"vc_shared_destroy", __func__, tag, line, xprt,
-				xd_refcnt);
-			REC_UNLOCK(rec);
-		}
-	} else
-		mutex_unlock(&xprt->xp_lock);
-}
-
-static void
-svc_vc_destroy(SVCXPRT *xprt)
-{
-	struct rpc_dplx_rec *rec;
-	struct x_vc_data *xd;
-	uint32_t xp_refcnt = 0;
-	uint32_t xd_refcnt = 0;
-	uint32_t drefcnt = 0;	/* debugging only */
-
-	mutex_lock(&xprt->xp_lock);
-	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
-		mutex_unlock(&xprt->xp_lock);
-		goto out;
-	}
-
-	XPRT_TRACE_RADDR(xprt, __func__, __func__, __LINE__);
-
-	xd = (struct x_vc_data *)xprt->xp_p1;
-	rec = xd->rec;
-
-	xprt->xp_flags |= SVC_XPRT_FLAG_DESTROYED;
-	xp_refcnt = --(xprt->xp_refcnt);
-	mutex_unlock(&xprt->xp_lock);
-
-	drefcnt = xprt->xp_refcnt;
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: preunreg %p xp_refcnt %u",
-		__func__, xprt, drefcnt);
-
-	/* XXX prefer LOCKED? (would require lock order change) */
-	(void)svc_rqst_xprt_unregister(xprt, SVC_RQST_FLAG_NONE);
+	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
+	struct rpc_dplx_rec *rec = xd->rec;
+	uint32_t xd_refcnt;
 
 	/* connection tracking--decrement now, he's dead jim */
 	svc_vc_dec_nconns();
 
-	drefcnt = xprt->xp_refcnt;
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: prefinalize %p xp_refcnt %u",
-		__func__, xprt, drefcnt);
-
 	/* clears xprt from the xprt table (eg, idle scans) */
-	svc_rqst_finalize_xprt(xprt, SVC_RQST_FLAG_NONE);
-
-	drefcnt = xprt->xp_refcnt;
+	xprt_unregister(xprt);
 
 	/* bidirectional */
 	REC_LOCK(rec);
@@ -837,20 +665,26 @@ svc_vc_destroy(SVCXPRT *xprt)
 	xd_refcnt = --(xd->refcnt);
 
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-		"%s: postfinalize %p xp_refcnt %u xd_refcnt %u", __func__, xprt,
-		drefcnt, xd_refcnt);
+		"%s: postfinalize %p xp_refs %" PRIu32
+		" xd_refcnt %u",
+		__func__, xprt, xprt->xp_refs, xd_refcnt);
 
 	/* conditional destroy */
-	if ((xp_refcnt == 0) && (xd_refcnt == 0)) {
+	if (xd_refcnt == 0) {
 		__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-			"%s: %p xp_refcnt %u xd_refcnt %u calling vc_shared_destroy",
-			__func__, xprt, xp_refcnt, xd_refcnt);
+			"%s: %p xp_refs %" PRIu32
+			" xd_refcnt %" PRIu32
+			" calling vc_shared_destroy @ %s:%d",
+			__func__, xprt, xprt->xp_refs, xd_refcnt, tag, line);
 		vc_shared_destroy(xd);	/* RECLOCKED */
-	} else
+	} else {
+		__warnx(TIRPC_DEBUG_FLAG_REFCNT,
+			"%s: %p xp_refs %" PRIu32
+			" xd_refcnt %" PRIu32
+			" omit vc_shared_destroy @ %s:%d",
+			__func__, xprt, xprt->xp_refs, xd_refcnt, tag, line);
 		REC_UNLOCK(rec);
-
- out:
-	return;
+	}
 }
 
 extern mutex_t ops_lock;
@@ -996,17 +830,13 @@ svc_vc_rendezvous_control(SVCXPRT *xprt, const u_int rq, void *in)
 static enum xprt_stat
 svc_vc_stat(SVCXPRT *xprt)
 {
-	struct x_vc_data *xd;
-	uint32_t xp_flags;
+	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
 
-	/* XXX overkill? */
-	mutex_lock(&xprt->xp_lock);
-	xd = (struct x_vc_data *)xprt->xp_p1;
-	xp_flags = xprt->xp_flags;
-	mutex_unlock(&xprt->xp_lock);
-
-	if (xp_flags & SVC_XPRT_FLAG_DESTROYED)
+	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
 		return (XPRT_DESTROYED);
+
+	if (!xd)
+		return (XPRT_IDLE);
 
 	/* we hold the recv lock */
 	if (xd->sx.strm_stat == XPRT_DIED)
@@ -1190,8 +1020,6 @@ svc_vc_ops(SVCXPRT *xprt)
 		ops.xp_freeargs = svc_vc_freeargs;
 		ops.xp_destroy = svc_vc_destroy;
 		ops.xp_control = svc_vc_control;
-		ops.xp_release = svc_vc_release;
-		ops.xp_ref = svc_vc_ref;
 		ops.xp_lock = svc_vc_lock;
 		ops.xp_unlock = svc_vc_unlock;
 		ops.xp_getreq = svc_getreq_default;
@@ -1239,8 +1067,6 @@ svc_vc_rendezvous_ops(SVCXPRT *xprt)
 				    void *))abort;
 		ops.xp_destroy = svc_rdvs_destroy;
 		ops.xp_control = svc_vc_rendezvous_control;
-		ops.xp_release = svc_rdvs_release;
-		ops.xp_ref = svc_vc_ref;
 		ops.xp_lock = svc_vc_lock;
 		ops.xp_unlock = svc_vc_unlock;
 		ops.xp_getreq = svc_getreq_default;
@@ -1321,7 +1147,8 @@ svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
 	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
 		/* XXX should not happen--but do no harm */
 		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"%s: destroyed xprt %p seen in clan idle\n", __func__,
+			"%s: destroyed xprt %p seen in clean idle\n",
+			__func__,
 			xprt);
 		goto unlock;
 	}
@@ -1436,7 +1263,7 @@ clnt_vc_ncreate_svc(SVCXPRT *xprt, const rpcprog_t prog,
 	if ((flags & SVC_VC_CREATE_ONEWAY) && (flags & SVC_VC_CREATE_DISPOSE)) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 			"%s:  disposing--calls svc_vc_destroy\n", __func__);
-		svc_vc_destroy(xprt);
+		svc_vc_destroy(xprt, 0, __func__, __LINE__);
 	}
 
 	return (clnt);

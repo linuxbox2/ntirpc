@@ -303,7 +303,7 @@ vc_shared_destroy(struct x_vc_data *xd)
 	xprt = rec->hdl.xprt;
 	if (xprt) {
 
-		XPRT_TRACE_RADDR(xprt, __func__, __func__, __LINE__);
+		XPRT_TRACE(xprt, __func__, __func__, __LINE__);
 
 		rec->hdl.xprt = NULL;	/* unreachable */
 

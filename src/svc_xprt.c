@@ -51,25 +51,34 @@
 
 static bool initialized;
 
-static struct svc_xprt_set svc_xprt_set_ = {
+struct svc_xprt_fd {
+	mutex_t lock;
+	struct rbtree_x xt;
+};
+
+static struct svc_xprt_fd svc_xprt_fd = {
 	MUTEX_INITIALIZER /* svc_xprt_lock */ ,
 	{
-	 0, RBT_X_FLAG_NONE, 0, NULL}	/* xt */
+	 0,			/* npart */
+	 RBT_X_FLAG_NONE,	/* flags */
+	 0,			/* cachesz */
+	 NULL			/* tree */
+	}			/* xt */
 };
 
 static inline int
 svc_xprt_fd_cmpf(const struct opr_rbtree_node *lhs,
 		 const struct opr_rbtree_node *rhs)
 {
-	struct svc_xprt_rec *lk, *rk;
+	SVCXPRT *lk, *rk;
 
-	lk = opr_containerof(lhs, struct svc_xprt_rec, node_k);
-	rk = opr_containerof(rhs, struct svc_xprt_rec, node_k);
+	lk = opr_containerof(lhs, struct rpc_svcxprt, xp_fd_node);
+	rk = opr_containerof(rhs, struct rpc_svcxprt, xp_fd_node);
 
-	if (lk->fd_k < rk->fd_k)
+	if (lk->xp_fd < rk->xp_fd)
 		return (-1);
 
-	if (lk->fd_k == rk->fd_k)
+	if (lk->xp_fd == rk->xp_fd)
 		return (0);
 
 	return (1);
@@ -79,7 +88,7 @@ void svc_xprt_init()
 {
 	int code = 0;
 
-	mutex_lock(&svc_xprt_set_.lock);
+	mutex_lock(&svc_xprt_fd.lock);
 
 	if (initialized)
 		goto unlock;
@@ -87,7 +96,7 @@ void svc_xprt_init()
 	/* one of advantages of this RBT is convenience of external
 	 * iteration, we'll go to that shortly */
 	code =
-	    rbtx_init(&svc_xprt_set_.xt, svc_xprt_fd_cmpf /* NULL (inline) */ ,
+	    rbtx_init(&svc_xprt_fd.xt, svc_xprt_fd_cmpf /* NULL (inline) */ ,
 		      SVC_XPRT_PARTITIONS, RBT_X_FLAG_ALLOC);
 	if (code)
 		__warnx(TIRPC_DEBUG_FLAG_SVC_XPRT,
@@ -96,7 +105,7 @@ void svc_xprt_init()
 	initialized = true;
 
  unlock:
-	mutex_unlock(&svc_xprt_set_.lock);
+	mutex_unlock(&svc_xprt_fd.lock);
 }
 
 #define cond_init_svc_xprt() { \
@@ -106,179 +115,104 @@ void svc_xprt_init()
 		} while (0); \
 	}
 
-static inline struct svc_xprt_rec *
-svc_xprt_lookup(int fd)
+SVCXPRT *
+svc_xprt_get(int fd)
 {
+	struct rpc_svcxprt sk;
 	struct rbtree_x_part *t;
-	struct svc_xprt_rec sk, *srec = NULL;
 	struct opr_rbtree_node *nv;
+	SVCXPRT *srec = NULL;
 
 	cond_init_svc_xprt();
 
-	sk.fd_k = fd;
-	t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, fd);
+	sk.xp_fd = fd;
+	t = rbtx_partition_of_scalar(&svc_xprt_fd.xt, fd);
 
 	rwlock_rdlock(&t->lock);
-	nv = opr_rbtree_lookup(&t->t, &sk.node_k);
+	nv = opr_rbtree_lookup(&t->t, &sk.xp_fd_node);
 	rwlock_unlock(&t->lock);
 
 	/* XXX safe, even if tree is reorganizing */
 	if (nv)
-		srec = opr_containerof(nv, struct svc_xprt_rec, node_k);
+		srec = opr_containerof(nv, struct rpc_svcxprt, xp_fd_node);
 
 	return (srec);
 }
 
-static inline SVCXPRT *
-svc_xprt_insert(SVCXPRT *xprt, uint32_t flags)
-{
-	struct rbtree_x_part *t;
-	struct svc_xprt_rec sk, *srec;
-	struct opr_rbtree_node *nv;
-
-	cond_init_svc_xprt();
-
-	if (!(flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
-		mutex_lock(&xprt->xp_lock);
-
-	sk.fd_k = xprt->xp_fd;
-	t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, xprt->xp_fd);
-
-	if (!(flags & SVC_XPRT_FLAG_WLOCKED))
-		rwlock_wrlock(&t->lock);
-
-	nv = opr_rbtree_lookup(&t->t, &sk.node_k);
-	if (!nv) {
-		srec = mem_alloc(sizeof(struct svc_xprt_rec));
-		mutex_init(&srec->mtx, NULL);
-		srec->fd_k = xprt->xp_fd;
-		srec->xprt = xprt;
-		srec->gen = 1;
-		if (opr_rbtree_insert(&t->t, &srec->node_k)) {
-			/* cant happen */
-			__warnx(TIRPC_DEBUG_FLAG_SVC_XPRT,
-				"%s: collision inserting in locked rbtree "
-				"partition",
-				__func__);
-			mutex_destroy(&srec->mtx);
-			mem_free(srec, sizeof(struct svc_xprt_rec));
-		}
-	}
-
-	if (flags & SVC_XPRT_FLAG_UNLOCK)
-		rwlock_unlock(&t->lock);
-
-	if (!(flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
-		mutex_unlock(&xprt->xp_lock);
-
-	return (NULL);
-}
-
-static inline SVCXPRT *
-svc_xprt_set_impl(SVCXPRT *xprt, uint32_t flags)
-{
-	struct rbtree_x_part *t;
-	struct svc_xprt_rec sk, *srec;
-	struct opr_rbtree_node *ov;
-	SVCXPRT *xprt2 = NULL;
-
-	cond_init_svc_xprt();
-
-	if (!(flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
-		mutex_lock(&xprt->xp_lock);
-
-	sk.fd_k = xprt->xp_fd;
-	t = rbtx_partition_of_scalar(&svc_xprt_set_.xt, sk.fd_k);
-
-	rwlock_wrlock(&t->lock);
-	ov = opr_rbtree_lookup(&t->t, &sk.node_k);
-
-	if (ov) {
-		srec = opr_containerof(ov, struct svc_xprt_rec, node_k);
-		mutex_lock(&srec->mtx);
-		/* XXX state flags and refcount here? */
-		if (!srec->xprt) {
-			if (xprt->xp_gen == 0) {
-				srec->gen++;
-				xprt->xp_gen = srec->gen;
-			}
-			srec->xprt = xprt;
-		} else {
-			xprt2 = srec->xprt;
-			if (flags & SVC_XPRT_FLAG_CLEAR) {
-				/* XXX avoid bloat, remove cleared entries */
-				opr_rbtree_remove(&t->t, &srec->node_k);
-				srec->xprt = NULL;
-				mutex_unlock(&srec->mtx);
-				mutex_destroy(&srec->mtx);
-				mem_free(srec, sizeof(struct svc_xprt_rec));
-				goto unlock;
-			} else
-				srec->xprt = xprt;
-		}
-		mutex_unlock(&srec->mtx);
-	} else {
-		/* no srec */
-		xprt2 =
-		    svc_xprt_insert(xprt,
-				    SVC_XPRT_FLAG_WLOCKED |
-				    SVC_XPRT_FLAG_MUTEX_LOCKED);
-	}
-
- unlock:
-	rwlock_unlock(&t->lock);
-
-	/* conditional */
-	if (!(flags & SVC_XPRT_FLAG_MUTEX_LOCKED))
-		mutex_unlock(&xprt->xp_lock);
-
-	return (xprt2);
-};
-
 SVCXPRT *
 svc_xprt_set(SVCXPRT *xprt, uint32_t flags)
 {
-	return (svc_xprt_set_impl(xprt, flags));
-}
+	struct rbtree_x_part *t;
+	struct opr_rbtree_node *nv;
+	SVCXPRT *srec = NULL;
 
-SVCXPRT *
-svc_xprt_clear(SVCXPRT *xprt, uint32_t flags)
-{
-	return (svc_xprt_set_impl(xprt, flags | SVC_XPRT_FLAG_CLEAR));
-}
+	cond_init_svc_xprt();
 
-SVCXPRT *
-svc_xprt_get(int fd)
-{
-	SVCXPRT *xprt = NULL;
-	struct svc_xprt_rec *srec = svc_xprt_lookup(fd);
+	if (!(flags & SVC_XPRT_FLAG_LOCKED))
+		mutex_lock(&xprt->xp_lock);
 
-	if (srec) {
-		mutex_lock(&srec->mtx);
-		xprt = srec->xprt;
-		mutex_unlock(&srec->mtx);
+	t = rbtx_partition_of_scalar(&svc_xprt_fd.xt, xprt->xp_fd);
+
+	rwlock_wrlock(&t->lock);
+
+	nv = opr_rbtree_insert(&t->t, &xprt->xp_fd_node);
+	if (nv) {
+		srec = opr_containerof(nv, struct rpc_svcxprt, xp_fd_node);
+		__warnx(TIRPC_DEBUG_FLAG_SVC_XPRT,
+			"%s: %p xp_refs %" PRIu32
+			" insert collision with %p xp_refs %" PRIu32,
+			__func__, srec, srec->xp_refs, xprt, xprt->xp_refs);
 	}
 
-	return (xprt);
+	rwlock_unlock(&t->lock);
+
+	if (flags & SVC_XPRT_FLAG_UNLOCK)
+		mutex_unlock(&xprt->xp_lock);
+
+	return (srec);
+}
+
+void
+svc_xprt_clear(SVCXPRT *xprt, uint32_t flags)
+{
+	struct rbtree_x_part *t;
+
+	cond_init_svc_xprt();
+
+	if (!(flags & SVC_XPRT_FLAG_LOCKED))
+		mutex_lock(&xprt->xp_lock);
+
+	if (opr_rbtree_node_valid(&xprt->xp_fd_node)) {
+		t = rbtx_partition_of_scalar(&svc_xprt_fd.xt, xprt->xp_fd);
+
+		rwlock_wrlock(&t->lock);
+		opr_rbtree_remove(&t->t, &xprt->xp_fd_node);
+		rwlock_unlock(&t->lock);
+	}
+
+	if (flags & SVC_XPRT_FLAG_UNLOCK)
+		mutex_unlock(&xprt->xp_lock);
 }
 
 int
 svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 {
-	struct rbtree_x_part *t = NULL;
+	struct rpc_svcxprt sk;
+	struct rbtree_x_part *t;
 	struct opr_rbtree_node *n;
-	struct svc_xprt_rec sk, *srec;
 	SVCXPRT *xprt;
-	int p_ix, x_ix, restarts, code = 0;
 	uint64_t tgen;
 	uint32_t rflag;
+	int p_ix;
+	int x_ix;
+	int restarts;
 
 	cond_init_svc_xprt();
 
 	/* concurrent, restartable iteration over t */
 	p_ix = 0;
 	while (p_ix < SVC_XPRT_PARTITIONS) {
-		t = &svc_xprt_set_.xt.tree[p_ix];
+		t = &svc_xprt_fd.xt.tree[p_ix];
 		restarts = 0;
 		/* TI-RPC __svc_clean_idle held global svc_fd_lock
 		 * exclusive locked for a full scan of the legacy svc_xprts
@@ -286,7 +220,8 @@ svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 		 * operating mostly unlocked. */
  restart:
 		if (++restarts > 5)
-			break;
+			return (1);
+
 		/* start with rlock */
 		rwlock_rdlock(&t->lock);	/* t RLOCKED */
 		tgen = t->t.gen;
@@ -295,34 +230,27 @@ svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 		while (n != NULL) {
 			++x_ix;	/* diagnostic, index into logical srec
 				 * sequence */
-			srec = opr_containerof(n, struct svc_xprt_rec, node_k);
-			mutex_lock(&srec->mtx);
-			if (srec->xprt) {
-				sk.fd_k = srec->fd_k;
-				xprt = srec->xprt;
+			xprt = opr_containerof(n, struct rpc_svcxprt, xp_fd_node);
+			sk.xp_fd = xprt->xp_fd;
 
-				/* call each_func with t !LOCKED, srec
-				 * !LOCKED */
-				mutex_unlock(&srec->mtx);
-				rwlock_unlock(&t->lock);
+			/* call each_func with t !LOCKED */
+			rwlock_unlock(&t->lock);
 
-				/* restart if each_f disposed xprt */
-				rflag = each_f(xprt, arg);
-				if (rflag == SVC_XPRT_FOREACH_CLEAR)
-					goto restart;
+			/* restart if each_f disposed xprt */
+			rflag = each_f(xprt, arg);
+			if (rflag == SVC_XPRT_FOREACH_CLEAR)
+				goto restart;
 
-				/* invalidate */
-				rwlock_rdlock(&t->lock);
+			/* validate */
+			rwlock_rdlock(&t->lock);
 
-				if (tgen != t->t.gen) {
+			if (tgen != t->t.gen) {
+				n = opr_rbtree_lookup(&t->t, &sk.xp_fd_node);
+				if (!n) {
 					/* invalidated, try harder */
-					n = opr_rbtree_lookup(&t->t,
-							      &sk.node_k);
-					if (!n) {
-						rwlock_unlock(&t->lock);
-								/* t !LOCKED */
-						goto restart;
-					}
+					rwlock_unlock(&t->lock);
+							/* t !LOCKED */
+					goto restart;
 				}
 			}
 			n = opr_rbtree_next(n);
@@ -331,7 +259,7 @@ svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 		p_ix++;
 	}			/* SVC_XPRT_PARTITIONS */
 
-	return (code);
+	return (0);
 }
 
 void
@@ -339,7 +267,7 @@ svc_xprt_dump_xprts(const char *tag)
 {
 	struct rbtree_x_part *t = NULL;
 	struct opr_rbtree_node *n;
-	struct svc_xprt_rec *srec;
+	SVCXPRT *xprt;
 	int p_ix;
 
 	if (!initialized)
@@ -347,17 +275,16 @@ svc_xprt_dump_xprts(const char *tag)
 
 	p_ix = 0;
 	while (p_ix < SVC_XPRT_PARTITIONS) {
-		t = &svc_xprt_set_.xt.tree[p_ix];
+		t = &svc_xprt_fd.xt.tree[p_ix];
 		rwlock_rdlock(&t->lock);	/* t RLOCKED */
 		__warnx(TIRPC_DEBUG_FLAG_SVC_XPRT,
 			"xprts at %s: tree %d size %d", tag, p_ix, t->t.size);
 		n = opr_rbtree_first(&t->t);
 		while (n != NULL) {
-			srec = opr_containerof(n, struct svc_xprt_rec, node_k);
+			xprt = opr_containerof(n, struct rpc_svcxprt, xp_fd_node);
 			__warnx(TIRPC_DEBUG_FLAG_SVC_XPRT,
-				"xprts at %s:  srec %p fd %d xprt %p xp_fd %d",
-				tag, srec, srec->fd_k, srec->xprt,
-				(srec->xprt) ? srec->xprt->xp_fd : 0);
+				"xprts at %s: %p xp_fd %d",
+				tag, xprt, xprt->xp_fd);
 			n = opr_rbtree_next(n);
 		}		/* curr partition */
 		rwlock_unlock(&t->lock);	/* t !LOCKED */
@@ -370,35 +297,30 @@ svc_xprt_dump_xprts(const char *tag)
 void
 svc_xprt_shutdown()
 {
-	struct rbtree_x_part *t = NULL;
+	struct rbtree_x_part *t;
 	struct opr_rbtree_node *n;
-	struct svc_xprt_rec *srec;
+	SVCXPRT *xprt;
 	int p_ix;
 
 	if (!initialized)
-		goto out;
+		return;
 
 	p_ix = 0;
 	while (p_ix < SVC_XPRT_PARTITIONS) {
-		t = &svc_xprt_set_.xt.tree[p_ix];
-	restart:
+		t = &svc_xprt_fd.xt.tree[p_ix];
+
 		rwlock_wrlock(&t->lock);	/* t WLOCKED */
 		n = opr_rbtree_first(&t->t);
 		while (n != NULL) {
-			srec = opr_containerof(n, struct svc_xprt_rec, node_k);
-			if (srec->xprt) {
-				/* call each_func with t !LOCKED, srec !LOCKED
-				 */
-				rwlock_unlock(&t->lock); /* xp_lock, t->lock order */
-				SVC_DESTROY(srec->xprt); /* locks srec, xprt */
-				goto restart;
-			} else {
-				/* now remove srec */
-				opr_rbtree_remove(&t->t, &srec->node_k);
-				/* and free it */
-				mem_free(srec, sizeof(struct svc_xprt_rec));
-			}
-			n = opr_rbtree_first(&t->t);
+			xprt = opr_containerof(n, struct rpc_svcxprt, xp_fd_node);
+			n = opr_rbtree_next(n);
+
+			/* prevent repeats, see svc_xprt_clear() */
+			mutex_lock(&xprt->xp_lock);
+			opr_rbtree_remove(&t->t, &xprt->xp_fd_node);
+			mutex_unlock(&xprt->xp_lock);
+
+			SVC_DESTROY(xprt);
 		}		/* curr partition */
 		rwlock_unlock(&t->lock);	/* t !LOCKED */
 		rwlock_destroy(&t->lock);
@@ -406,8 +328,31 @@ svc_xprt_shutdown()
 	}			/* SVC_XPRT_PARTITIONS */
 
 	/* free tree */
-	mem_free(svc_xprt_set_.xt.tree,
+	mem_free(svc_xprt_fd.xt.tree,
 		 SVC_XPRT_PARTITIONS * sizeof(struct rbtree_x_part));
- out:
-	return;
+}
+
+void
+svc_xprt_trace(SVCXPRT *xprt, const char *func, const char *tag, const int line)
+{
+	struct sockaddr_storage *ss = (struct sockaddr_storage *)
+	    &(xprt->xp_remote.ss);
+	int port;
+
+	switch (ss->ss_family) {
+	case AF_INET6:
+		port = ntohs(((struct sockaddr_in6 *)ss)->sin6_port);
+		break;
+	case AF_INET:
+		port = ntohs(((struct sockaddr_in *)ss)->sin_port);
+		break;
+	default:
+		port = -1;
+		break;
+	}
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
+		"%s() %p xp_refs %" PRId32
+		" fd %d port %d @ %s:%d",
+		func, xprt, xprt->xp_refs,
+		xprt->xp_fd, port, tag, line);
 }
