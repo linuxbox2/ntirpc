@@ -62,6 +62,7 @@ xdr_call_encode(XDR *xdrs, struct rpc_msg *cmsg)
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR cb_cred.oa_length (%u) > %u",
 			__func__, __LINE__,
+			cmsg->rm_call.cb_cred.oa_length,
 			MAX_AUTH_BYTES);
 		return (false);
 	}
@@ -69,6 +70,7 @@ xdr_call_encode(XDR *xdrs, struct rpc_msg *cmsg)
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR cb_verf.oa_length (%u) > %u",
 			__func__, __LINE__,
+			cmsg->rm_call.cb_verf.oa_length,
 			MAX_AUTH_BYTES);
 		return (false);
 	}

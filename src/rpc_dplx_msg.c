@@ -68,23 +68,6 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 	struct opaque_auth *oa;
 	int32_t *buf;
 
-	if (dmsg->rm_call.cb_cred.oa_length > MAX_AUTH_BYTES) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s:%u ERROR cb_cred.oa_length (%u) > %u",
-			__func__, __LINE__,
-			MAX_AUTH_BYTES);
-		return (false);
-	}
-	if (dmsg->rm_call.cb_verf.oa_length > MAX_AUTH_BYTES) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s:%u ERROR cb_verf.oa_length (%u) > %u",
-			__func__, __LINE__,
-			MAX_AUTH_BYTES);
-		return (false);
-	}
-
-	/* This is untested code. */
-
 	switch (dmsg->rm_reply.rp_stat) {
 	case MSG_ACCEPTED:
 	{
@@ -92,6 +75,14 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 						&(dmsg->rm_reply.ru);
 
 		oa = &ar->ar_verf;
+		if (oa->oa_length > MAX_AUTH_BYTES) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR ar_verf.oa_length (%u) > %u",
+				__func__, __LINE__,
+				oa->oa_length,
+				MAX_AUTH_BYTES);
+			return (false);
+		}
 		buf = XDR_INLINE(xdrs,
 				 6 * BYTES_PER_XDR_UNIT +
 				 RNDUP(oa->oa_length));

@@ -60,6 +60,7 @@ inline_auth_encode_opaque(XDR *xdrs, struct opaque_auth *oa)
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR oa_length (%u) > %u",
 			__func__, __LINE__,
+			oa->oa_length,
 			MAX_AUTH_BYTES);
 		return (false);
 	}
@@ -108,6 +109,7 @@ inline_auth_decode_opaque(XDR *xdrs, struct opaque_auth *oa)
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR oa_length (%u) > %u",
 			__func__, __LINE__,
+			oa->oa_length,
 			MAX_AUTH_BYTES);
 		return (false);
 	}
