@@ -119,7 +119,7 @@ struct kevent {
  * This is currently visible to userland to work around broken
  * programs which pull in <sys/proc.h>.
  */
-#include <sys/queue.h>
+#include <misc/queue.h>
 
 struct knote;
 SLIST_HEAD(klist, knote);
