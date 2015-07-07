@@ -139,12 +139,6 @@ struct opr_rbtree_node *opr_rbtree_prev(struct opr_rbtree_node *node)
 	return parent;
 }
 
-static inline void initnode(struct opr_rbtree_node *node)
-{
-	node->left = node->right = node->parent = NULL;
-	node->red = 1;
-}
-
 static inline void rotateright(struct opr_rbtree *head,
 			       struct opr_rbtree_node *node)
 {
@@ -385,7 +379,7 @@ static void remove_recolour(struct opr_rbtree *head,
 
 void opr_rbtree_remove(struct opr_rbtree *head, struct opr_rbtree_node *node)
 {
-	struct opr_rbtree_node *child, *parent;
+	struct opr_rbtree_node *child = NULL, *parent;
 	int red;
 
 	if (node->left == NULL && node->right == NULL) {
