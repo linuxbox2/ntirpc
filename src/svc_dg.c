@@ -211,7 +211,11 @@ static void svc_dg_set_pktinfo(struct cmsghdr *cmsg, struct svc_req *req)
 		cmsg->cmsg_level = SOL_IP;
 		cmsg->cmsg_type = IP_PKTINFO;
 		pki->ipi_ifindex = 0;
+#ifdef __FreeBSD__
+		pki->ipi_addr = daddr->sin_addr;
+#else
 		pki->ipi_spec_dst = daddr->sin_addr;
+#endif
 		cmsg->cmsg_len = CMSG_LEN(sizeof(*pki));
 		break;
 	}
@@ -323,6 +327,9 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 
 				cmsg = (struct cmsghdr *)mesgp->msg_control;
 				svc_dg_set_pktinfo(cmsg, req);
+#ifndef CMSG_ALIGN
+#define CMSG_ALIGN(len) (len)
+#endif
 				mesgp->msg_controllen =
 					CMSG_ALIGN(cmsg->cmsg_len);
 			}
@@ -855,7 +862,11 @@ svc_dg_store_in_pktinfo(struct cmsghdr *cmsg, struct svc_req *req)
 		pkti = (struct in_pktinfo *)CMSG_DATA(cmsg);
 		daddr = (struct sockaddr_in *)&req->rq_daddr;
 		daddr->sin_family = AF_INET;
+#ifdef __FreeBSD__
+		daddr->sin_addr = pkti->ipi_addr;
+#else
 		daddr->sin_addr.s_addr = pkti->ipi_spec_dst.s_addr;
+#endif
 		req->rq_daddr_len = sizeof(struct sockaddr_in);
 		return 1;
 	} else {
