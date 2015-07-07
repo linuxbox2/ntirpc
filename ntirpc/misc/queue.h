@@ -31,8 +31,14 @@
  * $
  */
 
-#ifndef _TIRPC_SYS_QUEUE_H_
-#define	_TIRPC_SYS_QUEUE_H_
+#ifndef _TIRPC_MISC_QUEUE_H_
+#define	_TIRPC_MISC_QUEUE_H_
+
+#if defined(__FreeBSD__) && defined(_SYS_QUEUE_H_)
+#error misc/queue.h must be included before sys/queue.h
+#else
+#define _SYS_QUEUE_H_
+#endif
 
 #include <sys/cdefs.h>
 
@@ -643,4 +649,4 @@ struct {								\
 		(head2)->tqh_last = &(head2)->tqh_first;		\
 } while (0)
 
-#endif				/* !_SYS_QUEUE_H_ */
+#endif				/* !TIRPC__MISC_QUEUE_H_ */
