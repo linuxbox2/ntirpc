@@ -86,7 +86,7 @@ work_pool_init(struct work_pool *pool, const char *name,
 	if (pool->params.thrd_min < 1) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s() thrd_min (%d) < 1",
-			__func__, pool->params.thrd_max);
+			__func__, pool->params.thrd_min);
 		pool->params.thrd_min = 1;
 	};
 
@@ -308,10 +308,10 @@ work_pool_shutdown(struct work_pool *pool)
 		.tv_nsec = 0,
 	};
 
-	pthread_mutex_lock(&pool->pqh.qmutex);
-
 	pool->params.thrd_max =
 	pool->params.thrd_min = 0;
+
+	pthread_mutex_lock(&pool->pqh.qmutex);
 
 	while (0 > pool->pqh.qcount) {
 		/* unlike _submit, only increment negatives */
