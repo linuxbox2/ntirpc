@@ -246,6 +246,11 @@ void opr_rbtree_insert_at(struct opr_rbtree *head,
 	node->parent = parent;
 	node->left = node->right = NULL;
 	node->red = 1;
+	node->gen = (uint32_t)(++(head->gen));
+	if (!node->gen) {
+		/* truncated to zero */
+		node->gen = (uint32_t)(++(head->gen));
+	}
 	*childptr = node;
 
 	/* Rebalance the tree for the newly inserted node */
@@ -278,7 +283,6 @@ struct opr_rbtree_node *opr_rbtree_insert(struct opr_rbtree *head,
 
 	opr_rbtree_insert_at(head, parent, iter, node);
 	(head->size)++;
-	(head->gen)++;
 
 	return (NULL);
 }
@@ -381,6 +385,12 @@ void opr_rbtree_remove(struct opr_rbtree *head, struct opr_rbtree_node *node)
 {
 	struct opr_rbtree_node *child = NULL, *parent;
 	int red;
+
+	if (!node->gen) {
+		/* not in tree */
+		return;
+	}
+	node->gen = 0;
 
 	if (node->left == NULL && node->right == NULL) {
 		/* A node with no non-leaf children */

@@ -3,6 +3,7 @@
 #ifndef _OPR_RBTREE_H
 #define _OPR_RBTREE_H 1
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <misc/opr.h>
 
@@ -14,7 +15,8 @@ struct opr_rbtree_node {
 	struct opr_rbtree_node *left;
 	struct opr_rbtree_node *right;
 	struct opr_rbtree_node *parent;
-	int red;
+	uint32_t red;
+	uint32_t gen;		/* generation number */
 };
 
 typedef int (*opr_rbtree_cmpf_t) (const struct opr_rbtree_node *lhs,
@@ -45,6 +47,11 @@ extern void opr_rbtree_remove(struct opr_rbtree *head,
 extern void opr_rbtree_replace(struct opr_rbtree *head,
 			       struct opr_rbtree_node *old,
 			       struct opr_rbtree_node *replacement);
+
+static inline bool opr_rbtree_node_valid(struct opr_rbtree_node *node)
+{
+	return (node->gen != 0);
+}
 
 static inline unsigned long opr_rbtree_size(struct opr_rbtree *head)
 {
