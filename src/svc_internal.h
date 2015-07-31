@@ -78,7 +78,7 @@ extern struct svc_params __svc_params[1];
 #define svc_cond_init()	\
 	do { \
 		if (!__svc_params->initialized) { \
-			svc_init(&(svc_init_params) \
+			(void)svc_init(&(svc_init_params) \
 				 {       .flags = SVC_INIT_EPOLL, \
 						 .max_connections = 8192, \
 						 .max_events = 512, \

@@ -113,7 +113,7 @@ static struct svc_callout *svc_find(rpcprog_t, rpcvers_t, struct svc_callout **,
 
 struct work_pool svc_work_pool;
 
-static void
+static int
 svc_work_pool_init()
 {
 	struct work_pool_params params = {
@@ -121,7 +121,7 @@ svc_work_pool_init()
 		.thrd_min = 2
 	};
 
-	(void)work_pool_init(&svc_work_pool, "svc_work_pool", &params);
+	return work_pool_init(&svc_work_pool, "svc_work_pool", &params);
 }
 
 /* Package init function.
@@ -129,7 +129,7 @@ svc_work_pool_init()
  * will call svc_init() before accessing such state and before executing
  * any svc exported functions.   Traditional TI-RPC programs need not
  * call the function as presently integrated. */
-void
+bool
 svc_init(svc_init_params *params)
 {
 	mutex_lock(&__svc_params->mtx);
@@ -137,7 +137,7 @@ svc_init(svc_init_params *params)
 		__warnx(TIRPC_DEBUG_FLAG_SVC,
 			"svc_init: multiple initialization attempt (nothing happens)");
 		mutex_unlock(&__svc_params->mtx);
-		return;
+		return true;
 	}
 	__svc_params->max_connections =
 	    (params->max_connections) ? params->max_connections : FD_SETSIZE;
@@ -187,7 +187,8 @@ svc_init(svc_init_params *params)
 		__svc_params->ioq.thrd_max = 200;
 
 	/* uses ioq.thrd_max */
-	svc_work_pool_init();
+	if (svc_work_pool_init())
+		return false;
 
 	if (params->gss_ctx_hash_partitions)
 		__svc_params->gss.ctx_hash_partitions =
@@ -217,7 +218,7 @@ svc_init(svc_init_params *params)
 #if defined(_SC_IOV_MAX) /* IRIX, MacOS X, FreeBSD, Solaris, ... */
 	__svc_maxiov = sysconf(_SC_IOV_MAX);
 #endif
-	return;
+	return true;
 }
 
 struct rpc_msg *
