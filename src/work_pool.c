@@ -57,7 +57,7 @@
 
 #include <rpc/work_pool.h>
 
-#define WORK_POOL_STACK_SIZE (65535)
+#define WORK_POOL_STACK_SIZE MAX(64 * 1024, PTHREAD_STACK_MIN)
 #define WORK_POOL_TIMEOUT_MS (120000)
 
 /* forward declaration in lieu of moving code, was inline */
@@ -119,7 +119,6 @@ work_pool_init(struct work_pool *pool, const char *name,
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s() can't set pthread's stack size: %s (%d)",
 			__func__, strerror(rc), rc);
-		return rc;
 	}
 
 	/* initial spawn will spawn more threads as needed */
