@@ -58,10 +58,13 @@ extern SVCAUTH svc_auth_none;
  * from mit-krb5-1.2.1 mechglue/mglueP.h:
  * Array of context IDs typed by mechanism OID
  */
-typedef struct gss_union_ctx_id_t {
+struct gss_union_ctx_id {
 	gss_OID mech_type;
 	gss_ctx_id_t internal_ctx_id;
-} gss_union_ctx_id_desc, *gss_union_ctx_id_t;
+};
+
+typedef struct gss_union_ctx_id gss_union_ctx_id_desc;
+typedef gss_union_ctx_id_desc *gss_union_ctx_id_t;
 
 #define SVC_RPC_GSS_FLAG_NONE    0x0000
 #define SVC_RPC_GSS_FLAG_MSPAC   0x0001
@@ -101,6 +104,7 @@ static inline struct
 svc_rpc_gss_data *alloc_svc_rpc_gss_data(void)
 {
 	struct svc_rpc_gss_data *gd =
+		(struct svc_rpc_gss_data *)
 		mem_zalloc(sizeof(struct svc_rpc_gss_data));
 	mutex_init(&gd->lock, NULL);
 	TAILQ_INIT_ENTRY(gd, lru_q);
