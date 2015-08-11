@@ -196,19 +196,19 @@ typedef struct rpc_xdr {
 static inline size_t
 xdr_size_inline(XDR *xdrs)
 {
-	return (xdrs->x_v.vio_wrap - xdrs->x_private);
+	return ((uintptr_t)xdrs->x_v.vio_wrap - (uintptr_t)xdrs->x_private);
 }
 
 static inline size_t
 xdr_tail_inline(XDR *xdrs)
 {
-	return (xdrs->x_v.vio_tail - xdrs->x_private);
+	return ((uintptr_t)xdrs->x_v.vio_tail - (uintptr_t)xdrs->x_private);
 }
 
 static inline void
 xdr_tail_update(XDR *xdrs)
 {
-	if (xdrs->x_v.vio_tail < xdrs->x_private) {
+	if ((uintptr_t)xdrs->x_v.vio_tail < (uintptr_t)xdrs->x_private) {
 		xdrs->x_v.vio_tail = xdrs->x_private;
 		XDR_VIO(xdrs)->vio_tail = xdrs->x_private;
 	}
