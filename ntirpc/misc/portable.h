@@ -69,8 +69,13 @@ extern int clock_gettime(clockid_t clock, struct timespec *ts);
 #endif
 
 #if !defined(CACHE_LINE_SIZE)
+#if defined(__PPC64__)
+#define CACHE_LINE_SIZE 128
+#else /* __x86_64__, __i386__ and others */
 #define CACHE_LINE_SIZE 64
 #endif
+#endif
+
 #define CACHE_PAD(_n) char __pad ## _n [CACHE_LINE_SIZE]
 
 #endif				/* NTIRPC_PORTABLE_H */
