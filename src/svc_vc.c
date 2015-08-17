@@ -243,15 +243,24 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	    && (!(flags & SVC_VC_CREATE_XPRT_NOREG)))
 		xprt_register(xprt);
 
+#if defined(HAVE_BLKIN)
+	__rpc_set_blkin_endpoint(xprt, "svc_vc");
+#endif
+
  done:
 	return (xprt);
 
  err:
-	if (rdvs != NULL)
+	if (rdvs)
 		mem_free(rdvs, sizeof(struct cf_rendezvous));
 
-	if (xprt)
+	if (xprt) {
+#if defined(HAVE_BLKIN)
+		if (xprt->blkin.svc_name)
+			mem_free(xprt->blkin.svc_name, 2*INET6_ADDRSTRLEN);
+#endif
 		mem_free(xprt, sizeof(SVCXPRT));
+	}
 
 	if (rec) {
 		rpc_dplx_unref(rec,
@@ -565,6 +574,10 @@ rendezvous_request(SVCXPRT *xprt, struct svc_req *req)
 	} else {
 		__rpc_set_address(&newxprt->xp_local, &addr, slen);
 	}
+
+#if defined(HAVE_BLKIN)
+	__rpc_set_blkin_endpoint(newxprt, "svc_vc");
+#endif
 
 	xd = (struct x_vc_data *)newxprt->xp_p1;
 	xd->shared.recvsz = rdvs->recvsize;

@@ -208,6 +208,10 @@ epoll_create_wr(size_t size, int flags)
 }
 #endif
 
+#if defined(HAVE_BLKIN)
+extern void __rpc_set_blkin_endpoint(SVCXPRT *xprt, const char *tag);
+#endif
+
 void svc_rqst_shutdown(void);
 
 #endif				/* TIRPC_SVC_INTERNAL_H */

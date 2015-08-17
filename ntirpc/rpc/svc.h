@@ -48,6 +48,10 @@
 #include <misc/queue.h>
 #include <misc/rbtree.h>
 #include "reentrant.h"
+#if defined(HAVE_BLKIN)
+#include <blkin/zipkin_c.h>
+#endif
+
 
 /*
  * This interface must manage two items concerning remote procedure calling:
@@ -77,6 +81,7 @@
 #define SVC_INIT_EPOLL          0x0002
 #define SVC_INIT_WARNX          0x0004
 #define SVC_INIT_NOREG_XPRTS    0x0008
+#define SVC_INIT_BLKIN          0x0010
 
 #define SVC_SHUTDOWN_FLAG_NONE  0x0000
 
@@ -263,6 +268,13 @@ typedef struct rpc_svcxprt {
 	struct rpc_address xp_local;	/* local address, length, port */
 	struct rpc_address xp_remote;	/* remote address, length, port */
 
+#if defined(HAVE_BLKIN)
+	/* blkin tracing */
+	struct {
+		char *svc_name;
+		struct blkin_endpoint endp;
+	} blkin;
+#endif
 	/* auth */
 	mutex_t xp_auth_lock;	/* lock owned by installed authenticator */
 
@@ -366,6 +378,11 @@ struct svc_req {
 
 	size_t rq_raddr_len;
 	size_t rq_daddr_len;
+
+#if defined(HAVE_BLKIN)
+	/* blkin tracing */
+	struct blkin_trace bl_trace;
+#endif
 };
 
 /*

@@ -181,7 +181,12 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 	if (!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
 		xprt_register(xprt);
 
+#if defined(HAVE_BLKIN)
+	__rpc_set_blkin_endpoint(xprt, "svc_dg");
+#endif
+
 	return (xprt);
+
  freedata:
 	__warnx(TIRPC_DEBUG_FLAG_SVC_DG, svc_dg_str, __no_mem_str);
 	if (xprt) {
@@ -472,7 +477,10 @@ svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		/* call free hook */
 		xprt->xp_ops->xp_free_user_data(xprt);
 	}
-
+#if defined(HAVE_BLKIN)
+	if (xprt->blkin.svc_name)
+		mem_free(xprt->blkin.svc_name, 2*INET6_ADDRSTRLEN);
+#endif
 	(void)mem_free(xprt, sizeof(SVCXPRT));
 }
 
