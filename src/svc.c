@@ -63,6 +63,7 @@
 
 #include <rpc/svc.h>
 #include <rpc/svc_auth.h>
+#include <arpa/inet.h>
 
 #include "clnt_internal.h"
 #include "svc_internal.h"
@@ -149,6 +150,17 @@ svc_init(svc_init_params *params)
 	/* svc_vc */
 	__svc_params->xprt_u.vc.nconns = 0;
 	mutex_init(&__svc_params->xprt_u.vc.mtx, NULL);
+
+#if defined(HAVE_BLKIN)
+	if (params->flags & SVC_INIT_BLKIN) {
+		int r = blkin_init();
+		if (r < 0) {
+			__warnx(TIRPC_DEBUG_FLAG_SVC,
+				"%s: blkn_init failed\n",
+				__func__);
+		}
+	}
+#endif
 
 #if defined(TIRPC_EPOLL)
 	if (params->flags & SVC_INIT_EPOLL) {
@@ -993,6 +1005,50 @@ rpc_control(int what, void *arg)
 
 	return (true);
 }
+
+#if defined(HAVE_BLKIN)
+void __rpc_set_blkin_endpoint(SVCXPRT *xprt, const char *tag)
+{
+	struct sockaddr_in *salocal_in;
+	struct sockaddr_in6 *salocal_in6;
+	struct sockaddr *salocal =
+		(struct sockaddr *)&xprt->xp_local.ss;
+	char saddr[INET6_ADDRSTRLEN];
+	int xp_port = 0;
+
+	switch (salocal->sa_family) {
+	case AF_INET:
+		salocal_in = (struct sockaddr_in *)salocal;
+		(void)  inet_ntop(salocal->sa_family,
+				&salocal_in->sin_addr,
+				saddr, INET6_ADDRSTRLEN);
+		xp_port = ntohs(salocal_in->sin_port);
+		break;
+	case AF_INET6:
+		salocal_in6 = (struct sockaddr_in6 *)salocal;
+		(void) inet_ntop(salocal->sa_family,
+				&salocal_in6->sin6_addr,
+				saddr, INET6_ADDRSTRLEN);
+		xp_port = ntohs(salocal_in6->sin6_port);
+		break;
+	}
+
+	/* in Zipkin, traces are localized by a service name at an endpoint,
+	 * plus an "address" which
+	 * a) is represented by an integer
+	 * b) is treated by libraries as if it is an ipv4 address
+	 * c) is mostly ignored if it converts as 0 (see below)
+	 *
+	 * the blkin c interface doesn't copy the endpoint string, so we
+	 * allocate one;
+	 */
+	xprt->blkin.svc_name = mem_zalloc(2*INET6_ADDRSTRLEN);
+	snprintf(xprt->blkin.svc_name, 2*INET6_ADDRSTRLEN,
+		"ntirpc-%s:%s:%d", tag, saddr, xp_port);
+	blkin_init_endpoint(&xprt->blkin.endp, "0.0.0.0", xp_port,
+			xprt->blkin.svc_name);
+}
+#endif
 
 int
 svc_shutdown(u_long flags)
