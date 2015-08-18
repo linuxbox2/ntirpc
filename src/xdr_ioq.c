@@ -95,7 +95,7 @@ struct poolq_entry *
 xdr_ioq_uv_fetch(struct xdr_ioq *xioq, struct poolq_head *ioqh,
 		 char *comment, u_int count, u_int ioq_flags)
 {
-	struct poolq_entry *have;
+	struct poolq_entry *have = NULL;
 
 	__warnx(TIRPC_DEBUG_FLAG_XDR,
 		"%s() %u %s",
