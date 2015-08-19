@@ -117,10 +117,14 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	struct sockaddr_in6 *salocal_in6;
 	struct rpc_dplx_rec *rec = NULL;
 	struct x_vc_data *xd = NULL;
+	const char *netid;
 	uint32_t oflags;
 	socklen_t slen;
 
 	if (!__rpc_fd2sockinfo(fd, &si))
+		return NULL;
+
+	if (!__rpc_sockinfo2netid(&si, &netid))
 		return NULL;
 
 	rdvs = mem_alloc(sizeof(struct cf_rendezvous));
@@ -222,6 +226,8 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 		break;
 	}
 	__rpc_set_address(&xprt->xp_local, &sslocal, slen);
+
+	xprt->xp_netid = rpc_strdup(netid);
 
 	/* make reachable from rec */
 	rec->hdl.xprt = xprt;
