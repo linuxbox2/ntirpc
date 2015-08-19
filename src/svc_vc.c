@@ -364,7 +364,6 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 			"%s: makefd_xprt: max_connections exceeded\n",
 			__func__);
-		xprt = NULL;
 		goto done;
 	}
 
@@ -430,6 +429,9 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 		rpc_dplx_unref(rec,
 			       RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
 		*allocated = FALSE;
+
+		/* return ref'd xprt */
+		goto done_xprt;
 	}
 
 	/* XXX bi-directional?  initially I had assumed that explicit
@@ -477,7 +479,8 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 	/* Make reachable from xprt list.  Registration deferred. */
 	svc_rqst_init_xprt(xprt);
 
- done:
+done_xprt:
+done:
 	return (xprt);
 }
 
