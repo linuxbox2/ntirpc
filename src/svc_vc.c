@@ -372,6 +372,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 	const char *netid;
 	uint32_t oflags;
 	bool newxd = false;
+	*allocated = false;
 
 	assert(fd != -1);
 
