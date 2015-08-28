@@ -187,8 +187,10 @@ svc_init(svc_init_params *params)
 		__svc_params->ioq.thrd_max = 200;
 
 	/* uses ioq.thrd_max */
-	if (svc_work_pool_init())
+	if (svc_work_pool_init()) {
+		mutex_unlock(&__svc_params->mtx);
 		return false;
+	}
 
 	if (params->gss_ctx_hash_partitions)
 		__svc_params->gss.ctx_hash_partitions =
