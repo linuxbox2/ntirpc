@@ -89,7 +89,7 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 
 		if (buf != NULL) {
 			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
-				"%s:%u INLINE",
+				"%s:%u ACCEPTED INLINE",
 				__func__, __LINE__);
 			IXDR_PUT_INT32(buf, dmsg->rm_xid);
 			IXDR_PUT_ENUM(buf, dmsg->rm_direction);
@@ -104,10 +104,16 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 			IXDR_PUT_ENUM(buf, ar->ar_stat);
 			switch (ar->ar_stat) {
 			case SUCCESS:
+				__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+					"%s:%u SUCCESS",
+					__func__, __LINE__);
 				return ((*(ar->ar_results.proc))(xdrs,
 						ar->ar_results.where));
 
 			case PROG_MISMATCH:
+				__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+					"%s:%u MISMATCH",
+					__func__, __LINE__);
 				buf = XDR_INLINE(xdrs,
 					2 * BYTES_PER_XDR_UNIT);
 				if (buf != NULL) {
@@ -137,6 +143,9 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 			};
 			return (true);
 		} else {
+			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+				"%s:%u ACCEPTED non-INLINE",
+				__func__, __LINE__);
 			return (inline_xdr_union(xdrs,
 				(enum_t *) &(dmsg->rm_reply.rp_stat),
 				(caddr_t)(void *)&(dmsg->rm_reply.ru),
@@ -151,6 +160,9 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 						&(dmsg->rm_reply.ru);
 		switch (rr->rj_stat) {
 		case RPC_MISMATCH:
+			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+				"%s:%u DENIED MISMATCH",
+				__func__, __LINE__);
 			buf = XDR_INLINE(xdrs, 3 * BYTES_PER_XDR_UNIT);
 
 			if (buf != NULL) {
@@ -180,6 +192,9 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 			}
 			return (true); /* bugfix */
 		case AUTH_ERROR:
+			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+				"%s:%u DENIED AUTH",
+				__func__, __LINE__);
 			buf = XDR_INLINE(xdrs, 2 * BYTES_PER_XDR_UNIT);
 
 			if (buf != NULL) {
@@ -266,10 +281,16 @@ xdr_reply_decode(XDR *xdrs, struct rpc_msg *dmsg, int32_t *buf)
 
 		switch (ar->ar_stat) {
 		case SUCCESS:
+			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+				"%s:%u SUCCESS",
+				__func__, __LINE__);
 			return ((*(ar->ar_results.proc))(xdrs,
 						&(ar->ar_results.where)));
 
 		case PROG_MISMATCH:
+			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+				"%s:%u MISMATCH",
+				__func__, __LINE__);
 			if (!xdr_getuint32(xdrs, &(ar->ar_vers.low))) {
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"%s:%u ERROR ar_vers.low",
@@ -315,6 +336,9 @@ xdr_reply_decode(XDR *xdrs, struct rpc_msg *dmsg, int32_t *buf)
 
 		switch (rr->rj_stat) {
 		case RPC_MISMATCH:
+			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+				"%s:%u DENIED MISMATCH",
+				__func__, __LINE__);
 			if (buf != NULL) {
 				rr->rj_vers.low = IXDR_GET_U_INT32(buf);
 			} else if (!xdr_getuint32(xdrs, &(rr->rj_vers.low))) {
@@ -332,6 +356,9 @@ xdr_reply_decode(XDR *xdrs, struct rpc_msg *dmsg, int32_t *buf)
 			break;
 
 		case AUTH_ERROR:
+			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+				"%s:%u DENIED AUTH",
+				__func__, __LINE__);
 			if (buf != NULL) {
 				rr->rj_why = IXDR_GET_ENUM(buf, enum_t);
 			} else if (!xdr_getenum(xdrs,
