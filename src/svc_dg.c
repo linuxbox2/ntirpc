@@ -65,7 +65,7 @@
 #include <misc/city.h>
 #include <rpc/rpc_cksum.h>
 
-extern tirpc_pkg_params __pkg_params;
+extern tirpc_pkg_params __ntirpc_pkg_params;
 extern struct svc_params __svc_params[1];
 
 #define su_data(xprt) ((struct svc_dg_data *)(xprt->xp_p2))	/* XXX */
@@ -692,7 +692,7 @@ svc_dg_cache_set(SVCXPRT *xprt, size_t replylen)
 	/*
 	 * Store it away
 	 */
-	if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_RPC_CACHE) {
+	if (__ntirpc_pkg_params.debug_flags & TIRPC_DEBUG_FLAG_RPC_CACHE) {
 		nconf = getnetconfigent(xprt->xp_netid);
 		if (nconf) {
 			uaddr = taddr2uaddr(nconf, &xprt->xp_remote.nb);
@@ -752,7 +752,7 @@ svc_dg_cache_get(SVCXPRT *xprt, struct rpc_msg *msg, char **replyp,
 		    (memcmp
 		     (ent->cache_addr.buf, xprt->xp_remote.nb.buf,
 		      xprt->xp_remote.nb.len) == 0)) {
-			if (__pkg_params.
+			if (__ntirpc_pkg_params.
 			    debug_flags & TIRPC_DEBUG_FLAG_RPC_CACHE) {
 				nconf = getnetconfigent(xprt->xp_netid);
 				if (nconf) {

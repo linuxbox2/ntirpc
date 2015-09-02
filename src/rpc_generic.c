@@ -59,7 +59,7 @@
 
 #include "rpc_com.h"
 
-tirpc_pkg_params __pkg_params = {
+tirpc_pkg_params __ntirpc_pkg_params = {
 	TIRPC_FLAG_NONE,
 	TIRPC_DEBUG_FLAG_NONE,
 	warnx
@@ -70,22 +70,22 @@ tirpc_control(const u_int rq, void *in)
 {
 	switch (rq) {
 	case TIRPC_GET_FLAGS:
-		*(u_int *) in = __pkg_params.flags;
+		*(u_int *) in = __ntirpc_pkg_params.flags;
 		break;
 	case TIRPC_SET_FLAGS:
-		__pkg_params.flags = *(int *)in;
+		__ntirpc_pkg_params.flags = *(int *)in;
 		break;
 	case TIRPC_GET_DEBUG_FLAGS:
-		*(u_int *) in = __pkg_params.debug_flags;
+		*(u_int *) in = __ntirpc_pkg_params.debug_flags;
 		break;
 	case TIRPC_SET_DEBUG_FLAGS:
-		__pkg_params.debug_flags = *(int *)in;
+		__ntirpc_pkg_params.debug_flags = *(int *)in;
 		break;
 	case TIRPC_GET_WARNX:
-		*(warnx_t *) in = __pkg_params.warnx;
+		*(warnx_t *) in = __ntirpc_pkg_params.warnx;
 		break;
 	case TIRPC_SET_WARNX:
-		__pkg_params.warnx = *(warnx_t) in;
+		__ntirpc_pkg_params.warnx = *(warnx_t) in;
 		break;
 	default:
 		return (false);

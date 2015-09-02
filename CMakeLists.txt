@@ -1,5 +1,19 @@
-
 # Ganesha CMake integration
+
+# version numbers
+set(NTIRPC_MAJOR_VERSION 1)
+set(NTIRPC_MINOR_VERSION 3)
+set(NTIRPC_PATCHLEVEL 0)
+
+# version string used for packaging
+set(NTIRPC_VERSION
+  "${NTIRPC_MAJOR_VERSION}.${NTIRPC_MINOR_VERSION}.${NTIRPC_PATCHLEVEL}")
+
+# subst files (need add_custom_command for dependency, fyi)
+configure_file(
+  "${PROJECT_SOURCE_DIR}/libntirpc/src/libntirpc.map.in.cmake"
+  "${PROJECT_BINARY_DIR}/libntirpc/src/libntirpc.map"
+)
 
 if(TIRPC_EPOLL)
   add_definitions(-DTIRPC_EPOLL)

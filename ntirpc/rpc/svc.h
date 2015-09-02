@@ -408,9 +408,9 @@ __BEGIN_DECLS
 extern void svc_xprt_trace(SVCXPRT *, const char *, const char *, const int);
 __END_DECLS
 
-#define XPRT_TRACE(xprt, func, tag, line)				\
-	if (__pkg_params.debug_flags & TIRPC_DEBUG_FLAG_REFCNT) {	\
-		svc_xprt_trace((xprt), (func), (tag), (line));		\
+#define XPRT_TRACE(xprt, func, tag, line)				 \
+	if (__ntirpc_pkg_params.debug_flags & TIRPC_DEBUG_FLAG_REFCNT) { \
+		svc_xprt_trace((xprt), (func), (tag), (line));		 \
 	}
 
 /*

@@ -5,7 +5,7 @@ add_definitions(
   -D_GNU_SOURCE
 )
 
-# XXX FreeBSD?
+# ok on Linux and FreeBSD w/GCC and clang compilers
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 
 include_directories(
@@ -112,20 +112,22 @@ if(USE_NFS_MSK)
 endif(USE_NFS_MSK)
 
 # declares the library
-add_library(ntirpc STATIC
+add_library(ntirpc SHARED
   ${ntirpc_common_SRCS}
   ${ntirpc_des_SRCS}
   ${ntirpc_gss_SRCS}
   ${ntirpc_rdma_SRCS}
   )
 
-########### next target ###############
-
+# add required libraries--for Ganesha build, it's ok for them to
+# propagate (i.e., omit PRIVATE)
 target_link_libraries(ntirpc ${CMAKE_THREAD_LIBS_INIT})
 
-# fixme!
-set_target_properties(ntirpc PROPERTIES VERSION 4.2.0 SOVERSION 4)
-install(TARGETS ntirpc DESTINATION bin)
+# set library version and symbol namespace(s) from gen'd map file
+set_target_properties(ntirpc PROPERTIES LINK_FLAGS
+  "-Wl,--version-script=${PROJECT_BINARY_DIR}/libntirpc/src/libntirpc.map"
+  )
+install(TARGETS ntirpc DESTINATION ${FSAL_DESTINATION})
 
 ########### install files ###############
 

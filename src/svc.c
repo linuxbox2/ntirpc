@@ -83,7 +83,7 @@ int __svc_maxiov = 1024; /* UIO_MAXIOV value from sys/uio.h */
 #endif
 int __svc_maxrec = 0;
 
-extern tirpc_pkg_params __pkg_params;
+extern tirpc_pkg_params __ntirpc_pkg_params;
 
 struct svc_params __svc_params[1] = {
 	{
@@ -143,9 +143,9 @@ svc_init(svc_init_params *params)
 	    (params->max_connections) ? params->max_connections : FD_SETSIZE;
 
 	if (params->flags & SVC_INIT_WARNX)
-		__pkg_params.warnx = params->warnx;
+		__ntirpc_pkg_params.warnx = params->warnx;
 	else
-		__pkg_params.warnx = warnx;
+		__ntirpc_pkg_params.warnx = warnx;
 
 	/* svc_vc */
 	__svc_params->xprt_u.vc.nconns = 0;
