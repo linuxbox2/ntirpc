@@ -111,6 +111,15 @@ if(USE_NFS_MSK)
   )
 endif(USE_NFS_MSK)
 
+if(USE_NFS_RDMA)
+  SET(ntirpc_rdma_SRCS
+  clnt_rdma.c
+  rpc_rdma.c
+  svc_rdma.c
+  xdr_rdma.c
+  )
+endif(USE_NFS_RDMA)
+
 # declares the library
 add_library(ntirpc SHARED
   ${ntirpc_common_SRCS}

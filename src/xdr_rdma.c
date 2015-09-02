@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2012-2014 CEA
  * Dominique Martinet <dominique.martinet@cea.fr>
+ * contributeur : William Allen Simpson <bill@cohortfs.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -33,117 +34,80 @@
 #include <sys/types.h>
 
 #include <netinet/in.h>
-#include <mooshika.h>
 
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <pthread.h>
+#include <time.h>
+#include <unistd.h>
 
 #include <rpc/types.h>
 #include <rpc/xdr.h>
+#include <rpc/xdr_ioq.h>
 #include <rpc/rpc.h>
 #include "un-namespace.h"
 
 #include "rpc_rdma.h"
 
-static void xdrmsk_destroy(XDR *);
-static bool xdrmsk_getlong_aligned(XDR *, long *);
-static bool xdrmsk_putlong_aligned(XDR *, const long *);
-static bool xdrmsk_getlong_unaligned(XDR *, long *);
-static bool xdrmsk_putlong_unaligned(XDR *, const long *);
-static bool xdrmsk_getbytes(XDR *, char *, u_int);
-static bool xdrmsk_putbytes(XDR *, const char *, u_int);
-/* XXX: w/64-bit pointers, u_int not enough! */
-static u_int xdrmsk_getpos(XDR *);
-static bool xdrmsk_setpos(XDR *, u_int);
-static int32_t *xdrmsk_inline_aligned(XDR *, u_int);
-static int32_t *xdrmsk_inline_unaligned(XDR *, u_int);
+/* NOTA BENE: as in xdr_ioq.c, although indications of failure are returned,
+ * they are rarely checked.
+ */
 
-static const struct	xdr_ops xdrmsk_ops_aligned = {
-	xdrmsk_getlong_aligned,
-	xdrmsk_putlong_aligned,
-	xdrmsk_getbytes,
-	xdrmsk_putbytes,
-	xdrmsk_getpos,
-	xdrmsk_setpos,
-	xdrmsk_inline_aligned,
-	xdrmsk_destroy
-};
+#define CALLQ_SIZE (2)
+#define RFC5666_BUFFER_SIZE (1024)
 
-static const struct	xdr_ops xdrmsk_ops_unaligned = {
-	xdrmsk_getlong_unaligned,
-	xdrmsk_putlong_unaligned,
-	xdrmsk_getbytes,
-	xdrmsk_putbytes,
-	xdrmsk_getpos,
-	xdrmsk_setpos,
-	xdrmsk_inline_unaligned,
-	xdrmsk_destroy
-};
+static const struct	xdr_ops xdr_rdma_ops_aligned;
+static const struct	xdr_ops xdr_rdma_ops_unaligned;
 
-struct condlock {
-	pthread_cond_t cond;
-	pthread_mutex_t lock;
-};
+#define x_xprt(xdrs) ((RDMAXPRT *)((xdrs)->x_lib[1]))
 
-struct mskinfo {
-	msk_trans_t *trans;
-	char *pos; /* xdrmem's x_private */
-	msk_data_t *xdrbuf;
-	msk_data_t *curbuf;
-	msk_data_t *callbuf;
-	u_int sendsz;
-	u_int recvsz;
-	u_int credits;
-	struct ibv_mr *mr;
-	u_int8_t *mskbase;
-	msk_data_t *inbufs;
-	msk_data_t *outbufs;
-	msk_data_t *hdrbufs;
-	msk_data_t *rdmabufs;
-	struct condlock cl;
-	void (*callback)(void*);
-	void *callbackarg;
-};
-
-#define priv(xdrs) ((struct mskinfo *)((xdrs)->x_private))
-#define cl_of_xdrs(xdrs) (&priv(xdrs)->cl)
-#define callback_of_xdrs(xdrs) (priv(xdrs)->callback)
-#define callbackarg_of_xdrs(xdrs) (priv(xdrs)->callbackarg)
-
-#define rpcrdma_dump_msg(data, base, xid)
+//#define rpcrdma_dump_msg(data, comment, xid)
 
 #ifndef rpcrdma_dump_msg
-static void rpcrdma_dump_msg(msk_data_t *data, char *base, uint32_t xid)
+#define DUMP_BYTES_PER_GROUP (4)
+#define DUMP_GROUPS_PER_LINE (4)
+#define DUMP_BYTES_PER_LINE (DUMP_BYTES_PER_GROUP * DUMP_GROUPS_PER_LINE)
+
+static void
+rpcrdma_dump_msg(struct xdr_ioq_uv *data, char *comment, uint32_t xid)
 {
 	char *buffer;
-	int sized = data->size;
-	int buffered = (((sized / 16) + 1) * (12 + (9 * 4))) + 1;
+	uint8_t *datum = data->v.vio_head;
+	int sized = ioquv_length(data);
+	int buffered = (((sized / DUMP_BYTES_PER_LINE) + 1 /*partial line*/)
+			* (12 /* heading */
+			   + (((DUMP_BYTES_PER_GROUP * 2 /*%02X*/) + 1 /*' '*/)
+			      * DUMP_GROUPS_PER_LINE)))
+			+ 1 /*'\0'*/;
 	int i = 0;
 	int m = 0;
 
+	xid = ntohl(xid);
 	if (sized == 0) {
-		__warnx(TIRPC_DEBUG_FLAG_XDR, "rpcrdma %x %s?", xid, base);
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"rpcrdma 0x%" PRIx32 "(%" PRIu32 ") %s?",
+			xid, xid, comment);
 		return;
 	}
 	buffer = (char *)mem_alloc(buffered);
 
 	while (sized > i) {
 		int j = sized - i;
-		int k = j < 16 ? j : 16;
+		int k = j < DUMP_BYTES_PER_LINE ? j : DUMP_BYTES_PER_LINE;
 		int l = 0;
-		int r = sprintf(&buffer[m], "\n%10d:", i);
+		int r = sprintf(&buffer[m], "\n%10d:", i);	/* heading */
 
 		if (r < 0)
 			goto quit;
 		m += r;
 
 		for (; l < k; l++) {
-			if (l % 4 == 0)
+			if (l % DUMP_BYTES_PER_GROUP == 0)
 				buffer[m++] = ' ';
 
-			r = sprintf(&buffer[m], "%02X", data->data[i++]);
+			r = sprintf(&buffer[m], "%02X", datum[i++]);
 			if (r < 0)
 				goto quit;
 			m += r;
@@ -151,112 +115,217 @@ static void rpcrdma_dump_msg(msk_data_t *data, char *base, uint32_t xid)
 	}
 quit:
 	buffer[m] = '\0';	/* in case of error */
-	__warnx(TIRPC_DEBUG_FLAG_XDR, "rpcrdma %x %s:%s\n",
-		xid, base, buffer);
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"rpcrdma 0x%" PRIx32 "(%" PRIu32 ") %s:%s\n",
+		xid, xid, comment, buffer);
 	mem_free(buffer, buffered);
 }
 #endif /* rpcrdma_dump_msg */
+
+/*
+** match RFC-5666 as cloely as possible
+*/
+struct xdr_rdma_segment {
+	uint32_t handle;	/* Registered memory handle */
+	uint32_t length;	/* Length of the chunk in bytes */
+	uint64_t offset;	/* Chunk virtual address or offset */
+};
+
+struct xdr_read_list {
+	uint32_t present;	/* 1 indicates presence */
+	uint32_t position;	/* Position in XDR stream */
+	struct xdr_rdma_segment target;
+};
+
+struct xdr_write_chunk {
+	struct xdr_rdma_segment target;
+};
+
+struct xdr_write_list {
+	uint32_t present;	/* 1 indicates presence */
+	uint32_t elements;	/* Number of array elements */
+	struct xdr_write_chunk entry[0];
+};
+
+struct rpc_rdma_header {
+	uint32_t rdma_reads;
+	uint32_t rdma_writes;
+	uint32_t rdma_reply;
+	/* rpc body follows */
+};
+
+struct rpc_rdma_header_nomsg {
+	uint32_t rdma_reads;
+	uint32_t rdma_writes;
+	uint32_t rdma_reply;
+};
+
+struct rpc_rdma_header_padded {
+	uint32_t rdma_align;	/* Padding alignment */
+	uint32_t rdma_thresh;	/* Padding threshold */
+	uint32_t rdma_reads;
+	uint32_t rdma_writes;
+	uint32_t rdma_reply;
+	/* rpc body follows */
+};
+
+enum rdma_proc {
+	RDMA_MSG = 0,	/* An RPC call or reply msg */
+	RDMA_NOMSG = 1,	/* An RPC call or reply msg - separate body */
+	RDMA_MSGP = 2,	/* An RPC call or reply msg with padding */
+	RDMA_DONE = 3,	/* Client signals reply completion */
+	RDMA_ERROR = 4	/* An RPC RDMA encoding error */
+};
+
+struct rdma_msg {
+	uint32_t rdma_xid;	/* Mirrors the RPC header xid */
+	uint32_t rdma_vers;	/* Version of this protocol */
+	uint32_t rdma_credit;	/* Buffers requested/granted */
+	uint32_t rdma_type;	/* Type of message (enum rdma_proc) */
+	union {
+		struct rpc_rdma_header		rdma_msg;
+		struct rpc_rdma_header_nomsg	rdma_nomsg;
+		struct rpc_rdma_header_padded	rdma_padmsg;
+	} rdma_body;
+};
 
 /***********************************/
 /****** Utilities for buffers ******/
 /***********************************/
 
-/* assume lock is taken */
-#define XDRMSK_GETBUF(funname, condition, optargs...)		\
-static msk_data_t*						\
-funname(msk_data_t *bufs, struct mskinfo *mi, ##optargs) {	\
-	int i;							\
-								\
-	do {							\
-		for (i=0; i < mi->credits; i++) {		\
-			if (condition)				\
-				break;				\
-		}						\
-		if (i != mi->credits)				\
-			break;					\
-								\
-		/* INFO LOG */					\
-		__warnx(TIRPC_DEBUG_FLAG_XDR,			\
-			#funname ": waiting for buffer\n");	\
-		pthread_cond_wait(&mi->cl.cond, &mi->cl.lock); 	\
-	} while (1);						\
-								\
-	return bufs + i;					\
+static void
+xdr_rdma_chunk_in(struct poolq_entry *have, u_int k, u_int m, u_int sized)
+{
+	/* final buffer limited to truncated length */
+	IOQ_(have)->v.vio_head = IOQ_(have)->v.vio_base;
+	IOQ_(have)->v.vio_tail = (char *)IOQ_(have)->v.vio_base + m;
+	IOQ_(have)->v.vio_wrap = (char *)IOQ_(have)->v.vio_base + sized;
+
+	while (0 < --k && NULL != (have = TAILQ_PREV(have, q_head, q))) {
+		/* restore defaults after previous usage */
+		IOQ_(have)->v.vio_head = IOQ_(have)->v.vio_base;
+		IOQ_(have)->v.vio_tail =
+		IOQ_(have)->v.vio_wrap = (char *)IOQ_(have)->v.vio_base + sized;
+	}
 }
 
-/* condition can use:
-	loop index int i,
-	and function arguments:
-	    msk_data_t *buf, struct mskinfo *mi,
-	    and whatever optional argument is added (c.f. xid) */
-XDRMSK_GETBUF(xdrmsk_getfreebuf, bufs[i].size == 0)
-XDRMSK_GETBUF(xdrmsk_getusedbuf, bufs[i].size != 0)
-XDRMSK_GETBUF(xdrmsk_getxidbuf,
-	      ntohl(((struct rpcrdma_msg *)bufs[i].data)->rm_xid) == xid,
-	      u_int32_t xid)
-XDRMSK_GETBUF(xdrmsk_getaddrbuf, bufs[i].data == addr, uint8_t *addr)
+static void
+xdr_rdma_chunk_out(struct poolq_entry *have, u_int k, u_int m, u_int sized)
+{
+	/* final buffer limited to truncated length */
+	IOQ_(have)->v.vio_head =
+	IOQ_(have)->v.vio_tail = IOQ_(have)->v.vio_base;
+	IOQ_(have)->v.vio_wrap = (char *)IOQ_(have)->v.vio_base + m;
 
-static int
-xdrmsk_countusedbufs(struct mskinfo *mi) {
-	int i = 0;
-	int count = 0;
+	while (0 < --k && NULL != (have = TAILQ_PREV(have, q_head, q))) {
+		/* restore defaults after previous usage */
+		IOQ_(have)->v.vio_head =
+		IOQ_(have)->v.vio_tail = IOQ_(have)->v.vio_base;
+		IOQ_(have)->v.vio_wrap = (char *)IOQ_(have)->v.vio_base + sized;
+	}
+}
 
-	/* do we want to lock? */
-	for (; i < mi->credits; i++) {
-		if (mi->inbufs[i].size != 0)
-			count++;
+static uint32_t
+xdr_rdma_chunk_fetch(struct xdr_ioq *xioq, struct poolq_head *ioqh,
+		     char *comment, u_int length, u_int sized, u_int max_sge,
+		     void (*setup)(struct poolq_entry *, u_int, u_int, u_int))
+{
+	struct poolq_entry *have;
+	uint32_t k = length / sized;
+	uint32_t m = length % sized;
+
+	if (m) {
+		/* need fractional buffer */
+		k++;
+	} else {
+		/* have full-sized buffer */
+		m = sized;
 	}
 
-	return count;
+	/* ensure never asking for more buffers than allowed */
+	if (k > max_sge) {
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s() requested chunk %" PRIu32
+			" is too long (" PRIu32 ">" PRIu32 ")",
+			__func__, m, k, max_sge);
+		k = max_sge;
+		m = sized;
+	}
+
+	/* ensure we can get all of our buffers without deadlock
+	 * (wait for them all to be appended)
+	 */
+	have = xdr_ioq_uv_fetch(xioq, ioqh, comment, k, IOQ_FLAG_NONE);
+	(*setup)(have, k, m, sized);
+	return k;
 }
 
 /***********************/
 /****** Callbacks ******/
 /***********************/
 
-static void rpcrdma_signal(msk_trans_t *trans) {
-	struct condlock *cl = cl_of_xdrs((XDR*)trans->private_data);
-	pthread_mutex_lock(&cl->lock);
-	pthread_cond_broadcast(&cl->cond);
-	pthread_mutex_unlock(&cl->lock);
+/* note parameter order matching svc.h svc_req callbacks */
+
+static void
+xdr_rdma_respond_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
+{
+	__warnx(TIRPC_DEBUG_FLAG_ERROR,
+		"%s() %p[%u] cbc %p\n",
+		__func__, xprt, xprt->state, cbc);
+
+	mutex_lock(&xprt->waitq.ioq_uv.uvqh.qmutex);
+	TAILQ_REMOVE(&xprt->waitq.ioq_uv.uvqh.qh, &cbc->workq.ioq_s, q);
+	(xprt->waitq.ioq_uv.uvqh.qcount)--;
+	mutex_unlock(&xprt->waitq.ioq_uv.uvqh.qmutex);
+
+	xdr_ioq_destroy(&cbc->workq, sizeof(*cbc));
 }
 
-static void signal_callback(msk_trans_t *trans, msk_data_t *data, void *arg) {
-	XDR *xdrs = trans->private_data;
-	rpcrdma_signal(trans);
-	__warnx(TIRPC_DEBUG_FLAG_XDR,
-		"received something on trans %p!\n", trans);
+static void
+xdr_rdma_destroy_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
+{
+	__warnx(TIRPC_DEBUG_FLAG_ERROR,
+		"%s() %p[%u] cbc %p\n",
+		__func__, xprt, xprt->state, cbc);
 
-	if (callback_of_xdrs(xdrs))
-		(callback_of_xdrs(xdrs))(callbackarg_of_xdrs(xdrs));
-}
+	mutex_lock(&xprt->waitq.ioq_uv.uvqh.qmutex);
+	TAILQ_REMOVE(&xprt->waitq.ioq_uv.uvqh.qh, &cbc->workq.ioq_s, q);
+	(xprt->waitq.ioq_uv.uvqh.qcount)--;
+	mutex_unlock(&xprt->waitq.ioq_uv.uvqh.qmutex);
 
-static void setunused_callback(msk_trans_t *trans, msk_data_t *data, void *arg) {
-	msk_data_t *prevdata;
-	prevdata = NULL;
-	do {
-		data->size = 0;
-		if (prevdata)
-			prevdata->next = NULL;
-		prevdata = data;
-	} while ((data = data->next) != NULL);
-
-	rpcrdma_signal(trans);
-}
-
-static void err_callback(msk_trans_t *trans, msk_data_t *data, void *arg) {
-	if(trans->state != MSK_CLOSING && trans->state != MSK_CLOSED)
-		__warnx(TIRPC_DEBUG_FLAG_XDR,
-			"error callback on buffer %p\n", data);
+	xdr_ioq_destroy(&cbc->workq, sizeof(*cbc));
 }
 
 /**
- * msk_wait_callback: send/recv callback that just unlocks a mutex.
+ * xdr_rdma_wait_callback: send/recv callback that just unlocks a mutex.
  *
  */
-static void msk_wait_callback(struct msk_trans *trans, msk_data_t *data, void *arg) {
-	pthread_mutex_t *lock = arg;
-	msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, lock);
+static void
+xdr_rdma_wait_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
+{
+	mutex_t *lock = cbc->callback_arg;
+
+	__warnx(TIRPC_DEBUG_FLAG_ERROR,
+		"%s() %p[%u] cbc %p\n",
+		__func__, xprt, xprt->state, cbc);
+
+	mutex_unlock(lock);
+}
+
+/**
+ * xdr_rdma_warn_callback: send/recv callback that just unlocks a mutex.
+ *
+ */
+static void
+xdr_rdma_warn_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
+{
+	mutex_t *lock = cbc->callback_arg;
+
+	__warnx(TIRPC_DEBUG_FLAG_ERROR,
+		"%s() %p[%u] cbc %p\n",
+		__func__, xprt, xprt->state, cbc);
+
+	mutex_unlock(lock);
 }
 
 /***********************************/
@@ -264,173 +333,242 @@ static void msk_wait_callback(struct msk_trans *trans, msk_data_t *data, void *a
 /***********************************/
 
 /**
- * msk_post_n_recv: Post a receive buffer.
+ * xdr_rdma_post_recv_n: Post receive chunk(s).
  *
  * Need to post recv buffers before the opposite side tries to send anything!
- * @param trans        [IN]
- * @param data         [OUT] the data buffer to be filled with received data
- * @param num_sge      [IN]  the number of elements in data to register
- * @param callback     [IN]  function that'll be called when done
- * @param err_callback [IN]  function that'll be called on error
- * @param callback_arg [IN]  argument to give to the callback
+ * @param[IN] xprt
+ * @param[INOUT] cbc	CallBack Context xdr_ioq and xdr_ioq_uv(s)
+ * @param[IN] sge	scatter/gather elements to register
  *
+ * Must be set in advance:
+ * @param[IN] positive_cb	function that'll be called when done
+ * @param[IN] negative_cb	function that'll be called on error
+ * @param[IN] callback_arg	argument to give to the callback
+
  * @return 0 on success, the value of errno on error
  */
-int msk_post_n_recv(struct msk_trans *trans, msk_data_t *data, int num_sge, ctx_callback_t callback, ctx_callback_t err_callback, void* callback_arg) {
-	struct msk_ctx *rctx;
-	int i, ret;
+static int
+xdr_rdma_post_recv_n(RDMAXPRT *xprt, struct rpc_rdma_cbc *cbc, int sge)
+{
+	struct poolq_entry *have = TAILQ_FIRST(&cbc->workq.ioq_uv.uvqh.qh);
+	int i = 0;
+	int ret;
 
-	if (!trans || (trans->state != MSK_CONNECTED && trans->state != MSK_ROUTE_RESOLVED && trans->state != MSK_CONNECT_REQUEST)) {
-		INFO_LOG((trans ? trans->debug : 0) & MSK_DEBUG_EVENT, "trans (%p) state: %d", trans, trans->state);
+	if (!xprt) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() xprt state missing",
+			__func__);
 		return EINVAL;
 	}
 
-	INFO_LOG(trans->debug & MSK_DEBUG_RECV, "posting recv");
-
-	i = 0;
-	rctx = trans->rctx;
-	do {
-		if (i == trans->rq_depth) {
-			INFO_LOG(trans->debug & MSK_DEBUG_CTX, "Waiting for rctx");
-			usleep(250);
-			i = 0;
-			rctx = trans->rctx;
-		}
-
-		while (i < trans->rq_depth && rctx->used != MSK_CTX_FREE) {
-			rctx = msk_next_ctx(rctx, trans->max_recv_sge);
-			i++;
-		}
-	} while ( i == trans->rq_depth || !(atomic_bool_compare_and_swap(&rctx->used, MSK_CTX_FREE, MSK_CTX_PENDING)) );
-	INFO_LOG(trans->debug & MSK_DEBUG_RECV, "got a free context");
-
-	rctx->callback = callback;
-	rctx->err_callback = err_callback;
-	rctx->callback_arg = callback_arg;
-	rctx->data = data;
-
-	for (i=0; i < num_sge; i++) {
-		if (!data || !data->mr) {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "You said to recv %d elements (num_sge), but we only found %d! Not requesting.", num_sge, i);
-			return EINVAL;
-		}
-		rctx->sg_list[i].addr = (uintptr_t) data->data;
-		INFO_LOG(trans->debug & MSK_DEBUG_RECV, "addr: %lx\n", rctx->sg_list->addr);
-		rctx->sg_list[i].length = data->max_size;
-		rctx->sg_list[i].lkey = data->mr->lkey;
-		if (i != num_sge-1)
-			data = data->next;
+	switch (xprt->state) {
+	case RDMAXS_CONNECTED:
+	case RDMAXS_ROUTE_RESOLVED:
+	case RDMAXS_CONNECT_REQUEST:
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s() %p[%u] cbc %p posting recv",
+			__func__, xprt, xprt->state, cbc);
+		break;
+	default:
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s() %p[%u] != "
+			"connect request, connected, or resolved",
+			__func__, xprt, xprt->state);
+		return EINVAL;
 	}
 
-	rctx->wr.rwr.next = NULL;
-	rctx->wr.rwr.wr_id = (uint64_t)rctx;
-	rctx->wr.rwr.sg_list = rctx->sg_list;
-	rctx->wr.rwr.num_sge = num_sge;
+	while (have && i < sge) {
+		struct ibv_mr *mr = IOQ_(have)->u.uio_p2;
 
-	if (trans->srq)
-		ret = ibv_post_srq_recv(trans->srq, &rctx->wr.rwr, &trans->bad_recv_wr);
+		if (!mr) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() Missing mr: Not requesting.",
+				__func__);
+			return EINVAL;
+		}
+
+		cbc->sg_list[i].addr = (uintptr_t)(IOQ_(have)->v.vio_head);
+		cbc->sg_list[i].length = ioquv_length(IOQ_(have));
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s() %" PRIx64 ", %" PRIu32 " [%" PRIx32 "]",
+			__func__,
+			cbc->sg_list[i].addr,
+			cbc->sg_list[i].length,
+			mr->lkey);
+		cbc->sg_list[i++].lkey = mr->lkey;
+
+		have = TAILQ_NEXT(have, q);
+	}
+
+	cbc->wr.rwr.next = NULL;
+	cbc->wr.rwr.wr_id = (uintptr_t)cbc;
+	cbc->wr.rwr.sg_list = cbc->sg_list;
+	cbc->wr.rwr.num_sge = i;
+
+	if (xprt->srq)
+		ret = ibv_post_srq_recv(xprt->srq, &cbc->wr.rwr,
+					&xprt->bad_recv_wr);
 	else
-		ret = ibv_post_recv(trans->qp, &rctx->wr.rwr, &trans->bad_recv_wr);
+		ret = ibv_post_recv(xprt->qp, &cbc->wr.rwr,
+					&xprt->bad_recv_wr);
 
 	if (ret) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "ibv_post_recv failed: %s (%d)", strerror(ret), ret);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] cbc %p ibv_post_recv failed: %s (%d)",
+			__func__, xprt, xprt->state, cbc, strerror(ret), ret);
 		return ret; // FIXME np_uerror(ret)
 	}
 
 	return 0;
 }
 
-static inline int msk_post_recv(msk_trans_t *trans, msk_data_t *data, ctx_callback_t callback, ctx_callback_t err_callback, void *callback_arg) {
-	return msk_post_n_recv(trans, data, 1, callback, err_callback, callback_arg);
+/**
+ * xdr_rdma_post_recv_cb: Post receive chunk(s) with standard callbacks.
+ *
+ * Need to post recv buffers before the opposite side tries to send anything!
+ * @param[IN] xprt
+ * @param[INOUT] cbc	CallBack Context xdr_ioq and xdr_ioq_uv(s)
+ * @param[IN] sge	scatter/gather elements to register
+ *
+ * @return 0 on success, the value of errno on error
+ */
+static int
+xdr_rdma_post_recv_cb(RDMAXPRT *xprt, struct rpc_rdma_cbc *cbc, int sge)
+{
+	cbc->positive_cb = (rpc_rdma_callback_t)xprt->xa->request_cb;
+	cbc->negative_cb = xdr_rdma_destroy_callback;
+	cbc->callback_arg = NULL;
+	return xdr_rdma_post_recv_n(xprt, cbc, sge);
 }
 
-static int msk_post_send_generic(struct msk_trans *trans, enum ibv_wr_opcode opcode, msk_data_t *data, int num_sge, msk_rloc_t *rloc, ctx_callback_t callback, ctx_callback_t err_callback, void* callback_arg) {
-	struct msk_ctx *wctx;
-	int i, ret;
+/**
+ * Post a work chunk.
+ *
+ * @param[IN] xprt
+ * @param[IN] cbc	CallBack Context xdr_ioq and xdr_ioq_uv(s)
+ * @param[IN] sge	scatter/gather elements to send
+ * @param[IN] rs	remote segment
+ * @param[IN] opcode
+ *
+ * Must be set in advance:
+ * @param[IN] positive_cb	function that'll be called when done
+ * @param[IN] negative_cb	function that'll be called on error
+ * @param[IN] callback_arg	argument to give to the callback
+ *
+ * @return 0 on success, the value of errno on error
+ */
+static int
+xdr_rdma_post_send_n(RDMAXPRT *xprt, struct rpc_rdma_cbc *cbc, int sge,
+		     struct xdr_rdma_segment *rs, enum ibv_wr_opcode opcode)
+{
+	struct poolq_entry *have = TAILQ_FIRST(&cbc->workq.ioq_uv.uvqh.qh);
 	uint32_t totalsize = 0;
+	int i = 0;
+	int ret;
 
-	if (!trans || trans->state != MSK_CONNECTED) {
-		INFO_LOG((trans ? trans->debug : 0) & MSK_DEBUG_EVENT, "trans (%p) state: %d", trans, trans->state);
+	if (!xprt) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() xprt state missing",
+			__func__);
 		return EINVAL;
 	}
 
-	INFO_LOG(trans->debug & MSK_DEBUG_SEND, "posting a send with op %d", opcode);
+	switch (xprt->state) {
+	case RDMAXS_CONNECTED:
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s() %p[%u] cbc %p posting a send with op %d",
+			__func__, xprt, xprt->state, cbc, opcode);
+		break;
+	default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] != "
+			"connected",
+			__func__, xprt, xprt->state);
+		return EINVAL;
+	}
 
 	// opcode-specific checks:
-	if (opcode == IBV_WR_RDMA_WRITE || opcode == IBV_WR_RDMA_READ) {
-		if (!rloc) {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Cannot do rdma without a remote location!");
+	switch (opcode) {
+	case IBV_WR_RDMA_WRITE:
+	case IBV_WR_RDMA_READ:
+		if (!rs) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() Cannot do rdma without a remote location!",
+				__func__);
 			return EINVAL;
 		}
-	} else if (opcode == IBV_WR_SEND || opcode == IBV_WR_SEND_WITH_IMM) {
-	} else {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "unsupported op code: %d", opcode);
+		break;
+	case IBV_WR_SEND:
+	case IBV_WR_SEND_WITH_IMM:
+		break;
+	default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() unsupported op code: %d",
+			__func__, opcode);
 		return EINVAL;
 	}
 
-	i = 0;
-	wctx = trans->wctx;
-	do {
-		if (i == trans->sq_depth) {
-			INFO_LOG(trans->debug & MSK_DEBUG_CTX, "waiting for wctx");
-			usleep(250);
-			i = 0;
-			wctx = trans->wctx;
-		}
+	while (have && i < sge) {
+		struct ibv_mr *mr = IOQ_(have)->u.uio_p2;
+		uint32_t length = ioquv_length(IOQ_(have));
 
-		while (i < trans->sq_depth && wctx->used != MSK_CTX_FREE) {
-			wctx = msk_next_ctx(wctx, trans->max_send_sge);
-			i++;
-		}
-	} while ( i == trans->sq_depth || !(atomic_bool_compare_and_swap(&wctx->used, MSK_CTX_FREE, MSK_CTX_PENDING)) );
-	INFO_LOG(trans->debug & MSK_DEBUG_SEND, "got a free context");
-
-	wctx->callback = callback;
-	wctx->err_callback = err_callback;
-	wctx->callback_arg = callback_arg;
-	wctx->data = data;
-
-	for (i=0; i < num_sge; i++) {
-		if (!data || !data->mr) {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "You said to send %d elements (num_sge), but we only found %d! Not sending.", num_sge, i);
-			// or send up to previous one? It's probably an error though...
-			return EINVAL;
-		}
-		if (data->size == 0) {
-			num_sge = i; // only send up to previous sg, do we want to warn about this?
+		if (!length) {
+			__warnx(TIRPC_DEBUG_FLAG_XDR,
+				"%s() Empty buffer: Not sending.",
+				__func__);
 			break;
 		}
+		if (!mr) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() Missing mr: Not sending.",
+				__func__);
+			return EINVAL;
+		}
 
-		wctx->sg_list[i].addr = (uintptr_t)data->data;
-		INFO_LOG(trans->debug & MSK_DEBUG_SEND, "addr: %lx\n", wctx->sg_list[i].addr);
-		wctx->sg_list[i].length = data->size;
-		wctx->sg_list[i].lkey = data->mr->lkey;
-		totalsize += data->size;
+		cbc->sg_list[i].addr = (uintptr_t)(IOQ_(have)->v.vio_head);
+		cbc->sg_list[i].length = length;
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s() %" PRIx64 ", %" PRIu32 " [%" PRIx32 "]",
+			__func__,
+			cbc->sg_list[i].addr,
+			cbc->sg_list[i].length,
+			mr->lkey);
+		cbc->sg_list[i++].lkey = mr->lkey;
 
-		if (i != num_sge-1)
-			data = data->next;
+		totalsize += length;
+		have = TAILQ_NEXT(have, q);
 	}
 
-	if (rloc && totalsize > rloc->size) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "trying to send or read a buffer bigger than the remote buffer (shall we truncate?)");
-		return EMSGSIZE;
+	cbc->wr.wwr.next = NULL;
+	cbc->wr.wwr.wr_id = (uint64_t)cbc;
+	cbc->wr.wwr.opcode = opcode;
+//FIXME	cbc->wr.wwr.imm_data = htonl(data->imm_data);
+	cbc->wr.wwr.send_flags = IBV_SEND_SIGNALED;
+	cbc->wr.wwr.sg_list = cbc->sg_list;
+	cbc->wr.wwr.num_sge = i;
+
+	if (rs) {
+		cbc->wr.wwr.wr.rdma.rkey = ntohl(rs->handle);
+		cbc->wr.wwr.wr.rdma.remote_addr =
+			xdr_decode_hyper(&rs->offset);
+
+		if (ntohl(rs->length) < totalsize) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() chunk bigger than the remote buffer "
+				"(" PRIu32 ">" PRIu32 ")",
+				__func__, totalsize, ntohl(rs->length));
+			return EMSGSIZE;
+		} else {
+			/* save in place for posterity */
+			rs->length = htonl(totalsize);
+		}
 	}
 
-	wctx->wr.wwr.next = NULL;
-	wctx->wr.wwr.wr_id = (uint64_t)wctx;
-	wctx->wr.wwr.opcode = opcode;
-//FIXME	wctx->wr.wwr.imm_data = htonl(data->imm_data);
-	wctx->wr.wwr.send_flags = IBV_SEND_SIGNALED;
-	wctx->wr.wwr.sg_list = wctx->sg_list;
-	wctx->wr.wwr.num_sge = num_sge;
-	if (rloc) {
-		wctx->wr.wwr.wr.rdma.rkey = rloc->rkey;
-		wctx->wr.wwr.wr.rdma.remote_addr = rloc->raddr;
-	}
-
-	ret = ibv_post_send(trans->qp, &wctx->wr.wwr, &trans->bad_send_wr);
+	ret = ibv_post_send(xprt->qp, &cbc->wr.wwr, &xprt->bad_send_wr);
 	if (ret) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "ibv_post_send failed: %s (%d)", strerror(ret), ret);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] cbc %p ibv_post_send failed: %s (%d)",
+			__func__, xprt, xprt->state, cbc, strerror(ret), ret);
 		return ret; // FIXME np_uerror(ret)
 	}
 
@@ -438,251 +576,256 @@ static int msk_post_send_generic(struct msk_trans *trans, enum ibv_wr_opcode opc
 }
 
 /**
- * Post a send buffer.
+ * Post a work chunk with standard callbacks.
  *
- * @param trans        [IN]
- * @param data         [IN] the data buffer to be sent
- * @param num_sge      [IN] the number of elements in data to send
- * @param callback     [IN] function that'll be called when done
- * @param err_callback [IN] function that'll be called on error
- * @param callback_arg [IN] argument to give to the callback
+ * @param[IN] xprt
+ * @param[IN] cbc	CallBack Context xdr_ioq and xdr_ioq_uv(s)
+ * @param[IN] sge	scatter/gather elements to send
  *
  * @return 0 on success, the value of errno on error
  */
-int msk_post_n_send(struct msk_trans *trans, msk_data_t *data, int num_sge, ctx_callback_t callback, ctx_callback_t err_callback, void* callback_arg) {
-	return msk_post_send_generic(trans, IBV_WR_SEND, data, num_sge, NULL, callback, err_callback, callback_arg);
+static inline int
+xdr_rdma_post_send_cb(RDMAXPRT *xprt, struct rpc_rdma_cbc *cbc, int sge)
+{
+	cbc->positive_cb = xdr_rdma_respond_callback;
+	cbc->negative_cb = xdr_rdma_destroy_callback;
+	cbc->callback_arg = cbc;
+	return xdr_rdma_post_send_n(xprt, cbc, sge, NULL, IBV_WR_SEND);
 }
 
-static inline int msk_post_send(msk_trans_t *trans, msk_data_t *data, ctx_callback_t callback, ctx_callback_t err_callback, void *callback_arg) {
-	return msk_post_n_send(trans, data, 1, callback, err_callback, callback_arg);
-}
-
+#ifdef UNUSED
 /**
- * Post a receive buffer and waits for _that one and not any other_ to be filled.
+ * Post a receive chunk and waits for _that one and not any other_ to be filled.
  * Generally a bad idea to use that one unless only that one is used.
  *
- * @param trans   [IN]
- * @param data    [OUT] the data buffer to be filled with the received data
- * @param num_sge [IN]  the number of elements in data to register
+ * @param[IN] xprt
+ * @param[INOUT] cbc	CallBack Context xdr_ioq and xdr_ioq_uv(s)
  *
  * @return 0 on success, the value of errno on error
  */
-int msk_wait_n_recv(struct msk_trans *trans, msk_data_t *data, int num_sge) {
-	pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+static int
+xdr_rdma_wait_recv_n(RDMAXPRT *xprt, struct rpc_rdma_cbc *cbc)
+{
+	mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 	int ret;
 
-	msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &lock);
-	ret = msk_post_n_recv(trans, data, num_sge, msk_wait_callback, msk_wait_callback, &lock);
+	cbc->positive_cb = xdr_rdma_wait_callback;
+	cbc->negative_cb = xdr_rdma_warn_callback;
+	cbc->callback_arg = &lock;
+
+	mutex_lock(&lock);
+	ret = xdr_rdma_post_recv_n(xprt, cbc);
 
 	if (!ret) {
-		msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &lock);
-		msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &lock);
-		pthread_mutex_destroy(&lock);
+		mutex_lock(&lock);
+		mutex_unlock(&lock);
 	}
+	mutex_destroy(&lock);
 
 	return ret;
-}
-
-static inline int msk_wait_recv(msk_trans_t *trans, msk_data_t *data) {
-	return msk_wait_n_recv(trans, data, 1);
 }
 
 /**
- * Post a send buffer and waits for that one to be completely sent
- * @param trans   [IN]
- * @param data    [IN] the data to send
- * @param num_sge [IN] the number of elements in data to send
+ * Post a send chunk and waits for that one to be completely sent
+ * @param[IN] xprt
+ * @param[IN] cbc	CallBack Context xdr_ioq and xdr_ioq_uv(s)
+ * @param[IN] sge	scatter/gather elements to send
  *
  * @return 0 on success, the value of errno on error
  */
-int msk_wait_n_send(struct msk_trans *trans, msk_data_t *data, int num_sge) {
-	pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+static int
+xdr_rdma_wait_send_n(RDMAXPRT *xprt, struct rpc_rdma_cbc *cbc, int sge)
+{
+	mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 	int ret;
 
-	msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &lock);
-	ret = msk_post_n_send(trans, data, num_sge, msk_wait_callback, msk_wait_callback, &lock);
+	cbc->positive_cb = xdr_rdma_wait_callback;
+	cbc->negative_cb = xdr_rdma_warn_callback;
+	cbc->callback_arg = &lock;
+
+	mutex_lock(&lock);
+	ret = xdr_rdma_post_send_n(xprt, cbc, sge, NULL, IBV_WR_SEND);
 
 	if (!ret) {
-		msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &lock);
-		msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &lock);
-		pthread_mutex_destroy(&lock);
+		mutex_lock(&lock);
+		mutex_unlock(&lock);
 	}
+	mutex_destroy(&lock);
 
 	return ret;
 }
 
-static inline int msk_wait_send(msk_trans_t *trans, msk_data_t *data) {
-	return msk_wait_n_send(trans, data, 1);
+static inline int
+xdr_rdma_post_read_cb(RDMAXPRT *xprt, struct rpc_rdma_cbc *cbc, int sge,
+		      struct xdr_rdma_segment *rs)
+{
+	cbc->positive_cb = xdr_rdma_respond_callback;
+	cbc->negative_cb = xdr_rdma_destroy_callback;
+	cbc->callback_arg = cbc;
+	return xdr_rdma_post_send_n(xprt, cbc, sge, rs, IBV_WR_RDMA_READ);
 }
 
-// callbacks would all be run in a big send/recv_thread
-
-
-// server specific:
-
-
-int msk_post_n_read(struct msk_trans *trans, msk_data_t *data, int num_sge, msk_rloc_t *rloc, ctx_callback_t callback, ctx_callback_t err_callback, void* callback_arg) {
-	return msk_post_send_generic(trans, IBV_WR_RDMA_READ, data, num_sge, rloc, callback, err_callback, callback_arg);
+static inline int
+xdr_rdma_post_write_cb(RDMAXPRT *xprt, struct rpc_rdma_cbc *cbc, int sge,
+		       struct xdr_rdma_segment *rs)
+{
+	cbc->positive_cb = xdr_rdma_respond_callback;
+	cbc->negative_cb = xdr_rdma_destroy_callback;
+	cbc->callback_arg = cbc;
+	return xdr_rdma_post_send_n(xprt, cbc, sge, rs, IBV_WR_RDMA_WRITE);
 }
+#endif /* UNUSED */
 
-static inline int msk_post_read(msk_trans_t *trans, msk_data_t *data, msk_rloc_t *rloc, ctx_callback_t callback, ctx_callback_t err_callback, void* callback_arg) {
-	return msk_post_n_read(trans, data, 1, rloc, callback, err_callback, callback_arg);
-}
-
-int msk_post_n_write(struct msk_trans *trans, msk_data_t *data, int num_sge, msk_rloc_t *rloc, ctx_callback_t callback, ctx_callback_t err_callback, void* callback_arg) {
-	return msk_post_send_generic(trans, IBV_WR_RDMA_WRITE, data, num_sge, rloc, callback, err_callback, callback_arg);
-}
-
-static inline int msk_post_write(msk_trans_t *trans, msk_data_t *data, msk_rloc_t *rloc, ctx_callback_t callback, ctx_callback_t err_callback, void* callback_arg) {
-	return msk_post_n_write(trans, data, 1, rloc, callback, err_callback, callback_arg);
-}
-
-int msk_wait_n_read(struct msk_trans *trans, msk_data_t *data, int num_sge, msk_rloc_t *rloc) {
-	pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+static int
+xdr_rdma_wait_read_cb(RDMAXPRT *xprt, struct rpc_rdma_cbc *cbc, int sge,
+		     struct xdr_rdma_segment *rs)
+{
+	mutex_t lock = MUTEX_INITIALIZER;
 	int ret;
 
-	msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &lock);
-	ret = msk_post_n_read(trans, data, num_sge, rloc, msk_wait_callback, msk_wait_callback, &lock);
+	cbc->positive_cb = xdr_rdma_wait_callback;
+	cbc->negative_cb = xdr_rdma_warn_callback;
+	cbc->callback_arg = &lock;
+
+	mutex_lock(&lock);
+	ret = xdr_rdma_post_send_n(xprt, cbc, sge, rs, IBV_WR_RDMA_READ);
 
 	if (!ret) {
-		msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &lock);
-		msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &lock);
-		pthread_mutex_destroy(&lock);
+		mutex_lock(&lock);
+		mutex_unlock(&lock);
 	}
+	mutex_destroy(&lock);
 
 	return ret;
 }
 
-static inline int msk_wait_read(msk_trans_t *trans, msk_data_t *data, msk_rloc_t *rloc) {
-	return msk_wait_n_read(trans, data, 1, rloc);
-}
-
-int msk_wait_n_write(struct msk_trans *trans, msk_data_t *data, int num_sge, msk_rloc_t *rloc) {
-	pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+static int
+xdr_rdma_wait_write_cb(RDMAXPRT *xprt, struct rpc_rdma_cbc *cbc, int sge,
+		      struct xdr_rdma_segment *rs)
+{
+	mutex_t lock = MUTEX_INITIALIZER;
 	int ret;
 
-	msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &lock);
-	ret = msk_post_n_write(trans, data, num_sge, rloc, msk_wait_callback, msk_wait_callback, &lock);
+	cbc->positive_cb = xdr_rdma_wait_callback;
+	cbc->negative_cb = xdr_rdma_warn_callback;
+	cbc->callback_arg = &lock;
+
+	mutex_lock(&lock);
+	ret = xdr_rdma_post_send_n(xprt, cbc, sge, rs, IBV_WR_RDMA_WRITE);
 
 	if (!ret) {
-		msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &lock);
-		msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &lock);
-		pthread_mutex_destroy(&lock);
+		mutex_lock(&lock);
+		mutex_unlock(&lock);
 	}
+	mutex_destroy(&lock);
 
 	return ret;
-}
-
-static inline int msk_wait_write(msk_trans_t *trans, msk_data_t *data, msk_rloc_t *rloc) {
-	return msk_wait_n_write(trans, data, 1, rloc);
-}
-
-struct sockaddr *msk_get_dst_addr(struct msk_trans *trans) {
-	return rdma_get_peer_addr(trans->cm_id);
-}
-
-struct sockaddr *msk_get_src_addr(struct msk_trans *trans) {
-	return rdma_get_local_addr(trans->cm_id);
-}
-
-uint16_t msk_get_src_port(struct msk_trans *trans) {
-	return rdma_get_src_port(trans->cm_id);
-}
-
-uint16_t msk_get_dst_port(struct msk_trans *trans) {
-	return rdma_get_dst_port(trans->cm_id);
 }
 
 /***********************************/
 /****** Utilities for rpcrdma ******/
 /***********************************/
 
-#define rc(ptr) ((struct rpcrdma_read_chunk*)ptr)
-#define wa(ptr) ((struct rpcrdma_write_array*)ptr)
-#define wc(ptr) ((struct rpcrdma_write_chunk*)ptr)
-static inline void rpcrdma_skip_read_list(uint32_t **pptr) {
-	while (rc(*pptr)->rc_discrim) {
-		*pptr += sizeof(struct rpcrdma_read_chunk)/sizeof(**pptr);
+#define m_(ptr) ((struct rdma_msg *)ptr)
+#define rl(ptr) ((struct xdr_read_list*)ptr)
+
+typedef struct xdr_write_list wl_t;
+#define wl(ptr) ((struct xdr_write_list*)ptr)
+
+static inline void
+xdr_rdma_skip_read_list(uint32_t **pptr)
+{
+	while (rl(*pptr)->present) {
+		*pptr += sizeof(struct xdr_read_list)
+			 / sizeof(**pptr);
 	}
 	(*pptr)++;
 }
 
-static inline void rpcrdma_skip_write_array(uint32_t **pptr) {
-	if (wa(*pptr)->wc_discrim) {
-		*pptr += (sizeof(struct rpcrdma_write_array) + sizeof(struct rpcrdma_write_chunk) * ntohl(wa(*pptr)->wc_nchunks))/sizeof(**pptr);
+static inline void
+xdr_rdma_skip_write_list(uint32_t **pptr)
+{
+	if (wl(*pptr)->present) {
+		*pptr += (sizeof(struct xdr_write_list)
+			  + sizeof(struct xdr_write_chunk)
+			    * ntohl(wl(*pptr)->elements))
+			 / sizeof(**pptr);
 	}
 	(*pptr)++;
 }
 
-static inline void rpcrdma_skip_reply_array(uint32_t **pptr) {
-	if (wa(*pptr)->wc_discrim) {
-		*pptr += (sizeof(struct rpcrdma_write_array) + sizeof(struct rpcrdma_write_chunk) * ntohl(wa(*pptr)->wc_nchunks))/sizeof(**pptr);
+static inline void
+xdr_rdma_skip_reply_array(uint32_t **pptr)
+{
+	if (wl(*pptr)->present) {
+		*pptr += (sizeof(struct xdr_write_list)
+			  + sizeof(struct xdr_write_chunk)
+			    * ntohl(wl(*pptr)->elements))
+			 / sizeof(**pptr);
 	} else {
 		(*pptr)++;
 	}
 }
 
-static inline struct rpcrdma_read_chunk *rpcrdma_get_read_list(struct rpcrdma_msg *rmsg) {
-	return rc(rmsg->rm_body.rm_chunks);
+static inline uint32_t *
+xdr_rdma_get_read_list(void *data)
+{
+	return &m_(data)->rdma_body.rdma_msg.rdma_reads;
 }
 
-/*static inline struct rpcrdma_write_array *rpcrdma_get_write_array(struct rpcrdma_msg *rmsg) {
-	uint32_t *ptr = rmsg->rm_body.rm_chunks;
+#ifdef UNUSED
+static inline uint32_t *
+xdr_rdma_get_write_array(void *data)
+{
+	uint32_t *ptr = xdr_rdma_get_read_list(data);
 
-	rpcrdma_skip_read_list(&ptr);
+	xdr_rdma_skip_read_list(&ptr);
 
-	return wa(ptr);
-}*/
-
-static inline struct rpcrdma_write_array *rpcrdma_get_reply_array(struct rpcrdma_msg *rmsg) {
-	uint32_t *ptr = rmsg->rm_body.rm_chunks;
-
-	rpcrdma_skip_read_list(&ptr);
-	rpcrdma_skip_write_array(&ptr);
-
-	return wa(ptr);
+	return ptr;
 }
+#endif /* UNUSED */
 
-static inline uint32_t *rpcrdma_skip_header(struct rpcrdma_msg *rmsg) {
-	uint32_t *ptr = rmsg->rm_body.rm_chunks;
+static inline uint32_t *
+xdr_rdma_get_reply_array(void *data)
+{
+	uint32_t *ptr = xdr_rdma_get_read_list(data);
 
-	rpcrdma_skip_read_list(&ptr);
-	rpcrdma_skip_write_array(&ptr);
-	rpcrdma_skip_reply_array(&ptr);
+	xdr_rdma_skip_read_list(&ptr);
+	xdr_rdma_skip_write_list(&ptr);
 
 	return ptr;
 }
 
-static inline uint32_t rpcrdma_get_call(struct rpcrdma_msg *rmsg, char **call_p) {
+static inline uint32_t *
+xdr_rdma_skip_header(struct rdma_msg *rmsg)
+{
+	uint32_t *ptr = &rmsg->rdma_body.rdma_msg.rdma_reads;
 
-	assert(call_p != NULL);
+	xdr_rdma_skip_read_list(&ptr);
+	xdr_rdma_skip_write_list(&ptr);
+	xdr_rdma_skip_reply_array(&ptr);
 
-	*call_p = (char*)rpcrdma_skip_header(rmsg);
-
-	return ((uint64_t)(*call_p) - (uint64_t)rmsg);
+	return ptr;
 }
 
-static inline uint32_t rpcrdma_hdr_len(struct rpcrdma_msg *rmsg) {
-	uint32_t *ptr = rpcrdma_skip_header(rmsg);
+static inline uintptr_t
+xdr_rdma_header_length(struct rdma_msg *rmsg)
+{
+	uint32_t *ptr = xdr_rdma_skip_header(rmsg);
 
-	return ((uint64_t)ptr - (uint64_t)rmsg);
+	return ((uintptr_t)ptr - (uintptr_t)rmsg);
 }
 
-static inline void rpcrdma_rloc_from_segment(msk_rloc_t *rloc, struct rpcrdma_segment *seg) {
-	rloc->rkey = ntohl(seg->rs_handle);
-	rloc->size = ntohl(seg->rs_length);
-	rloc->raddr = xdr_decode_hyper(&seg->rs_offset);
-}
-
-#if 0
-int svc_rdma_xdr_encode_error(struct svcxprt_rdma *xprt,
-			      struct rpcrdma_msg *rmsgp,
-			      enum rpcrdma_errcode err, u32 *va)
+#ifdef UNUSED
+int
+xdr_rdma_encode_error(struct svcxprt_rdma *xprt,
+			      struct rdma_msg *rmsgp,
+			      enum xdr_rdma_errcode err, u32 *va)
 {
 	u32 *startp = va;
 
-	*va++ = htonl(rmsgp->rm_xid);
-	*va++ = htonl(rmsgp->rm_vers);
+	*va++ = htonl(rmsgp->rdma_xid);
+	*va++ = htonl(rmsgp->rdma_vers);
 	*va++ = htonl(xprt->sc_max_requests);
 	*va++ = htonl(RDMA_ERROR);
 	*va++ = htonl(err);
@@ -694,611 +837,838 @@ int svc_rdma_xdr_encode_error(struct svcxprt_rdma *xprt,
 	return (int)((unsigned long)va - (unsigned long)startp);
 }
 
-void svc_rdma_xdr_encode_reply_array(struct rpcrdma_write_array *ary,
-				 int chunks)
+void
+xdr_rdma_encode_reply_array(wl_t *ary, int chunks)
 {
-	ary->wc_discrim = xdr_one;
-	ary->wc_nchunks = htonl(chunks);
+	ary->present = xdr_one;
+	ary->elements = htonl(chunks);
 }
 
-void svc_rdma_xdr_encode_array_chunk(struct rpcrdma_write_array *ary,
-				     int chunk_no,
-				     u32 rs_handle, u64 rs_offset,
-				     u32 write_len)
+void
+xdr_rdma_encode_array_chunk(wl_t *ary, int chunk_no, u32 handle,
+			    u64 offset, u32 write_len)
 {
-	struct rpcrdma_segment *seg = &ary->wc_array[chunk_no].wc_target;
-	seg->rs_handle = htonl(rs_handle);
-	seg->rs_length = htonl(write_len);
-	xdr_encode_hyper((u32 *) &seg->rs_offset, rs_offset);
+	struct xdr_rdma_segment *seg = &ary->entry[chunk_no].target;
+	seg->handle = htonl(handle);
+	seg->length = htonl(write_len);
+	xdr_encode_hyper((u32 *) &seg->offset, offset);
 }
 
-void svc_rdma_xdr_encode_reply_header(struct svcxprt_rdma *xprt,
-				  struct rpcrdma_msg *rdma_argp,
-				  struct rpcrdma_msg *rdma_resp,
-				  enum rpcrdma_proc rdma_type)
+void
+xdr_rdma_encode_reply_header(struct svcxprt_rdma *xprt,
+				  struct rdma_msg *rdma_argp,
+				  struct rdma_msg *rdma_resp,
+				  enum rdma_proc rdma_type)
 {
-	rdma_resp->rm_xid = htonl(rdma_argp->rm_xid);
-	rdma_resp->rm_vers = htonl(rdma_argp->rm_vers);
-	rdma_resp->rm_credit = htonl(xprt->sc_max_requests);
-	rdma_resp->rm_type = htonl(rdma_type);
+	rdma_resp->rdma_xid = htonl(rdma_argp->rdma_xid);
+	rdma_resp->rdma_vers = htonl(rdma_argp->rdma_vers);
+	rdma_resp->rdma_credit = htonl(xprt->sc_max_requests);
+	rdma_resp->rdma_type = htonl(rdma_type);
 
 	/* Encode <nul> chunks lists */
-	rdma_resp->rm_body.rm_chunks[0] = xdr_zero;
-	rdma_resp->rm_body.rm_chunks[1] = xdr_zero;
-	rdma_resp->rm_body.rm_chunks[2] = xdr_zero;
+	rdma_resp->rdma_body.rm_chunks[0] = xdr_zero;
+	rdma_resp->rdma_body.rm_chunks[1] = xdr_zero;
+	rdma_resp->rdma_body.rm_chunks[2] = xdr_zero;
 }
+#endif /* UNUSED */
 
-#endif /* 0 */
+/* post recv buffers.
+ * keep at least 2 spare waiting for calls,
+ * the remainder can be used for incoming rdma buffers.
+ */
+static void
+xdr_rdma_callq(RDMAXPRT *xprt)
+{
+	struct poolq_entry *have =
+		xdr_ioq_uv_fetch(&xprt->waitq, &xprt->cbqh,
+				 "callq context", 1, IOQ_FLAG_NONE);
+	struct rpc_rdma_cbc *cbc = (struct rpc_rdma_cbc *)(_IOQ(have));
+
+	have = xdr_ioq_uv_fetch(&cbc->workq, &xprt->inbufs.uvqh,
+				"callq buffer", 1, IOQ_FLAG_NONE);
+
+	/* input positions */
+	IOQ_(have)->v.vio_head = IOQ_(have)->v.vio_base;
+	IOQ_(have)->v.vio_tail = IOQ_(have)->v.vio_wrap;
+	IOQ_(have)->v.vio_wrap = (char *)IOQ_(have)->v.vio_base + xprt->recvsize;
+
+	cbc->workq.xdrs[0].x_lib[1] =
+	cbc->holdq.xdrs[0].x_lib[1] = xprt;
+
+	xdr_rdma_post_recv_cb(xprt, cbc, 1);
+}
 
 /****************************/
 /****** Main functions ******/
 /****************************/
 
-/*ARGSUSED*/
-static void
-xdrmsk_destroy(XDR *xdrs)
+void
+xdr_rdma_destroy(XDR *xdrs)
 {
-	struct mskinfo *mi;
-	if (xdrs->x_private) {
-		mi = xdrs->x_private;
-		if (mi->mr) {
-			msk_dereg_mr(mi->mr);
-			mi->mr = NULL;
-		}
-		if (mi->inbufs) {
-			mem_free(mi->inbufs, sizeof(msk_data_t)*mi->credits);
-			mi->inbufs = NULL;
-		}
-		if (mi->outbufs) {
-			mem_free(mi->outbufs, sizeof(msk_data_t)*mi->credits);
-			mi->outbufs = NULL;
-		}
-		if (mi->hdrbufs) {
-			mem_free(mi->hdrbufs, sizeof(msk_data_t)*mi->credits);
-			mi->hdrbufs = NULL;
-		}
-		if (mi->rdmabufs) {
-			mem_free(mi->rdmabufs, sizeof(msk_data_t)*mi->credits);
-			mi->rdmabufs = NULL;
-		}
-		if (mi->mskbase) {
-			mem_free(mi->mskbase, (mi->sendsz + mi->recvsz) * mi->credits);
-			mi->mskbase = NULL;
-		}
-		mem_free(xdrs->x_private, sizeof(struct mskinfo));
-		xdrs->x_private = NULL;
+	RDMAXPRT *xprt;
+
+	if (!xdrs) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() no xdrs?",
+			__func__);
+		return;
 	}
+	xprt = x_xprt(xdrs);
+
+	if (xprt->mr) {
+		ibv_dereg_mr(xprt->mr);
+		xprt->mr = NULL;
+	}
+
+	xdr_ioq_destroy_pool(&xprt->waitq.ioq_uv.uvqh);
+
+	/* must be after queues, xdr_ioq_destroy() moves them here */
+	xdr_ioq_release(&xprt->inbufs.uvqh);
+	poolq_head_destroy(&xprt->inbufs.uvqh);
+	xdr_ioq_release(&xprt->outbufs.uvqh);
+	poolq_head_destroy(&xprt->outbufs.uvqh);
+
+	/* must be after pools */
+	if (xprt->buffer_aligned) {
+		mem_free(xprt->buffer_aligned, xprt->buffer_total);
+		xprt->buffer_aligned = NULL;
+	}
+
+	xdrs->x_lib[0] = NULL;
+	xdrs->x_lib[1] = NULL;
 }
 
 /*
- * The procedure xdrmsk_create initializes a stream descriptor for a
- * memory buffer.
+ * initializes a stream descriptor for a memory buffer.
+ *
+ * XDR has already been created and passed as arg.
+ *
+ * credits is the number of buffers used
  */
 int
-xdrmsk_create(XDR *xdrs,
-	      msk_trans_t *trans,
-	      u_int sendsz,
-	      u_int recvsz,
-	      u_int credits,
-	      void (*callback)(void*),
-	      void *callbackarg)
+xdr_rdma_create(XDR *xdrs, RDMAXPRT *xprt, const u_int sendsize,
+		const u_int recvsize, const u_int flags)
 {
-	int i;
-	struct mskinfo *mi;
+	uint8_t *b;
+	long ps = sysconf(_SC_PAGESIZE);
 
-	xdrs->x_private = mem_alloc(sizeof(struct mskinfo));
-	if (xdrs->x_private == NULL)
-		goto err;
-
-	mi = priv(xdrs);
-
-	mi->mskbase = mem_alloc((sendsz+2*recvsz+HDR_MAX_SIZE)*credits);
-	if (mi->mskbase == NULL)
-		goto err;
-
-	mi->sendsz = sendsz;
-	mi->recvsz = recvsz;
-	mi->credits = credits;
-	mi->trans = trans;
-	mi->callback = callback;
-	mi->callbackarg = callbackarg;
-
-	//TODO: alloc 'em all in a single mem_alloc?
-	mi->inbufs = mem_alloc(sizeof(msk_data_t)*mi->credits);
-	if (!mi->inbufs)
-		goto err;
-
-	mi->outbufs = mem_alloc(sizeof(msk_data_t)*mi->credits);
-	if (!mi->outbufs)
-		goto err;
-
-	mi->hdrbufs = mem_alloc(sizeof(msk_data_t)*mi->credits);
-	if (!mi->hdrbufs)
-		goto err;
-
-	mi->rdmabufs = mem_alloc(sizeof(msk_data_t)*mi->credits);
-	if (!mi->rdmabufs)
-		goto err;
-
-	trans->private_data = xdrs;
-
-	mi->mr = msk_reg_mr(mi->trans, mi->mskbase, credits*(mi->sendsz + 2*mi->recvsz + HDR_MAX_SIZE),
-			    IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ); // register it in two chunks for read and write?
-
-	pthread_cond_init(&mi->cl.cond, NULL);
-	pthread_mutex_init(&mi->cl.lock, NULL);
-
-	/* init data buffers (note that setting size to zero is important) and post recv buffers */
-	for (i=0; i < credits; i++) {
-		mi->outbufs[i].max_size = sendsz;
-		mi->outbufs[i].size = 0;
-		mi->outbufs[i].data = mi->mskbase + i*sendsz;
-		mi->outbufs[i].mr = mi->mr;
-		mi->hdrbufs[i].max_size = HDR_MAX_SIZE;
-		mi->hdrbufs[i].size = 0;
-		mi->hdrbufs[i].data = mi->mskbase + credits*sendsz + i*HDR_MAX_SIZE;
-		mi->hdrbufs[i].mr = mi->mr;
-		mi->rdmabufs[i].max_size = recvsz;
-		mi->rdmabufs[i].size = 0;
-		mi->rdmabufs[i].data = mi->mskbase + credits*(sendsz + HDR_MAX_SIZE) + i * recvsz;
-		mi->rdmabufs[i].mr = mi->mr;
-		mi->inbufs[i].max_size = recvsz;
-		mi->inbufs[i].size = 0;
-		mi->inbufs[i].data = mi->mskbase + credits*(sendsz + HDR_MAX_SIZE + recvsz) + i*recvsz;
-		mi->inbufs[i].mr = mi->mr;
-		msk_post_recv(mi->trans, mi->inbufs + i, signal_callback, err_callback, NULL);
+	if (!xprt->pd || !xprt->pd->pd) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] xdr %p missing Protection Domain",
+			__func__, xprt, xprt->state, xdrs);
+		xdr_rdma_destroy(xdrs);
+		return ENODEV;
 	}
 
-	mi->pos = xdrs->x_base = NULL;
-	xdrs->x_handy = 0;
+	/* buffer sizes MUST be page sized */
+	xprt->sendsize = sendsize & ~(ps - 1);
+	xprt->sendsize = xprt->sendsize >= ps ? xprt->sendsize : ps;
+	xprt->recvsize = recvsize & ~(ps - 1);
+	xprt->recvsize = xprt->recvsize >= ps ? xprt->recvsize : ps;
 
-	/* set the op to free since we don't know what to do until we get our first recv/send anyway. Let's hope that's ok */
-	xdrs->x_op = XDR_FREE;
+	/* pre-allocated buffer_total:
+	 * the number of credits is irrelevant here.
+	 * instead, allocate buffers to match the read/write contexts.
+	 * more than one buffer can be chained to one ioq_uv head,
+	 * but never need more ioq_uv heads than buffers.
+	 */
+	xprt->buffer_total = recvsize * xprt->xa->rq_depth
+			   + sendsize * xprt->xa->sq_depth;
 
+	xprt->buffer_aligned = mem_alloc_aligned(xprt->buffer_total, ps);
+	if (xprt->buffer_aligned == NULL)
+		goto err;
+
+	__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+		"%s() buffer_aligned at %p",
+		__func__, xprt->buffer_aligned);
+
+	/* register it in two chunks for read and write??? */
+	xprt->mr = ibv_reg_mr(xprt->pd->pd, xprt->buffer_aligned,
+				xprt->buffer_total,
+				IBV_ACCESS_LOCAL_WRITE |
+				IBV_ACCESS_REMOTE_WRITE |
+				IBV_ACCESS_REMOTE_READ);
+
+	poolq_head_setup(&xprt->inbufs.uvqh);
+	xprt->inbufs.min_bsize = ps;
+	xprt->inbufs.max_bsize = xprt->recvsize;
+
+	poolq_head_setup(&xprt->outbufs.uvqh);
+	xprt->outbufs.min_bsize = ps;
+	xprt->outbufs.max_bsize = xprt->sendsize;
+
+	/* Each pre-allocated buffer has a corresponding xdr_ioq_uv,
+	 * stored on the pool queues.
+	 */
+	b = xprt->buffer_aligned;
+
+	for (xprt->inbufs.uvqh.qcount = 0;
+	     xprt->inbufs.uvqh.qcount < xprt->xa->rq_depth;
+	     xprt->inbufs.uvqh.qcount++) {
+		struct xdr_ioq_uv *data = xdr_ioq_uv_create(0, UIO_FLAG_BUFQ);
+
+		data->v.vio_base =
+		data->v.vio_head =
+		data->v.vio_tail = b;
+		data->v.vio_wrap = (char *)b + xprt->recvsize;
+		data->u.uio_p1 = &xprt->inbufs.uvqh;
+		data->u.uio_p2 = xprt->mr;
+		TAILQ_INSERT_TAIL(&xprt->inbufs.uvqh.qh, &data->uvq, q);
+
+		b += xprt->recvsize;
+	}
+
+	for (xprt->outbufs.uvqh.qcount = 0;
+	     xprt->outbufs.uvqh.qcount < xprt->xa->sq_depth;
+	     xprt->outbufs.uvqh.qcount++) {
+		struct xdr_ioq_uv *data = xdr_ioq_uv_create(0, UIO_FLAG_BUFQ);
+
+		data->v.vio_base =
+		data->v.vio_head =
+		data->v.vio_tail = b;
+		data->v.vio_wrap = (char *)b + xprt->sendsize;
+		data->u.uio_p1 = &xprt->outbufs.uvqh;
+		data->u.uio_p2 = xprt->mr;
+		TAILQ_INSERT_TAIL(&xprt->outbufs.uvqh.qh, &data->uvq, q);
+
+		b += xprt->sendsize;
+	}
+
+	xdr_ioq_setup(&xprt->waitq);
+	while (xprt->waitq.ioq_uv.uvqh.qcount < CALLQ_SIZE) {
+		xdr_rdma_callq(xprt);
+	}
 	return 0;
 
 err:
-	__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: out of memory", __func__);
-	xdrmsk_destroy(xdrs);
+	__warnx(TIRPC_DEBUG_FLAG_ERROR,
+		"%s() out of memory",
+		__func__);
+	xdr_rdma_destroy(xdrs);
 	return ENOMEM;
 }
 
-/* returns length available to use */
-int
-rpcrdma_clnt_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
-	int i;
-	struct mskinfo *mi;
-	struct rpcrdma_write_array *reply_array;
-	msk_data_t *prev_buf, *tmp_buf;
+/** xdr_rdma_clnt_call
+ *
+ * Client processes a call request
+ *
+ * @param[IN] xdrs	cm_data
+ *
+ * called by clnt_rdma_call()
+ */
+bool
+xdr_rdma_clnt_call(XDR *xdrs, u_int32_t xid)
+{
+	struct rpc_rdma_cbc *cbc = (struct rpc_rdma_cbc *)xdrs;
+	RDMAXPRT *xprt;
 
 	if (!xdrs) {
-		__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: no xdrs?", __func__);
-		return 0;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() no context?",
+			__func__);
+		return (false);
 	}
-
-	mi = priv(xdrs);
+	xprt = x_xprt(xdrs);
 
 	/* free old buffers */
-	switch(xdrs->x_op) {
-	    case XDR_ENCODE:
-		/* FIXME: only clears the ones associated with last request */
-		for(i=0; i<mi->credits; i++) {
-			mi->rdmabufs[i].size = 0;
-			mi->rdmabufs[i].next = NULL;
-		}
-		break;
-	    case XDR_DECODE:
-		mi->curbuf->size = 0; // set this for countusedbuf
-		msk_post_recv(mi->trans, mi->curbuf, signal_callback, err_callback, NULL);
-		break;
-	    default:
-		break;
-	}
-
-	xdrs->x_op = op;
+	/* (should do nothing) */
+	xdr_ioq_release(&cbc->workq.ioq_uv.uvqh);
+	xdr_ioq_release(&cbc->holdq.ioq_uv.uvqh);
+	xdr_rdma_callq(xprt);
 
 	/* get new buffer */
-	switch (xdrs->x_op) {
+#ifdef OLDCODE
 	// Client encodes a call request
 	case XDR_ENCODE:
 		pthread_mutex_lock(&mi->cl.lock);
 		mi->xdrbuf = mi->curbuf = xdrmsk_getfreebuf(mi->outbufs, mi);
+#endif
+	(void) xdr_ioq_uv_fetch(&cbc->holdq, &xprt->outbufs.uvqh,
+				"call buffer", 1, IOQ_FLAG_NONE);
 
-		mi->curbuf->size = 1; // just saying it's used.
+	xdr_ioq_reset(&cbc->holdq, 0);
 
-		xdrs->x_handy = mi->curbuf->max_size;
-		mi->pos = xdrs->x_base = (char*)mi->curbuf->data;
+#ifdef OLDCODE
 		xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
 		    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
-
 		pthread_mutex_unlock(&mi->cl.lock);
-
 		break;
+#endif
+	return (true);
+}
 
+/** xdr_rdma_clnt_reply
+ *
+ * Client prepares for a reply
+ *
+ * potential output buffers are queued in workq.
+ *
+ * @param[IN] xdrs	cm_data
+ *
+ * called by clnt_rdma_call()
+ */
+bool
+xdr_rdma_clnt_reply(XDR *xdrs, u_int32_t xid)
+{
+	struct rpc_rdma_cbc *cbc = (struct rpc_rdma_cbc *)xdrs;
+	RDMAXPRT *xprt;
+	struct xdr_write_list *reply_array;
+	struct xdr_ioq_uv *work_uv;
+	struct poolq_entry *have;
+
+	if (!xdrs) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() no context?",
+			__func__);
+		return (false);
+	}
+	xprt = x_xprt(xdrs);
+
+#ifdef OLDCODE
 	// Client decodes a reply buffer
 	case XDR_DECODE:
 		pthread_mutex_lock(&mi->cl.lock);
-
 		mi->curbuf = xdrmsk_getxidbuf(mi->inbufs, mi, xid);
-
 		rpcrdma_dump_msg(mi->curbuf, "clntrplyhdr", ntohl(xid));
+#endif
+	work_uv = IOQ_(TAILQ_FIRST(&cbc->workq.ioq_uv.uvqh.qh));
+	rpcrdma_dump_msg(work_uv, "creply head", htonl(xid));
 
-		//handy = length, base = address
-		reply_array = rpcrdma_get_reply_array((struct rpcrdma_msg*)mi->curbuf->data);
-		if (reply_array->wc_discrim == 0) {
-		        __warnx(TIRPC_DEBUG_FLAG_XDR, "No reply/read array, failing miserably till writes/inlines are handled");
-			return 0;
-		} else {
+	reply_array = (wl_t *)xdr_rdma_get_reply_array(work_uv->v.vio_head);
+	if (reply_array->present == 0) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() No reply/read array, failing miserably "
+			"till writes/inlines are handled",
+			__func__);
+		return (false);
+	} else {
+#if OLDCODE
 			prev_buf = NULL;
-			for (i=0; i < ntohl(reply_array->wc_nchunks); i++) {
-				/* FIXME: xdrmsk_getaddrbuf hangs instead of failing if no match. add a zero timeout when implemented */
-				tmp_buf = xdrmsk_getaddrbuf(mi->rdmabufs, mi, (uint8_t*) xdr_decode_hyper(&reply_array->wc_array[i].wc_target.rs_offset));
+#endif
+		uint32_t i;
+/*		uint32_t l; */
+		uint32_t n = ntohl(reply_array->elements);
 
-				/* rs_length < max_size if the protocol works out... FIXME: check anyway? */
-				tmp_buf->size = ntohl(reply_array->wc_array[i].wc_target.rs_length);
+		for (i = 0; i < n; i++) {
+			/* FIXME: xdr_rdma_getaddrbuf hangs instead of
+			 * failing if no match. add a zero timeout
+			 * when implemented
+			 */
+			have = xdr_ioq_uv_fetch(&cbc->holdq, &xprt->inbufs.uvqh,
+				"creply body", 1, IOQ_FLAG_NONE);
+			rpcrdma_dump_msg(IOQ_(have), "creply body", ntohl(xid));
+
+			/* length < size if the protocol works out...
+			 * FIXME: check anyway?
+			 */
+/*			l = ntohl(reply_array->entry[i].target.length); */
+#if OLDCODE
 
 				rpcrdma_dump_msg(tmp_buf, "clntrplybody", ntohl(xid));
-
 				if (prev_buf)
 					prev_buf->next = tmp_buf;
 				else
 					mi->xdrbuf = tmp_buf;
-
 				prev_buf = tmp_buf;
-			}
+#endif
 		}
+	}
 
-		pthread_mutex_unlock(&mi->cl.lock);
-
-		xdrs->x_handy = mi->xdrbuf->size;
-		mi->pos = xdrs->x_base = (char*)mi->xdrbuf->data;
-
+#ifdef OLDCODE
 		xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
 		    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
-
 		break;
+#endif
 
-	// XDR_FREE
-	default:
-		__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: unknown op", __func__);
-	}
-
-	return xdrs->x_handy;
+	xdr_ioq_reset(&cbc->holdq, 0);
+	return (true);
 }
 
-int
-rpcrdma_svc_setbuf(XDR *xdrs, u_int32_t xid, enum xdr_op op) {
+/** xdr_rdma_svc_recv
+ *
+ * Server assembles a call request
+ *
+ * concatenates any rdma Read buffers for processing,
+ * but clones call rdma header in place for future use.
+ *
+ * @param[IN] cbc	incoming request
+ *			call request is in workq
+ *
+ * called by svc_rdma_recv()
+ */
+bool
+xdr_rdma_svc_recv(struct rpc_rdma_cbc *cbc, u_int32_t xid)
+{
+	RDMAXPRT *xprt;
+	struct rdma_msg *rmsg;
+	uint32_t k;
+	uint32_t l;
 
-	int i;
-	struct mskinfo *mi;
-	struct rpcrdma_write_array *call_array;
-	msk_data_t *prev_buf, *tmp_buf;
-	struct rpcrdma_read_chunk *read_chunk;
-	msk_rloc_t rloc;
-
-	if (!xdrs) {
-		__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: no xdrs?", __func__);
-		return -1;
+	if (!cbc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() no context?",
+			__func__);
+		return (false);
 	}
-
-	mi = priv(xdrs);
+	xprt = x_xprt(cbc->workq.xdrs);
 
 	/* free old buffers */
-	switch(xdrs->x_op) {
-	    case XDR_DECODE:
-		break;
-	    case XDR_ENCODE:
-		break;
-	    default:
-		break;
-	}
+	/* (should do nothing) */
+	xdr_ioq_release(&cbc->holdq.ioq_uv.uvqh);
+	xdr_rdma_callq(xprt);
 
-	xdrs->x_op = op;
+	/* swap calling message from workq to holdq */
+	TAILQ_CONCAT(&cbc->holdq.ioq_uv.uvqh.qh, &cbc->workq.ioq_uv.uvqh.qh, q);
+	cbc->holdq.ioq_uv.uvqh.qcount = cbc->workq.ioq_uv.uvqh.qcount;
+	cbc->workq.ioq_uv.uvqh.qcount = 0;
 
-	/* get new buffer */
-	switch (xdrs->x_op) {
+#ifdef OLDCODE
 	// Server decodes a call request
 	case XDR_DECODE:
 		pthread_mutex_lock(&mi->cl.lock);
 		mi->callbuf = mi->curbuf = xdrmsk_getusedbuf(mi->inbufs, mi);
-
 		pthread_mutex_unlock(&mi->cl.lock);
-
 		rpcrdma_dump_msg(mi->curbuf, "call", ((struct rpcrdma_msg *)mi->curbuf->data)->rm_xid);
+#endif
+	cbc->call_uv = IOQ_(TAILQ_FIRST(&cbc->holdq.ioq_uv.uvqh.qh));
+	(cbc->call_uv->u.uio_references)++;
+	rmsg = m_(cbc->call_uv->v.vio_head);
+	rpcrdma_dump_msg(cbc->call_uv, "call", rmsg->rdma_xid);
 
+	/* locate NFS/RDMA (RFC-5666) chunk positions */
+	cbc->read_chunk = xdr_rdma_get_read_list(rmsg);
+	cbc->write_chunk = (wl_t *)cbc->read_chunk;
+	xdr_rdma_skip_read_list((uint32_t **)&cbc->write_chunk);
+	cbc->reply_chunk = cbc->write_chunk;
+	xdr_rdma_skip_write_list((uint32_t **)&cbc->reply_chunk);
+	cbc->call_data = cbc->reply_chunk;
+	xdr_rdma_skip_reply_array((uint32_t **)&cbc->call_data);
+
+	/* skip past the header for the calling buffer */
+	xdr_ioq_reset(&cbc->holdq, ((uintptr_t)cbc->call_data
+				  - (uintptr_t)rmsg));
+
+#ifdef OLDCODE
 		read_chunk = rpcrdma_get_read_list((struct rpcrdma_msg*)mi->curbuf->data);
 		prev_buf = NULL;
-		while (read_chunk->rc_discrim != 0) {
-			__warnx(TIRPC_DEBUG_FLAG_XDR,
-				"got something to read :D\n");
+#endif
+	switch (ntohl(rmsg->rdma_type)) {
+	case RDMA_MSG:
+		return (true);
+	case RDMA_NOMSG:
+		break;
+	default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() rdma_type %" PRIu32 "?",
+			__func__, ntohl(rmsg->rdma_type));
+		return (false);
+	}
 
-			tmp_buf = xdrmsk_getfreebuf(mi->rdmabufs, mi);
+	while (rl(cbc->read_chunk)->present != 0
+	    && rl(cbc->read_chunk)->position == 0) {
+		l = ntohl(rl(cbc->read_chunk)->target.length);
+		k = xdr_rdma_chunk_fetch(&cbc->workq, &xprt->inbufs.uvqh,
+					 "call chunk", l, xprt->recvsize,
+					 xprt->xa->max_recv_sge,
+					 xdr_rdma_chunk_in);
 
-			tmp_buf->size = ntohl(read_chunk->rc_target.rs_length);
-			rpcrdma_rloc_from_segment(&rloc, &read_chunk->rc_target);
-			//FIXME: get them only when needed in xdrmsk_getnextbuf or at least post all the reads and wait only at the end...
+		xdr_rdma_wait_read_cb(xprt, cbc, k, &rl(cbc->read_chunk)->target);
+		rpcrdma_dump_msg(IOQ_(TAILQ_FIRST(&cbc->workq.ioq_uv.uvqh.qh)),
+				 "call chunk", rmsg->rdma_xid);
+#ifdef OLDCODE
 			msk_wait_read(mi->trans, tmp_buf, &rloc);
-
 			rpcrdma_dump_msg(tmp_buf, "svcreaddata", ((struct rpcrdma_msg *)mi->curbuf->data)->rm_xid);
+#endif
 
+		/* concatenate any additional buffers after the calling message,
+		 * faking there is more call data in the calling buffer.
+		 */
+		TAILQ_CONCAT(&cbc->holdq.ioq_uv.uvqh.qh,
+			     &cbc->workq.ioq_uv.uvqh.qh, q);
+		cbc->holdq.ioq_uv.uvqh.qcount += cbc->workq.ioq_uv.uvqh.qcount;
+		cbc->workq.ioq_uv.uvqh.qcount = 0;
+		cbc->read_chunk += sizeof(struct xdr_read_list);
+#ifdef OLDCODE
 			if (prev_buf)
 				prev_buf->next = tmp_buf;
 			else
 				mi->curbuf->next = tmp_buf;
-
 			prev_buf = tmp_buf;
 			read_chunk++;
-		}
+#endif
+	}
 
-		i = rpcrdma_get_call((struct rpcrdma_msg *)mi->curbuf->data, (char **)&xdrs->x_base);
-		if (i != 0) {
-			//handy = length, base = address
-			mi->pos = xdrs->x_base;
-			xdrs->x_handy = mi->curbuf->size - i; //FIXME: check this matches read_chunk position
-			mi->xdrbuf = mi->curbuf;
-		}
-
+#ifdef OLDCODE
 		xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
 		    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
-
 		break;
+#endif
+	return (true);
+}
 
+/** xdr_rdma_svc_reply
+ *
+ * Server prepares for a reply
+ *
+ * potential output buffers are queued in workq.
+ *
+ * @param[IN] cbc	incoming request
+ *			call request is in holdq
+ *
+ * called by svc_rdma_reply()
+ */
+bool
+xdr_rdma_svc_reply(struct rpc_rdma_cbc *cbc, u_int32_t xid)
+{
+	RDMAXPRT *xprt;
+	struct xdr_write_list *reply_array;
+	struct poolq_entry *have;
+
+	if (!cbc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() no context?",
+			__func__);
+		return (false);
+	}
+	xprt = x_xprt(cbc->workq.xdrs);
+
+	/* free call buffers (head will be retained) */
+	xdr_ioq_release(&cbc->holdq.ioq_uv.uvqh);
+
+#ifdef OLDCODE
 	// Server encodes a reply
 	case XDR_ENCODE:
 		call_array = rpcrdma_get_reply_array((struct rpcrdma_msg*)mi->callbuf->data);
+#endif
+	reply_array = (wl_t *)cbc->reply_chunk;
 
-		pthread_mutex_lock(&mi->cl.lock);
-
-		if (call_array->wc_discrim == 0) {
+	if (reply_array->present == 0) {
+#ifdef OLDCODE
 			// no reply array to write to, replying inline an' hope it works (OK on RPC/RDMA Read)
 			mi->curbuf = xdrmsk_getfreebuf(mi->outbufs, mi);
-			mi->curbuf->size = mi->curbuf->max_size;
-			xdrs->x_handy = mi->curbuf->size;
-			mi->pos = xdrs->x_base = (char*)mi->curbuf->data;
-			mi->xdrbuf = mi->curbuf;
-			xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
-			    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
-		} else {
+#endif
+		/* no reply array to write, replying inline and hope it works
+		 * (OK on RPC/RDMA Read)
+		 */
+		have = xdr_ioq_uv_fetch(&cbc->holdq, &xprt->outbufs.uvqh,
+					"reply buffer", 1, IOQ_FLAG_NONE);
+
+		/* buffer is limited size */
+		IOQ_(have)->v.vio_head =
+		IOQ_(have)->v.vio_tail = IOQ_(have)->v.vio_base;
+		IOQ_(have)->v.vio_wrap = (char *)IOQ_(have)->v.vio_base
+					+ RFC5666_BUFFER_SIZE;
+
+		/* make room at head for RDMA header */
+		xdr_ioq_reset(&cbc->holdq, (uintptr_t)cbc->call_data
+				  - (uintptr_t)cbc->write_chunk
+				  + offsetof(struct rdma_msg, rdma_body));
+	} else {
+#ifdef OLDCODE
 			prev_buf = NULL;
+#endif
+		uint32_t i;
+		uint32_t l;
+		uint32_t n = ntohl(reply_array->elements);
 
-			if (ntohl(call_array->wc_nchunks) != 1) {
-				__warnx(TIRPC_DEBUG_FLAG_XDR,
-					"More than one chunk in list\n");
-			}
+		if (!n) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() missing reply chunks",
+				__func__);
+			return (false);
+		}
 
-			for (i=0; i < ntohl(call_array->wc_nchunks); i++) {
-				tmp_buf = xdrmsk_getfreebuf(mi->outbufs, mi);
-				tmp_buf->size = MIN(tmp_buf->max_size, ntohl(call_array->wc_array[i].wc_target.rs_length));
+		/* fetch all reply chunks in advance to avoid deadlock
+		 * (there may be more than one)
+		 */
+		for (i = 0; i < n; i++) {
+			l = ntohl(reply_array->entry[i].target.length);
+			xdr_rdma_chunk_fetch(&cbc->holdq, &xprt->outbufs.uvqh,
+					     "reply chunk", l, xprt->sendsize,
+					     xprt->xa->max_send_sge,
+					     xdr_rdma_chunk_out);
+		}
+#ifdef OLDCODE
 				if (prev_buf)
 					prev_buf->next = tmp_buf;
 				else
 					mi->curbuf = tmp_buf; /* that's the first of the list, we'll use it first */
-
 				prev_buf = tmp_buf;
-			}
-		}
+#endif
+		xdr_ioq_reset(&cbc->holdq, 0);
+	}
 
-		xdrs->x_handy = mi->curbuf->size;
-		mi->pos = xdrs->x_base = (char*)mi->curbuf->data;
-		mi->xdrbuf = mi->curbuf;
+#ifdef OLDCODE
 		xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
 		    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
-
-		pthread_mutex_unlock(&mi->cl.lock);
-
 		break;
-
-	default:
-		__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: unknown op", __func__);
-	}
-	return 0;
+#endif
+	return (true);
 }
 
-/* true is message sent, false otherwise */
+/** xdr_rdma_clnt_flushout
+ *
+ * @param[IN] xdrs	combined callback context
+ *
+ * @return true is message sent, false otherwise
+ *
+ * called by clnt_rdma_call()
+ */
 bool
-rpcrdma_clnt_flushout(XDR * xdrs) {
+xdr_rdma_clnt_flushout(XDR *xdrs)
+{
 /* FIXME: decide how many buffers we use in argument!!!!!! */
-#define num_chunks (mi->credits-1)
+#define num_chunks (xprt->xa->credits - 1)
 
-	int i;
-	struct rpc_msg *msg = (struct rpc_msg*)xdrs->x_base;
-	msk_data_t *hdr_buf, *rdma_buf, *prev_buf, *tmp_buf;
-	struct mskinfo *mi;
-	struct rpcrdma_msg *rmsg;
-	struct rpcrdma_write_array *w_array;
+	struct rpc_rdma_cbc *cbc = (struct rpc_rdma_cbc *)xdrs;
+	RDMAXPRT *xprt;
+	struct rpc_msg *msg;
+	struct rdma_msg *rmsg;
+	struct xdr_write_list *w_array;
+	struct xdr_ioq_uv *head_uv;
+	struct xdr_ioq_uv *work_uv;
+	struct poolq_entry *have;
+	int i = 0;
 
 	if (!xdrs) {
-		__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: no xdrs?", __func__);
-		return 0;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() no context?",
+			__func__);
+		return (false);
 	}
+	xprt = x_xprt(cbc->workq.xdrs);
 
-	mi = priv(xdrs);
+	work_uv = IOQ_(TAILQ_FIRST(&cbc->workq.ioq_uv.uvqh.qh));
+	msg = (struct rpc_msg *)(work_uv->v.vio_head);
+	xdr_tail_update(cbc->workq.xdrs);
 
 	switch(ntohl(msg->rm_direction)) {
 	    case CALL:
-		pthread_mutex_lock(&mi->cl.lock);
-		hdr_buf = xdrmsk_getfreebuf(mi->hdrbufs, mi);
-		hdr_buf->size = 1; // just say it's taken, will be updated later
+		/* good to go */
+		break;
+	    case REPLY:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() nothing to send on REPLY (%u)",
+			__func__, ntohl(msg->rm_direction));
+		return (true);
+	    default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() bad rm_direction (%u)",
+			__func__, ntohl(msg->rm_direction));
+		return (false);
+	}
 
-		prev_buf = NULL;
-		for (i=0; i<num_chunks; i++) {
-			tmp_buf = xdrmsk_getfreebuf(mi->rdmabufs, mi);
-			tmp_buf->size = tmp_buf->max_size; // just say it's taken
-			if (prev_buf)
-				prev_buf->next = tmp_buf;
-			else
-				rdma_buf = tmp_buf;
+	cbc->workq.ioq_uv.uvq_fetch = xdr_ioq_uv_fetch_nothing;
 
-			prev_buf = tmp_buf;
-		}
+	head_uv = IOQ_(xdr_ioq_uv_fetch(&cbc->workq, &xprt->outbufs.uvqh,
+					"c_head buffer", 1, IOQ_FLAG_NONE));
 
-		pthread_mutex_unlock(&mi->cl.lock);
+	(void)xdr_ioq_uv_fetch(&cbc->holdq, &xprt->inbufs.uvqh,
+				"call buffers", num_chunks, IOQ_FLAG_NONE);
 
-		rmsg = (struct rpcrdma_msg*)hdr_buf->data;
-		rmsg->rm_xid = msg->rm_xid;
-		rmsg->rm_vers = htonl(1);
-		rmsg->rm_credit = htonl(mi->credits - xdrmsk_countusedbufs(mi));
-		rmsg->rm_type = htonl(RDMA_MSG);
+	rmsg = m_(head_uv->v.vio_head);
+	rmsg->rdma_xid = msg->rm_xid;
+	rmsg->rdma_vers = htonl(1);
+	rmsg->rdma_credit = htonl(xprt->xa->credits);
+	rmsg->rdma_type = htonl(RDMA_MSG);
 
 		/* no read, write chunks. */
-		rmsg->rm_body.rm_chunks[0] = htonl(0);
-		rmsg->rm_body.rm_chunks[1] = htonl(0);
+	rmsg->rdma_body.rdma_msg.rdma_reads = 0; /* htonl(0); */
+	rmsg->rdma_body.rdma_msg.rdma_writes = 0; /* htonl(0); */
 
 		/* reply chunk */
-		w_array = (struct rpcrdma_write_array*)&rmsg->rm_body.rm_chunks[2];
-		w_array->wc_discrim = htonl(1);
-		w_array->wc_nchunks = htonl(num_chunks);
+	w_array = (wl_t *)&rmsg->rdma_body.rdma_msg.rdma_reply;
+	w_array->present = htonl(1);
+	w_array->elements = htonl(num_chunks);
 
-		for (i=0; i<num_chunks; i++) {
-			w_array->wc_array[i].wc_target.rs_handle = htonl(mi->mr->rkey);
-			w_array->wc_array[i].wc_target.rs_length = htonl(rdma_buf->size);
-			xdr_encode_hyper((uint32_t*)&w_array->wc_array[i].wc_target.rs_offset, (uint64_t)rdma_buf->data);
-			rdma_buf = rdma_buf->next;
-		}
+	TAILQ_FOREACH(have, &cbc->holdq.ioq_uv.uvqh.qh, q) {
+		struct xdr_rdma_segment *w_seg =
+			&w_array->entry[i++].target;
+		uint32_t length = ioquv_length(IOQ_(have));
 
-		hdr_buf->size = rpcrdma_hdr_len(rmsg);
-		hdr_buf->next = mi->curbuf;
-		mi->curbuf->size = xdrmsk_getpos(xdrs);
+		w_seg->handle = htonl(xprt->mr->rkey);
+		w_seg->length = htonl(length);
+		xdr_encode_hyper((uint32_t*)&w_seg->offset,
+				 (uintptr_t)IOQ_(have)->v.vio_head);
+	}
 
-		rpcrdma_dump_msg(hdr_buf, "clntcall", msg->rm_xid);
-		rpcrdma_dump_msg(mi->curbuf, "clntcall", msg->rm_xid);
+	head_uv->v.vio_tail = head_uv->v.vio_head
+				+ xdr_rdma_header_length(rmsg);
+
+	rpcrdma_dump_msg(head_uv, "clnthead", msg->rm_xid);
+	rpcrdma_dump_msg(work_uv, "clntcall", msg->rm_xid);
 
 		/* actual send, callback will take care of cleanup */
-		msk_post_n_send(mi->trans, hdr_buf, 2, setunused_callback, err_callback, hdr_buf);
-		break;
-	    case REPLY:
-		break;
-	}
-
-	return TRUE;
+	xdr_rdma_post_send_cb(xprt, cbc, 2);
+	return (true);
 }
 
+/** xdr_rdma_svc_flushout
+ *
+ * @param[IN] cbc	combined callback context
+ *
+ * called by svc_rdma_reply()
+ */
 bool
-rpcrdma_svc_flushout(XDR * xdrs) {
+xdr_rdma_svc_flushout(struct rpc_rdma_cbc *cbc)
+{
+	RDMAXPRT *xprt;
 	struct rpc_msg *msg;
-	int i;
-	struct mskinfo *mi;
-	struct rpcrdma_msg *rmsg;
-	struct rpcrdma_write_array *w_array;
-	struct rpcrdma_write_array *call_array;
-	msk_data_t *prev_buf, *hdr_buf;
-	msk_rloc_t rloc;
+	struct rdma_msg *rmsg;
+	struct xdr_write_list *w_array;
+	struct xdr_write_list *reply_array;
+	struct xdr_ioq_uv *head_uv;
+	struct xdr_ioq_uv *work_uv;
 
-	if (!xdrs) {
-		__warnx(TIRPC_DEBUG_FLAG_XDR, "%s: no xdrs?", __func__);
-		return 0;
+	if (!cbc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() no context?",
+			__func__);
+		return (false);
 	}
+	xprt = x_xprt(cbc->workq.xdrs);
 
-	mi = priv(xdrs);
-	msg = (struct rpc_msg*)mi->curbuf->data;
+	/* swap reply body from holdq to workq */
+	TAILQ_CONCAT(&cbc->workq.ioq_uv.uvqh.qh, &cbc->holdq.ioq_uv.uvqh.qh, q);
+	cbc->workq.ioq_uv.uvqh.qcount = cbc->holdq.ioq_uv.uvqh.qcount;
+	cbc->holdq.ioq_uv.uvqh.qcount = 0;
+
+	work_uv = IOQ_(TAILQ_FIRST(&cbc->workq.ioq_uv.uvqh.qh));
+	msg = (struct rpc_msg *)(work_uv->v.vio_head);
+	/* work_uv->v.vio_tail has been set by xdr_tail_update() */
 
 	switch(ntohl(msg->rm_direction)) {
 	    case CALL:
-		break;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() nothing to send on CALL (%u)",
+			__func__, ntohl(msg->rm_direction));
+		return (true);
 	    case REPLY:
-		pthread_mutex_lock(&mi->cl.lock);
-		hdr_buf = xdrmsk_getfreebuf(mi->hdrbufs, mi);
-		hdr_buf->size = 1; // just say it's taken, will be updated later
-		pthread_mutex_unlock(&mi->cl.lock);
+		/* good to go */
+		break;
+	    default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() bad rm_direction (%u)",
+			__func__, ntohl(msg->rm_direction));
+		return (false);
+	}
+
+	/* usurp the holdq for the head, move to workq later */
+	head_uv = IOQ_(xdr_ioq_uv_fetch(&cbc->holdq, &xprt->outbufs.uvqh,
+					"reply head", 1, IOQ_FLAG_NONE));
+
+	/* entry was already added directly to the queue */
+	head_uv->v.vio_head = head_uv->v.vio_base;
+	/* tail adjusted below */
+	head_uv->v.vio_wrap = (char *)head_uv->v.vio_base + xprt->sendsize;
 
 		/* CHECKS HERE */
 
-		call_array = rpcrdma_get_reply_array((struct rpcrdma_msg*)mi->callbuf->data);
+	reply_array = (wl_t *)cbc->reply_chunk;
 
-		/* build the header that goes with the data as we post it for writes */
-		rmsg = (struct rpcrdma_msg*)hdr_buf->data;
-		rmsg->rm_xid = msg->rm_xid;				/* TODO: check it matches mi->hdrbuf xid */
-		rmsg->rm_vers = htonl(1);
-		rmsg->rm_credit = htonl(mi->credits - xdrmsk_countusedbufs(mi));
+	/* build the header that goes with the data */
+	rmsg = m_(head_uv->v.vio_head);
+	rmsg->rdma_xid = msg->rm_xid;
+	/* TODO: check it matches call_uv xid */
+	rmsg->rdma_vers = htonl(1);
+	rmsg->rdma_credit = htonl(xprt->xa->credits);
 
 		/* no read, write chunks. */
-		rmsg->rm_body.rm_chunks[0] = htonl(0);
-		rmsg->rm_body.rm_chunks[1] = htonl(0);
+	rmsg->rdma_body.rdma_msg.rdma_reads = 0; /* htonl(0); */
+	rmsg->rdma_body.rdma_msg.rdma_writes = 0; /* htonl(0); */
 
-		if (call_array->wc_discrim == 0) {
-			rmsg->rm_type = htonl(RDMA_MSG);
+	if (reply_array->present == 0) {
+		rmsg->rdma_type = htonl(RDMA_MSG);
 
 			/* no reply chunk either */
-			rmsg->rm_body.rm_chunks[2] = htonl(0);
+		rmsg->rdma_body.rdma_msg.rdma_reply = 0; /* htonl(0); */
 
-			hdr_buf->next = mi->curbuf;
-			hdr_buf->size = rpcrdma_hdr_len(rmsg);
+		head_uv->v.vio_tail = head_uv->v.vio_head
+					+ xdr_rdma_header_length(rmsg);
 
-			mi->xdrbuf->size = xdrmsk_getpos(xdrs);
+		rpcrdma_dump_msg(head_uv, "reply head", msg->rm_xid);
+		rpcrdma_dump_msg(work_uv, "reply body", msg->rm_xid);
+	} else {
+		uint32_t i = 0;
+		uint32_t n = ntohl(reply_array->elements);
 
-			rpcrdma_dump_msg(hdr_buf, "rplyhdr", msg->rm_xid);
-			rpcrdma_dump_msg(mi->curbuf, "rplybody", msg->rm_xid);
-
-			/* actual send, callback will take care of cleanup */
-			/* TODO: make it work with not just one outbuf, but get more outbufs as needed in xdrmsk_getnextbuf?
-			   add something in mi instead of checking call_array->wc_discrim everytime... */
-			msk_post_n_send(mi->trans, hdr_buf, 2, setunused_callback, err_callback, hdr_buf);
-
-		} else {
-			rmsg->rm_type = htonl(RDMA_NOMSG);
+		rmsg->rdma_type = htonl(RDMA_NOMSG);
 
 			/* reply chunk */
-			w_array = (struct rpcrdma_write_array*)&rmsg->rm_body.rm_chunks[2];
-			w_array->wc_discrim = htonl(1);
+		w_array = (wl_t *)&rmsg->rdma_body.rdma_msg.rdma_reply;
+		w_array->present = htonl(1);
 
-			i = 0;
-			while (i < ntohl(call_array->wc_nchunks)) {
-				/* This is checked in msk_post_write already
-				if (mi->curbuf->size < ntohl(call_array->wc_array[i].wc_target.rs_length))
-					return FALSE; */
+		while (i < n) {
+			struct xdr_rdma_segment *c_seg =
+				&reply_array->entry[i].target;
+			struct xdr_rdma_segment *w_seg =
+				&w_array->entry[i++].target;
+			uint32_t length = ntohl(c_seg->length);
+			uint32_t k = length / xprt->sendsize;
+			uint32_t m = length % xprt->sendsize;
+		
+			if (m) {
+				/* need fractional buffer */
+				k++;
+			}
+		
+			/* ensure never asking for more buffers than allowed */
+			if (k > xprt->xa->max_send_sge) {
+				__warnx(TIRPC_DEBUG_FLAG_XDR,
+					"%s() requested chunk %" PRIu32
+					" is too long (" PRIu32 ">" PRIu32 ")",
+					__func__, m, k, xprt->xa->max_send_sge);
+				k = xprt->xa->max_send_sge;
+			}
 
-				rpcrdma_rloc_from_segment(&rloc, &call_array->wc_array[i].wc_target);
-				mi->xdrbuf->size = xdrmsk_getpos(xdrs);
+			*w_seg = *c_seg;
 
-				/** @todo: check if remote addr + size = next remote addr and send in a single write if so */
+			/* sometimes, back-to-back buffers could be sent
+			 * together.  releases of unused buffers and
+			 * other events eventually scramble the buffers
+			 * enough that there's no gain in efficiency.
+			 */
+			xdr_rdma_wait_write_cb(xprt, cbc, k, w_seg);
 
-				msk_wait_write(mi->trans, mi->curbuf, &rloc); /* FIXME: change to msk_post_write and wait somehow */
+			while (0 < k--) {
+				struct poolq_entry *have =
+					TAILQ_FIRST(&cbc->workq.ioq_uv.uvqh.qh);
 
-				w_array->wc_array[i].wc_target.rs_handle = call_array->wc_array[i].wc_target.rs_handle;
-				w_array->wc_array[i].wc_target.rs_length = htonl(mi->curbuf->size);
-				w_array->wc_array[i].wc_target.rs_offset = call_array->wc_array[i].wc_target.rs_offset;
+				TAILQ_REMOVE(&cbc->workq.ioq_uv.uvqh.qh, have, q);
+				(cbc->workq.ioq_uv.uvqh.qcount)--;
+#ifdef OLDCODE
 
 				rpcrdma_dump_msg(mi->curbuf, "rplybody", msg->rm_xid);
-
-				mi->curbuf->size = 0; /* FIXME: _not_ MT-safe without lock */
-
-				if (mi->curbuf == mi->xdrbuf)
-					break;
-
-				i++;
-				prev_buf = mi->curbuf;
-				mi->curbuf = mi->curbuf->next; /* FIXME: this is safe if it was constructed properly... check anyway? */
-				prev_buf->next = NULL;
+#endif
+				rpcrdma_dump_msg(IOQ_(have), "reply body",
+						 msg->rm_xid);
+				xdr_ioq_uv_release(IOQ_(have));
 			}
-
-			while (mi->curbuf->next) {
-				prev_buf = mi->curbuf;
-				mi->curbuf = mi->curbuf->next;
-				prev_buf->next = NULL;
-				mi->curbuf->size = 0;
-			}
-
-			w_array->wc_nchunks = htonl(i+1);
-
-			hdr_buf->size = rpcrdma_hdr_len(rmsg);
-
-			rpcrdma_dump_msg(hdr_buf, "rplyhdr", msg->rm_xid);
-
-			/* actual send, callback will take care of cleanup */
-			msk_post_send(mi->trans, hdr_buf, setunused_callback, err_callback, hdr_buf);
-
 		}
+		w_array->elements = htonl(i);
 
-		/* free the old inbuf we only kept for header, and repost it. */
-		mi->callbuf->size = 0; // set this for countusedbuf
-		msk_post_recv(mi->trans, mi->callbuf, signal_callback, err_callback, NULL);
-
-		break;
+		head_uv->v.vio_tail = head_uv->v.vio_head
+					+ xdr_rdma_header_length(rmsg);
+#ifdef OLDCODE
+			rpcrdma_dump_msg(hdr_buf, "rplyhdr", msg->rm_xid);
+#endif
+		rpcrdma_dump_msg(head_uv, "reply head", msg->rm_xid);
 	}
 
-	return TRUE;
+			/* actual send, callback will take care of cleanup */
+	TAILQ_REMOVE(&cbc->holdq.ioq_uv.uvqh.qh, &head_uv->uvq, q);
+	(cbc->holdq.ioq_uv.uvqh.qcount)--;
+	(cbc->workq.ioq_uv.uvqh.qcount)++;
+	TAILQ_INSERT_HEAD(&cbc->workq.ioq_uv.uvqh.qh, &head_uv->uvq, q);
+	xdr_rdma_post_send_cb(xprt, cbc, cbc->workq.ioq_uv.uvqh.qcount);
+
+		/* free the old inbuf we only kept for header, and repost it. */
+	xdr_ioq_uv_release(cbc->call_uv);
+	return (true);
 }
 
+#ifdef FIXMEREPLACED
 static u_int
 xdrmsk_getpos(XDR *xdrs)
 {
@@ -1494,3 +1864,4 @@ xdrmsk_inline_unaligned(XDR *xdrs, u_int len)
 {
 	return (NULL);
 }
+#endif /* FIXMEREPLACED */

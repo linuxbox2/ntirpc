@@ -23,6 +23,10 @@ if(USE_NFS_MSK)
   add_definitions(-DUSE_RPC_RDMA)
 endif(USE_NFS_MSK)
 
+if(USE_NFS_RDMA)
+  add_definitions(-DUSE_RPC_RDMA)
+endif(USE_NFS_RDMA)
+
 include_directories(
   "${PROJECT_BINARY_DIR}/include"
   "${PROJECT_SOURCE_DIR}/libntirpc/ntirpc/"

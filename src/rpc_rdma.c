@@ -1,32 +1,39 @@
 /*
+ * Copyright (c) 2012-2014 CEA
+ * contributeur : Dominique Martinet <dominique.martinet@cea.fr>
+ * contributeur : William Allen Simpson <bill@cohortfs.com>
  *
- * Copyright CEA/DAM/DIF (2012)
- * contributor : Dominique Martinet  dominique.martinet@cea.fr
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * - Redistributions of source code must retain the above copyright notice,
+ *   this list of conditions and the following disclaimer.
+ * - Redistributions in binary form must reproduce the above copyright notice,
+ *   this list of conditions and the following disclaimer in the documentation
+ *   and/or other materials provided with the distribution.
+ * - Neither the name of Sun Microsystems, Inc. nor the names of its
+ *   contributors may be used to endorse or promote products derived
+ *   from this software without specific prior written permission.
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 3 of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
- *
- * ---------------------------------------
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 /**
- * \file    trans_rdma.c
+ * \file    rpc_rdma.c
  * \brief   rdma helper
  *
- * This is (very) loosely based on a mix of diod, rping (librdmacm/examples)
- * and kernel's net/9p/trans_rdma.c
- *
+ * This was (very) loosely based on the Mooshika library, which in turn
+ * was a mix of diod, rping (librdmacm/examples), and Linux kernel's
+ * net/9p/trans_rdma.c (dual BSD/GPL license). No vestiges remain.
  */
 
 #if HAVE_CONFIG_H
@@ -37,8 +44,8 @@
 #include <stdlib.h>	//malloc
 #include <string.h>	//memcpy
 #include <limits.h>	//INT_MAX
-#include <inttypes.h>	//uint*_t
 #include <errno.h>	//ENOMEM
+#include <err.h>	//warnx
 #include <sys/socket.h> //sockaddr
 #include <sys/un.h>     //sockaddr_un
 #include <pthread.h>	//pthread_* (think it's included by another one)
@@ -48,16 +55,27 @@
 #include <unistd.h>	//fcntl
 #include <fcntl.h>	//fcntl
 #include <sys/epoll.h>
-#include <sys/eventfd.h>
 
-#define EPOLL_MAX_EVENTS 16
-#define NUM_WQ_PER_POLL 16
+#define EPOLL_SIZE (10)
+/*^ expected number of fd, must be > 0 */
+#define EPOLL_EVENTS (16)
+/*^ maximum number of events per poll */
+#define EPOLL_WAIT_MS (1000)
+/*^ ms check for rpc_rdma_state.run_count (was 100) */
+#define IBV_POLL_EVENTS (16)
+/*^ maximum number of events per poll */
+#define NSEC_IN_SEC (1000*1000*1000)
 
+#include "misc/portable.h"
 #include <infiniband/arch.h>
 #include <rdma/rdma_cma.h>
+#include <rpc/types.h>
+#include <rpc/xdr.h>
+#include <rpc/xdr_ioq.h>
+#include <rpc/rpc.h>
 
-#include "utils.h"
-#include "mooshika.h"
+#include "misc/abstract_atomic.h"
+#include "rpc_rdma.h"
 
 #ifdef HAVE_VALGRIND_MEMCHECK_H
 #  include <valgrind/memcheck.h>
@@ -69,215 +87,247 @@
 #  define VALGRIND_MAKE_MEM_DEFINED(addr, len)
 #endif
 
-/**
- * \struct msk_ctx
- * Context data we can use during recv/send callbacks
- */
-struct msk_ctx {
-	enum msk_ctx_used {
-		MSK_CTX_FREE = 0,
-		MSK_CTX_PENDING,
-		MSK_CTX_PROCESSING
-	} used;				/**< 0 if we can use it for a new recv/send */
-	msk_data_t *data;
-	ctx_callback_t callback;
-	ctx_callback_t err_callback;
-	void *callback_arg;
-	union {
-		struct ibv_recv_wr rwr;
-		struct ibv_send_wr wwr;
-	} wr;
-	struct ibv_sge sg_list[0]; 		/**< this is actually an array. note that when you malloc you have to add its size */
-};
+/** defaults **/
+#define WORKER_STACK_SIZE (65535) /* was 2116488 */
 
-struct msk_worker_data {
-	struct msk_trans *trans;
-	struct msk_ctx *ctx;
+#ifdef REMOVEME
+struct rpc_rdma_worker_data {
+	RDMAXPRT *xprt;
+	struct rpc_rdma_cbc *cbc;
 	enum ibv_wc_status status;
 	enum ibv_wc_opcode opcode;
 };
 
 struct worker_pool {
+	struct rpc_rdma_worker_data *wd_queue;
 	pthread_t *thrids;
-	struct msk_worker_data *wd_queue;
-	int worker_count;
-	int size;
-	int w_head;
-	int w_count;
-	int w_efd;
-	int m_tail;
-	int m_count;
-	int m_efd;
+	sem_t	q_sem;
+	sem_t	u_sem;
+	uint32_t q_head;
+	uint32_t q_tail;
+	u_int	t_allocated;
+	u_int	t_count;
+	u_int	q_allocated;
+	u_int	q_size;
+};
+#endif /* REMOVEME */
+
+struct connection_requests {
+	struct rdma_cm_id **id_queue;
+	sem_t	q_sem;
+	sem_t	u_sem;
+	uint32_t q_head;
+	uint32_t q_tail;
+	u_int	q_size;
 };
 
-struct msk_global_state {
-	pthread_mutex_t lock;
-	int debug;
+struct rpc_rdma_state {
+	LIST_HEAD(pdh_s, rpc_rdma_pd) pdh;	/**< Protection Domain list */
+	mutex_t lock;
+
+	struct connection_requests c_r;		/* never freed??? */
+
 	pthread_t cm_thread;		/**< Thread id for connection manager */
-	pthread_t cq_thread;		/**< Thread id for completion queue handler */
+	pthread_t cq_thread;		/**< Thread id for completion queue */
 	pthread_t stats_thread;
-	unsigned int run_threads;
+
 	int cm_epollfd;
 	int cq_epollfd;
 	int stats_epollfd;
-	struct worker_pool worker_pool;
+
+	int32_t run_count;
 };
 
 /* GLOBAL VARIABLES */
 
-static struct msk_global_state *msk_global_state = NULL;
+static struct rpc_rdma_state rpc_rdma_state;
 
-void __attribute__ ((constructor)) msk_internals_init(void) {
-	msk_global_state = malloc(sizeof(*msk_global_state));
-	if (!msk_global_state) {
-		ERROR_LOG("Out of memory");
-	}
+void
+rpc_rdma_internals_init(void)
+{
+	memset(&rpc_rdma_state, 0, sizeof(rpc_rdma_state));
 
-	memset(msk_global_state, 0, sizeof(*msk_global_state));
+	sem_init(&rpc_rdma_state.c_r.q_sem, 0, 0);
 
-	msk_global_state->run_threads = 0;
-	pthread_mutex_init(&msk_global_state->lock, NULL);
+	mutex_init(&rpc_rdma_state.lock, NULL);
+	LIST_INIT(&rpc_rdma_state.pdh);
 }
 
-void __attribute__ ((destructor)) msk_internals_fini(void) {
-
-	if (msk_global_state) {
-		msk_global_state->run_threads = 0;
-
-		if (msk_global_state->cm_thread) {
-			pthread_join(msk_global_state->cm_thread, NULL);
-			msk_global_state->cm_thread = 0;
-		}
-		if (msk_global_state->cq_thread) {
-			pthread_join(msk_global_state->cq_thread, NULL);
-			msk_global_state->cq_thread = 0;
-		}
-		if (msk_global_state->stats_thread) {
-			pthread_join(msk_global_state->stats_thread, NULL);
-			msk_global_state->stats_thread = 0;
-		}
-
-		pthread_mutex_destroy(&msk_global_state->lock);
-		free(msk_global_state);
-		msk_global_state = NULL;
+static void
+rpc_rdma_internals_join(void)
+{
+	if (rpc_rdma_state.cm_thread) {
+		pthread_join(rpc_rdma_state.cm_thread, NULL);
+		rpc_rdma_state.cm_thread = 0;
 	}
+	if (rpc_rdma_state.cq_thread) {
+		pthread_join(rpc_rdma_state.cq_thread, NULL);
+		rpc_rdma_state.cq_thread = 0;
+	}
+	if (rpc_rdma_state.stats_thread) {
+		pthread_join(rpc_rdma_state.stats_thread, NULL);
+		rpc_rdma_state.stats_thread = 0;
+	}
+}
+
+void
+rpc_rdma_internals_fini(void)
+{
+	rpc_rdma_state.run_count = 0;
+	rpc_rdma_internals_join();
+
+	sem_destroy(&rpc_rdma_state.c_r.q_sem);
+	sem_destroy(&rpc_rdma_state.c_r.u_sem);
+
+	mutex_destroy(&rpc_rdma_state.lock);
 }
 
 /* forward declarations */
 
-static void *msk_cq_thread(void *arg);
-
+static int rpc_rdma_bind_server(RDMAXPRT *xprt);
+static struct xp_ops rpc_rdma_ops;
 
 /* UTILITY FUNCTIONS */
 
-
-static inline int msk_mutex_lock(int debug, pthread_mutex_t *mutex) {
-	INFO_LOG(debug, "locking   %p", mutex);
-	return pthread_mutex_lock(mutex);
-}
-static inline int msk_mutex_unlock(int debug, pthread_mutex_t *mutex) {
-	INFO_LOG(debug, "unlocking %p", mutex);
-	return pthread_mutex_unlock(mutex);
-}
-static inline int msk_cond_wait(int debug,
-				pthread_cond_t *cond,
-				pthread_mutex_t *mutex) {
+/**
+ * rpc_rdma_pd_by_verbs: register the protection domain for a given xprt
+ *
+ * Since the protection domains seem to be related to the interfaces,
+ * and those are hot-swappable and variable, need a dynamic list of them.
+ * (Cannot reliably count them during initialization.)
+ *
+ * LFU the list to keep access near O(1).
+ *
+ * @param[IN] xprt	connection handle
+ *
+ * @return 0, ENOSPC, or EINVAL.
+ */
+static int
+rpc_rdma_pd_by_verbs(RDMAXPRT *xprt)
+{
+	struct rpc_rdma_pd *pd;
+	struct rpc_rdma_pd *lf;
 	int rc;
-	INFO_LOG(debug, "unlocking %p", mutex);
-	rc = pthread_cond_wait(cond, mutex);
-	INFO_LOG(debug, "locked    %p", mutex);
+
+	if (!xprt->cm_id) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() transport missing cm_id",
+			__func__);
+		return EINVAL;
+	}
+	if (!xprt->cm_id->verbs) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() cm_id missing verbs",
+			__func__);
+		/* return EINVAL; legal value for dispatcher??? */
+	}
+
+	if (xprt->pd && xprt->pd->context == xprt->cm_id->verbs) {
+		atomic_inc_uint32_t(&xprt->pd->pd_used);
+		return (0);
+	}
+
+	mutex_lock(&rpc_rdma_state.lock);
+	LIST_FOREACH(pd, &rpc_rdma_state.pdh, pdl) {
+		if (pd->context == xprt->cm_id->verbs) {
+			atomic_inc_uint32_t(&pd->pd_used);
+			lf = LIST_FIRST(&rpc_rdma_state.pdh);
+			if (pd->pd_used > lf->pd_used) {
+				LIST_REMOVE(pd, pdl);
+				LIST_INSERT_HEAD(&rpc_rdma_state.pdh, pd, pdl);
+			}
+			mutex_unlock(&rpc_rdma_state.lock);
+			xprt->pd = pd;
+			return (0);
+		}
+	}
+
+	pd = mem_zalloc(sizeof(*pd));
+	if (pd) {
+		rc = 0;
+		pd->context = xprt->cm_id->verbs;
+		pd->pd_used = 1;
+
+		LIST_INSERT_HEAD(&rpc_rdma_state.pdh, pd, pdl);
+	} else {
+		rc = ENOSPC;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() couldn't malloc rdma pd",
+			__func__);
+	}
+	mutex_unlock(&rpc_rdma_state.lock);
+	xprt->pd = pd;
 	return rc;
 }
-static inline int msk_cond_timedwait(int debug,
-				     pthread_cond_t *cond,
-				     pthread_mutex_t *mutex,
-				     const struct timespec *abstime) {
-	int rc;
-	INFO_LOG(debug, "unlocking %p", mutex);
-	rc = pthread_cond_timedwait(cond, mutex, abstime);
-	INFO_LOG(debug, "locked    %p", mutex);
-	return rc;
-}
-
 
 /**
- * msk_getpd: helper function to get the right pd for a given trans
+ * rpc_rdma_pd_get: register and setup the protection domain
  *
- * @param trans [IN] the connection handle
+ * @param[IN] xprt	connection handle
  *
- * @return NULL if nothing is available, next free pd if none fit, correct one if any match
+ * @return 0, errno, ENOSPC, or EINVAL.
  */
-struct msk_pd *msk_getpd(struct msk_trans *trans) {
-	int i = 0;
+static int
+rpc_rdma_pd_get(RDMAXPRT *xprt)
+{
+	int rc = rpc_rdma_pd_by_verbs(xprt);
 
-	if (!trans->pd)
-		return NULL;
-
-	while (trans->pd[i].context != PD_GUARD) {
-		if (trans->pd[i].context == trans->cm_id->verbs) {
-			/* Got a match, woo. */
-			return &trans->pd[i];
-		}
-
-		if (!trans->pd[i].context) {
-			/* Not found, but we have room. */
-			if (atomic_postinc(trans->pd[i].used) != 0
-			    || trans->pd[i].context != NULL) {
-				/* We got raced, try again */
-				atomic_dec(trans->pd[i].used);
-				continue;
-			} else {
-				trans->pd[i].context = trans->cm_id->verbs;
-				return &trans->pd[i];
-			}
-		}
-		i++;
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR (return)",
+			__func__, __LINE__);
+		return rc;
 	}
-
-	/* No space left, too bad. */
-	return NULL;
+	if (!xprt->pd->pd) {
+		xprt->pd->pd = ibv_alloc_pd(xprt->cm_id->verbs);
+		if (!xprt->pd->pd) {
+			rc = errno;
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() %p[%u] ibv_alloc_pd failed: %s (%d)",
+				__func__, xprt, xprt->state, strerror(rc), rc);
+			return rc;
+		}
+	}
+	return (0);
 }
 
-
-/* Prepare for first child to allocate pd
- * Cases:
- *  - pd already provided in attr,
- *  - context already set (bound to one uverb)
- *  - need to prepare for all of them
+/**
+ * rpc_rdma_pd_put: de-register and teardown the protection domain
+ *
+ * @param[IN] xprt	connection handle
  */
-static int msk_setup_pd(struct msk_trans *trans) {
-	int ret;
-	struct ibv_device **devlist;
-
-	if (!trans->pd) {
-		if (trans->cm_id->verbs) {
-			ret = 1;
-		} else {
-			devlist = ibv_get_device_list(&ret);
-			if (!devlist) {
-				ret = errno;
-				INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "ibv_get_device_list: %s (%d)", strerror(ret), ret);
-				return ret;
-			}
-			/* We only care about the number of devices */
-			ibv_free_device_list(devlist);
-		}
-
-		++ret; /* for guard */
-		trans->pd = malloc(ret * sizeof(*trans->pd));
-		if (!trans->pd) {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "couldn't malloc msk pd (%u elems)", ret);
-			ret = ENOMEM;
-			return ret;
-		}
-		memset(trans->pd, 0, ret * sizeof(*trans->pd));
-		trans->pd[0].refcnt = 1; /* only use refcnt of the first one */
-		trans->pd[ret-1].context = PD_GUARD;
+static inline void
+rpc_rdma_pd_put(RDMAXPRT *xprt)
+{
+	if (!xprt->pd) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() missing protection domain?",
+			__func__);
+		return;
 	}
 
-	return 0;
+	if (atomic_dec_uint32_t(&xprt->pd->pd_used) == 0) {
+		mutex_lock(&rpc_rdma_state.lock);
+		LIST_REMOVE(xprt->pd, pdl);
+		mutex_unlock(&rpc_rdma_state.lock);
+
+		if (xprt->pd->pd)
+			ibv_dealloc_pd(xprt->pd->pd);
+		xprt->pd->pd = NULL;
+
+		if (xprt->pd->srq)
+			ibv_destroy_srq(xprt->pd->srq);
+		xprt->pd->srq = NULL;
+
+		if (!TAILQ_EMPTY(&xprt->pd->srqh.qh)) {
+			xdr_ioq_destroy_pool(&xprt->pd->srqh);
+		}
+		mem_free(xprt->pd, sizeof(*xprt->pd));
+	}
+	xprt->pd = NULL;
 }
 
+#ifdef UNUSED
 /**
  * msk_reg_mr: registers memory for rdma use (almost the same as ibv_reg_mr)
  *
@@ -312,32 +362,38 @@ int msk_dereg_mr(struct ibv_mr *mr) {
 }
 
 /**
- * msk_make_rloc: makes a rkey to send it for remote host use
+ * rpc_rdma_make_rloc: makes a rkey to send it for remote host use
  *
- * @param mr   [IN] the mr in which the addr belongs
- * @param addr [IN] the addr to give
- * @param size [IN] the size to allow (hint)
+ * @param[IN] mr	mr in which the addr belongs
+ * @param[IN] addr	addr to give
+ * @param[IN] size	size to allow (hint)
  *
  * @return a pointer to the rkey on success, NULL on failure.
  */
-msk_rloc_t *msk_make_rloc(struct ibv_mr *mr, uint64_t addr, uint32_t size) {
-	msk_rloc_t *rloc;
-	rloc = malloc(sizeof(msk_rloc_t));
+rpcrdma_segment *
+rpc_rdma_make_rloc(struct ibv_mr *mr, uint64_t addr, uint32_t size)
+{
+	rpcrdma_segment *rloc = mem_alloc(sizeof(*rloc));
+
 	if (!rloc) {
-		INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "Out of memory!");
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() Out of memory!",
+			__func__);
 		return NULL;
 	}
 
-	rloc->raddr = addr;
-	rloc->rkey = mr->rkey;
-	rloc->size = size;
+	rloc->rs_handle = mr->rkey;
+	rloc->rs_length = size;
+	rloc->rs_offset = addr;
 
 	return rloc;
 }
 
-void msk_print_devinfo(struct msk_trans *trans) {
+void
+rpc_rdma_print_devinfo(RDMAXPRT *xprt)
+{
 	struct ibv_device_attr device_attr;
-	ibv_query_device(trans->cm_id->verbs, &device_attr);
+	ibv_query_device(xprt->cm_id->verbs, &device_attr);
 	uint64_t node_guid = ntohll(device_attr.node_guid);
 	printf("guid: %04x:%04x:%04x:%04x\n",
 		(unsigned) (node_guid >> 48) & 0xffff,
@@ -345,472 +401,595 @@ void msk_print_devinfo(struct msk_trans *trans) {
 		(unsigned) (node_guid >> 16) & 0xffff,
 		(unsigned) (node_guid >>  0) & 0xffff);
 }
-
-
-static inline struct msk_ctx *msk_next_ctx(struct msk_ctx *ctx, int n_sge) {
-	return (struct msk_ctx*)((uint8_t*)ctx + sizeof(struct msk_ctx) + n_sge*sizeof(struct ibv_sge));
-}
+#endif /* UNUSED */
 
 /**
- * msk_create_thread: Simple wrapper around pthread_create
+ * rpc_rdma_thread_create: Simple wrapper around pthread_create
  */
-#define THREAD_STACK_SIZE 2116488
-static inline int msk_create_thread(pthread_t *thrid, void *(*start_routine)(void*), void *arg) {
+static int
+rpc_rdma_thread_create(pthread_t *thrid, size_t stacksize,
+		       void *(*routine)(void *), void *arg)
+{
 
 	pthread_attr_t attr;
-	int ret;
+	int rc;
 
 	/* Init for thread parameter (mostly for scheduling) */
-	if ((ret = pthread_attr_init(&attr)) != 0) {
-		INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "can't init pthread's attributes: %s (%d)", strerror(ret), ret);
-		return ret;
+	rc = pthread_attr_init(&attr);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() can't init pthread's attributes: %s (%d)",
+			__func__, strerror(rc), rc);
+		return rc;
 	}
 
-	if ((ret = pthread_attr_setscope(&attr, PTHREAD_SCOPE_SYSTEM)) != 0) {
-		INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "can't set pthread's scope: %s (%d)", strerror(ret), ret);
-		return ret;
+	rc = pthread_attr_setscope(&attr, PTHREAD_SCOPE_SYSTEM);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() can't set pthread's scope: %s (%d)",
+			__func__, strerror(rc), rc);
+		return rc;
 	}
 
-	if ((ret = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE)) != 0) {
-		INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "can't set pthread's join state: %s (%d)", strerror(ret), ret);
-		return ret;
+	rc = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() can't set pthread's join state: %s (%d)",
+			__func__, strerror(rc), rc);
+		return rc;
 	}
 
-	if ((ret = pthread_attr_setstacksize(&attr, THREAD_STACK_SIZE)) != 0) {
-		INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "can't set pthread's stack size: %s (%d)", strerror(ret), ret);
-		return ret;
+	rc = pthread_attr_setstacksize(&attr, stacksize);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() can't set pthread's stack size: %s (%d)",
+			__func__, strerror(rc), rc);
+		return rc;
 	}
 
-	return pthread_create(thrid, &attr, start_routine, arg);
+	return pthread_create(thrid, &attr, routine, arg);
 }
 
-static inline int msk_check_create_epoll_thread(pthread_t *thrid, void *(*start_routine)(void*), void *arg, int *epollfd) {
-	int ret;
+static int
+rpc_rdma_thread_create_epoll(pthread_t *thrid, void *(*routine)(void *),
+			      void *arg, int *epollfd)
+{
+	int rc = 0;
 
-	pthread_mutex_lock(&msk_global_state->lock);
+	/* all calls set a thrid in rpc_rdma_state, but unlikely conflict */
+	mutex_lock(&rpc_rdma_state.lock);
+
 	if (*thrid == 0) do {
-		*epollfd = epoll_create(10);
+		*epollfd = epoll_create(EPOLL_SIZE);
 		if (*epollfd == -1) {
-			ret = errno;
-			INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "epoll_create failed: %s (%d)", strerror(ret), ret);
+			rc = errno;
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() epoll_create failed: %s (%d)",
+				__func__, strerror(rc), rc);
 			break;
 		}
 
-		if ((ret = msk_create_thread(thrid, start_routine, arg))) {
-			INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "Could not create thread: %s (%d)", strerror(ret), ret);
+		rc = rpc_rdma_thread_create(thrid, WORKER_STACK_SIZE,
+					routine, arg);
+		if (rc) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() could not create thread: %s (%d)",
+				__func__, strerror(rc), rc);
 			*thrid = 0;
 			break;
 		}
+		__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+			"%s() thread %lx spawned for epoll %d",
+			__func__,
+			(unsigned long)*thrid,
+			*epollfd);
 	} while (0);
 
-	pthread_mutex_unlock(&msk_global_state->lock);
-	return 0;
+	mutex_unlock(&rpc_rdma_state.lock);
+	return rc;
 }
 
+static void
+rpc_rdma_worker_callback(struct work_pool_entry *wpe)
+{
+	struct rpc_rdma_cbc *cbc =
+		opr_containerof(wpe, struct rpc_rdma_cbc, wpe);
+	RDMAXPRT *xprt = (RDMAXPRT *)wpe->arg;
 
-static inline void msk_worker_callback(struct msk_trans *trans, struct msk_ctx *ctx, enum ibv_wc_status status, enum ibv_wc_opcode opcode) {
-	struct timespec ts_start, ts_end;
-
-	if (status) {
-		if (ctx->err_callback) {
-			if (trans->debug & MSK_DEBUG_SPEED)
-				clock_gettime(CLOCK_MONOTONIC, &ts_start);
-			ctx->err_callback(trans, ctx->data, ctx->callback_arg);
-			if (trans->debug & MSK_DEBUG_SPEED) {
-				clock_gettime(CLOCK_MONOTONIC, &ts_end);
-				sub_timespec(&trans->stats.nsec_callback, &ts_start, &ts_end);
-			}
+	if (cbc->status) {
+		if (cbc->negative_cb) {
+			__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+				"%s() %p[%u] cbc %p status: %d",
+				__func__, xprt, xprt->state, cbc, cbc->status);
+			cbc->negative_cb(cbc, xprt);
 		}
-	} else switch (opcode) {
-		case IBV_WC_SEND:
-		case IBV_WC_RDMA_WRITE:
-		case IBV_WC_RDMA_READ:
-			if (ctx->callback) {
-				if (trans->debug & MSK_DEBUG_SPEED)
-					clock_gettime(CLOCK_MONOTONIC, &ts_start);
-				ctx->callback(trans, ctx->data, ctx->callback_arg);
-				if (trans->debug & MSK_DEBUG_SPEED) {
-					clock_gettime(CLOCK_MONOTONIC, &ts_end);
-					sub_timespec(&trans->stats.nsec_callback, &ts_start, &ts_end);
-				}
-			}
-			break;
 
-		case IBV_WC_RECV:
-		case IBV_WC_RECV_RDMA_WITH_IMM:
-			if (ctx->callback) {
-				if (trans->debug & MSK_DEBUG_SPEED)
-					clock_gettime(CLOCK_MONOTONIC, &ts_start);
-				ctx->callback(trans, ctx->data, ctx->callback_arg);
-				if (trans->debug & MSK_DEBUG_SPEED) {
-					clock_gettime(CLOCK_MONOTONIC, &ts_end);
-					sub_timespec(&trans->stats.nsec_callback, &ts_start, &ts_end);
-				}
-			}
-			break;
-
-		default:
-			INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "worker thread got weird opcode: %d", opcode);
+		/* wpe->arg referenced before work_pool_submit() */
+		SVC_RELEASE(&xprt->xprt, SVC_REF_FLAG_NONE);
+		return;
 	}
 
-	atomic_store(&ctx->used, MSK_CTX_FREE);
+	switch (cbc->opcode) {
+	case IBV_WC_SEND:
+	case IBV_WC_RDMA_WRITE:
+	case IBV_WC_RDMA_READ:
+	case IBV_WC_RECV:
+	case IBV_WC_RECV_RDMA_WITH_IMM:
+		if (cbc->positive_cb) {
+			__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+				"%s() %p[%u] cbc %p opcode: %d",
+				__func__, xprt, xprt->state, cbc, cbc->opcode);
+			cbc->positive_cb(cbc, xprt);
+		}
+		break;
 
-	return;
+	default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] cbc %p opcode: %d unknown",
+			__func__, xprt, xprt->state, cbc, cbc->opcode);
+		break;
+	}
+
+	/* wpe->arg referenced before work_pool_submit() */
+	SVC_RELEASE(&xprt->xprt, SVC_REF_FLAG_NONE);
 }
 
-static void* msk_worker_thread(void *arg) {
-	struct worker_pool *pool = arg;
-	struct msk_worker_data wd;
-	uint64_t n;
-	int i;
+#ifdef REMOVEME
+static void *
+rpc_rdma_worker_thread(void *arg)
+{
+	struct rpc_rdma_worker_data wd;
+	uint32_t u;
+	int rc;
 
-	while (msk_global_state->run_threads > 0) {
+	while (rpc_rdma_state.run_count > 0) {
 
-		if (pool->w_count > 0) {
-			i = atomic_dec(pool->w_count);
-			if (i < 0) {
-				atomic_inc(pool->w_count);
-				continue;
-			}
-			i = atomic_postinc(pool->w_head);
-			if (i >= pool->size) {
-				i = i & (pool->size-1);
-				atomic_mask(pool->w_head, pool->size-1);
-			}
-		} else {
-			if (eventfd_read(pool->w_efd, &n) || n > INT_MAX) {
-				INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "eventfd_read failed");
-				continue;
-			}
-			if (msk_global_state->run_threads == 0)
-				break;
-			INFO_LOG(msk_global_state->debug & MSK_DEBUG_WORKERS, "worker: %d", (int)n);
-			atomic_add(pool->w_count, (int)n);
-			continue;
+		rc = sem_wait(&rpc_rdma_state.w_p.q_sem);
+		if (rc) {
+			rc = errno;
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() sem_wait failed: %s (%d)",
+				__func__, strerror(rc), rc);
+			break;
 		}
 
-		INFO_LOG(msk_global_state->debug & MSK_DEBUG_WORKERS, "thread %lx, depopping wd index %i, count %i, trans %p, ctx %p, used %i", pthread_self(), pool->w_head, pool->w_count, pool->wd_queue[i].trans, pool->wd_queue[i].ctx, pool->wd_queue[i].ctx->used);
+		u = atomic_postinc_uint32_t(&rpc_rdma_state.w_p.q_head);
+		if (u >= rpc_rdma_state.w_p.q_size) {
+			u_int q_mask = rpc_rdma_state.w_p.q_size - 1;
 
-		memcpy(&wd, &pool->wd_queue[i], sizeof(struct msk_worker_data));
+			/* masking allows update by lock-free tasks,
+			 * as long as overrun never 2 * q_size
+			 */
+			u &= q_mask;
+			atomic_clear_uint32_t_bits(&rpc_rdma_state.w_p.q_head,
+						   ~q_mask);
+		}
+		memcpy(&wd, &rpc_rdma_state.w_p.wd_queue[u], sizeof(wd));
 
-		if (eventfd_write(pool->m_efd, 1))
-			INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "eventfd_write failed");
+		/* Increase available count */
+		rc = sem_post(&rpc_rdma_state.w_p.u_sem);
+		if (rc) {
+			rc = errno;
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() sem_post failed: %s (%d)",
+				__func__, strerror(rc), rc);
+			break;
+		}
 
-		msk_worker_callback(wd.trans, wd.ctx, wd.status, wd.opcode);
+		__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+			"%s() thread %lx, q %u, xprt %p, cbc %p",
+			__func__,
+			pthread_self(),
+			u,
+			wd.xprt,
+			wd.cbc);
+
+		rpc_rdma_worker_callback(wd.xprt, wd.cbc, wd.status, wd.opcode);
 	}
 
 	pthread_exit(NULL);
 }
 
-static int msk_spawn_worker_threads() {
-	int i, ret = 0;
-	/* alloc and stuff */
+static int
+rpc_rdma_worker_threads_spawn(struct rpc_rdma_attr *xa)
+{
+	int i;
+	int rc = 0;
 
-	pthread_mutex_lock(&msk_global_state->lock);
-	do {
-		if (msk_global_state->worker_pool.thrids != NULL || msk_global_state->worker_pool.worker_count == -1) {
-			break;
-		}
+	if (rpc_rdma_state.run_count != 0) {
+		/* highly unlikely, as this is only called once */
+		return (0);
+	}
+	atomic_inc_int32_t(&rpc_rdma_state.run_count);
+	mutex_lock(&rpc_rdma_state.lock);
 
-		msk_global_state->worker_pool.thrids = malloc(msk_global_state->worker_pool.worker_count*sizeof(pthread_t));
-		if (msk_global_state->worker_pool.thrids == NULL) {
-			ret = ENOMEM;
-			break;
-		}
-		msk_global_state->worker_pool.wd_queue = malloc(msk_global_state->worker_pool.size*sizeof(struct msk_worker_data));
-		if (msk_global_state->worker_pool.wd_queue == NULL) {
-			ret = ENOMEM;
-			break;
-		}
+	if (xa->worker_count == 0) {
+		/* none specified */
+		goto finished;
+	}
+	if (rpc_rdma_state.w_p.thrids != NULL) {
+		/* already allocated */
+		goto finished;
+	}
 
-		msk_global_state->worker_pool.w_head = 0;
-		msk_global_state->worker_pool.w_count = 0;
-		msk_global_state->worker_pool.m_tail = 0;
-		msk_global_state->worker_pool.m_count = 0;
-		msk_global_state->worker_pool.w_efd = eventfd(0, 0);
-		msk_global_state->worker_pool.m_efd = eventfd(0, 0);
+	rpc_rdma_state.w_p.t_allocated =
+		xa->worker_count * sizeof(pthread_t);
+	rpc_rdma_state.w_p.thrids =
+		mem_alloc(rpc_rdma_state.w_p.t_allocated);
+	if (rpc_rdma_state.w_p.thrids == NULL) {
+		rc = ENOMEM;
+		goto failure;
+	}
+	rpc_rdma_state.w_p.t_count = xa->worker_count;
 
-		for (i=0; i < msk_global_state->worker_pool.worker_count; i++) {
-			ret = msk_create_thread(&msk_global_state->worker_pool.thrids[i], msk_worker_thread, &msk_global_state->worker_pool);
-			if (ret)
-				break;
+	if (xa->worker_queue_size == 0) {
+		/* none specified */
+		goto finished;
+	}
+	/* round up to the next power of two */
+	rpc_rdma_state.w_p.q_size = 2;
+	while (rpc_rdma_state.w_p.q_size < xa->worker_queue_size) {
+		rpc_rdma_state.w_p.q_size <<= 1;
+	}
+	rpc_rdma_state.w_p.q_allocated = rpc_rdma_state.w_p.q_size *
+				sizeof(struct rpc_rdma_worker_data);
+	rpc_rdma_state.w_p.wd_queue =
+		mem_alloc(rpc_rdma_state.w_p.q_allocated);
+	if (!rpc_rdma_state.w_p.wd_queue) {
+		rc = ENOMEM;
+		goto failure;
+	}
+	sem_init(&rpc_rdma_state.w_p.u_sem, 0, rpc_rdma_state.w_p.q_size);
+
+	rpc_rdma_state.w_p.q_head = 0;
+	rpc_rdma_state.w_p.q_tail = 0;
+
+	for (i = 0; i < rpc_rdma_state.w_p.t_count; i++) {
+		rc = rpc_rdma_thread_create(&rpc_rdma_state.w_p.thrids[i],
+					    WORKER_STACK_SIZE,
+					    rpc_rdma_worker_thread,
+					    NULL);
+		if (rc) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() could not create thread: %s (%d)",
+				__func__, strerror(rc), rc);
+			goto failure;
 		}
-	} while (0);
-	if (ret) {
+		__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+			"%s() thread %lx spawned for worker %d",
+			__func__,
+			(unsigned long)rpc_rdma_state.w_p.thrids[i],
+			i);
+	}
+
+failure:
+	if (rc) {
 		// join stuff?
-		INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "Could not create workers: %s (%d)", strerror(ret), ret);
-		if (msk_global_state->worker_pool.wd_queue) {
-			free(msk_global_state->worker_pool.wd_queue);
-			msk_global_state->worker_pool.wd_queue = NULL;
+		if (rpc_rdma_state.w_p.wd_queue) {
+			mem_free(rpc_rdma_state.w_p.wd_queue,
+				 rpc_rdma_state.w_p.q_allocated);
+			rpc_rdma_state.w_p.wd_queue = NULL;
 		}
-		if (msk_global_state->worker_pool.thrids) {
-			free(msk_global_state->worker_pool.thrids);
-			msk_global_state->worker_pool.thrids = NULL;
+		if (rpc_rdma_state.w_p.thrids) {
+			mem_free(rpc_rdma_state.w_p.thrids,
+				 rpc_rdma_state.w_p.t_allocated);
+			rpc_rdma_state.w_p.thrids = NULL;
 		}
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() Could not create workers: %s (%d)",
+			__func__, strerror(rc), rc);
 	}
-	pthread_mutex_unlock(&msk_global_state->lock);
-	return ret;
+
+finished:
+	mutex_unlock(&rpc_rdma_state.lock);
+	return rc;
 }
 
-/** msk_kill_worker_threads: stops and joins worker threads, assume that we hold msk_global_state->lock and msk_global_state->run_thread == 0;
+/** rpc_rdma_worker_threads_kill: stops and joins worker threads
+ *
+ * assume that we hold rpc_rdma_state.lock and rpc_rdma_state.run_thread == 0;
  */
-static int msk_kill_worker_threads() {
+static int
+rpc_rdma_worker_threads_kill()
+{
 	int i;
 
-	if (msk_global_state->worker_pool.thrids == NULL || msk_global_state->worker_pool.worker_count == -1) {
+	if (rpc_rdma_state.w_p.thrids == NULL
+	 || rpc_rdma_state.w_p.t_count == 0) {
 		return 0;
 	}
 
-	/* wake up all threads - this value guarantees that we wait till a thread woke up before sending it again... */
-	/* FIXME make sure none is awake before sending that :) */
-	for (i=0; i < msk_global_state->worker_pool.worker_count; i++)
-		eventfd_write(msk_global_state->worker_pool.w_efd, 0xfffffffffffffffe);
+	/* wake up all threads -*/
 
-	for (i=0; i < msk_global_state->worker_pool.worker_count; i++) {
-		pthread_join(msk_global_state->worker_pool.thrids[i], NULL);
+	for (i=0; i < rpc_rdma_state.w_p.t_count; i++) {
+		pthread_join(rpc_rdma_state.w_p.thrids[i], NULL);
 	}
 
-	close(msk_global_state->worker_pool.w_efd);
-	close(msk_global_state->worker_pool.m_efd);
-
-	free(msk_global_state->worker_pool.thrids);
-	msk_global_state->worker_pool.thrids = NULL;
-	free(msk_global_state->worker_pool.wd_queue);
-	msk_global_state->worker_pool.wd_queue = NULL;
-
+	free(rpc_rdma_state.w_p.thrids);
+	rpc_rdma_state.w_p.thrids = NULL;
+	free(rpc_rdma_state.w_p.wd_queue);
+	rpc_rdma_state.w_p.wd_queue = NULL;
 
 	return 0;
 }
 
-/* called under trans cm lock */
-static int msk_signal_worker(struct msk_trans *trans, struct msk_ctx *ctx, enum ibv_wc_status status, enum ibv_wc_opcode opcode) {
-	struct msk_worker_data *wd;
-	int i;
+/** rpc_rdma_worker_signal: queue operation for worker threads
+ *
+ * no locks held
+ */
+static int
+rpc_rdma_worker_signal(RDMAXPRT *xprt, struct rpc_rdma_cbc *cbc,
+			enum ibv_wc_status status, enum ibv_wc_opcode opcode)
+{
+	struct rpc_rdma_worker_data *wd;
+	uint32_t u;
+	int rc;
 
-	INFO_LOG(trans->debug & MSK_DEBUG_WORKERS, "signaling trans %p, ctx %p", trans, ctx);
+	__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+		"%s() %p[%u] cbc %p",
+		__func__, xprt, xprt->state, cbc);
 
-	// Don't signal and do it directly if no worker
-	if (msk_global_state->worker_pool.worker_count == -1) {
-		msk_worker_callback(trans, ctx, status, opcode);
+	/* if no worker, do it directly */
+	if (!rpc_rdma_state.w_p.t_count) {
+		rpc_rdma_worker_callback(xprt, cbc, status, opcode);
 		return 0;
 	}
 
-	/*
-	 * Only need this done in async mode because we don't leave trans cm lock otherwise.
-	 * Likewise, doesn't need an atomic_bool_compare_and_swap because it only matters where this lock is held
-	 * e.g. if (!atomic_bool_compare_and_swap(&ctx->used, MSK_CTX_PENDING, MSK_CTX_PROCESSING))
-	 */
-	if (ctx->used != MSK_CTX_PENDING) {
-		// nothing to do
-		return 0;
+	rc = sem_trywait(&rpc_rdma_state.w_p.u_sem);
+	if (rc) {
+		rc = errno;
+		if (EAGAIN != rc) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() %p[%u] sem_trywait failed: %s (%d)",
+				__func__, xprt, xprt->state, strerror(rc), rc);
+			return rc;
+		}
+
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p WARNING too many worker requests!",
+			__func__, xprt);
+
+		/* After advisory message, wait for available slot.
+		 */
+		rc = sem_wait(&rpc_rdma_state.w_p.u_sem);
+		if (rc) {
+			rc = errno;
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() %p[%u] sem_wait failed: %s (%d)",
+				__func__, xprt, xprt->state, strerror(rc), rc);
+			return rc;
+		}
 	}
-	ctx->used = MSK_CTX_PROCESSING;
 
-	while (atomic_inc(msk_global_state->worker_pool.m_count) > msk_global_state->worker_pool.size
-	    && msk_global_state->run_threads > 0) {
-		uint64_t n;
-		msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-
-		if (eventfd_read(msk_global_state->worker_pool.m_efd, &n) || n > INT_MAX) {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "eventfd_read failed");
-		} else {
-			INFO_LOG(trans->debug & MSK_DEBUG_WORKERS, "master: %d\n", (int)n);
-			atomic_sub(msk_global_state->worker_pool.m_count, (int)n+1 /* we're doing inc again */);
-		}
-		msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
+	/* Since we might have waited, better check still running */
+	if (rpc_rdma_state.run_count <= 0) {
+		__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+			"%s() Had something to do but threads stopping?",
+			__func__);
+		return ESHUTDOWN;
 	}
 
-	do {
-		if (msk_global_state->run_threads == 0) {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Had something to do but threads stopping?");
-			break;
-		}
+	u = atomic_postinc_uint32_t(&rpc_rdma_state.w_p.q_tail);
+	if (u >= rpc_rdma_state.w_p.q_size) {
+		u_int q_mask = rpc_rdma_state.w_p.q_size - 1;
 
-		i = atomic_postinc(msk_global_state->worker_pool.m_tail);
-		if (i >= msk_global_state->worker_pool.size) {
-			i = i & (msk_global_state->worker_pool.size-1);
-			atomic_mask(msk_global_state->worker_pool.w_head, msk_global_state->worker_pool.size-1);
-		}
+		/* masking allows update by lock-free tasks,
+		 * as long as overrun never 2 * q_size
+		 */
+		u &= q_mask;
+		atomic_clear_uint32_t_bits(&rpc_rdma_state.w_p.q_tail, ~q_mask);
+	}
+	wd = &rpc_rdma_state.w_p.wd_queue[u];
+	wd->xprt = xprt;
+	wd->cbc = cbc;
+	wd->status = status;
+	wd->opcode = opcode;
 
-		wd = &msk_global_state->worker_pool.wd_queue[i];
-		wd->trans = trans;
-		wd->ctx = ctx;
-		wd->status = status;
-		wd->opcode = opcode;
-
-		if (eventfd_write(msk_global_state->worker_pool.w_efd, 1))
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "eventfd_write failed");
-
-	} while (0);
-
+	/* signal worker */
+	rc = sem_post(&rpc_rdma_state.w_p.q_sem);
+	if (rc) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() sem_post failed",
+			__func__, strerror(rc), rc);
+		return rc;
+	}
 	return 0;
 }
-
+#endif /* REMOVEME */
 
 /**
- * msk_cq_addfd: Adds trans' completion queue fd to the epoll wait
+ * rpc_rdma_fd_add: Adds fd to the epoll wait
+ *
  * Returns 0 on success, errno value on error.
  */
-static int msk_addfd(struct msk_trans *trans, int fd, int epollfd) {
-	int flags, ret;
+static int
+rpc_rdma_fd_add(RDMAXPRT *xprt, int fd, int epollfd)
+{
 	struct epoll_event ev;
+	int flags = fcntl(fd, F_GETFL);
+	int rc = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 
-	//make get_cq_event_nonblocking for poll
-	flags = fcntl(fd, F_GETFL);
-	ret = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-	if (ret < 0) {
-		ret = errno;
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Failed to make the comp channel nonblock");
-		return ret;
+	if (rc < 0) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p Failed to make the channel nonblock: %s (%d)",
+			__func__, xprt, strerror(rc), rc);
+		return rc;
 	}
 
 	ev.events = EPOLLIN;
-	ev.data.ptr = trans;
+	ev.data.ptr = xprt;
 
-	ret = epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev);
-	if (ret == -1) {
-		ret = errno;
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Failed to add fd to epoll: %s (%d)", strerror(ret), ret);
-		return ret;
+	rc = epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev);
+	if (rc == -1) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p Failed to add fd to epoll: %s (%d)",
+			__func__, xprt, strerror(rc), rc);
+		return rc;
 	}
 
 	return 0;
 }
 
-static int msk_delfd(int fd, int epollfd) {
-	int ret;
+static int
+rpc_rdma_fd_del(int fd, int epollfd)
+{
+	int rc = epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, NULL);
 
-	ret = epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, NULL);
 	/* Let epoll deal with multiple deletes of the same fd */
-	if (ret == -1 && errno != ENOENT) {
-		ret = errno;
-		INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "Failed to del fd to epoll: %s (%d)", strerror(ret), ret);
-		return ret;
+	if (rc == -1 && errno != ENOENT) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() Failed to del fd to epoll: %s (%d)",
+			__func__, strerror(rc), rc);
+		return rc;
 	}
 
 	return 0;
 }
 
-static inline int msk_cq_addfd(struct msk_trans *trans) {
-	return msk_addfd(trans, trans->comp_channel->fd, msk_global_state->cq_epollfd);
-}
-
-static inline int msk_cq_delfd(struct msk_trans *trans) {
-	return msk_delfd(trans->comp_channel->fd, msk_global_state->cq_epollfd);
-}
-
-static inline int msk_cm_addfd(struct msk_trans *trans) {
-	return msk_addfd(trans, trans->event_channel->fd, msk_global_state->cm_epollfd);
-}
-
-static inline int msk_cm_delfd(struct msk_trans *trans) {
-	return msk_delfd(trans->event_channel->fd, msk_global_state->cm_epollfd);
-}
-
-static inline int msk_stats_add(struct msk_trans *trans) {
-	int rc;
+static inline int
+rpc_rdma_stats_add(RDMAXPRT *xprt)
+{
 	struct sockaddr_un sockaddr;
+	int rc;
 
 	/* no stats if no prefix */
-	if (!trans->stats_prefix)
+	if (!xprt->xa->statistics_prefix)
 		return 0;
 
-	/* setup trans->stats_sock here */
-	if ( (trans->stats_sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+	/* setup xprt->stats_sock here */
+	xprt->stats_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (xprt->stats_sock == -1) {
 		rc = errno;
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "socket on stats socket failed, quitting thread: %d (%s)", rc, strerror(rc));
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() socket on stats socket failed, quitting thread: %s (%d)",
+			__func__, strerror(rc), rc);
 		return rc;
 	}
 
 	memset(&sockaddr, 0, sizeof(sockaddr));
 	sockaddr.sun_family = AF_UNIX;
-	snprintf(sockaddr.sun_path, sizeof(sockaddr.sun_path)-1, "%s%p", trans->stats_prefix, trans);
+	snprintf(sockaddr.sun_path, sizeof(sockaddr.sun_path)-1, "%s%p",
+		xprt->xa->statistics_prefix, xprt);
 
 	unlink(sockaddr.sun_path);
 
-	if (bind(trans->stats_sock, (struct sockaddr*)&sockaddr, sizeof(sockaddr)) == -1) {
+	rc = bind(xprt->stats_sock, (struct sockaddr*)&sockaddr,
+						sizeof(sockaddr));
+	if (rc == -1) {
 		rc = errno;
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "bind on stats socket failed, quitting thread: %d (%s)", rc, strerror(rc));
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() bind on stats socket failed, quitting thread: %s (%d)",
+			__func__, strerror(rc), rc);
 		return rc;
 	}
 
-	if (listen(trans->stats_sock, 5) == -1) {
+	rc = listen(xprt->stats_sock, 5);
+	if (rc == -1) {
 		rc = errno;
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "listen on stats socket failed, quitting thread: %d (%s)", rc, strerror(rc));
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() listen on stats socket failed, quitting thread: %s (%d)",
+			__func__, strerror(rc), rc);
 		return rc;
 	}
 
-
-	return msk_addfd(trans, trans->stats_sock, msk_global_state->stats_epollfd);
+	return rpc_rdma_fd_add(xprt, xprt->stats_sock,
+				rpc_rdma_state.stats_epollfd);
 }
 
-static inline int msk_stats_del(struct msk_trans *trans) {
-	/* msk_delfd is called in stats thread when a close event comes in */
+static inline int
+rpc_rdma_stats_del(RDMAXPRT *xprt)
+{
+	/* rpc_rdma_fd_del is called in stats thread on a close event */
 	char sun_path[108];
-	snprintf(sun_path, sizeof(sun_path)-1, "%s%p", trans->stats_prefix, trans);
+
+	snprintf(sun_path, sizeof(sun_path)-1, "%s%p",
+		xprt->xa->statistics_prefix, xprt);
 	unlink(sun_path);
 
-	return close(trans->stats_sock);
+	return close(xprt->stats_sock);
 }
 
 /**
- * msk_stats_thread: unix socket thread
+ * rpc_rdma_stats_thread: unix socket thread
  *
- * Well, a thread. arg = trans
+ * Well, a thread. arg = xprt
  */
-void *msk_stats_thread(void *arg) {
-	struct msk_trans *trans;
-	struct epoll_event epoll_events[EPOLL_MAX_EVENTS];
+static void *
+rpc_rdma_stats_thread(void *arg)
+{
+	RDMAXPRT *xprt;
+	struct epoll_event epoll_events[EPOLL_EVENTS];
 	char stats_str[256];
-	int nfds, n, childfd;
-	int ret;
+	int childfd;
+	int i;
+	int n;
+	int rc;
 
-	while (msk_global_state->run_threads > 0) {
-		nfds = epoll_wait(msk_global_state->stats_epollfd, epoll_events, EPOLL_MAX_EVENTS, 100);
-		if (nfds == 0 || (nfds == -1 && errno == EINTR))
+	while (rpc_rdma_state.run_count > 0) {
+		n = epoll_wait(rpc_rdma_state.stats_epollfd,
+				epoll_events, EPOLL_EVENTS, EPOLL_WAIT_MS);
+		if (n == 0)
 			continue;
 
-		if (nfds == -1) {
-			ret = errno;
-			INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "epoll_pwait failed: %s (%d)", strerror(ret), ret);
+		if (n == -1) {
+			if (errno == EINTR)
+				continue;
+
+			rc = errno;
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() epoll_wait failed: %s (%d)",
+				__func__, strerror(rc), rc);
 			break;
 		}
 
-		for (n = 0; n < nfds; ++n) {
-			trans = (struct msk_trans*)epoll_events[n].data.ptr;
-
-			if (!trans) {
-				INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "got an event on a fd that should have been removed! (no trans)");
+		for (i = 0; i < n; ++i) {
+			xprt = (RDMAXPRT*)epoll_events[i].data.ptr;
+			if (!xprt) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() no xprt: got an event on a fd that should have been removed!",
+					__func__);
 				continue;
 			}
 
-			if (epoll_events[n].events == EPOLLERR || epoll_events[n].events == EPOLLHUP) {
-				msk_delfd(trans->stats_sock, msk_global_state->stats_epollfd);
+			if (epoll_events[i].events == EPOLLERR
+			 || epoll_events[i].events == EPOLLHUP) {
+				rpc_rdma_fd_del(xprt->stats_sock,
+						rpc_rdma_state.stats_epollfd);
 				continue;
 			}
-			if ( (childfd = accept(trans->stats_sock, NULL, NULL)) == -1) {
+
+			childfd = accept(xprt->stats_sock, NULL, NULL);
+			if (childfd == -1) {
 				if (errno == EINTR) {
 					continue;
 				} else {
-					INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "accept on stats socket failed: %d (%s).", errno, strerror(errno));
+					__warnx(TIRPC_DEBUG_FLAG_ERROR,
+						"%s() accept on stats socket failed: %s (%d)",
+						__func__, strerror(errno), errno);
 					continue;
 				}
 			}
 
-			ret = snprintf(stats_str, sizeof(stats_str), "stats:\n"
+			rc = snprintf(stats_str, sizeof(stats_str), "stats:\n"
 				"	tx_bytes\ttx_pkt\ttx_err\n"
 				"	%10"PRIu64"\t%"PRIu64"\t%"PRIu64"\n"
 				"	rx_bytes\trx_pkt\trx_err\n"
 				"	%10"PRIu64"\t%"PRIu64"\t%"PRIu64"\n"
 				"	callback time:   %lu.%09lu s\n"
 				"	completion time: %lu.%09lu s\n",
-				trans->stats.tx_bytes, trans->stats.tx_pkt,
-				trans->stats.tx_err, trans->stats.rx_bytes,
-				trans->stats.rx_pkt, trans->stats.rx_err,
-				trans->stats.nsec_callback / NSEC_IN_SEC, trans->stats.nsec_callback % NSEC_IN_SEC,
-				trans->stats.nsec_compevent / NSEC_IN_SEC, trans->stats.nsec_compevent % NSEC_IN_SEC);
-			ret = write(childfd, stats_str, ret);
-			ret = close(childfd);
+				xprt->stats.tx_bytes, xprt->stats.tx_pkt,
+				xprt->stats.tx_err, xprt->stats.rx_bytes,
+				xprt->stats.rx_pkt, xprt->stats.rx_err,
+				xprt->stats.nsec_callback / NSEC_IN_SEC,
+				xprt->stats.nsec_callback % NSEC_IN_SEC,
+				xprt->stats.nsec_compevent / NSEC_IN_SEC,
+				xprt->stats.nsec_compevent % NSEC_IN_SEC);
+			rc = write(childfd, stats_str, rc);
+			rc = close(childfd);
 		}
 	}
 
@@ -818,66 +997,95 @@ void *msk_stats_thread(void *arg) {
 }
 
 /**
- * msk_cq_event_handler: completion queue event handler.
- * marks contexts back out of use and calls the appropriate callbacks for each kind of event
+ * rpc_rdma_cq_event_handler: completion queue event handler.
+ *
+ * marks contexts back out of use,
+ * calls the appropriate callbacks for each kind of event.
  *
  * @return 0 on success, work completion status if not 0
  */
-static int msk_cq_event_handler(struct msk_trans *trans) {
-	struct ibv_wc wc[NUM_WQ_PER_POLL];
+static int
+rpc_rdma_cq_event_handler(RDMAXPRT *xprt)
+{
+	struct ibv_wc wc[IBV_POLL_EVENTS];
 	struct ibv_cq *ev_cq;
 	void *ev_ctx;
-	struct msk_ctx *ctx;
-	msk_data_t *data;
-	int ret, i;
+	struct rpc_rdma_cbc *cbc;
+	struct xdr_ioq_uv *data;
+	int i;
+	int rc;
 	int npoll = 0;
 	uint32_t len;
 
-	ret = ibv_get_cq_event(trans->comp_channel, &ev_cq, &ev_ctx);
-	if (ret) {
-		ret = errno;
-		if (ret != EAGAIN)
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "ibv_get_cq_event failed: %d", ret);
-		return ret;
+	rc = ibv_get_cq_event(xprt->comp_channel, &ev_cq, &ev_ctx);
+	if (rc) {
+		rc = errno;
+		if (rc != EAGAIN) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() ibv_get_cq_event failed: %d.",
+				__func__, rc);
+		}
+		return rc;
 	}
-	if (ev_cq != trans->cq) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Unknown cq %p", ev_cq);
+	if (ev_cq != xprt->cq) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() Unknown cq %p",
+			__func__, ev_cq);
 		ibv_ack_cq_events(ev_cq, 1);
 		return EINVAL;
 	}
 
-	ret = ibv_req_notify_cq(trans->cq, 0);
-	if (ret) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "ibv_req_notify_cq failed: %d.", ret);
+	rc = ibv_req_notify_cq(xprt->cq, 0);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() ibv_req_notify_cq failed: %d.",
+			__func__, rc);
 	}
 
-	while (ret == 0 && (npoll = ibv_poll_cq(trans->cq, NUM_WQ_PER_POLL, wc)) > 0) {
-		for (i=0; i < npoll; i++) {
-			if (trans->bad_recv_wr) {
-				INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Something was bad on that recv");
+	while (rc == 0
+	       && (npoll = ibv_poll_cq(xprt->cq, IBV_POLL_EVENTS, wc)) > 0) {
+		for (i = 0; i < npoll; i++) {
+			if (xprt->bad_recv_wr) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() Something was bad on that recv",
+					__func__);
 			}
-			if (trans->bad_send_wr) {
-				INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Something was bad on that send");
+			if (xprt->bad_send_wr) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() Something was bad on that send",
+					__func__);
 			}
+			cbc = (struct rpc_rdma_cbc *)wc[i].wr_id;
+			cbc->opcode = wc[i].opcode;
+			cbc->status = wc[i].status;
+			cbc->wpe.arg = xprt;
+
 			if (wc[i].status) {
 				switch (wc[i].opcode) {
 					case IBV_WC_SEND:
 					case IBV_WC_RDMA_WRITE:
 					case IBV_WC_RDMA_READ:
-						trans->stats.tx_err++;
+						xprt->stats.tx_err++;
 						break;
 					case IBV_WC_RECV:
 					case IBV_WC_RECV_RDMA_WITH_IMM:
-						trans->stats.rx_err++;
+						xprt->stats.rx_err++;
 						break;
 					default:
 						break;
 				}
-				msk_signal_worker(trans, (struct msk_ctx *)wc[i].wr_id, wc[i].status, wc[i].opcode);
 
-				if (trans->state != MSK_CLOSED && trans->state != MSK_CLOSING && trans->state != MSK_ERROR) {
-					INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "cq completion failed status: %s (%d)", ibv_wc_status_str(wc[i].status), wc[i].status);
-					ret = wc[i].status;
+				SVC_REF(&xprt->xprt, SVC_REF_FLAG_NONE);
+				work_pool_submit(&svc_work_pool, &cbc->wpe);
+
+				if (xprt->state != RDMAXS_CLOSING
+				 && xprt->state != RDMAXS_CLOSED
+				 && xprt->state != RDMAXS_ERROR) {
+					rc = wc[i].status;
+					__warnx(TIRPC_DEBUG_FLAG_ERROR,
+						"%s() cq completion failed status: %s (%d)",
+						__func__,
+						ibv_wc_status_str(rc), rc);
 
 				}
 				continue;
@@ -887,128 +1095,162 @@ static int msk_cq_event_handler(struct msk_trans *trans) {
 			case IBV_WC_SEND:
 			case IBV_WC_RDMA_WRITE:
 			case IBV_WC_RDMA_READ:
-				INFO_LOG(trans->debug & MSK_DEBUG_SEND, "WC_SEND/RDMA_WRITE/RDMA_READ: %d", wc[i].opcode);
-				trans->stats.tx_pkt++;
-				trans->stats.tx_bytes += wc[i].byte_len;
+				len = wc[i].byte_len;
+				xprt->stats.tx_bytes += len;
+				xprt->stats.tx_pkt++;
 
-				ctx = (struct msk_ctx *)wc[i].wr_id;
+				__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+					"%s() WC_SEND/RDMA_WRITE/RDMA_READ: %d len %u",
+					__func__,
+					wc[i].opcode,
+					len);
 
 				if (wc[i].wc_flags & IBV_WC_WITH_IMM) {
-					//FIXME ctx->data->imm_data = ntohl(wc.imm_data);
-					INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "imm_data: %d", ntohl(wc[i].imm_data));
+					//FIXME cbc->data->imm_data = ntohl(wc.imm_data);
+					__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+						"%s() imm_data: %d",
+						__func__,
+						ntohl(wc[i].imm_data));
 				}
 
-				msk_signal_worker(trans, ctx, wc[i].status, wc[i].opcode);
+				SVC_REF(&xprt->xprt, SVC_REF_FLAG_NONE);
+				work_pool_submit(&svc_work_pool, &cbc->wpe);
 				break;
 
 			case IBV_WC_RECV:
 			case IBV_WC_RECV_RDMA_WITH_IMM:
-				INFO_LOG(trans->debug & MSK_DEBUG_RECV, "WC_RECV");
-				trans->stats.rx_pkt++;
-				trans->stats.rx_bytes += wc[i].byte_len;
+				len = wc[i].byte_len;
+				xprt->stats.rx_bytes += len;
+				xprt->stats.rx_pkt++;
+
+				__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+					"%s() WC_RECV: %d len %u",
+					__func__,
+					wc[i].opcode,
+					len);
 
 				if (wc[i].wc_flags & IBV_WC_WITH_IMM) {
-					//FIXME ctx->data->imm_data = ntohl(wc.imm_data);
-					INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "imm_data: %d", ntohl(wc[i].imm_data));
+					//FIXME cbc->data->imm_data = ntohl(wc.imm_data);
+					__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+						"%s() imm_data: %d",
+						__func__,
+						ntohl(wc[i].imm_data));
 				}
 
-				ctx = (struct msk_ctx *)wc[i].wr_id;
-
-				// fill all the sizes in case of multiple sge
-				len = wc[i].byte_len;
-				data = ctx->data;
-				while (data && len > data->max_size) {
-					data->size = data->max_size;
-					VALGRIND_MAKE_MEM_DEFINED(data->data, data->size);
-					len -= data->max_size;
-					data = data->next;
+				/* fill all the sizes in case of multiple sge
+				 * assumes _tail was set to _wrap before call
+				 */
+				data = IOQ_(TAILQ_FIRST(&cbc->workq.ioq_uv.uvqh.qh));
+				while (data && ioquv_length(data) < len) {
+					VALGRIND_MAKE_MEM_DEFINED(data->v.vio_head, ioquv_length(data));
+					len -= ioquv_length(data);
+					data = IOQ_(TAILQ_NEXT(&data->uvq, q));
 				}
 				if (data) {
-					data->size = len;
-					VALGRIND_MAKE_MEM_DEFINED(data->data, data->size);
+					data->v.vio_tail = data->v.vio_head + len;
+					VALGRIND_MAKE_MEM_DEFINED(data->v.vio_head, ioquv_length(data));
 				} else if (len) {
-					INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "received more than could fit? %d leftover bytes", len);
+					__warnx(TIRPC_DEBUG_FLAG_ERROR,
+						"%s() ERROR %d leftover bytes?",
+						__func__, len);
 				}
 
-				msk_signal_worker(trans, ctx, wc[i].status, wc[i].opcode);
+				SVC_REF(&xprt->xprt, SVC_REF_FLAG_NONE);
+				work_pool_submit(&svc_work_pool, &cbc->wpe);
 				break;
 
 			default:
-				INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "unknown opcode: %d", wc[i].opcode);
-				ret = EINVAL;
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() unknown opcode: %d",
+					__func__, wc[i].opcode);
+				rc = EINVAL;
 			}
 		}
 	}
 
 	if (npoll < 0) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "ibv_poll_cq failed: %d (%s)", -npoll, strerror(-npoll));
-		ret = -npoll;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] ibv_poll_cq failed: %s (%d)",
+			__func__, xprt, xprt->state, strerror(-npoll), -npoll);
+		rc = -npoll;
 	}
 
-	ibv_ack_cq_events(trans->cq, 1);
+	ibv_ack_cq_events(xprt->cq, 1);
 
-	return -ret;
+	return -rc;
 }
 
 /**
- * msk_cq_thread: thread function which waits for new completion events and gives them to handler (then ack the event)
+ * rpc_rdma_cq_thread: thread function which waits for new completion events
+ * and gives them to handler (then ack the event)
  *
  */
-static void *msk_cq_thread(void *arg) {
-	struct msk_trans *trans;
-	struct epoll_event epoll_events[EPOLL_MAX_EVENTS];
-	struct timespec ts_start, ts_end;
-	int nfds, n;
-	int ret;
+static void *
+rpc_rdma_cq_thread(void *arg)
+{
+	RDMAXPRT *xprt;
+	struct epoll_event epoll_events[EPOLL_EVENTS];
+	int i;
+	int n;
+	int rc;
 
-	while (msk_global_state->run_threads > 0) {
-		nfds = epoll_wait(msk_global_state->cq_epollfd, epoll_events, EPOLL_MAX_EVENTS, 100);
-		if (nfds == 0 || (nfds == -1 && errno == EINTR))
+	while (rpc_rdma_state.run_count > 0) {
+		n = epoll_wait(rpc_rdma_state.cq_epollfd,
+				epoll_events, EPOLL_EVENTS, EPOLL_WAIT_MS);
+		if (n == 0)
 			continue;
 
-		if (nfds == -1) {
-			ret = errno;
-			INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "epoll_pwait failed: %s (%d)", strerror(ret), ret);
+		if (n == -1) {
+			if (errno == EINTR)
+				continue;
+
+			rc = errno;
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() epoll_wait failed: %s (%d)",
+				__func__, strerror(rc), rc);
 			break;
 		}
 
-		for (n = 0; n < nfds; ++n) {
-			trans = (struct msk_trans*)epoll_events[n].data.ptr;
-
-			if (!trans) {
-				INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "got an event on a fd that should have been removed! (no trans)");
+		for (i = 0; i < n; ++i) {
+			xprt = (RDMAXPRT*)epoll_events[i].data.ptr;
+			if (!xprt) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() got an event on a fd that should have been removed! (no xprt)",
+					__func__);
 				continue;
 			}
 
-			if (epoll_events[n].events == EPOLLERR || epoll_events[n].events == EPOLLHUP) {
-				INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "epoll error or hup (%d)", epoll_events[n].events);
-				continue;
-			}
-			if (trans->debug & MSK_DEBUG_SPEED)
-				clock_gettime(CLOCK_MONOTONIC, &ts_start);
-
-			msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-			if (trans->state >= MSK_CLOSING) { /* CLOSING, CLOSED, ERROR */
-				// closing trans, skip this, will be done on flush
-				msk_cq_delfd(trans);
-				msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
+			if (epoll_events[i].events == EPOLLERR
+			 || epoll_events[i].events == EPOLLHUP) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() epoll error or hup (%d)",
+					__func__, epoll_events[i].events);
 				continue;
 			}
 
-			ret = msk_cq_event_handler(trans);
-			if (ret) {
-				if (trans->state != MSK_CLOSED && trans->state != MSK_CLOSING && trans->state != MSK_ERROR) {
-					INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "something went wrong with our cq_event_handler");
-					trans->state = MSK_ERROR;
-					pthread_cond_broadcast(&trans->cm_cond);
+			mutex_lock(&xprt->cm_lock);
+			if (xprt->state >= RDMAXS_CLOSING) {
+				/* CLOSING, CLOSED, ERROR */
+				// closing xprt, skip this, will be done on flush
+				rpc_rdma_fd_del(xprt->comp_channel->fd,
+						rpc_rdma_state.cq_epollfd);
+				mutex_unlock(&xprt->cm_lock);
+				continue;
+			}
+
+			rc = rpc_rdma_cq_event_handler(xprt);
+			if (rc) {
+				if (xprt->state != RDMAXS_CLOSING
+				 && xprt->state != RDMAXS_CLOSED
+				 && xprt->state != RDMAXS_ERROR) {
+					__warnx(TIRPC_DEBUG_FLAG_ERROR,
+						"%s() something went wrong with our cq_event_handler",
+						__func__);
+					xprt->state = RDMAXS_ERROR;
+					cond_broadcast(&xprt->cm_cond);
 				}
 			}
-			msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-
-			if (trans->debug & MSK_DEBUG_SPEED) {
-				clock_gettime(CLOCK_MONOTONIC, &ts_end);
-				sub_timespec(&trans->stats.nsec_compevent, &ts_start, &ts_end);
-			}
+			mutex_unlock(&xprt->cm_lock);
 		}
 	}
 
@@ -1016,80 +1258,127 @@ static void *msk_cq_thread(void *arg) {
 }
 
 /**
- * msk_cma_event_handler: handles addr/route resolved events (client side) and disconnect (everyone)
+ * rpc_rdma_cm_event_handler: handles addr/route resolved events (client side)
+ * and disconnect (everyone)
  *
  */
-static int msk_cma_event_handler(struct rdma_cm_id *cm_id, struct rdma_cm_event *event) {
-	int i;
-	int ret = 0;
-	struct msk_trans *trans = cm_id->context;
+static int
+rpc_rdma_cm_event_handler(RDMAXPRT *ep_xprt, struct rdma_cm_event *event)
+{
+	struct rdma_cm_id *cm_id = event->id;
+	RDMAXPRT *xprt = cm_id->context;
+	uint32_t u;
+	int rc = 0;
 
-	INFO_LOG(trans->debug & MSK_DEBUG_SETUP, "cma_event type %s", rdma_event_str(event->event));
+	__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+		"%s() %p cma_event type %s",
+		__func__, ep_xprt, rdma_event_str(event->event));
 
-	if (trans->bad_recv_wr) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Something was bad on that recv");
+	if (xprt->bad_recv_wr) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() Something was bad on that recv",
+			__func__);
 	}
-	if (trans->bad_send_wr) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Something was bad on that send");
+	if (xprt->bad_send_wr) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() Something was bad on that send",
+			__func__);
 	}
 
 	switch (event->event) {
 	case RDMA_CM_EVENT_ADDR_RESOLVED:
-		INFO_LOG(trans->debug & MSK_DEBUG_SETUP, "ADDR_RESOLVED");
-		msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-		trans->state = MSK_ADDR_RESOLVED;
-		pthread_cond_broadcast(&trans->cm_cond);
-		msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
+		__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+			"%s() %p ADDR_RESOLVED",
+			__func__, xprt);
+		mutex_lock(&xprt->cm_lock);
+		xprt->state = RDMAXS_ADDR_RESOLVED;
+		cond_broadcast(&xprt->cm_cond);
+		mutex_unlock(&xprt->cm_lock);
 		break;
 
 	case RDMA_CM_EVENT_ROUTE_RESOLVED:
-		INFO_LOG(trans->debug & MSK_DEBUG_SETUP, "ROUTE_RESOLVED");
-		msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-		trans->state = MSK_ROUTE_RESOLVED;
-		pthread_cond_broadcast(&trans->cm_cond);
-		msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
+		__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+			"%s() %p ROUTE_RESOLVED",
+			__func__, xprt);
+		mutex_lock(&xprt->cm_lock);
+		xprt->state = RDMAXS_ROUTE_RESOLVED;
+		cond_broadcast(&xprt->cm_cond);
+		mutex_unlock(&xprt->cm_lock);
 		break;
 
 	case RDMA_CM_EVENT_ESTABLISHED:
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "ESTABLISHED");
-		msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-		if ((ret = msk_check_create_epoll_thread(&msk_global_state->cq_thread, msk_cq_thread, trans, &msk_global_state->cq_epollfd))) {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "msk_check_create_epoll_thread for cq failed: %s (%d)", strerror(ret), ret);
-			trans->state = MSK_ERROR;
-		} else if (trans->stats_prefix != NULL && (ret = msk_check_create_epoll_thread(&msk_global_state->stats_thread, msk_stats_thread, trans, &msk_global_state->stats_epollfd))) {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "msk_check_create_epoll_thread for stats failed: %s (%d)", strerror(ret), ret);
-			trans->state = MSK_ERROR;
-		} else {
-			trans->state = MSK_CONNECTED;
-		}
+		__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+			"%s() %p ESTABLISHED",
+			__func__, xprt);
 
-		pthread_cond_broadcast(&trans->cm_cond);
-		msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
+		xprt->state = RDMAXS_CONNECTED;
+
+		rc = rpc_rdma_fd_add(xprt, xprt->comp_channel->fd,
+					rpc_rdma_state.cq_epollfd);
+		if (rc) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR (return)",
+				__func__, __LINE__);
+		}
+		rpc_rdma_stats_add(xprt);
 		break;
 
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "CONNECT_REQUEST");
-		//even if the cm_id is new, trans is the good parent's trans.
-		msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
+		__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+			"%s() %p CONNECT_REQUEST",
+			__func__, xprt);
 
-		//FIXME don't run through this stupidely and remember last index written to and last index read, i.e. use as a queue
-		/* Find an empty connection request slot */
-		for (i = 0; i < trans->server; i++)
-			if (!trans->conn_requests[i])
-				break;
+		rc = sem_trywait(&rpc_rdma_state.c_r.u_sem);
+		if (rc) {
+			rc = errno;
+			if (EAGAIN != rc) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() %p[%u] sem_trywait failed: %s (%d)",
+					__func__, xprt, xprt->state,
+					strerror(rc), rc);
+				return rc;
+			}
 
-		if (i == trans->server) {
-			msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Could not pile up new connection requests' cm_id!");
-			ret = ENOBUFS;
-			break;
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() %p WARNING too many connection requests! "
+				"Need to increase backlog parameter.\n",
+				__func__, xprt);
+
+			/* After advisory message, wait for available slot.
+			 */
+			rc = sem_wait(&rpc_rdma_state.c_r.u_sem);
+			if (rc) {
+				rc = errno;
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() %p[%u] sem_wait failed: %s (%d)",
+					__func__, xprt, xprt->state,
+					strerror(rc), rc);
+				return rc;
+			}
 		}
 
-		// write down new cm_id and signal accept handler there's stuff to do
-		trans->conn_requests[i] = cm_id;
-		pthread_cond_broadcast(&trans->cm_cond);
-		msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
+		u = atomic_postinc_uint32_t(&rpc_rdma_state.c_r.q_tail);
+		if (u >= rpc_rdma_state.c_r.q_size) {
+			u_int q_mask = rpc_rdma_state.c_r.q_size - 1;
 
+			/* masking allows update by lock-free tasks,
+			 * as long as overrun never 2 * q_size
+			 */
+			u &= q_mask;
+			atomic_clear_uint32_t_bits(&rpc_rdma_state.c_r.q_tail,
+						   ~q_mask);
+		}
+		rpc_rdma_state.c_r.id_queue[u] = cm_id;
+
+		/* signal accept handler */
+		rc = sem_post(&rpc_rdma_state.c_r.q_sem);
+		if (rc) {
+			rc = errno;
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() sem_post failed",
+				__func__, strerror(rc), rc);
+			return rc;
+		}
 		break;
 
 	case RDMA_CM_EVENT_ADDR_ERROR:
@@ -1097,106 +1386,142 @@ static int msk_cma_event_handler(struct rdma_cm_id *cm_id, struct rdma_cm_event 
 	case RDMA_CM_EVENT_CONNECT_ERROR:
 	case RDMA_CM_EVENT_UNREACHABLE:
 	case RDMA_CM_EVENT_REJECTED:
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "cma event %s, error %d",
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] cma event %s, error %d",
+			__func__, xprt, xprt->state,
 			rdma_event_str(event->event), event->status);
-		msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-		trans->state = MSK_ERROR;
-		pthread_cond_broadcast(&trans->cm_cond);
-		msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
+		mutex_lock(&xprt->cm_lock);
+		xprt->state = RDMAXS_ERROR;
+		cond_broadcast(&xprt->cm_cond);
+		mutex_unlock(&xprt->cm_lock);
 		break;
 
 	case RDMA_CM_EVENT_DISCONNECTED:
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "DISCONNECT EVENT...");
+		__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+			"%s() %p[%u] DISCONNECT EVENT...",
+			__func__, xprt, xprt->state);
 
 		// don't call completion again
-		if (trans->comp_channel)
-			msk_cq_delfd(trans);
+		if (xprt->comp_channel)
+			rpc_rdma_fd_del(xprt->comp_channel->fd,
+					rpc_rdma_state.cq_epollfd);
 
-		msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-		trans->state = MSK_CLOSED;
-		pthread_cond_broadcast(&trans->cm_cond);
-		msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
+		mutex_lock(&xprt->cm_lock);
+		xprt->state = RDMAXS_CLOSED;
+		cond_broadcast(&xprt->cm_cond);
+		mutex_unlock(&xprt->cm_lock);
 
-		if (trans->disconnect_callback)
-			trans->disconnect_callback(trans);
-
+		if (xprt->xa->disconnect_cb)
+			xprt->xa->disconnect_cb(&xprt->xprt);
 		break;
 
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "cma detected device removal!!!!");
-		ret = ENODEV;
+		__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+			"%s() %p[%u] cma detected device removal!!!!",
+			__func__, xprt, xprt->state);
+		rc = ENODEV;
 		break;
 
 	default:
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "unhandled event: %s, ignoring\n",
-			rdma_event_str(event->event));
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] unhandled event: %s, ignoring %d\n",
+			__func__, xprt, xprt->state,
+			rdma_event_str(event->event), event->event);
 		break;
 	}
 
-	return ret;
+	return rc;
 }
 
 /**
- * msk_cm_thread: thread function which waits for new connection events and gives them to handler (then ack the event)
+ * rpc_rdma_cm_thread: thread function which waits for new connection events
+ * and gives them to handler (then ack the event)
  *
  */
-static void *msk_cm_thread(void *arg) {
-	struct msk_trans *trans;
+static void *
+rpc_rdma_cm_thread(void *nullarg)
+{
+	RDMAXPRT *xprt;
+	RDMAXPRT *cm_xprt;
 	struct rdma_cm_event *event;
-	struct epoll_event epoll_events[EPOLL_MAX_EVENTS];
-	int nfds, n;
-	int ret;
+	struct epoll_event epoll_events[EPOLL_EVENTS];
+	int i;
+	int n;
+	int rc;
 
-	while (msk_global_state->run_threads > 0) {
-		nfds = epoll_wait(msk_global_state->cm_epollfd, epoll_events, EPOLL_MAX_EVENTS, 100);
-
-		if (nfds == 0 || (nfds == -1 && errno == EINTR))
+	while (rpc_rdma_state.run_count > 0) {
+		n = epoll_wait(rpc_rdma_state.cm_epollfd,
+				epoll_events, EPOLL_EVENTS, EPOLL_WAIT_MS);
+		if (n == 0)
 			continue;
 
-		if (nfds == -1) {
-			ret = errno;
-			INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "epoll_wait failed: %s (%d)", strerror(ret), ret);
+		if (n == -1) {
+			if (errno == EINTR)
+				continue;
+
+			rc = errno;
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() %p[%u] epoll_wait failed: %s (%d)",
+				__func__, xprt, xprt->state, strerror(rc), rc);
 			break;
 		}
 
-		for (n = 0; n < nfds; ++n) {
-			trans = (struct msk_trans*)epoll_events[n].data.ptr;
-			if (!trans) {
-				INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "got an event on a fd that should have been removed! (no trans)");
+		for (i = 0; i < n; ++i) {
+			xprt = (RDMAXPRT*)epoll_events[i].data.ptr;
+			if (!xprt) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() got an event on a fd that should have been removed! (no xprt)",
+					__func__);
 				continue;
 			}
 
-			if (epoll_events[n].events == EPOLLERR || epoll_events[n].events == EPOLLHUP) {
-				INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "epoll error or hup (%d)", epoll_events[n].events);
-				continue;
-			}
-			if (trans->state == MSK_CLOSED) {
-				INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "got a cm event on a closed trans?");
-				continue;
-			}
-
-			if (!trans->event_channel) {
-				if (trans->state != MSK_CLOSED)
-					INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "no event channel? :D");
+			if (epoll_events[i].events == EPOLLERR
+			 || epoll_events[i].events == EPOLLHUP) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() epoll error or hup (%d)",
+					__func__, epoll_events[i].events);
 				continue;
 			}
 
-			ret = rdma_get_cm_event(trans->event_channel, &event);
-			if (ret) {
-				ret = errno;
-				INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "rdma_get_cm_event failed: %d.", ret);
+			if (xprt->state == RDMAXS_CLOSED) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() got a cm event on a closed xprt?",
+					__func__);
 				continue;
 			}
-			ret = msk_cma_event_handler(event->id, event);
 
-			trans = event->id->context;
-			if (ret && (trans->state != MSK_LISTENING || trans == event->id->context)) {
-				INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "something happened in cma_event_handler: %d", ret);
+			if (!xprt->event_channel) {
+				if (xprt->state != RDMAXS_CLOSED)
+					__warnx(TIRPC_DEBUG_FLAG_ERROR,
+						"%s() no event channel? :D",
+						__func__);
+				continue;
 			}
+
+			rc = rdma_get_cm_event(xprt->event_channel, &event);
+			if (rc) {
+				rc = errno;
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() rdma_get_cm_event failed: %d.",
+					__func__, rc);
+				continue;
+			}
+
+			cm_xprt = event->id->context;
+			rc = rpc_rdma_cm_event_handler(xprt, event);
 			rdma_ack_cm_event(event);
 
-			if (trans->state == MSK_CLOSED && trans->destroy_on_disconnect)
-				msk_destroy_trans(&trans);
+			if (rc
+			 && (cm_xprt->state != RDMAXS_LISTENING
+			  || cm_xprt == xprt)) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() rpc_rdma_cm_event_handler: %d.",
+					__func__, rc);
+			}
+
+			if (cm_xprt->state == RDMAXS_CLOSED
+			 && cm_xprt->destroy_on_disconnect)
+				SVC_DESTROY(&cm_xprt->xprt);
 		}
 	}
 
@@ -1204,719 +1529,863 @@ static void *msk_cm_thread(void *arg) {
 }
 
 /**
- * msk_flush_buffers: Flush all pending recv/send
+ * rpc_rdma_flush_buffers: Flush all pending recv/send
  *
- * @param trans [IN]
+ * @param[IN] xprt
  *
  * @return void
  */
-static void msk_flush_buffers(struct msk_trans *trans) {
-	struct msk_ctx *ctx;
-	int i, wait, ret;
+static void
+rpc_rdma_flush_buffers(RDMAXPRT *xprt)
+{
+	int rc;
 
-	INFO_LOG(trans->debug & MSK_DEBUG_SETUP, "flushing %p", trans);
+	__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+		"%s() %p[%u]",
+		__func__, xprt, xprt->state);
 
-	msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
+	mutex_lock(&xprt->cm_lock);
 
-	if (trans->state != MSK_ERROR) {
+	if (xprt->state != RDMAXS_ERROR) {
 		do {
-			ret = msk_cq_event_handler(trans);
-		} while (ret == 0);
+			rc = rpc_rdma_cq_event_handler(xprt);
+		} while (rc == 0);
 
-		if (ret != EAGAIN)
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "couldn't flush pending data in cq: %d", ret);
+		if (rc != EAGAIN)
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() couldn't flush pending data in cq: %d",
+				__func__, rc);
 	}
-
+#ifdef FIXME
 	/* only flush rx if client or accepting server */
-	if (trans->server >= 0)
-	    for (i = 0, ctx = trans->rctx;
-		 i < trans->rq_depth;
-		 i++, ctx = (struct msk_ctx*)((uint8_t*)ctx + sizeof(struct msk_ctx) + trans->max_recv_sge*sizeof(struct ibv_sge)))
+	if (xprt->server >= 0)
+	    for (i = 0, ctx = xprt->rcb;
+		 i < xprt->xa->rq_depth;
+		 i++,
+		 ctx = (struct rpc_rdma_cbc*)((uint8_t*)ctx + sizeof(struct rpc_rdma_cbc) + xprt->xa->max_recv_sge*sizeof(struct ibv_sge)))
 			if (ctx->used == MSK_CTX_PENDING)
-				msk_signal_worker(trans, ctx, IBV_WC_FATAL_ERR, IBV_WC_RECV);
+				rpc_rdma_worker_signal(xprt, ctx, IBV_WC_FATAL_ERR, IBV_WC_RECV);
 
-	for (i = 0, ctx = (struct msk_ctx *)trans->wctx;
-	     i < trans->sq_depth;
-	     i++, ctx = (struct msk_ctx*)((uint8_t*)ctx + sizeof(struct msk_ctx) + trans->max_send_sge*sizeof(struct ibv_sge)))
+	for (i = 0, ctx = (struct rpc_rdma_cbc *)xprt->wcb;
+	     i < xprt->xa->sq_depth;
+	     i++, ctx = (struct rpc_rdma_cbc*)((uint8_t*)ctx + sizeof(struct rpc_rdma_cbc) + xprt->xa->max_send_sge*sizeof(struct ibv_sge)))
 		if (ctx->used == MSK_CTX_PENDING)
-			msk_signal_worker(trans, ctx, IBV_WC_FATAL_ERR, IBV_WC_SEND);
+			rpc_rdma_worker_signal(xprt, ctx, IBV_WC_FATAL_ERR, IBV_WC_SEND);
 
 	/* only flush rx if client or accepting server */
-	if (trans->server >= 0) do {
+	if (xprt->server >= 0) do {
 		wait = 0;
-			for (i = 0, ctx = trans->rctx;
-			     i < trans->rq_depth;
-			     i++, ctx = msk_next_ctx(ctx, trans->max_recv_sge))
+			for (i = 0, ctx = xprt->rcb;
+			     i < xprt->xa->rq_depth;
+			     i++, ctx = rpc_rdma_next_ctx(ctx, xprt->xa->max_recv_sge))
 				if (ctx->used != MSK_CTX_FREE)
 					wait++;
 
 	} while (wait && usleep(100000));
 	do {
 		wait = 0;
-		for (i = 0, ctx = (struct msk_ctx *)trans->wctx;
-		     i < trans->sq_depth;
-		     i++, ctx = msk_next_ctx(ctx, trans->max_recv_sge))
+		for (i = 0, ctx = (struct rpc_rdma_cbc *)xprt->wcb;
+		     i < xprt->xa->sq_depth;
+		     i++, ctx = rpc_rdma_next_ctx(ctx, xprt->xa->max_recv_sge))
 			if (ctx->used != MSK_CTX_FREE)
 				wait++;
 
 	} while (wait && usleep(100000));
-
-	msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
+#endif
+	mutex_unlock(&xprt->cm_lock);
 }
 
 /**
- * msk_destroy_qp: destroys all qp-related stuff for us
+ * rpc_rdma_destroy_stuff: destroys all qp-related stuff for us
  *
- * @param trans [INOUT]
+ * @param[INOUT] xprt
  *
  * @return void, even if the functions _can_ fail we choose to ignore it. //FIXME?
  */
-static void msk_destroy_qp(struct msk_trans *trans) {
-	if (trans->qp) {
+static void
+rpc_rdma_destroy_stuff(RDMAXPRT *xprt)
+{
+	if (xprt->qp) {
 		// flush all pending receive/send buffers to error callback
-		msk_flush_buffers(trans);
+		rpc_rdma_flush_buffers(xprt);
 
-		ibv_destroy_qp(trans->qp);
-		trans->qp = NULL;
+		ibv_destroy_qp(xprt->qp);
+		xprt->qp = NULL;
 	}
-	if (trans->cq) {
-		ibv_destroy_cq(trans->cq);
-		trans->cq = NULL;
+
+	if (xprt->cq) {
+		ibv_destroy_cq(xprt->cq);
+		xprt->cq = NULL;
 	}
-	if (trans->comp_channel) {
-		ibv_destroy_comp_channel(trans->comp_channel);
-		trans->comp_channel = NULL;
+
+	if (xprt->comp_channel) {
+		ibv_destroy_comp_channel(xprt->comp_channel);
+		xprt->comp_channel = NULL;
 	}
-	/* only dealloc PDs if client or accepting server */
-	if (trans->server >= 0 && trans->pd) {
-		if (atomic_dec(trans->pd->refcnt) == 0) {
-			int i = 0;
-			while (trans->pd[i].context != PD_GUARD && trans->pd[i].context != NULL) {
-				if (trans->pd[i].pd)
-					ibv_dealloc_pd(trans->pd[i].pd);
-				trans->pd[i].pd = NULL;
-				if (trans->pd[i].srq)
-					ibv_destroy_srq(trans->pd[i].srq);
-				trans->pd[i].srq = NULL;
-				if (trans->pd[i].rctx)
-					free(trans->pd[i].rctx);
-				trans->pd[i].rctx = NULL;
-				i++;
-			}
-			free(trans->pd);
-			trans->pd = NULL;
-		}
-	}
-	if (!trans->srq) {
-		free(trans->rctx);
-	}
-	trans->rctx = NULL;
-	if (trans->wctx) {
-		free(trans->wctx);
-		trans->wctx = NULL;
-	}
-}
 
-
-/**
- * msk_destroy_trans: disconnects and free trans data
- *
- * @param ptrans [INOUT] pointer to the trans to destroy
- */
-void msk_destroy_trans(struct msk_trans **ptrans) {
-	struct msk_trans *trans = *ptrans;
-
-	if (trans) {
-		trans->destroy_on_disconnect = 0;
-		if (trans->state == MSK_CONNECTED || trans->state == MSK_CLOSED) {
-			msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-			if (trans->state != MSK_CLOSED && trans->state != MSK_LISTENING && trans->state != MSK_ERROR)
-				trans->state = MSK_CLOSING;
-
-			if (trans->cm_id && trans->cm_id->verbs)
-				rdma_disconnect(trans->cm_id);
-
-			while (trans->state != MSK_CLOSED && trans->state != MSK_LISTENING && trans->state != MSK_ERROR) {
-				INFO_LOG(trans->debug & MSK_DEBUG_SETUP, "we're not closed yet, waiting for disconnect_event");
-				msk_cond_wait(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_cond, &trans->cm_lock);
-			}
-			trans->state = MSK_CLOSED;
-			msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-		}
-
-		if (trans->cm_id) {
-			rdma_destroy_id(trans->cm_id);
-			trans->cm_id = NULL;
-		}
-
-		if (trans->stats_sock)
-			msk_stats_del(trans);
-
-		// event channel is shared between all children, so don't close it unless it's its own.
-		if ((trans->server != MSK_SERVER_CHILD) && trans->event_channel) {
-			msk_cm_delfd(trans);
-			rdma_destroy_event_channel(trans->event_channel);
-			trans->event_channel = NULL;
-
-			// likewise for stats prefix
-			if (trans->stats_prefix)
-				free(trans->stats_prefix);
-
-			if (trans->node)
-				free(trans->node);
-			if (trans->port)
-				free(trans->port);
-
-		}
-
-		// these two functions do the proper if checks
-		msk_destroy_qp(trans);
-
-		pthread_mutex_lock(&msk_global_state->lock);
-		msk_global_state->run_threads--;
-		if (msk_global_state->run_threads == 0) {
-			if (msk_global_state->cm_thread) {
-				pthread_join(msk_global_state->cm_thread, NULL);
-				msk_global_state->cm_thread = 0;
-			}
-			if (msk_global_state->cq_thread) {
-				pthread_join(msk_global_state->cq_thread, NULL);
-				msk_global_state->cq_thread = 0;
-			}
-			if (msk_global_state->stats_thread) {
-				pthread_join(msk_global_state->stats_thread, NULL);
-				msk_global_state->stats_thread = 0;
-			}
-			msk_kill_worker_threads();
-		}
-		pthread_mutex_unlock(&msk_global_state->lock);
-
-
-		//FIXME check if it is init. if not should just return EINVAL but.. lock.__lock, cond.__lock might work.
-		msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-		pthread_mutex_destroy(&trans->cm_lock);
-		pthread_cond_destroy(&trans->cm_cond);
-
-		free(trans);
-		*ptrans = NULL;
+	if (!TAILQ_EMPTY(&xprt->cbqh.qh)) {
+		xdr_ioq_destroy_pool(&xprt->cbqh);
 	}
 }
 
 /**
- * msk_init: part of the init that's the same for client and server
+ * rpc_rdma_destroy: disconnects and free transport data
  *
- * @param ptrans [INOUT]
- * @param attr   [IN]    attributes to set parameters in ptrans. attr->addr must be set, others can be either 0 or sane values.
- *
- * @return 0 on success, errno value on failure
+ * @param[IN] xprt	pointer to the service transport to destroy
  */
-int msk_init(struct msk_trans **ptrans, struct msk_trans_attr *attr) {
-	int ret;
+void
+rpc_rdma_destroy(SVCXPRT *s_xprt)
+{
+	RDMAXPRT *xprt = (RDMAXPRT *)s_xprt;
 
-	struct msk_trans *trans;
+	/* inhibit repeated destroy */
+	xprt->destroy_on_disconnect = false;
 
-	if (!ptrans || !attr) {
-		INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "Invalid argument");
-		return EINVAL;
+	if (xprt->state == RDMAXS_CONNECTED
+	 || xprt->state == RDMAXS_CLOSED) {
+		mutex_lock(&xprt->cm_lock);
+		if (xprt->state != RDMAXS_CLOSED
+		 && xprt->state != RDMAXS_LISTENING
+		 && xprt->state != RDMAXS_ERROR)
+			xprt->state = RDMAXS_CLOSING;
+
+		if (xprt->cm_id && xprt->cm_id->verbs)
+			rdma_disconnect(xprt->cm_id);
+
+		while (xprt->state != RDMAXS_CLOSED
+			&& xprt->state != RDMAXS_LISTENING
+			&& xprt->state != RDMAXS_ERROR) {
+			__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+				"%s() we're not closed yet, "
+				"waiting for disconnect_event",
+				__func__);
+			cond_wait(&xprt->cm_cond, &xprt->cm_lock);
+		}
+		xprt->state = RDMAXS_CLOSED;
+		mutex_unlock(&xprt->cm_lock);
 	}
 
-	trans = malloc(sizeof(struct msk_trans));
-	if (!trans) {
-		INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "Out of memory");
-		return ENOMEM;
+	if (xprt->cm_id) {
+		rdma_destroy_id(xprt->cm_id);
+		xprt->cm_id = NULL;
 	}
 
-	do {
-		memset(trans, 0, sizeof(struct msk_trans));
+	if (xprt->stats_sock)
+		rpc_rdma_stats_del(xprt);
 
-		trans->event_channel = rdma_create_event_channel();
-		if (!trans->event_channel) {
-			ret = errno;
-			INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "create_event_channel failed: %s (%d)", strerror(ret), ret);
-			break;
-		}
-
-		trans->conn_type = (attr->conn_type ? attr->conn_type : RDMA_PS_TCP);
-
-		ret = rdma_create_id(trans->event_channel, &trans->cm_id, trans, trans->conn_type);
-		if (ret) {
-			ret = errno;
-			INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "create_id failed: %s (%d)", strerror(ret), ret);
-			break;
-		}
-
-		trans->state = MSK_INIT;
-
-		if (!attr->node || !attr->port) {
-			INFO_LOG(msk_global_state->debug & MSK_DEBUG_EVENT, "node and port have to be defined");
-			ret = EDESTADDRREQ;
-			break;
-		}
-		trans->node = strdup(attr->node);
-		if (!trans->node) {
-				ret = ENOMEM;
-				INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "couldn't malloc trans->node");
-				break;
-		}
-		trans->port = strdup(attr->port);
-		if (!trans->port) {
-				ret = ENOMEM;
-				INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "couldn't malloc trans->port");
-				break;
-		}
-		/*memcpy(trans->qp_attr, attr->qp_attr, sizeof(struct ibv_qp_init_attr));*/
-
-		/* fill in default values */
-		trans->sq_depth = attr->sq_depth ? attr->sq_depth : 50;
-		trans->max_send_sge = attr->max_send_sge ? attr->max_send_sge : 1;
-		trans->rq_depth = attr->rq_depth ? attr->rq_depth : 50;
-		trans->max_recv_sge = attr->max_recv_sge ? attr->max_recv_sge : 1;
-
-		trans->server = attr->server;
-		/* listening trans's srq is used as a bool.. */
-		if (trans->server)
-			trans->srq = attr->use_srq ? (void*)1 : NULL;
-
-		trans->debug = attr->debug;
-		trans->timeout = attr->timeout   ? attr->timeout  : 30000; // in ms
-		trans->disconnect_callback = attr->disconnect_callback;
-		trans->destroy_on_disconnect = attr->destroy_on_disconnect;
-		if (attr->stats_prefix) {
-			ret = strlen(attr->stats_prefix)+1;
-			trans->stats_prefix = malloc(ret);
-			if (!trans->stats_prefix) {
-				ret = ENOMEM;
-				INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "couldn't malloc trans->stats_prefix");
-				break;
-			}
-
-			strncpy(trans->stats_prefix, attr->stats_prefix, ret);
-		}
-
-		if (attr->pd) {
-			if (atomic_postinc(attr->pd->refcnt) > 0)
-				trans->pd = attr->pd;
-			else
-				atomic_dec(attr->pd->refcnt);
-		}
-
-		ret = pthread_mutex_init(&trans->cm_lock, NULL)
-			|| pthread_cond_init(&trans->cm_cond, NULL);
-		if (ret) {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "pthread_mutex/cond_init failed: %s (%d)", strerror(ret), ret);
-			break;
-		}
-
-		pthread_mutex_lock(&msk_global_state->lock);
-		msk_global_state->debug = trans->debug;
-		if (msk_global_state->run_threads == 0) {
-			msk_global_state->worker_pool.worker_count = attr->worker_count ? attr->worker_count : -1;
-
-			/* round up worker_pool.size to the next bigger power of two */
-			attr->worker_queue_size = attr->worker_queue_size ? attr->worker_queue_size : 64;
-			msk_global_state->worker_pool.size = 2;
-			while (msk_global_state->worker_pool.size < attr->worker_queue_size)
-				msk_global_state->worker_pool.size *= 2;
-		}
-		msk_global_state->run_threads++;
-		pthread_mutex_unlock(&msk_global_state->lock);
-		ret = msk_spawn_worker_threads();
-
-		if (ret) {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Could not start worker threads: %s (%d)", strerror(ret), ret);
-			break;
-		}
-	} while (0);
-
-	if (ret) {
-		msk_destroy_trans(&trans);
-		return ret;
+	/* event channel is shared between all children,
+	 * so don't close it unless it's its own.
+	 */
+	if ((xprt->server != RDMAX_SERVER_CHILD)
+	 && xprt->event_channel) {
+		rpc_rdma_fd_del(xprt->event_channel->fd,
+				rpc_rdma_state.cm_epollfd);
+		rdma_destroy_event_channel(xprt->event_channel);
+		xprt->event_channel = NULL;
 	}
 
-	*ptrans = trans;
+	rpc_rdma_destroy_stuff(xprt);
+	rpc_rdma_pd_put(xprt);
 
-	return 0;
+	if (atomic_dec_int32_t(&rpc_rdma_state.run_count) <= 0) {
+		mutex_lock(&rpc_rdma_state.lock);
+		rpc_rdma_internals_join();
+		mutex_unlock(&rpc_rdma_state.lock);
+	}
+
+	/* destroy locking last, was initialized first (below).
+	 */
+	cond_destroy(&xprt->cm_cond);
+	mutex_destroy(&xprt->cm_lock);
+	mutex_destroy(&xprt->xprt.xp_lock);
+	mutex_destroy(&xprt->xprt.xp_auth_lock);
+
+	mem_free(xprt, sizeof(*xprt));
 }
 
 /**
- * msk_create_qp: create a qp associated with a trans
+ * rpc_rdma_allocate: allocate rdma transport structures
  *
- * @param trans [INOUT]
- * @param cm_id [IN]
+ * @param[IN] xa	parameters
  *
- * @ret 0 on success, errno value on error
+ * @return xprt on success, NULL on failure
  */
-static int msk_create_qp(struct msk_trans *trans, struct rdma_cm_id *cm_id) {
-	int ret;
+static RDMAXPRT *
+rpc_rdma_allocate(struct rpc_rdma_attr *xa)
+{
+	RDMAXPRT *xprt;
+	int rc;
+
+	if (!xa) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() Invalid argument",
+			__func__);
+		return NULL;
+	}
+
+	xprt = mem_zalloc(sizeof(RDMAXPRT));
+	if (!xprt) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() Out of memory",
+			__func__);
+		return NULL;
+	}
+
+	xprt->xprt.xp_type = XPRT_RDMA;
+	xprt->xprt.xp_refs = 1;
+	xprt->xprt.xp_ops = &rpc_rdma_ops;
+
+	xprt->xa = xa;
+	xprt->conn_type = RDMA_PS_TCP;
+	xprt->destroy_on_disconnect = xa->destroy_on_disconnect;
+
+	/* initialize locking first, will be destroyed last (above).
+	 */
+	rc = mutex_init(&xprt->xprt.xp_auth_lock, NULL);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() mutex_init xp_auth_lock failed: %s (%d)",
+			__func__, strerror(rc), rc);
+		goto xp_auth_lock;
+	}
+
+	rc = mutex_init(&xprt->xprt.xp_lock, NULL);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() mutex_init xp_lock failed: %s (%d)",
+			__func__, strerror(rc), rc);
+		goto xp_lock;
+	}
+
+	rc = mutex_init(&xprt->cm_lock, NULL);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() mutex_init failed: %s (%d)",
+			__func__, strerror(rc), rc);
+		goto cm_lock;
+	}
+
+	rc = cond_init(&xprt->cm_cond, NULL, NULL);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() cond_init failed: %s (%d)",
+			__func__, strerror(rc), rc);
+		goto cm_cond;
+	}
+
+	return (xprt);
+
+cm_cond:
+	mutex_destroy(&xprt->cm_lock);
+cm_lock:
+	mutex_destroy(&xprt->xprt.xp_lock);
+xp_lock:
+	mutex_destroy(&xprt->xprt.xp_auth_lock);
+xp_auth_lock:
+	mem_free(xprt, sizeof(*xprt));
+	return NULL;
+}
+
+/**
+ * rpc_rdma_create: initialize rdma transport structures
+ *
+ * @param[IN] xa	parameters
+ *
+ * @return xprt on success, NULL on failure
+ */
+SVCXPRT *
+rpc_rdma_create(struct rpc_rdma_attr *xa)
+{
+	RDMAXPRT *xprt;
+	int rc;
+
+	if (xa->backlog > 4096) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() backlog (%u) much too large",
+			__func__, xa->backlog);
+		return NULL;
+	}
+
+	if (xa->worker_count > 256) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() worker_count (%u) much too large",
+			__func__, xa->worker_count);
+		return NULL;
+	}
+
+	xprt = rpc_rdma_allocate(xa);
+	if (!xprt) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR (return)",
+			__func__, __LINE__);
+		return NULL;
+	}
+	xprt->server = xa->backlog; /* convenient number > 0 */
+
+	/* presence of event_channel confirms RDMA,
+	 * otherwise, cleanup and quit RDMA dispatcher.
+	 */
+	xprt->event_channel = rdma_create_event_channel();
+	if (!xprt->event_channel) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() create_event_channel failed: %s (%d)",
+			__func__, strerror(rc), rc);
+		goto failure;
+	}
+
+	rc = rdma_create_id(xprt->event_channel, &xprt->cm_id, xprt,
+			    xprt->conn_type);
+	if (rc) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() create_id failed: %s (%d)",
+			__func__, strerror(rc), rc);
+		goto failure;
+	}
+
+	pthread_mutex_lock(&svc_work_pool.pqh.qmutex);
+	if (!svc_work_pool.params.thrd_max) {
+		pthread_mutex_unlock(&svc_work_pool.pqh.qmutex);
+
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() svc_work_pool already shutdown",
+			__func__);
+		goto failure;
+	}
+	svc_work_pool.params.thrd_max += xa->worker_count;
+	pthread_mutex_unlock(&svc_work_pool.pqh.qmutex);
+
+	/* round up to the next power of two */
+	rpc_rdma_state.c_r.q_size = 2;
+	while (rpc_rdma_state.c_r.q_size < xa->backlog) {
+		rpc_rdma_state.c_r.q_size <<= 1;
+	}
+	rpc_rdma_state.c_r.id_queue = mem_alloc(rpc_rdma_state.c_r.q_size
+						* sizeof(struct rdma_cm_id *));
+	if (!rpc_rdma_state.c_r.id_queue) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() Could not allocate connection_requests queue",
+			__func__);
+		goto failure;
+	}
+	sem_init(&rpc_rdma_state.c_r.u_sem, 0, rpc_rdma_state.c_r.q_size);
+
+	rc = rpc_rdma_bind_server(xprt);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() NFS/RDMA dispatcher could not bind engine",
+			__func__);
+		goto failure;
+	} else {
+		__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+			"%s() NFS/RDMA engine bound",
+			__func__);
+	}
+
+	return (&xprt->xprt);
+
+failure:
+	rpc_rdma_destroy(&xprt->xprt);
+	return NULL;
+}
+
+/**
+ * rpc_rdma_create_qp: create a qp associated with a xprt
+ *
+ * @param[INOUT] xprt
+ * @param[IN] cm_id
+ *
+ * @return 0 on success, errno value on error
+ */
+static int
+rpc_rdma_create_qp(RDMAXPRT *xprt, struct rdma_cm_id *cm_id)
+{
+	int rc;
 	struct ibv_qp_init_attr qp_attr = {
-		.cap.max_send_wr = trans->sq_depth,
-		.cap.max_send_sge = trans->max_send_sge,
-		.cap.max_recv_wr = trans->rq_depth,
-		.cap.max_recv_sge = trans->max_recv_sge,
+		.cap.max_send_wr = xprt->xa->sq_depth,
+		.cap.max_send_sge = xprt->xa->max_send_sge,
+		.cap.max_recv_wr = xprt->xa->rq_depth,
+		.cap.max_recv_sge = xprt->xa->max_recv_sge,
 		.cap.max_inline_data = 0, // change if IMM
-		.qp_type = (trans->conn_type == RDMA_PS_UDP ? IBV_QPT_UD : IBV_QPT_RC),
+		.qp_type = (xprt->conn_type == RDMA_PS_UDP
+			? IBV_QPT_UD : IBV_QPT_RC),
 		.sq_sig_all = 1,
-		.send_cq = trans->cq,
-		.recv_cq = trans->cq,
-		.srq = trans->srq,
+		.send_cq = xprt->cq,
+		.recv_cq = xprt->cq,
+		.srq = xprt->srq,
 	};
 
-	if (rdma_create_qp(cm_id, msk_getpd(trans)->pd, &qp_attr)) {
-		ret = errno;
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "rdma_create_qp: %s (%d)", strerror(ret), ret);
-		return ret;
+	rc = rdma_create_qp(cm_id, xprt->pd->pd, &qp_attr);
+	if (rc) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] rdma_create_qp failed: %s (%d)",
+			__func__, xprt, xprt->state, strerror(rc), rc);
+		return rc;
 	}
 
-	trans->qp = cm_id->qp;
+	xprt->qp = cm_id->qp;
 	return 0;
 }
 
 /**
- * msk_setup_qp: setups pd, qp an' stuff
+ * rpc_rdma_setup_stuff: setup pd, qp an' stuff
  *
- * @param trans [INOUT]
+ * @param[INOUT] xprt
  *
  * @return 0 on success, errno value on failure
  */
-static int msk_setup_qp(struct msk_trans *trans) {
-	int ret;
+static int
+rpc_rdma_setup_stuff(RDMAXPRT *xprt)
+{
+	int rc;
 
-	INFO_LOG(trans->debug & MSK_DEBUG_SETUP, "trans: %p", trans);
+	__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+		"%s() %p[%u]",
+		__func__, xprt, xprt->state);
 
-	trans->comp_channel = ibv_create_comp_channel(trans->cm_id->verbs);
-	if (!trans->comp_channel) {
-		ret = errno;
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "ibv_create_comp_channel failed: %s (%d)", strerror(ret), ret);
-		msk_destroy_qp(trans);
-		return ret;
+	/* Located in this function for convenience, called by both
+	 * client and server. Each is only done once for all connections.
+	 */
+	rc = rpc_rdma_thread_create_epoll(&rpc_rdma_state.cq_thread,
+		rpc_rdma_cq_thread, xprt, &rpc_rdma_state.cq_epollfd);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR (return)",
+			__func__, __LINE__);
+		return rc;
 	}
 
-	trans->cq = ibv_create_cq(trans->cm_id->verbs, trans->sq_depth + trans->rq_depth,
-				  trans, trans->comp_channel, 0);
-	if (!trans->cq) {
-		ret = errno;
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "ibv_create_cq failed: %s (%d)", strerror(ret), ret);
-		msk_destroy_qp(trans);
-		return ret;
+	if (xprt->xa->statistics_prefix != NULL
+	 && (rc = rpc_rdma_thread_create_epoll(&rpc_rdma_state.stats_thread,
+		rpc_rdma_stats_thread, xprt, &rpc_rdma_state.stats_epollfd))) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR (return)",
+			__func__, __LINE__);
+		return rc;
 	}
 
-	ret = ibv_req_notify_cq(trans->cq, 0);
-	if (ret) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "ibv_req_notify_cq failed: %s (%d)", strerror(ret), ret);
-		msk_destroy_qp(trans);
-		return ret;
+	xprt->comp_channel = ibv_create_comp_channel(xprt->cm_id->verbs);
+	if (!xprt->comp_channel) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] ibv_create_comp_channel failed: %s (%d)",
+			__func__, xprt, xprt->state, strerror(rc), rc);
+		return rc;
 	}
 
-	ret = msk_create_qp(trans, trans->cm_id);
-	if (ret) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "our own create_qp failed: %s (%d)", strerror(ret), ret);
-		msk_destroy_qp(trans);
-		return ret;
+	xprt->cq = ibv_create_cq(xprt->cm_id->verbs,
+				xprt->xa->sq_depth + xprt->xa->rq_depth,
+				xprt, xprt->comp_channel, 0);
+	if (!xprt->cq) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] ibv_create_cq failed: %s (%d)",
+			__func__, xprt, xprt->state, strerror(rc), rc);
+		return rc;
 	}
 
-	INFO_LOG(trans->debug & MSK_DEBUG_SETUP, "created qp %p", trans->qp);
+	rc = ibv_req_notify_cq(xprt->cq, 0);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] ibv_req_notify_cq failed: %s (%d)",
+			__func__, xprt, xprt->state, strerror(rc), rc);
+		return rc;
+	}
+
+	rc = rpc_rdma_create_qp(xprt, xprt->cm_id);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR (return)",
+			__func__, __LINE__);
+		return rc;
+	}
+
+	__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+		"%s() %p[%u] created qp %p",
+		__func__, xprt, xprt->state, xprt->qp);
 	return 0;
 }
 
-
 /**
- * msk_setup_*ctx
+ * rpc_rdma_setup_cbq
  */
-static int msk_setup_rctx(struct msk_trans *trans) {
-	trans->rctx = malloc(trans->rq_depth * (sizeof(struct msk_ctx) + trans->max_recv_sge * sizeof(struct ibv_sge)));
-	if (!trans->rctx) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "couldn't malloc trans->rctx");
-		return ENOMEM;
-	}
-	memset(trans->rctx, 0, trans->rq_depth * (sizeof(struct msk_ctx) + trans->max_recv_sge * sizeof(struct ibv_sge)));
-	return 0;
-}
+static int
+rpc_rdma_setup_cbq(struct poolq_head *ioqh, u_int depth, u_int sge)
+{
+	struct rpc_rdma_cbc *cbc;
 
-static int msk_setup_wctx(struct msk_trans *trans) {
-	trans->wctx = malloc(trans->sq_depth * (sizeof(struct msk_ctx) + trans->max_send_sge * sizeof(struct ibv_sge)));
-	if (!trans->wctx) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "couldn't malloc trans->wctx");
-		return ENOMEM;
+	if (ioqh->qsize) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() contexts already allocated",
+			__func__);
+		return EINVAL;
 	}
-	memset(trans->wctx, 0, trans->sq_depth * (sizeof(struct msk_ctx) + trans->max_send_sge * sizeof(struct ibv_sge)));
+	ioqh->qsize = sizeof(struct rpc_rdma_cbc)
+		    + sizeof(struct ibv_sge) * sge;
+	TAILQ_INIT(&ioqh->qh);
 
+	/* individual entries is less efficient than big array -- but uses
+	 * "standard" IOQ operations, xdr_ioq_destroy_pool(), and
+	 * debugging memory bounds checking of trailing ibv_sge array.
+	 */
+	while (depth--) {
+		cbc = mem_zalloc(ioqh->qsize);
+		if (!cbc) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() couldn't mem_zalloc callback context",
+				__func__);
+			return ENOMEM;
+		}
+		xdr_ioq_setup(&cbc->workq);
+		xdr_ioq_setup(&cbc->holdq);
+
+		cbc->workq.ioq_uv.uvq_fetch =
+		cbc->holdq.ioq_uv.uvq_fetch = xdr_ioq_uv_fetch_nothing;
+		cbc->workq.xdrs[0].x_ops =
+		cbc->holdq.xdrs[0].x_ops = &xdr_ioq_ops;
+		cbc->workq.xdrs[0].x_op =
+		cbc->holdq.xdrs[0].x_op = XDR_FREE; /* catch setup errors */
+
+		cbc->workq.ioq_pool = ioqh;
+		cbc->wpe.fun = rpc_rdma_worker_callback;
+
+		(ioqh->qcount)++;
+		TAILQ_INSERT_TAIL(&ioqh->qh, &cbc->workq.ioq_s, q);
+	}
 	return 0;
 }
 
 /**
- * msk_bind_server
+ * rpc_rdma_bind_server
  *
- * @param trans [INOUT]
+ * @param[INOUT] xprt
  *
  * @return 0 on success, errno value on failure
  */
-int msk_bind_server(struct msk_trans *trans) {
-	struct rdma_addrinfo hints, *res;
-	int ret;
+static int
+rpc_rdma_bind_server(RDMAXPRT *xprt)
+{
+	struct rdma_addrinfo *res;
+	struct rdma_addrinfo hints;
+	int rc;
 
-	if (!trans || trans->state != MSK_INIT) {
-		INFO_LOG((trans ? trans->debug : 0) & MSK_DEBUG_EVENT, "trans must be initialized first!");
+	if (!xprt || xprt->state != RDMAXS_INITIAL) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] must be initialized first!",
+			__func__, xprt, xprt->state);
 		return EINVAL;
 	}
 
-	if (trans->server <= 0) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Must be on server side to call this function");
+	if (xprt->server <= 0) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() Must be on server side to call this function",
+			__func__);
 		return EINVAL;
 	}
 
-
-	trans->conn_requests = malloc(trans->server * sizeof(struct rdma_cm_id*));
-	if (!trans->conn_requests) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Could not allocate conn_requests buffer");
-		return ENOMEM;
-	}
-
-	memset(trans->conn_requests, 0, trans->server * sizeof(struct rdma_cm_id*));
-
-	memset(&hints, 0, sizeof(struct rdma_addrinfo));
+	memset(&hints, 0, sizeof(hints));
 	hints.ai_flags = RAI_PASSIVE;
-	hints.ai_port_space = trans->conn_type;
+	hints.ai_port_space = xprt->conn_type;
 
-	ret = rdma_getaddrinfo(trans->node, trans->port, &hints, &res);
-	if (ret) {
-		ret = errno;
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "rdma_getaddrinfo: %s (%d)", strerror(ret), ret);
-		return ret;
+	rc = rdma_getaddrinfo(xprt->xa->node, xprt->xa->port, &hints, &res);
+	if (rc) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] rdma_getaddrinfo: %s (%d)",
+			__func__, xprt, xprt->state, strerror(rc), rc);
+		return rc;
 	}
-	ret = rdma_bind_addr(trans->cm_id, res->ai_src_addr);
-	if (ret) {
-		ret = errno;
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "rdma_bind_addr: %s (%d)", strerror(ret), ret);
-		return ret;
+
+	rc = rdma_bind_addr(xprt->cm_id, res->ai_src_addr);
+	if (rc) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] rdma_bind_addr: %s (%d)",
+			__func__, xprt, xprt->state, strerror(rc), rc);
+		return rc;
 	}
 	rdma_freeaddrinfo(res);
 
-	ret = msk_setup_pd(trans);
-	if (ret) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "setup pd failed: %s (%d)", strerror(ret), ret);
-		return ret;
+	/* at this point, the cm_id->verbs aren't filled */
+	rc = rpc_rdma_pd_by_verbs(xprt);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] register pd failed: %s (%d)",
+			__func__, xprt, xprt->state, strerror(rc), rc);
+		return rc;
 	}
 
-	ret = rdma_listen(trans->cm_id, trans->server);
-	if (ret) {
-		ret = errno;
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "rdma_listen failed: %s (%d)", strerror(ret), ret);
-		return ret;
+	rc = rdma_listen(xprt->cm_id, xprt->xa->backlog);
+	if (rc) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] rdma_listen failed: %s (%d)",
+			__func__, xprt, xprt->state, strerror(rc), rc);
+		return rc;
 	}
 
-	trans->state = MSK_LISTENING;
+	xprt->state = RDMAXS_LISTENING;
+	atomic_inc_int32_t(&rpc_rdma_state.run_count);
 
-	if ((ret = msk_check_create_epoll_thread(&msk_global_state->cm_thread, msk_cm_thread, trans, &msk_global_state->cm_epollfd))) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "msk_check_create_epoll_thread failed: %s (%d)", strerror(ret), ret);
-		return ret;
-	}
-	msk_cm_addfd(trans);
-
-	return 0;
-}
-
-
-static struct msk_trans *clone_trans(struct msk_trans *listening_trans, struct rdma_cm_id *cm_id) {
-	struct msk_trans *trans = malloc(sizeof(struct msk_trans));
-	struct msk_pd *pd;
-	int ret;
-
-	if (!trans) {
-		INFO_LOG(listening_trans->debug & MSK_DEBUG_EVENT, "malloc failed");
-		return NULL;
+	rc = rpc_rdma_thread_create_epoll(&rpc_rdma_state.cm_thread,
+		rpc_rdma_cm_thread, xprt, &rpc_rdma_state.cm_epollfd);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] rpc_rdma_thread_create_epoll failed: %s (%d)",
+			__func__, xprt, xprt->state, strerror(rc), rc);
+		atomic_dec_int32_t(&rpc_rdma_state.run_count);
+		return rc;
 	}
 
-	memcpy(trans, listening_trans, sizeof(struct msk_trans));
-
-	trans->cm_id = cm_id;
-	trans->cm_id->context = trans;
-	trans->state = MSK_CONNECT_REQUEST;
-	trans->server = MSK_SERVER_CHILD;
-
-	pd = msk_getpd(trans);
-	if (!pd) {
-		ret = ENOSPC;
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "No space left in msk pd, multiple contexts per device?");
-		return NULL;
-	}
-	if (!pd->pd) {
-		pd->pd = ibv_alloc_pd(trans->cm_id->verbs);
-		if (!pd->pd) {
-			ret = errno;
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "ibv_alloc_pd failed: %s (%d)", strerror(ret), ret);
-			return NULL;
-		}
-	}
-	if (listening_trans->srq) {
-		if (!pd->srq) {
-			struct ibv_srq_init_attr srq_attr = {
-				.attr.max_wr = trans->rq_depth,
-				.attr.max_sge = trans->max_recv_sge,
-			};
-			pd->srq = ibv_create_srq(pd->pd, &srq_attr);
-			if (!pd->srq) {
-				ret = errno;
-				INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "ibv_create_srq failed: %s (%d)", strerror(ret), ret);
-				return NULL;
-			}
-		}
-
-		if (!pd->rctx) {
-			msk_setup_rctx(trans);
-			pd->rctx = trans->rctx;
-		} else {
-			trans->rctx = pd->rctx;
-		}
-	} else {
-		msk_setup_rctx(trans);
-	}
-
-	trans->srq = pd->srq;
-
-	memset(&trans->cm_lock, 0, sizeof(pthread_mutex_t));
-	memset(&trans->cm_cond, 0, sizeof(pthread_cond_t));
-
-	ret = pthread_mutex_init(&trans->cm_lock, NULL);
-	if (ret) {
-		INFO_LOG(listening_trans->debug & MSK_DEBUG_EVENT, "pthread_mutex_init failed: %s (%d)", strerror(ret), ret);
-		msk_destroy_trans(&trans);
-		return NULL;
-	}
-	ret = pthread_cond_init(&trans->cm_cond, NULL);
-	if (ret) {
-		INFO_LOG(listening_trans->debug & MSK_DEBUG_EVENT, "pthread_cond_init failed: %s (%d)", strerror(ret), ret);
-		msk_destroy_trans(&trans);
-		return NULL;
-	}
-
-	pthread_mutex_lock(&msk_global_state->lock);
-	msk_global_state->run_threads++;
-	pthread_mutex_unlock(&msk_global_state->lock);
-
-	return trans;
+	return rpc_rdma_fd_add(xprt, xprt->event_channel->fd,
+				rpc_rdma_state.cm_epollfd);
 }
 
 /**
- * msk_finalize_accept: does the real connection acceptance and wait for other side to be ready
+ * rpc_rdma_clone: clone child from listener parent
  *
- * @param trans [IN]
+ * @param[IN] l_xprt	listening (parent) transport
+ * @param[IN] cm_id	new rdma connection manager identifier
+ *
+ * @return 0 on success, errno value on failure
+ */
+static RDMAXPRT *
+rpc_rdma_clone(RDMAXPRT *l_xprt, struct rdma_cm_id *cm_id)
+{
+	RDMAXPRT *xprt = rpc_rdma_allocate(l_xprt->xa);
+	int rc;
+
+	if (!xprt) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR (return)",
+			__func__, __LINE__);
+		return NULL;
+	}
+
+	xprt->cm_id = cm_id;
+	xprt->cm_id->context = xprt;
+	xprt->state = RDMAXS_CONNECT_REQUEST;
+	xprt->server = RDMAX_SERVER_CHILD;
+
+	xprt->event_channel = l_xprt->event_channel;
+
+	rc = rpc_rdma_pd_get(xprt);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR (return)",
+			__func__, __LINE__);
+		goto failure;
+	}
+
+	if (l_xprt->xa->use_srq) {
+		if (!xprt->pd->srq) {
+			struct ibv_srq_init_attr srq_attr = {
+				.attr.max_wr = xprt->xa->rq_depth,
+				.attr.max_sge = xprt->xa->max_recv_sge,
+			};
+			xprt->pd->srq =
+				ibv_create_srq(xprt->pd->pd, &srq_attr);
+			if (!xprt->pd->srq) {
+				rc = errno;
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() ibv_create_srq failed: %s (%d)",
+					__func__, strerror(rc), rc);
+				goto failure;
+			}
+		}
+
+		if (!xprt->pd->srqh.qcount) {
+			rc = rpc_rdma_setup_cbq(&xprt->pd->srqh,
+						xprt->xa->rq_depth,
+						xprt->xa->max_recv_sge);
+			if (rc) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s:%u ERROR (return)",
+					__func__, __LINE__);
+				goto failure;
+			}
+		}
+
+		/* only send contexts */
+		rc = rpc_rdma_setup_cbq(&xprt->cbqh,
+					xprt->xa->sq_depth,
+					xprt->xa->credits);
+		if (rc) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR (return)",
+				__func__, __LINE__);
+			goto failure;
+		}
+	} else {
+		rc = rpc_rdma_setup_cbq(&xprt->cbqh,
+					xprt->xa->rq_depth +
+					xprt->xa->sq_depth,
+					xprt->xa->credits);
+		if (rc) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR (return)",
+				__func__, __LINE__);
+			goto failure;
+		}
+	}
+
+	/* srq only used as a boolean here */
+	xprt->srq = xprt->pd->srq;
+
+	rc = rpc_rdma_setup_stuff(xprt);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR (return)",
+			__func__, __LINE__);
+		goto failure;
+	}
+
+	atomic_inc_int32_t(&rpc_rdma_state.run_count);
+	return xprt;
+
+failure:
+	rpc_rdma_destroy(&xprt->xprt);
+	return (NULL);
+}
+
+/**
+ * rpc_rdma_accept_finalize: does the real connection acceptance
+ * N.B. no wait for CM result. CM event thread will handle setup/teardown.
+ *
+ * @param[IN] xprt
  *
  * @return 0 on success, the value of errno on error
  */
-int msk_finalize_accept(struct msk_trans *trans) {
+int
+rpc_rdma_accept_finalize(RDMAXPRT *xprt)
+{
 	struct rdma_conn_param conn_param;
-	int ret;
+	int rc;
 
-	if (!trans || trans->state != MSK_CONNECT_REQUEST) {
-		INFO_LOG((trans ? trans->debug : 0) & MSK_DEBUG_EVENT, "trans isn't from a connection request?");
+	if (!xprt || xprt->state != RDMAXS_CONNECT_REQUEST) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] isn't from a connection request?",
+			__func__, xprt, xprt->state);
 		return EINVAL;
 	}
 
-	memset(&conn_param, 0, sizeof(struct rdma_conn_param));
+	memset(&conn_param, 0, sizeof(conn_param));
 	conn_param.responder_resources = 1;
 	conn_param.initiator_depth = 1;
 	conn_param.private_data = NULL;
 	conn_param.private_data_len = 0;
 	conn_param.rnr_retry_count = 10;
 
-	msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-	do {
-		ret = rdma_accept(trans->cm_id, &conn_param);
-		if (ret) {
-			ret = errno;
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "rdma_accept failed: %s (%d)", strerror(ret), ret);
-			break;
-		}
-		while (trans->state == MSK_CONNECT_REQUEST) {
-			msk_cond_wait(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_cond, &trans->cm_lock);
-			INFO_LOG(trans->debug & MSK_DEBUG_SETUP, "Got a cond, state: %i", trans->state);
-		}
+	rc = rdma_accept(xprt->cm_id, &conn_param);
+	if (rc) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] rdma_accept failed: %s (%d)",
+			__func__, xprt, xprt->state, strerror(rc), rc);
+	}
 
-		if (trans->state == MSK_CONNECTED) {
-			msk_cq_addfd(trans);
-			msk_stats_add(trans);
-		} else {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Accept failed");
-			ret = ECONNRESET;
-			break;
-		}
-	} while (0);
-
-	msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-
-	return ret;
+	return rc;
 }
 
 /**
- * msk_accept_one: given a listening trans, waits till one connection is requested and accepts it
+ * rpc_rdma_accept_timedwait: given a listening xprt,
+ * waits till any connection is requested and accepts one,
+ * then clones the listener.
  *
- * @param trans [IN] the parent trans
+ * @param[IN] l_xprt	listening (parent) transport
+ * @param[IN] abstime	time to wait
  *
- * @return a new trans for the child on success, NULL on failure
+ * @return 0 on success, errno value on failure
  */
-struct msk_trans *msk_accept_one_timedwait(struct msk_trans *trans, struct timespec *abstime) { //TODO make it return an int an' use trans as argument
+static RDMAXPRT *
+rpc_rdma_accept_timedwait(RDMAXPRT *l_xprt, struct timespec *abstime)
+{
+	struct rdma_cm_id *cm_id;
+	uint32_t u;
+	int rc;
 
-	//TODO: timeout?
-
-	struct rdma_cm_id *cm_id = NULL;
-	struct msk_trans *child_trans = NULL;
-	int i, ret;
-
-	if (!trans || trans->state != MSK_LISTENING) {
-		INFO_LOG((trans ? trans->debug : 0) & MSK_DEBUG_EVENT, "trans isn't listening (after bind_server)?");
-		return NULL;
+	if (!l_xprt || l_xprt->state != RDMAXS_LISTENING) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] isn't listening (after bind_server)?",
+			__func__, l_xprt, l_xprt->state);
+		return (NULL);
 	}
 
-	msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-	ret = 0;
-	while (!cm_id && ret == 0) {
-		/* See if one of the slots has been taken */
-		for (i = 0; i < trans->server; i++)
-			if (trans->conn_requests[i])
-				break;
-
-		if (i == trans->server) {
-			INFO_LOG(trans->debug & MSK_DEBUG_SETUP, "Waiting for a connection to come in");
-			if (abstime)
-				ret = msk_cond_timedwait(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_cond, &trans->cm_lock, abstime);
-			else
-				ret = msk_cond_wait(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_cond, &trans->cm_lock);
-		} else {
-			cm_id = trans->conn_requests[i];
-			trans->conn_requests[i] = NULL;
+	/* Drain connection_requests */
+	if (abstime) {
+		rc = sem_timedwait(&rpc_rdma_state.c_r.q_sem, abstime);
+		if (rc) {
+			rc = errno;
+			if (ETIMEDOUT == rc) {
+				__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+					"%s() ETIMEDOUT",
+					__func__);
+			} else {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s() sem_timedwait failed",
+					__func__, strerror(rc), rc);
+			}
+			return (NULL);
+		}
+	} else {
+		rc = sem_wait(&rpc_rdma_state.c_r.q_sem);
+		if (rc) {
+			rc = errno;
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() sem_wait failed",
+				__func__, strerror(rc), rc);
+			return (NULL);
 		}
 	}
 
-	if (ret) {
-		msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-		return NULL;
+	u = atomic_postinc_uint32_t(&rpc_rdma_state.c_r.q_head);
+	if (u >= rpc_rdma_state.c_r.q_size) {
+		u_int q_mask = rpc_rdma_state.c_r.q_size - 1;
+
+		/* masking allows update by lock-free tasks,
+		 * as long as overrun never 2 * q_size
+		 */
+		u &= q_mask;
+		atomic_clear_uint32_t_bits(&rpc_rdma_state.c_r.q_head, ~q_mask);
+	}
+	cm_id = rpc_rdma_state.c_r.id_queue[u];
+
+	/* Increase available count */
+	rc = sem_post(&rpc_rdma_state.c_r.u_sem);
+	if (rc) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() sem_post failed",
+			__func__, strerror(rc), rc);
+		return (NULL);
 	}
 
-	INFO_LOG(trans->debug & MSK_DEBUG_SETUP, "Got a connection request - creating child");
-	child_trans = clone_trans(trans, cm_id);
+	__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+		"%s() thread %lx, q %u, cm_id %p",
+		__func__,
+		pthread_self(),
+		u,
+		cm_id);
 
-	msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-
-	if (child_trans) {
-		if ((ret = msk_setup_qp(child_trans))) {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Could not setup child trans's qp: %s (%d)", strerror(ret), ret);
-			msk_destroy_trans(&child_trans);
-			return NULL;
-		}
-		if ((ret = msk_setup_wctx(child_trans))) {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Could not setup child trans's buffer: %s (%d)", strerror(ret), ret);
-			msk_destroy_trans(&child_trans);
-			return NULL;
-		}
+	if (!cm_id) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() missing cm_id",
+			__func__);
+		return (NULL);
 	}
-	return child_trans;
+
+	return rpc_rdma_clone(l_xprt, cm_id);
 }
 
-struct msk_trans *msk_accept_one_wait(struct msk_trans *trans, int msleep) {
+RDMAXPRT *
+rpc_rdma_accept_wait(RDMAXPRT *l_xprt,int msleep)
+{
 	struct timespec ts;
 
 	if (msleep == 0)
-		return msk_accept_one(trans);
+		return rpc_rdma_accept_timedwait(l_xprt, NULL);
 
 	clock_gettime(CLOCK_REALTIME, &ts);
 	ts.tv_sec += msleep / 1000;
@@ -1926,183 +2395,194 @@ struct msk_trans *msk_accept_one_wait(struct msk_trans *trans, int msleep) {
 		ts.tv_sec++;
 	}
 
-	return msk_accept_one_timedwait(trans, &ts);
+	return rpc_rdma_accept_timedwait(l_xprt, &ts);
 }
 
 /**
- * msk_bind_client: resolve addr and route for the client and waits till it's done
- * (the route and pthread_cond_signal is done in the cm thread)
+ * rpc_rdma_bind_client: resolve addr and route for the client and waits till it's done
+ * (the route and cond_signal is done in the cm thread)
  *
  */
-static int msk_bind_client(struct msk_trans *trans) {
-	struct rdma_addrinfo hints, *res;
-	int ret;
+static int
+rpc_rdma_bind_client(RDMAXPRT *xprt)
+{
+	struct rdma_addrinfo hints;
+	struct rdma_addrinfo *res;
+	int rc;
 
-	msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
+	mutex_lock(&xprt->cm_lock);
 
 	do {
-		memset(&hints, 0, sizeof(struct rdma_addrinfo));
-		hints.ai_port_space = trans->conn_type;
+		memset(&hints, 0, sizeof(hints));
+		hints.ai_port_space = xprt->conn_type;
 
-		ret = rdma_getaddrinfo(trans->node, trans->port, &hints, &res);
-		if (ret) {
-			ret = errno;
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "rdma_getaddrinfo: %s (%d)", strerror(ret), ret);
+		rc = rdma_getaddrinfo(xprt->xa->node, xprt->xa->port,
+					&hints, &res);
+		if (rc) {
+			rc = errno;
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() %p[%u] rdma_getaddrinfo: %s (%d)",
+				__func__, xprt, xprt->state, strerror(rc), rc);
 			break;
 		}
 
-		ret = rdma_resolve_addr(trans->cm_id, res->ai_src_addr, res->ai_dst_addr, trans->timeout);
-		if (ret) {
-			ret = errno;
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "rdma_resolve_addr failed: %s (%d)", strerror(ret), ret);
+		rc = rdma_resolve_addr(xprt->cm_id, res->ai_src_addr,
+					res->ai_dst_addr, xprt->xa->timeout);
+		if (rc) {
+			rc = errno;
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() %p[%u] rdma_resolve_addr failed: %s (%d)",
+				__func__, xprt, xprt->state, strerror(rc), rc);
 			break;
 		}
 		rdma_freeaddrinfo(res);
 
-
-		while (trans->state == MSK_INIT) {
-			msk_cond_wait(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_cond, &trans->cm_lock);
-			INFO_LOG(trans->debug & MSK_DEBUG_SETUP, "Got a cond, state: %i", trans->state);
+		while (xprt->state == RDMAXS_INITIAL) {
+			cond_wait(&xprt->cm_cond, &xprt->cm_lock);
+			__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+				"%s() %p[%u] after cond_wait",
+				__func__, xprt, xprt->state);
 		}
-		if (trans->state != MSK_ADDR_RESOLVED) {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Could not resolve addr");
-			ret = EINVAL;
+
+		if (xprt->state != RDMAXS_ADDR_RESOLVED) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() Could not resolve addr",
+				__func__);
+			rc = EINVAL;
 			break;
 		}
 
-		ret = rdma_resolve_route(trans->cm_id, trans->timeout);
-		if (ret) {
-			trans->state = MSK_ERROR;
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "rdma_resolve_route failed: %s (%d)", strerror(ret), ret);
+		rc = rdma_resolve_route(xprt->cm_id, xprt->xa->timeout);
+		if (rc) {
+			xprt->state = RDMAXS_ERROR;
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() %p[%u] rdma_resolve_route failed: %s (%d)",
+				__func__, xprt, xprt->state, strerror(rc), rc);
 			break;
 		}
 
-		while (trans->state == MSK_ADDR_RESOLVED) {
-			msk_cond_wait(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_cond, &trans->cm_lock);
-			INFO_LOG(trans->debug & MSK_DEBUG_SETUP, "Got a cond, state: %i", trans->state);
+		while (xprt->state == RDMAXS_ADDR_RESOLVED) {
+			cond_wait(&xprt->cm_cond, &xprt->cm_lock);
+			__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+				"%s() %p[%u] after cond_wait",
+				__func__, xprt, xprt->state);
 		}
 
-		if (trans->state != MSK_ROUTE_RESOLVED) {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Could not resolve route");
-			ret = EINVAL;
+		if (xprt->state != RDMAXS_ROUTE_RESOLVED) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() Could not resolve route",
+				__func__);
+			rc = EINVAL;
 			break;
 		}
 	} while (0);
 
-	msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
+	mutex_unlock(&xprt->cm_lock);
 
-	return ret;
+	return rc;
 }
 
 /**
- * msk_finalize_connect: tells the other side we're ready to receive stuff (does the actual rdma_connect) and waits for its ack
+ * rpc_rdma_connect_finalize: tells the other side we're ready to receive stuff
+ * (does the actual rdma_connect)
+ * N.B. no wait for CM result. CM event thread will handle setup/teardown.
  *
- * @param trans [IN]
+ * @param[IN] xprt
  *
  * @return 0 on success, errno value on failure
  */
-int msk_finalize_connect(struct msk_trans *trans) {
+int
+rpc_rdma_connect_finalize(RDMAXPRT *xprt)
+{
 	struct rdma_conn_param conn_param;
-	int ret;
+	int rc;
 
-	if (!trans || trans->state != MSK_ROUTE_RESOLVED) {
-		INFO_LOG((trans ? trans->debug : 0) & MSK_DEBUG_EVENT, "trans isn't half-connected?");
+	if (!xprt || xprt->state != RDMAXS_ROUTE_RESOLVED) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] isn't half-connected?",
+			__func__, xprt, xprt->state);
 		return EINVAL;
 	}
 
-
-	memset(&conn_param, 0, sizeof(struct rdma_conn_param));
+	memset(&conn_param, 0, sizeof(conn_param));
 	conn_param.responder_resources = 1;
 	conn_param.initiator_depth = 1;
 	conn_param.rnr_retry_count = 10;
 	conn_param.retry_count = 10;
 
-	msk_mutex_lock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
+	rc = rdma_connect(xprt->cm_id, &conn_param);
+	if (rc) {
+		rc = errno;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] rdma_connect failed: %s (%d)",
+			__func__, xprt, xprt->state, strerror(rc), rc);
+	}
 
-	do {
-		ret = rdma_connect(trans->cm_id, &conn_param);
-		if (ret) {
-			ret = errno;
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "rdma_connect failed: %s (%d)", strerror(ret), ret);
-			break;
-		}
-
-		while (trans->state == MSK_ROUTE_RESOLVED) {
-			msk_cond_wait(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_cond, &trans->cm_lock);
-			INFO_LOG(trans->debug & MSK_DEBUG_SETUP, "Got a cond, state: %i", trans->state);
-		}
-
-		if (trans->state == MSK_CONNECTED) {
-			msk_cq_addfd(trans);
-			msk_stats_add(trans);
-		} else {
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Connection failed");
-			ret = ECONNREFUSED;
-			break;
-		}
-	} while (0);
-
-	msk_mutex_unlock(trans->debug & MSK_DEBUG_CM_LOCKS, &trans->cm_lock);
-
-	return ret;
+	return rc;
 }
 
 /**
- * msk_connect: connects a client to a server
+ * rpc_rdma_connect: connects a client to a server
  *
- * @param trans [INOUT] trans must be init first
+ * @param[INOUT] xprt	must be init first
  *
- * @return 0 on success, the value of errno on error
+ * @return 0 on success, errno value on failure
  */
-int msk_connect(struct msk_trans *trans) {
-	int ret;
-	struct msk_pd *pd;
+int
+rpc_rdma_connect(RDMAXPRT *xprt)
+{
+	int rc;
 
-	if (!trans || trans->state != MSK_INIT) {
-		INFO_LOG((trans ? trans->debug : 0) & MSK_DEBUG_EVENT, "trans must be initialized first!");
+	if (!xprt || xprt->state != RDMAXS_INITIAL) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] must be initialized first!",
+			__func__, xprt, xprt->state);
 		return EINVAL;
 	}
 
-	if (trans->server) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "Must be on client side to call this function");
+	if (xprt->server) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() only called from client side!",
+			__func__);
 		return EINVAL;
 	}
 
-	if ((ret = msk_check_create_epoll_thread(&msk_global_state->cm_thread, msk_cm_thread, trans, &msk_global_state->cm_epollfd))) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "msk_check_create_epoll_thread failed: %s (%d)", strerror(ret), ret);
-		return ret;
-	}
-	msk_cm_addfd(trans);
-
-	if ((ret = msk_bind_client(trans)))
-		return ret;
-
-	/* pick the right pd if we already have one, allocate otherwise */
-	ret = msk_setup_pd(trans);
-	if (ret) {
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "setup pd failed: %s (%d)", strerror(ret), ret);
-		return ret;
+	rc = rpc_rdma_thread_create_epoll(&rpc_rdma_state.cm_thread,
+		rpc_rdma_cm_thread, xprt, &rpc_rdma_state.cm_epollfd);
+	if (rc) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() %p[%u] rpc_rdma_thread_create_epoll failed: %s (%d)",
+			__func__, xprt, xprt->state, strerror(rc), rc);
+		return rc;
 	}
 
-	pd = msk_getpd(trans);
-	if (!pd) {
-		ret = ENOSPC;
-		INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "No space left in msk pd, multiple contexts per device?");
-		return ret;
+	rc = rpc_rdma_bind_client(xprt);
+	if (rc)
+		return rc;
+	rc = rpc_rdma_pd_get(xprt);
+	if (rc)
+		return rc;
+	rc = rpc_rdma_setup_stuff(xprt);
+	if (rc) {
+		rpc_rdma_destroy_stuff(xprt);
+		return rc;
 	}
-	if (!pd->pd) {
-		pd->pd = ibv_alloc_pd(trans->cm_id->verbs);
-		if (!pd->pd) {
-			ret = errno;
-			INFO_LOG(trans->debug & MSK_DEBUG_EVENT, "ibv_alloc_pd failed: %s (%d)", strerror(ret), ret);
-			return ret;
-		}
-	}
+	rc = rpc_rdma_setup_cbq(&xprt->cbqh,
+				xprt->xa->rq_depth + xprt->xa->sq_depth,
+				xprt->xa->credits);
+	if (rc)
+		return rc;
 
-	if ((ret = msk_setup_qp(trans)))
-		return ret;
-	if ((ret = msk_setup_wctx(trans)) || (ret = msk_setup_rctx(trans)))
-		return ret;
-
-	return 0;
+	return rpc_rdma_fd_add(xprt, xprt->event_channel->fd,
+				rpc_rdma_state.cm_epollfd);
 }
+
+static struct xp_ops rpc_rdma_ops = {
+	/* XXX wow */
+	.xp_getargs = (bool(*)(SVCXPRT *, struct svc_req *, xdrproc_t,
+				void *, void *))abort,
+	.xp_reply = (bool(*)(SVCXPRT *, struct svc_req *,
+				struct rpc_msg *))abort,
+	.xp_freeargs = (bool(*)(SVCXPRT *, struct svc_req *, xdrproc_t,
+				void *))abort,
+};

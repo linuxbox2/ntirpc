@@ -70,6 +70,9 @@
 #include "svc_xprt.h"
 #include "rpc_dplx_internal.h"
 #include <rpc/svc_rqst.h>
+#ifdef USE_RPC_RDMA
+#include "rpc_rdma.h"
+#endif
 #include "svc_ioq.h"
 
 #define SVC_VERSQUIET 0x0001	/* keep quiet about vers mismatch */
@@ -212,6 +215,10 @@ svc_init(svc_init_params *params)
 		__svc_params->gss.max_gc = params->gss_max_gc;
 	else
 		__svc_params->gss.max_gc = 200;
+
+#ifdef USE_RPC_RDMA
+	rpc_rdma_internals_init();
+#endif
 
 	__svc_params->initialized = true;
 
@@ -1057,6 +1064,11 @@ int
 svc_shutdown(u_long flags)
 {
 	int code = 0;
+
+#ifdef USE_RPC_RDMA
+	/* wait until RDMA control threads have finished */
+	rpc_rdma_internals_fini();
+#endif
 
 	/* finalize ioq */
 	work_pool_shutdown(&svc_work_pool);
