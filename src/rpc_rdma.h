@@ -44,8 +44,6 @@
 #include <rpc/svc.h>
 #include <rpc/xdr_ioq.h>
 
-typedef struct rpc_rdma_xprt RDMAXPRT;
-
 typedef union sockaddr_union {
 	struct sockaddr sa;
 	struct sockaddr_in sa_in;
@@ -64,6 +62,8 @@ struct msk_stats {
 	uint64_t nsec_callback;
 	uint64_t nsec_compevent;
 };
+
+typedef struct rpc_rdma_xprt RDMAXPRT;
 
 struct rpc_rdma_cbc;
 typedef void (*rpc_rdma_callback_t)(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt);
@@ -218,75 +218,6 @@ typedef struct rec_rdma_strm {
 	struct ibv_mr *mr;
 	int credits;
 } RECRDMA;
-
-/*
-** match sunrpc/rcp_rdma.h from Linux kernel with types from RFC-5666
-*/
-
-struct rpcrdma_segment {
-	uint32_t rs_handle;	/* Registered memory handle */
-	uint32_t rs_length;	/* Length of the chunk in bytes */
-	uint64_t rs_offset;	/* Chunk virtual address or offset */
-};
-
-/*
- * read chunk(s), encoded as a linked list.
- */
-struct rpcrdma_read_chunk {
-	uint32_t rc_discrim;	/* 1 indicates presence */
-	uint32_t rc_position;	/* Position in XDR stream */
-	struct rpcrdma_segment rc_target;
-};
-
-/*
- * write chunk, and reply chunk.
- */
-struct rpcrdma_write_chunk {
-	struct rpcrdma_segment wc_target;
-};
-
-/*
- * write chunk(s), encoded as a counted array.
- */
-struct rpcrdma_write_array {
-	uint32_t wc_discrim;	/* 1 indicates presence */
-	uint32_t wc_nchunks;	/* Array count */
-	struct rpcrdma_write_chunk wc_array[0];
-};
-
-struct rpcrdma_msg {
-	uint32_t rm_xid;	/* Mirrors the RPC header xid */
-	uint32_t rm_vers;	/* Version of this protocol */
-	uint32_t rm_credit;	/* Buffers requested/granted */
-	uint32_t rm_type;	/* Type of message (enum rpcrdma_proc) */
-	union {
-
-		struct {			/* no chunks */
-			uint32_t rm_empty[3];	/* 3 empty chunk lists */
-		} rm_nochunks;
-
-		struct {			/* no chunks and padded */
-			uint32_t rm_align;	/* Padding alignment */
-			uint32_t rm_thresh;	/* Padding threshold */
-			uint32_t rm_pempty[3];	/* 3 empty chunk lists */
-		} rm_padded;
-
-		uint32_t rm_chunks[0];		/* read, write and reply chunks */
-
-	} rm_body;
-};
-
-enum rpcrdma_proc {
-	RDMA_MSG = 0,	/* An RPC call or reply msg */
-	RDMA_NOMSG = 1,	/* An RPC call or reply msg - separate body */
-	RDMA_MSGP = 2,	/* An RPC call or reply msg with padding */
-	RDMA_DONE = 3,	/* Client signals reply completion */
-	RDMA_ERROR = 4	/* An RPC RDMA encoding error */
-};
-
-/*
-**
-*/
 
 static inline void *xdr_encode_hyper(uint32_t *iptr, uint64_t val)
 {

@@ -812,9 +812,6 @@ extern SVCXPRT *svc_raw_ncreate(void);
 /*
  * RDMA based rpc
  */
-extern SVCXPRT *svc_msk_create(void *arg, u_int credits,
-				void (*callback)(void *), void *callbackarg);
-
 extern SVCXPRT *svc_rdma_create(void *arg, const u_int sendsize,
 				const u_int recvsize, const u_int flags);
 

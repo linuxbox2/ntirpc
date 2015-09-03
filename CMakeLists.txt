@@ -19,10 +19,6 @@ if(TIRPC_EPOLL)
   add_definitions(-DTIRPC_EPOLL)
 endif(TIRPC_EPOLL)
 
-if(USE_NFS_MSK)
-  add_definitions(-DUSE_RPC_RDMA)
-endif(USE_NFS_MSK)
-
 if(USE_NFS_RDMA)
   add_definitions(-DUSE_RPC_RDMA)
 endif(USE_NFS_RDMA)

@@ -103,14 +103,6 @@ if(USE_GSS)
 
 endif(USE_GSS)
 
-if(USE_NFS_MSK)
-  SET(ntirpc_rdma_SRCS
-  clnt_msk.c
-  svc_msk.c
-  xdr_msk.c
-  )
-endif(USE_NFS_MSK)
-
 if(USE_NFS_RDMA)
   SET(ntirpc_rdma_SRCS
   clnt_rdma.c

@@ -1071,30 +1071,16 @@ xdr_rdma_clnt_call(XDR *xdrs, u_int32_t xid)
 	}
 	xprt = x_xprt(xdrs);
 
-	/* free old buffers */
-	/* (should do nothing) */
+	/* free old buffers (should do nothing) */
 	xdr_ioq_release(&cbc->workq.ioq_uv.uvqh);
 	xdr_ioq_release(&cbc->holdq.ioq_uv.uvqh);
 	xdr_rdma_callq(xprt);
 
 	/* get new buffer */
-#ifdef OLDCODE
-	// Client encodes a call request
-	case XDR_ENCODE:
-		pthread_mutex_lock(&mi->cl.lock);
-		mi->xdrbuf = mi->curbuf = xdrmsk_getfreebuf(mi->outbufs, mi);
-#endif
 	(void) xdr_ioq_uv_fetch(&cbc->holdq, &xprt->outbufs.uvqh,
 				"call buffer", 1, IOQ_FLAG_NONE);
 
 	xdr_ioq_reset(&cbc->holdq, 0);
-
-#ifdef OLDCODE
-		xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
-		    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
-		pthread_mutex_unlock(&mi->cl.lock);
-		break;
-#endif
 	return (true);
 }
 
@@ -1125,13 +1111,6 @@ xdr_rdma_clnt_reply(XDR *xdrs, u_int32_t xid)
 	}
 	xprt = x_xprt(xdrs);
 
-#ifdef OLDCODE
-	// Client decodes a reply buffer
-	case XDR_DECODE:
-		pthread_mutex_lock(&mi->cl.lock);
-		mi->curbuf = xdrmsk_getxidbuf(mi->inbufs, mi, xid);
-		rpcrdma_dump_msg(mi->curbuf, "clntrplyhdr", ntohl(xid));
-#endif
 	work_uv = IOQ_(TAILQ_FIRST(&cbc->workq.ioq_uv.uvqh.qh));
 	rpcrdma_dump_msg(work_uv, "creply head", htonl(xid));
 
@@ -1143,9 +1122,6 @@ xdr_rdma_clnt_reply(XDR *xdrs, u_int32_t xid)
 			__func__);
 		return (false);
 	} else {
-#if OLDCODE
-			prev_buf = NULL;
-#endif
 		uint32_t i;
 /*		uint32_t l; */
 		uint32_t n = ntohl(reply_array->elements);
@@ -1163,23 +1139,8 @@ xdr_rdma_clnt_reply(XDR *xdrs, u_int32_t xid)
 			 * FIXME: check anyway?
 			 */
 /*			l = ntohl(reply_array->entry[i].target.length); */
-#if OLDCODE
-
-				rpcrdma_dump_msg(tmp_buf, "clntrplybody", ntohl(xid));
-				if (prev_buf)
-					prev_buf->next = tmp_buf;
-				else
-					mi->xdrbuf = tmp_buf;
-				prev_buf = tmp_buf;
-#endif
 		}
 	}
-
-#ifdef OLDCODE
-		xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
-		    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
-		break;
-#endif
 
 	xdr_ioq_reset(&cbc->holdq, 0);
 	return (true);
@@ -1213,8 +1174,7 @@ xdr_rdma_svc_recv(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 	}
 	xprt = x_xprt(cbc->workq.xdrs);
 
-	/* free old buffers */
-	/* (should do nothing) */
+	/* free old buffers (should do nothing) */
 	xdr_ioq_release(&cbc->holdq.ioq_uv.uvqh);
 	xdr_rdma_callq(xprt);
 
@@ -1223,14 +1183,6 @@ xdr_rdma_svc_recv(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 	cbc->holdq.ioq_uv.uvqh.qcount = cbc->workq.ioq_uv.uvqh.qcount;
 	cbc->workq.ioq_uv.uvqh.qcount = 0;
 
-#ifdef OLDCODE
-	// Server decodes a call request
-	case XDR_DECODE:
-		pthread_mutex_lock(&mi->cl.lock);
-		mi->callbuf = mi->curbuf = xdrmsk_getusedbuf(mi->inbufs, mi);
-		pthread_mutex_unlock(&mi->cl.lock);
-		rpcrdma_dump_msg(mi->curbuf, "call", ((struct rpcrdma_msg *)mi->curbuf->data)->rm_xid);
-#endif
 	cbc->call_uv = IOQ_(TAILQ_FIRST(&cbc->holdq.ioq_uv.uvqh.qh));
 	(cbc->call_uv->u.uio_references)++;
 	rmsg = m_(cbc->call_uv->v.vio_head);
@@ -1249,10 +1201,6 @@ xdr_rdma_svc_recv(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 	xdr_ioq_reset(&cbc->holdq, ((uintptr_t)cbc->call_data
 				  - (uintptr_t)rmsg));
 
-#ifdef OLDCODE
-		read_chunk = rpcrdma_get_read_list((struct rpcrdma_msg*)mi->curbuf->data);
-		prev_buf = NULL;
-#endif
 	switch (ntohl(rmsg->rdma_type)) {
 	case RDMA_MSG:
 		return (true);
@@ -1276,10 +1224,6 @@ xdr_rdma_svc_recv(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 		xdr_rdma_wait_read_cb(xprt, cbc, k, &rl(cbc->read_chunk)->target);
 		rpcrdma_dump_msg(IOQ_(TAILQ_FIRST(&cbc->workq.ioq_uv.uvqh.qh)),
 				 "call chunk", rmsg->rdma_xid);
-#ifdef OLDCODE
-			msk_wait_read(mi->trans, tmp_buf, &rloc);
-			rpcrdma_dump_msg(tmp_buf, "svcreaddata", ((struct rpcrdma_msg *)mi->curbuf->data)->rm_xid);
-#endif
 
 		/* concatenate any additional buffers after the calling message,
 		 * faking there is more call data in the calling buffer.
@@ -1288,22 +1232,10 @@ xdr_rdma_svc_recv(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 			     &cbc->workq.ioq_uv.uvqh.qh, q);
 		cbc->holdq.ioq_uv.uvqh.qcount += cbc->workq.ioq_uv.uvqh.qcount;
 		cbc->workq.ioq_uv.uvqh.qcount = 0;
-		cbc->read_chunk += sizeof(struct xdr_read_list);
-#ifdef OLDCODE
-			if (prev_buf)
-				prev_buf->next = tmp_buf;
-			else
-				mi->curbuf->next = tmp_buf;
-			prev_buf = tmp_buf;
-			read_chunk++;
-#endif
+		cbc->read_chunk = (char *)cbc->read_chunk
+						+ sizeof(struct xdr_read_list);
 	}
 
-#ifdef OLDCODE
-		xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
-		    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
-		break;
-#endif
 	return (true);
 }
 
@@ -1336,23 +1268,13 @@ xdr_rdma_svc_reply(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 	/* free call buffers (head will be retained) */
 	xdr_ioq_release(&cbc->holdq.ioq_uv.uvqh);
 
-#ifdef OLDCODE
-	// Server encodes a reply
-	case XDR_ENCODE:
-		call_array = rpcrdma_get_reply_array((struct rpcrdma_msg*)mi->callbuf->data);
-#endif
 	reply_array = (wl_t *)cbc->reply_chunk;
-
 	if (reply_array->present == 0) {
-#ifdef OLDCODE
-			// no reply array to write to, replying inline an' hope it works (OK on RPC/RDMA Read)
-			mi->curbuf = xdrmsk_getfreebuf(mi->outbufs, mi);
-#endif
 		/* no reply array to write, replying inline and hope it works
 		 * (OK on RPC/RDMA Read)
 		 */
 		have = xdr_ioq_uv_fetch(&cbc->holdq, &xprt->outbufs.uvqh,
-					"reply buffer", 1, IOQ_FLAG_NONE);
+					"sreply buffer", 1, IOQ_FLAG_NONE);
 
 		/* buffer is limited size */
 		IOQ_(have)->v.vio_head =
@@ -1365,9 +1287,6 @@ xdr_rdma_svc_reply(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 				  - (uintptr_t)cbc->write_chunk
 				  + offsetof(struct rdma_msg, rdma_body));
 	} else {
-#ifdef OLDCODE
-			prev_buf = NULL;
-#endif
 		uint32_t i;
 		uint32_t l;
 		uint32_t n = ntohl(reply_array->elements);
@@ -1385,25 +1304,14 @@ xdr_rdma_svc_reply(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 		for (i = 0; i < n; i++) {
 			l = ntohl(reply_array->entry[i].target.length);
 			xdr_rdma_chunk_fetch(&cbc->holdq, &xprt->outbufs.uvqh,
-					     "reply chunk", l, xprt->sendsize,
+					     "sreply chunk", l, xprt->sendsize,
 					     xprt->xa->max_send_sge,
 					     xdr_rdma_chunk_out);
 		}
-#ifdef OLDCODE
-				if (prev_buf)
-					prev_buf->next = tmp_buf;
-				else
-					mi->curbuf = tmp_buf; /* that's the first of the list, we'll use it first */
-				prev_buf = tmp_buf;
-#endif
+
 		xdr_ioq_reset(&cbc->holdq, 0);
 	}
 
-#ifdef OLDCODE
-		xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
-		    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
-		break;
-#endif
 	return (true);
 }
 
@@ -1473,11 +1381,11 @@ xdr_rdma_clnt_flushout(XDR *xdrs)
 	rmsg->rdma_credit = htonl(xprt->xa->credits);
 	rmsg->rdma_type = htonl(RDMA_MSG);
 
-		/* no read, write chunks. */
+	/* no read, write chunks. */
 	rmsg->rdma_body.rdma_msg.rdma_reads = 0; /* htonl(0); */
 	rmsg->rdma_body.rdma_msg.rdma_writes = 0; /* htonl(0); */
 
-		/* reply chunk */
+	/* reply chunk */
 	w_array = (wl_t *)&rmsg->rdma_body.rdma_msg.rdma_reply;
 	w_array->present = htonl(1);
 	w_array->elements = htonl(num_chunks);
@@ -1499,7 +1407,7 @@ xdr_rdma_clnt_flushout(XDR *xdrs)
 	rpcrdma_dump_msg(head_uv, "clnthead", msg->rm_xid);
 	rpcrdma_dump_msg(work_uv, "clntcall", msg->rm_xid);
 
-		/* actual send, callback will take care of cleanup */
+	/* actual send, callback will take care of cleanup */
 	xdr_rdma_post_send_cb(xprt, cbc, 2);
 	return (true);
 }
@@ -1556,16 +1464,12 @@ xdr_rdma_svc_flushout(struct rpc_rdma_cbc *cbc)
 
 	/* usurp the holdq for the head, move to workq later */
 	head_uv = IOQ_(xdr_ioq_uv_fetch(&cbc->holdq, &xprt->outbufs.uvqh,
-					"reply head", 1, IOQ_FLAG_NONE));
+					"sreply head", 1, IOQ_FLAG_NONE));
 
 	/* entry was already added directly to the queue */
 	head_uv->v.vio_head = head_uv->v.vio_base;
 	/* tail adjusted below */
 	head_uv->v.vio_wrap = (char *)head_uv->v.vio_base + xprt->sendsize;
-
-		/* CHECKS HERE */
-
-	reply_array = (wl_t *)cbc->reply_chunk;
 
 	/* build the header that goes with the data */
 	rmsg = m_(head_uv->v.vio_head);
@@ -1574,28 +1478,29 @@ xdr_rdma_svc_flushout(struct rpc_rdma_cbc *cbc)
 	rmsg->rdma_vers = htonl(1);
 	rmsg->rdma_credit = htonl(xprt->xa->credits);
 
-		/* no read, write chunks. */
+	/* no read, write chunks. */
 	rmsg->rdma_body.rdma_msg.rdma_reads = 0; /* htonl(0); */
 	rmsg->rdma_body.rdma_msg.rdma_writes = 0; /* htonl(0); */
 
+	reply_array = (wl_t *)cbc->reply_chunk;
 	if (reply_array->present == 0) {
 		rmsg->rdma_type = htonl(RDMA_MSG);
 
-			/* no reply chunk either */
+		/* no reply chunk either */
 		rmsg->rdma_body.rdma_msg.rdma_reply = 0; /* htonl(0); */
 
 		head_uv->v.vio_tail = head_uv->v.vio_head
 					+ xdr_rdma_header_length(rmsg);
 
-		rpcrdma_dump_msg(head_uv, "reply head", msg->rm_xid);
-		rpcrdma_dump_msg(work_uv, "reply body", msg->rm_xid);
+		rpcrdma_dump_msg(head_uv, "sreply head", msg->rm_xid);
+		rpcrdma_dump_msg(work_uv, "sreply body", msg->rm_xid);
 	} else {
 		uint32_t i = 0;
 		uint32_t n = ntohl(reply_array->elements);
 
 		rmsg->rdma_type = htonl(RDMA_NOMSG);
 
-			/* reply chunk */
+		/* reply chunk */
 		w_array = (wl_t *)&rmsg->rdma_body.rdma_msg.rdma_reply;
 		w_array->present = htonl(1);
 
@@ -1637,11 +1542,8 @@ xdr_rdma_svc_flushout(struct rpc_rdma_cbc *cbc)
 
 				TAILQ_REMOVE(&cbc->workq.ioq_uv.uvqh.qh, have, q);
 				(cbc->workq.ioq_uv.uvqh.qcount)--;
-#ifdef OLDCODE
 
-				rpcrdma_dump_msg(mi->curbuf, "rplybody", msg->rm_xid);
-#endif
-				rpcrdma_dump_msg(IOQ_(have), "reply body",
+				rpcrdma_dump_msg(IOQ_(have), "sreply body",
 						 msg->rm_xid);
 				xdr_ioq_uv_release(IOQ_(have));
 			}
@@ -1650,218 +1552,17 @@ xdr_rdma_svc_flushout(struct rpc_rdma_cbc *cbc)
 
 		head_uv->v.vio_tail = head_uv->v.vio_head
 					+ xdr_rdma_header_length(rmsg);
-#ifdef OLDCODE
-			rpcrdma_dump_msg(hdr_buf, "rplyhdr", msg->rm_xid);
-#endif
-		rpcrdma_dump_msg(head_uv, "reply head", msg->rm_xid);
+		rpcrdma_dump_msg(head_uv, "sreply head", msg->rm_xid);
 	}
 
-			/* actual send, callback will take care of cleanup */
+	/* actual send, callback will take care of cleanup */
 	TAILQ_REMOVE(&cbc->holdq.ioq_uv.uvqh.qh, &head_uv->uvq, q);
 	(cbc->holdq.ioq_uv.uvqh.qcount)--;
 	(cbc->workq.ioq_uv.uvqh.qcount)++;
 	TAILQ_INSERT_HEAD(&cbc->workq.ioq_uv.uvqh.qh, &head_uv->uvq, q);
 	xdr_rdma_post_send_cb(xprt, cbc, cbc->workq.ioq_uv.uvqh.qcount);
 
-		/* free the old inbuf we only kept for header, and repost it. */
+	/* free the old inbuf we only kept for header */
 	xdr_ioq_uv_release(cbc->call_uv);
 	return (true);
 }
-
-#ifdef FIXMEREPLACED
-static u_int
-xdrmsk_getpos(XDR *xdrs)
-{
-	/* XXX w/64-bit pointers, u_int not enough! */
-	return (u_int)((u_long)priv(xdrs)->pos - (u_long)xdrs->x_base);
-}
-
-/* FIXME: Completely broken with buffer cut in parts... */
-static bool
-xdrmsk_setpos(XDR *xdrs, u_int pos)
-{
-	char *newaddr = xdrs->x_base + pos;
-	char *lastaddr = (char *)priv(xdrs)->pos + xdrs->x_handy;
-
-	if (newaddr > lastaddr)
-		return (FALSE);
-	priv(xdrs)->pos = newaddr;
-	xdrs->x_handy = (u_int)(lastaddr - newaddr); /* XXX sizeof(u_int) <? sizeof(ptrdiff_t) */
-	return (TRUE);
-}
-
-static bool
-xdrmsk_getnextbuf(XDR *xdrs)
-{
-	msk_data_t *data;
-
-	if (priv(xdrs)->xdrbuf == NULL)
-		return FALSE;
-
-	data = priv(xdrs)->xdrbuf;
-
-	if (data->next == NULL)
-		return FALSE;
-
-	data->size = xdrmsk_getpos(xdrs);
-
-	data = priv(xdrs)->xdrbuf = priv(xdrs)->xdrbuf->next;
-	xdrs->x_handy = data->size;
-	xdrs->x_base = priv(xdrs)->pos = (char*)data->data;
-	xdrs->x_ops = ((unsigned long)xdrs->x_base & (sizeof(int32_t) - 1))
-	    ? &xdrmsk_ops_unaligned : &xdrmsk_ops_aligned;
-
-	return TRUE;
-}
-
-static uint32_t
-xdrmsk_getsizeleft(XDR *xdrs)
-{
-	uint32_t count = xdrs->x_handy;
-	msk_data_t *data = priv(xdrs)->xdrbuf;
-
-	while (data->next) {
-		data=data->next;
-		count += data->size;
-	}
-
-	return count;
-}
-
-static bool
-xdrmsk_getlong_aligned(XDR *xdrs, long *lp)
-{
-
-	if (xdrs->x_handy < sizeof(int32_t)) {
-		if (xdrmsk_getnextbuf(xdrs))
-			return xdrs->x_ops->x_getlong(xdrs, lp);
-		else
-			return (FALSE);
-	}
-	xdrs->x_handy -= sizeof(int32_t);
-	*lp = ntohl(*(u_int32_t *)priv(xdrs)->pos);
-	priv(xdrs)->pos = (char *)priv(xdrs)->pos + sizeof(int32_t);
-	return (TRUE);
-}
-
-static bool
-xdrmsk_putlong_aligned(XDR *xdrs, const long *lp)
-{
-
-	if (xdrs->x_handy < sizeof(int32_t)) {
-		if (xdrmsk_getnextbuf(xdrs))
-			return xdrs->x_ops->x_putlong(xdrs, lp);
-		else
-			return (FALSE);
-	}
-	xdrs->x_handy -= sizeof(int32_t);
-	*(u_int32_t *)priv(xdrs)->pos = htonl((u_int32_t)*lp);
-	priv(xdrs)->pos = (char *)priv(xdrs)->pos + sizeof(int32_t);
-	return (TRUE);
-}
-
-static bool
-xdrmsk_getlong_unaligned(XDR *xdrs, long *lp)
-{
-	u_int32_t l;
-
-	if (xdrs->x_handy < sizeof(int32_t)) {
-		if (xdrmsk_getnextbuf(xdrs))
-			return xdrs->x_ops->x_getlong(xdrs, lp);
-		else
-			return (FALSE);
-	}
-	xdrs->x_handy -= sizeof(int32_t);
-	memmove(&l, priv(xdrs)->pos, sizeof(int32_t));
-	*lp = ntohl(l);
-	priv(xdrs)->pos = (char *)priv(xdrs)->pos + sizeof(int32_t);
-	return (TRUE);
-}
-
-static bool
-xdrmsk_putlong_unaligned(XDR *xdrs, const long *lp)
-{
-	u_int32_t l;
-
-	if (xdrs->x_handy < sizeof(int32_t)) {
-		if (xdrmsk_getnextbuf(xdrs))
-			return xdrs->x_ops->x_putlong(xdrs, lp);
-		else
-			return (FALSE);
-	}
-	xdrs->x_handy -= sizeof(int32_t);
-	l = htonl((u_int32_t)*lp);
-	memmove(priv(xdrs)->pos, &l, sizeof(int32_t));
-	priv(xdrs)->pos = (char *)priv(xdrs)->pos + sizeof(int32_t);
-	return (TRUE);
-}
-
-static bool
-xdrmsk_getbytes(XDR *xdrs, char *addr, u_int len)
-{
-	u_int size;
-
-	if (xdrmsk_getsizeleft(xdrs) < len)
-			return (FALSE);
-
-	while (len > 0) {
-		if (xdrs->x_handy == 0)
-			if (xdrmsk_getnextbuf(xdrs) == FALSE)
-				return (FALSE);
-		size = MIN(len, xdrs->x_handy);
-		memmove(addr, priv(xdrs)->pos, size);
-		addr += size;
-		len -= size;
-		xdrs->x_handy -= size;
-		priv(xdrs)->pos = (char *)priv(xdrs)->pos + size;
-	}
-	return (TRUE);
-}
-
-static bool
-xdrmsk_putbytes(XDR *xdrs, const char *addr, u_int len)
-{
-	u_int size;
-
-	if (xdrmsk_getsizeleft(xdrs) < len)
-		return (FALSE);
-
-	while (len > 0) {
-		if (xdrs->x_handy == 0)
-			if (xdrmsk_getnextbuf(xdrs) == FALSE)
-				return (FALSE);
-		size = MIN(len, xdrs->x_handy);
-		memmove(priv(xdrs)->pos, addr, size);
-		addr += size;
-		len -= size;
-		xdrs->x_handy -= size;
-		priv(xdrs)->pos = (char *)priv(xdrs)->pos + size;
-	}
-	return (TRUE);
-}
-
-static int32_t *
-xdrmsk_inline_aligned(XDR *xdrs, u_int len)
-{
-	int32_t *buf = NULL;
-
-	if (xdrs->x_handy >= len) {
-		xdrs->x_handy -= len;
-		buf = (int32_t *)priv(xdrs)->pos;
-		priv(xdrs)->pos = (char *)priv(xdrs)->pos + len;
-	} else {
-		if (xdrmsk_getnextbuf(xdrs))
-			return xdrs->x_ops->x_inline(xdrs, len);
-		else
-			return NULL;
-	}
-	return (buf);
-}
-
-/* ARGSUSED */
-static int32_t *
-xdrmsk_inline_unaligned(XDR *xdrs, u_int len)
-{
-	return (NULL);
-}
-#endif /* FIXMEREPLACED */
