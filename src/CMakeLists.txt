@@ -128,7 +128,12 @@ target_link_libraries(ntirpc ${CMAKE_THREAD_LIBS_INIT})
 set_target_properties(ntirpc PROPERTIES LINK_FLAGS
   "-Wl,--version-script=${PROJECT_BINARY_DIR}/libntirpc/src/libntirpc.map"
   )
+
+if (NTIRPC_STANALONE)
+install(TARGETS ntirpc DESTINATION lib)
+else(NTIRPC_STANDALONE)
 install(TARGETS ntirpc DESTINATION ${FSAL_DESTINATION})
+endif(NTIRPC_STANDALONE)
 
 ########### install files ###############
 

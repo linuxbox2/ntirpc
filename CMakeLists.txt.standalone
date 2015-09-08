@@ -1,7 +1,5 @@
 # New TI-RPC  Cmake
 
-# Current version as of Fedora 16.  Not tested with earlier.
-
 cmake_minimum_required(VERSION 2.6.3)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
@@ -12,12 +10,21 @@ include(${CMAKE_SOURCE_DIR}/cmake/maintainer_mode.cmake)
 
 project(NTIRPC C)
 
-set(${PROJECT_NAME}_MAJOR_VERSION 1)
-set(${PROJECT_NAME}_MINOR_VERSION 0)
-set(${PROJECT_NAME}_PATCH_LEVEL 0)
+set(NTIRPC_STANDALONE true)
+
+# version numbers
+set(NTIRPC_MAJOR_VERSION 1)
+set(NTIRPC_MINOR_VERSION 3)
+set(NTIRPC_PATCHLEVEL 0)
+
+# version string used for packaging
+set(NTIRPC_VERSION
+  "${NTIRPC_MAJOR_VERSION}.${NTIRPC_MINOR_VERSION}.${NTIRPC_PATCHLEVEL}")
+
 set(VERSION_COMMENT
-  "Full-duplex and bi-directional ONC RPC on TCP."
+  "Full-duplex and bi-directional ONC RPC on UDP, TCP.  Partial and experimental support for RDMA."
 )
+
 include(GetGitRevisionDescription)
 get_git_head_revision(GIT_REFSPEC _GIT_HEAD_COMMIT)
 git_describe(_GIT_DESCRIBE)
