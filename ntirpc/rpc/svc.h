@@ -812,8 +812,8 @@ extern SVCXPRT *svc_raw_ncreate(void);
 /*
  * RDMA based rpc
  */
-extern SVCXPRT *svc_rdma_create(void *arg, const u_int sendsize,
-				const u_int recvsize, const u_int flags);
+extern SVCXPRT *svc_rdma_ncreate(void *arg, const u_int sendsize,
+				 const u_int recvsize, const u_int flags);
 
 struct rpc_rdma_attr {
 	char *statistics_prefix;

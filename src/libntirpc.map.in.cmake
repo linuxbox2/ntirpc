@@ -129,6 +129,7 @@ NTIRPC_${NTIRPC_VERSION} {
     rpc_control;
     rpc_createerr;
     rpc_nullproc;
+    rpc_rdma_create;
     rpc_reg;
     rpcb_find_mapped_addr;
     rpcb_getaddr;
@@ -153,6 +154,7 @@ NTIRPC_${NTIRPC_VERSION} {
     svc_init;
     svc_ncreate;
     svc_raw_ncreate;
+    svc_rdma_ncreate;
     svc_reg;
     svc_register;
     svc_rqst_new_evchan;

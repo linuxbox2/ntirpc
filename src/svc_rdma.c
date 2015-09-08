@@ -81,11 +81,11 @@ extern struct svc_params __svc_params[1];
 static void svc_rdma_ops(SVCXPRT *);
 
 /*
- * svc_rdma_create: waits for connection request and returns transport
+ * svc_rdma_ncreate: waits for connection request and returns transport
  */
 SVCXPRT *
-svc_rdma_create(void *arg, const u_int sendsize, const u_int recvsize,
-		const u_int flags)
+svc_rdma_ncreate(void *arg, const u_int sendsize, const u_int recvsize,
+		 const u_int flags)
 {
 	struct svc_rdma_xdr *sm;
 	struct sockaddr_storage *ss;
