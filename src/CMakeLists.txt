@@ -126,14 +126,12 @@ target_link_libraries(ntirpc ${CMAKE_THREAD_LIBS_INIT})
 
 # set library version and symbol namespace(s) from gen'd map file
 set_target_properties(ntirpc PROPERTIES LINK_FLAGS
-  "-Wl,--version-script=${PROJECT_BINARY_DIR}/libntirpc/src/libntirpc.map"
+  "-Wl,--version-script=${LIBNTIRPC_MAP}"
+  VERSION ${NTIRPC_VERSION}
+  SOVERSION "${NTIRPC_MAJOR_VERSION}.${NTIRPC_MINOR_VERSION}"
   )
 
-if (NTIRPC_STANALONE)
-install(TARGETS ntirpc DESTINATION lib)
-else(NTIRPC_STANDALONE)
-install(TARGETS ntirpc DESTINATION ${FSAL_DESTINATION})
-endif(NTIRPC_STANDALONE)
+install(TARGETS ntirpc DESTINATION ${LIB_INSTALL_DIR})
 
 ########### install files ###############
 
