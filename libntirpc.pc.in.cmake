@@ -6,6 +6,6 @@ includedir=@includedir@
 Name: libntirpc
 Description: New Transport Independent RPC Library
 Requires:
-Version: @PACKAGE_VERSION@
+Version: @NTIRPC_VERSION@
 Libs: -L@libdir@ -lintirpc
 Cflags: -I@includedir@/ntirpc
