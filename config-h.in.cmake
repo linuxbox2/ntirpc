@@ -25,6 +25,7 @@
 #cmakedefine HAVE_STRINGS_H 1
 #cmakedefine LITTLEEND 1
 #cmakedefine BIGEND 1
+#cmakedefine TIRPC_EPOLL 1
 
 /* Package stuff */
 #define PACKAGE "libntirpc"
