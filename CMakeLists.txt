@@ -15,13 +15,13 @@ project(NTIRPC C)
 # version numbers
 set(NTIRPC_MAJOR_VERSION 1)
 set(NTIRPC_MINOR_VERSION 3)
-set(NTIRPC_PATCHLEVEL 0)
+set(NTIRPC_PATCH_LEVEL 0)
 set(VERSION_COMMENT
   "Full-duplex and bi-directional ONC RPC on TCP."
 )
 # version string used for packaging
 set(NTIRPC_VERSION
-  "${NTIRPC_MAJOR_VERSION}.${NTIRPC_MINOR_VERSION}.${NTIRPC_PATCHLEVEL}")
+  "${NTIRPC_MAJOR_VERSION}.${NTIRPC_MINOR_VERSION}.${NTIRPC_PATCH_LEVEL}")
 
 # Install destination, if built standalone
 if( CMAKE_SIZEOF_VOID_P EQUAL 8 )
@@ -35,6 +35,17 @@ endif( CMAKE_SIZEOF_VOID_P EQUAL 8 )
 include(GetGitRevisionDescription)
 get_git_head_revision(GIT_REFSPEC _GIT_HEAD_COMMIT)
 git_describe(_GIT_DESCRIBE)
+
+# Allow overriding of prefix
+if (OVERRIDE_INSTALL_PREFIX)
+  set(CMAKE_INSTALL_PREFIX ${OVERRIDE_INSTALL_PREFIX} CACHE PATH
+    "Install prefix" FORCE)
+endif(OVERRIDE_INSTALL_PREFIX)
+message(STATUS "OVERRIDE_INSTALL_PREFIX = ${OVERRIDE_INSTALL_PREFIX}")
+
+# Set default base directory
+set(NTIRPC_BASE_DIR ${PROJECT_SOURCE_DIR} CACHE
+  PATH "Path to base source directory of NTIRPC")
 
 # Build configure options
 
@@ -107,7 +118,7 @@ if (FREEBSD)
    set(EXTRA_INCLUDE_DIR "/opt/ganesha/include")
 else()
   # workaround bug in some include_directories when no extra includes
-  set(EXTRA_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/ntirpc/")
+  set(EXTRA_INCLUDE_DIR "${NTIRPC_BASE_DIR}/ntirpc/")
 endif(FREEBSD)
 
 add_definitions(-DHAVE_CONFIG_H)
@@ -118,7 +129,7 @@ endif(MSVC)
 
 include_directories(
   "${PROJECT_BINARY_DIR}"
-  "${PROJECT_SOURCE_DIR}/ntirpc/"
+  "${NTIRPC_BASE_DIR}/ntirpc/"
   "${EXTRA_INCLUDE_DIR}"
 )
 
@@ -139,8 +150,8 @@ set(SYSTEM_LIBRARIES
 set(LIBNTIRPC_MAP "${PROJECT_BINARY_DIR}/src/libntirpc.map")
 # subst files (need add_custom_command for dependency, fyi)
 configure_file(
-  "${PROJECT_SOURCE_DIR}/src/libntirpc.map.in.cmake"
-  "${LIBNTIRPC_MAP}"
+  "${NTIRPC_BASE_DIR}/src/libntirpc.map.in.cmake"
+  "${PROJECT_BINARY_DIR}/libntirpc.map"
 )
 
 add_subdirectory(src)
@@ -164,15 +175,22 @@ set(TIRPC_EPOLL ${TIRPC_EPOLL}
 
 # grist files
 configure_file(
-  "${PROJECT_SOURCE_DIR}/config-h.in.cmake"
+  "${NTIRPC_BASE_DIR}/config-h.in.cmake"
   "${PROJECT_BINARY_DIR}/config.h"
 )
 
 configure_file(
-  "${PROJECT_SOURCE_DIR}/libntirpc.pc.in.cmake"
+  "${NTIRPC_BASE_DIR}/version-h.in.cmake"
+  "${PROJECT_BINARY_DIR}/ntirpc/version.h"
+)
+
+configure_file(
+  "${NTIRPC_BASE_DIR}/libntirpc.pc.in.cmake"
   "${PROJECT_BINARY_DIR}/libntirpc.pc"
 )
 
 ########### install files ###############
 
 install(FILES  ${PROJECT_BINARY_DIR}/libntirpc.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
+install(DIRECTORY  ${NTIRPC_BASE_DIR}/ntirpc DESTINATION include)
+install(FILES  ${PROJECT_BINARY_DIR}/ntirpc/version.h DESTINATION include/ntirpc)

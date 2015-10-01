@@ -1,16 +1,9 @@
 /* config.h file expanded by Cmake for build */
 
+#include "ntirpc/version.h"
+
 #ifndef CONFIG_H
 #define CONFIG_H
-
-#define NTIRPC_VERSION_MAJOR @NTIRPC_MAJOR_VERSION@
-#define NTIRPC_VERSION_MINOR @NTIRPC_MINOR_VERSION@
-#define NTIRPC_PATCH_LEVEL @NTIRPC_PATCH_LEVEL@
-
-#define VERSION "${NTIRPC_VERSION_MAJOR}.${NTIRPC_VERSION_MINOR}.${NTIRPC_PATCH_LEVEL}"
-#define VERSION_COMMENT "@VERSION_COMMENT@"
-#define _GIT_HEAD_COMMIT "@_GIT_HEAD_COMMIT@"
-#define _GIT_DESCRIBE "@_GIT_DESCRIBE@"
 
 /* Build controls */
 

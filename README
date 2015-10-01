@@ -1,3 +1,16 @@
+NTIRPC - Transport-independent RPC (TI-RPC)
+
+To use this in a CMake-based project, copy cmake/modules/FindNTIRPC.cmake into
+your project, and add:
+
+find_package(NTIRPC [<version>] [REQUIRED])
+
+where <version> is the minimum version needed (e.g. 1.3.0) and REQUIRED is
+added if ntirpc is not optional.
+
+
+
+
 LIBTIRPC 0.1 FROM SUN'S TIRPCSRC 2.3 29 Aug 1994
 
 This package contains SunLib's implementation of transport-independent
