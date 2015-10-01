@@ -99,14 +99,14 @@ if(USE_GSS)
 
 endif(USE_GSS)
 
-if(USE_NFS_RDMA)
+if(USE_RPC_RDMA)
   SET(ntirpc_rdma_SRCS
   clnt_rdma.c
   rpc_rdma.c
   svc_rdma.c
   xdr_rdma.c
   )
-endif(USE_NFS_RDMA)
+endif(USE_RPC_RDMA)
 
 # declares the library
 add_library(ntirpc SHARED
