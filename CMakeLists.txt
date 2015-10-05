@@ -32,6 +32,8 @@ else( CMAKE_SIZEOF_VOID_P EQUAL 8 )
 		"Specify name of libdir inside install path")
 endif( CMAKE_SIZEOF_VOID_P EQUAL 8 )
 
+set(SYSTEM_LIBRARIES ${SYSTEM_LIBRARIES})
+
 include(GetGitRevisionDescription)
 get_git_head_revision(GIT_REFSPEC _GIT_HEAD_COMMIT)
 git_describe(_GIT_DESCRIBE)
@@ -52,6 +54,13 @@ set(NTIRPC_BASE_DIR ${PROJECT_SOURCE_DIR} CACHE
 option (USE_GSS "enable RPCSEC_GSS support" ON)
 
 option(TIRPC_EPOLL "platform supports EPOLL or emulation" ON)
+
+option(USE_RPC_RDMA "platform supports RDMA" OFF)
+if (USE_RPC_RDMA)
+  find_package(RDMA REQUIRED)
+  include_directories(${RDMA_INCLUDE_DIR})
+  set(SYSTEM_LIBRARIES ${SYSTEM_LIBRARIES} ${RDMA_LIBRARY})
+endif(USE_RPC_RDMA)
 
 # MSPAC support -lwbclient link flag
 option(_MSPAC_SUPPORT "enable mspac Winbind support" OFF)
@@ -107,8 +116,6 @@ if(KRB5_FOUND)
   set(_HAVE_GSSAPI ON)
 endif(KRB5_FOUND)
 
-set(SYSTEM_LIBRARIES ${SYSTEM_LIBRARIES})
-
 if(_MSPAC_SUPPORT)
   find_package(WBclient REQUIRED)
   set(SYSTEM_LIBRARIES ${WBclient_LIBRARIES} ${SYSTEM_LIBRARIES})
@@ -142,9 +149,8 @@ set(SYSTEM_LIBRARIES
   ${KRB5_LIBRARIES}
   gssapi_krb5
   ${SYSTEM_LIBRARIES}
-  ${LIBDL}
-  ${CMAKE_THREAD_LIBS_INIT}
   ${LIBRT}
+  ${LIBNSL}
 )
 
 set(LIBNTIRPC_MAP "${PROJECT_BINARY_DIR}/src/libntirpc.map")
@@ -161,6 +167,7 @@ add_subdirectory(src)
 message(STATUS)
 message(STATUS "-------------------------------------------------------")
 message(STATUS "TIRPC_EPOLL = ${TIRPC_EPOLL}")
+message(STATUS "USE_RPC_RDMA = ${USE_RPC_RDMA}")
 
 #force command line options to be stored in cache
 set(_MSPAC_SUPPORT ${_MSPAC_SUPPORT}

@@ -99,14 +99,14 @@ if(USE_GSS)
 
 endif(USE_GSS)
 
-if(USE_NFS_RDMA)
+if(USE_RPC_RDMA)
   SET(ntirpc_rdma_SRCS
   clnt_rdma.c
   rpc_rdma.c
   svc_rdma.c
   xdr_rdma.c
   )
-endif(USE_NFS_RDMA)
+endif(USE_RPC_RDMA)
 
 # declares the library
 add_library(ntirpc SHARED
@@ -118,7 +118,7 @@ add_library(ntirpc SHARED
 
 # add required libraries--for Ganesha build, it's ok for them to
 # propagate (i.e., omit PRIVATE)
-target_link_libraries(ntirpc ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(ntirpc ${SYSTEM_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 
 # set library version and symbol namespace(s) from gen'd map file
 set_target_properties(ntirpc PROPERTIES LINK_FLAGS
