@@ -1,6 +1,6 @@
-/*
+/*-
  * Copyright (c) 1982, 1985, 1986, 1988, 1993, 1994
- *	The Regents of the University of California.  All rights reserved.
+ *      The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -10,10 +10,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
  * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
@@ -30,34 +26,38 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- *	@(#)socket.h	8.4 (Berkeley) 2/21/94
- * $FreeBSD: src/sys/sys/socket.h,v 1.73 2003/11/14 18:48:15 bms Exp $
+ *      @(#)socket.h    8.4 (Berkeley) 2/21/94
+ * $FreeBSD: stable/10/sys/sys/socket.h 254925 2013-08-26 18:16:05Z jhb $
  */
 
-#ifndef _MISC_SYS_SOCKET_H_
-#define	_MISC_SYS_SOCKET_H_
+#ifndef MISC_SYS_SOCKET_H
+#define	MISC_SYS_SOCKET_H
 
 #include <sys/types.h>
-
-#define CMGROUP_MAX 16
-#define SCM_CREDS       0x03	/* process creds (struct cmsgcred) */
-
 #if defined(__linux__)
-/*
- * Credentials structure, used to verify the identity of a peer
- * process that has sent us a message. This is allocated by the
- * peer process but filled in by the kernel. This prevents the
- * peer from lying about its identity. (Note that cmcred_groups[0]
- * is the effective GID.)
+ /*
+  * While we may have more groups than this, the cmsgcred struct must
+  * be able to fit in an mbuf and we have historically supported a
+  * maximum of 16 groups.
  */
-struct cmsgcred {
-	pid_t cmcred_pid;	/* PID of sending process */
-	uid_t cmcred_uid;	/* real UID of sending process */
-	uid_t cmcred_euid;	/* effective UID of sending process */
-	gid_t cmcred_gid;	/* real GID of sending process */
-	short cmcred_ngroups;	/* number or groups */
-	gid_t cmcred_groups[CMGROUP_MAX];	/* groups */
-};
-#endif
+ #define CMGROUP_MAX 16
 
-#endif				/* _MISC_SYS_SOCKET_H_ */
+ /*
+  * Credentials structure, used to verify the identity of a peer
+  * process that has sent us a message. This is allocated by the
+  * peer process but filled in by the kernel. This prevents the
+  * peer from lying about its identity. (Note that cmcred_groups[0]
+  * is the effective GID.)
+  */
+ struct cmsgcred {
+         pid_t   cmcred_pid;             /* PID of sending process */
+         uid_t   cmcred_uid;             /* real UID of sending process */
+         uid_t   cmcred_euid;            /* effective UID of sending process */
+         gid_t   cmcred_gid;             /* real GID of sending process */
+         short   cmcred_ngroups;         /* number or groups */
+         gid_t   cmcred_groups[CMGROUP_MAX];     /* groups */
+ };
+
+#endif /* __linux__ */
+
+#endif /* MISC_SYS_SOCKET_H */
