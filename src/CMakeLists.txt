@@ -12,7 +12,6 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 
 SET(ntirpc_common_SRCS
   auth_none.c
-  auth_time.c
   auth_unix.c
   authunix_prot.c
   bindresvport.c
