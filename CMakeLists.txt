@@ -142,9 +142,8 @@ set(SYSTEM_LIBRARIES
   ${KRB5_LIBRARIES}
   gssapi_krb5
   ${SYSTEM_LIBRARIES}
-  ${LIBDL}
-  ${CMAKE_THREAD_LIBS_INIT}
   ${LIBRT}
+  ${LIBNSL}
 )
 
 set(LIBNTIRPC_MAP "${PROJECT_BINARY_DIR}/src/libntirpc.map")

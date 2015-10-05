@@ -118,7 +118,7 @@ add_library(ntirpc SHARED
 
 # add required libraries--for Ganesha build, it's ok for them to
 # propagate (i.e., omit PRIVATE)
-target_link_libraries(ntirpc ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(ntirpc ${SYSTEM_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 
 # set library version and symbol namespace(s) from gen'd map file
 set_target_properties(ntirpc PROPERTIES LINK_FLAGS
