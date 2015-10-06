@@ -9,8 +9,10 @@
 #    RDMA_LIBRARY   = The list of libraries to link to when using RDMA
 #    RDMA_INCLUDE_DIR = The path to RDMA include directory(s)
 #
-# On can set RDMA_PATH_HINT before using find_package(RDMA) and the
+# One can set RDMA_PATH_HINT before using find_package(RDMA) and the
 # module with use the PATH as a hint to find RDMA.
+# Alternatively, one can set LIBIBVERBS_PREFIX and LIBRDMACM_PREFIX to the individual
+# hints for those libraries.
 #
 # The hint can be given on the command line too:
 #   cmake -DRDMA_PATH_HINT=/DATA/ERIC/RDMA /path/to/source
@@ -18,14 +20,24 @@
 include(LibFindMacros)
 
 # ibverbs
-set(IBVERBS_PKGCONF_INCLUDE_DIRS ${RDMA_PATH_HINT}/include)
-set(IBVERBS_PKGCONF_LIBRARY_DIRS ${RDMA_PATH_HINT}/lib64 ${RDMA_PATH_HINT}/lib)
+if (LIBIBVERBS_PREFIX)
+	set(IBVERBS_PKGCONF_INCLUDE_DIRS ${LIBIBVERBS_PREFIX}/include)
+	set(IBVERBS_PKGCONF_LIBRARY_DIRS ${LIBIBVERBS_PREFIX}/lib64 ${LIBIBVERBS_PREFIX}/lib)
+else (LIBIBVERBS_PREFIX)
+	set(IBVERBS_PKGCONF_INCLUDE_DIRS ${RDMA_PATH_HINT}/include)
+	set(IBVERBS_PKGCONF_LIBRARY_DIRS ${RDMA_PATH_HINT}/lib64 ${RDMA_PATH_HINT}/lib)
+endif (LIBIBVERBS_PREFIX)
 libfind_pkg_detect(IBVERBS libibverbs FIND_PATH verbs.h PATH_SUFFIXES infiniband FIND_LIBRARY ibverbs)
 libfind_process(IBVERBS)
 
 # rdmacm
-set(RDMACM_PKGCONF_INCLUDE_DIRS ${RDMA_PATH_HINT}/include)
-set(RDMACM_PKGCONF_LIBRARY_DIRS $${RDMA_PATH_HINT}/lib64 ${RDMA_PATH_HINT}/lib)
+if (LIBRDMACM_PREFIX)
+	set(RDMACM_PKGCONF_INCLUDE_DIRS ${LIBRDMACM_PREFIX}/include)
+	set(RDMACM_PKGCONF_LIBRARY_DIRS ${LIBRDMACM_PREFIX}/lib64 ${LIBRDMACM_PREFIX}/lib)
+else (LIBRDMACM_PREFIX)
+	set(RDMACM_PKGCONF_INCLUDE_DIRS ${RDMA_PATH_HINT}/include)
+	set(RDMACM_PKGCONF_LIBRARY_DIRS ${RDMA_PATH_HINT}/lib64 ${RDMA_PATH_HINT}/lib)
+endif (LIBRDMACM_PREFIX)
 libfind_pkg_detect(RDMACM librdmacm FIND_PATH rdma_cma.h PATH_SUFFIXES rdma FIND_LIBRARY rdmacm)
 libfind_process(RDMACM)
 
