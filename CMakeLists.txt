@@ -134,7 +134,7 @@ if (MSVC)
    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif(MSVC)
 
-include_directories(
+include_directories(BEFORE
   "${PROJECT_BINARY_DIR}"
   "${NTIRPC_BASE_DIR}/ntirpc/"
   "${EXTRA_INCLUDE_DIR}"
