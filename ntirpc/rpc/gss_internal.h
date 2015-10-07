@@ -26,7 +26,6 @@
 #ifndef GSS_INTERNAL_H
 #define GSS_INTERNAL_H
 
-#include <config.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
