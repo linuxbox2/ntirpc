@@ -52,6 +52,11 @@
 #include <sys/poll.h>
 #endif
 
+#include <sys/socket.h>
+#ifdef RPC_VSOCK
+#include <linux/vm_sockets.h>
+#endif /* VSOCK */
+
 #include <rpc/types.h>
 #include <misc/portable.h>
 #include <rpc/rpc.h>
@@ -284,6 +289,12 @@ __rpc_set_address(struct rpc_address *rpca, const struct sockaddr_storage *ss,
 		l = sl ? sl : sizeof(struct sockaddr);
 		memcpy(&rpca->ss, ss, l);
 		break;
+#ifdef RPC_VSOCK
+	case AF_VSOCK:
+		l = sl ? sl : sizeof(struct sockaddr_vm);
+		memcpy(&rpca->ss, ss, l);
+		break;
+#endif /* VSOCK */
 	default:
 		memset(&rpca->ss, 0xfe, sizeof(struct sockaddr_storage));
 		l = sl ? sl : sizeof(struct sockaddr);

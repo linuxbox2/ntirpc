@@ -37,6 +37,9 @@
  */
 #include <sys/cdefs.h>
 #include <sys/socket.h>
+#ifdef RPC_VSOCK
+#include <linux/vm_sockets.h>
+#endif /* VSOCK */
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/poll.h>
@@ -79,11 +82,12 @@
 int generic_read_vc(XDR *, void *, void *, int);
 int generic_write_vc(XDR *, void *, void *, int);
 
-static void svc_vc_rendezvous_ops(SVCXPRT *);
-static void svc_vc_ops(SVCXPRT *);
+static void svc_vc_rendezvous_ops(SVCXPRT *, u_int);
+static void svc_vc_ops(SVCXPRT *, u_int);
 static void svc_vc_override_ops(SVCXPRT *, SVCXPRT *);
 
 bool __svc_clean_idle2(int, bool);
+
 static SVCXPRT *makefd_xprt(int, u_int, u_int, bool *);
 
 extern pthread_mutex_t svc_ctr_lock;
@@ -126,6 +130,10 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 
 	if (!__rpc_sockinfo2netid(&si, &netid))
 		return NULL;
+
+#ifdef RPC_VSOCK
+	flags |= (si.si_af == AF_VSOCK) ? SVC_VC_CREATE_VSOCK : 0;
+#endif /* VSOCK */
 
 	rdvs = mem_alloc(sizeof(struct cf_rendezvous));
 	rdvs->sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsize);
@@ -185,7 +193,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	xprt = mem_zalloc(sizeof(SVCXPRT));
 	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
 	xprt->xp_refs = 1;
-	svc_vc_rendezvous_ops(xprt);
+	svc_vc_rendezvous_ops(xprt, flags);
 	xprt->xp_p1 = rdvs;
 	xprt->xp_p2 = xd;
 	xprt->xp_p5 = rec;
@@ -318,6 +326,7 @@ SVCXPRT *
 svc_fd_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 {
 	struct sockaddr_storage ss;
+	struct sockaddr *sa = (struct sockaddr *)(void *)&ss;
 	socklen_t slen;
 	SVCXPRT *xprt;
 	bool xprt_allocd;
@@ -329,7 +338,7 @@ svc_fd_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 		return (xprt);
 
 	slen = sizeof(struct sockaddr_storage);
-	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
+	if (getsockname(fd, sa, &slen) < 0) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 			"svc_fd_ncreate: could not retrieve local addr");
 		return (NULL);
@@ -353,7 +362,7 @@ svc_fd_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 }
 
 static SVCXPRT *
-makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
+	makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 {
 	SVCXPRT *xprt = NULL;
 	struct x_vc_data *xd = NULL;
@@ -460,7 +469,12 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 	/* the SVCXPRT created in svc_vc_create accepts new connections
 	 * in its xp_recv op, the rendezvous_request method, but xprt is
 	 * a call channel */
-	svc_vc_ops(xprt);
+	u_int ops_flags =
+#ifdef RPC_VSOCK
+		(si.si_af == AF_VSOCK) ? SVC_VC_CREATE_VSOCK :
+#endif /* VSOCK */
+		0;
+	svc_vc_ops(xprt, ops_flags);
 
 	xd->sx.strm_stat = XPRT_IDLE;
 
@@ -1008,7 +1022,7 @@ svc_vc_unlock(SVCXPRT *xprt, uint32_t flags, const char *func, int line)
 }
 
 static void
-svc_vc_ops(SVCXPRT *xprt)
+svc_vc_ops(SVCXPRT *xprt, u_int flags)
 {
 	static struct xp_ops ops;
 
@@ -1016,6 +1030,11 @@ svc_vc_ops(SVCXPRT *xprt)
 	mutex_lock(&ops_lock);
 
 	xprt->xp_type = XPRT_TCP;
+	xprt->xp_type =
+#ifdef RPC_VSOCK
+		(flags & SVC_VC_CREATE_VSOCK) ? XPRT_VSOCK :
+#endif /* VSOCK */
+		XPRT_TCP;
 
 	if (ops.xp_recv == NULL) {
 		ops.xp_recv = svc_vc_recv;
@@ -1041,22 +1060,34 @@ svc_vc_override_ops(SVCXPRT *xprt, SVCXPRT *newxprt)
 {
 	if (xprt->xp_ops->xp_getreq)
 		newxprt->xp_ops->xp_getreq = xprt->xp_ops->xp_getreq;
+
 	if (xprt->xp_ops->xp_dispatch)
 		newxprt->xp_ops->xp_dispatch = xprt->xp_ops->xp_dispatch;
-	if (xprt->xp_ops->xp_recv_user_data)
-		newxprt->xp_ops->xp_recv_user_data = xprt->xp_ops->xp_recv_user_data;
-	if (xprt->xp_ops->xp_free_user_data)
-		newxprt->xp_ops->xp_free_user_data = xprt->xp_ops->xp_free_user_data;
+
+	if (xprt->xp_ops->xp_recv_user_data) {
+		newxprt->xp_ops->xp_recv_user_data =
+			xprt->xp_ops->xp_recv_user_data;
+	}
+	if (xprt->xp_ops->xp_free_user_data) {
+		newxprt->xp_ops->xp_free_user_data =
+			xprt->xp_ops->xp_free_user_data;
+	}
 }
 
 static void
-svc_vc_rendezvous_ops(SVCXPRT *xprt)
+svc_vc_rendezvous_ops(SVCXPRT *xprt, u_int flags)
 {
 	static struct xp_ops ops;
 	extern mutex_t ops_lock;
 
 	mutex_lock(&ops_lock);
-	xprt->xp_type = XPRT_TCP_RENDEZVOUS;
+
+	xprt->xp_type =
+#ifdef RPC_VSOCK
+		(flags & SVC_VC_CREATE_VSOCK) ? XPRT_VSOCK_RENDEZVOUS :
+#endif /* VSOCK */
+		XPRT_TCP_RENDEZVOUS;
+
 	if (ops.xp_recv == NULL) {
 		ops.xp_recv = rendezvous_request;
 		ops.xp_stat = rendezvous_stat;

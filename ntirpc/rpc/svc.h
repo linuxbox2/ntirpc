@@ -153,6 +153,7 @@ typedef struct svc_init_params {
 #define SVC_XPRT_FLAG_BLOCKED		0x0002
 #define SVC_XPRT_FLAG_DESTROYED		0x0020	/* SVC_DESTROY() was called */
 #define SVC_XPRT_FLAG_DESTROYING	0x0040	/* (*xp_destroy) was called */
+#define SVC_XPRT_FLAG_VSOCK             0x0080
 
 /* uint32_t instructions */
 #define SVC_XPRT_FLAG_LOCK		SVC_XPRT_FLAG_NONE
@@ -182,7 +183,9 @@ typedef enum xprt_type {
 	XPRT_TCP,
 	XPRT_TCP_RENDEZVOUS,
 	XPRT_SCTP,
-	XPRT_RDMA
+	XPRT_RDMA,
+	XPRT_VSOCK,
+	XPRT_VSOCK_RENDEZVOUS
 } xprt_type_t;
 
 enum xprt_stat {
@@ -746,6 +749,7 @@ __END_DECLS
 #define SVC_VC_CREATE_DISPOSE          0x0004	/* !bothways */
 #define SVC_VC_CREATE_XPRT_NOREG       0x0008
 #define SVC_VC_CREATE_LISTEN           0x0010
+#define SVC_VC_CREATE_VSOCK            0x0020
 
 __BEGIN_DECLS
 /*
