@@ -71,6 +71,7 @@ typedef struct {
 #define NC_X25		"x25"
 #define NC_OSINET	"osinet"
 #define NC_GOSIP	"gosip"
+#define NC_VSOCK        "vsock"
 
 /*
  * nc_proto values
@@ -79,6 +80,7 @@ typedef struct {
 #define NC_TCP		"tcp"
 #define NC_UDP		"udp"
 #define NC_ICMP		"icmp"
+
 
 __BEGIN_DECLS
 extern void *setnetconfig(void);

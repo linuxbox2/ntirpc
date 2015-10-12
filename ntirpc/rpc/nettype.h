@@ -53,6 +53,7 @@
 #define	_RPC_DATAGRAM_N	6
 #define	_RPC_TCP	7
 #define	_RPC_UDP	8
+#define _RPC_VSOCK      9 /* XXX assignment */
 
 __BEGIN_DECLS
 extern void *__rpc_setconf(const char *);

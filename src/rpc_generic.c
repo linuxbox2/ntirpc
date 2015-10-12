@@ -51,6 +51,9 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <netdb.h>
+#ifdef RPC_VSOCK
+#include <linux/vm_sockets.h>
+#endif /* VSOCK */
 #include <netconfig.h>
 #include <err.h>
 #include <stdlib.h>
@@ -99,20 +102,22 @@ struct handle {
 	int nettype;
 };
 
-static const struct _rpcnettype {
+struct _rpcnettype {
 	const char *name;
 	const int type;
-} _rpctypelist[] = {
-	{
-	"netpath", _RPC_NETPATH}, {
-	"visible", _RPC_VISIBLE}, {
-	"circuit_v", _RPC_CIRCUIT_V}, {
-	"datagram_v", _RPC_DATAGRAM_V}, {
-	"circuit_n", _RPC_CIRCUIT_N}, {
-	"datagram_n", _RPC_DATAGRAM_N}, {
-	"tcp", _RPC_TCP}, {
-	"udp", _RPC_UDP}, {
-	0, _RPC_NONE}
+};
+
+static const struct _rpcnettype _rpctypelist[] = {
+	{"netpath", _RPC_NETPATH},
+	{"visible", _RPC_VISIBLE},
+	{"circuit_v", _RPC_CIRCUIT_V},
+	{"datagram_v", _RPC_DATAGRAM_V},
+	{"circuit_n", _RPC_CIRCUIT_N},
+	{"datagram_n", _RPC_DATAGRAM_N},
+	{"tcp", _RPC_TCP},
+	{"udp", _RPC_UDP},
+	{"vsock", _RPC_VSOCK},
+	{0, _RPC_NONE}
 };
 
 struct netid_af {
@@ -128,6 +133,9 @@ static const struct netid_af na_cvt[] = {
 	{"udp6", AF_INET6, IPPROTO_UDP},
 	{"tcp6", AF_INET6, IPPROTO_TCP},
 #endif
+#ifdef RPC_VSOCK
+	{"vsock", AF_VSOCK, PF_VSOCK},
+#endif /* VSOCK */
 	{"local", AF_LOCAL, 0}
 };
 
@@ -173,8 +181,11 @@ __rpc_get_t_size(int af, int proto, int size)
 	case IPPROTO_UDP:
 		defsize = UDPMSGSIZE;
 		break;
+	case PF_VSOCK:
+		defsize = 64 * 1024;	/* XXX */
+		break;
 	default:
-		defsize = RPC_MAXDATASIZE;
+		defsize = RPC_MAXDATASIZE; /* 9000 */
 		break;
 	}
 	if (size == 0)
@@ -197,6 +208,11 @@ __rpc_get_a_size(int af)
 	case AF_INET6:
 		return sizeof(struct sockaddr_in6);
 #endif
+#ifdef RPC_VSOCK
+		/* Linux */
+	case AF_VSOCK:
+		return sizeof(struct sockaddr_vm);
+#endif /* VSOCK */
 	case AF_LOCAL:
 		return sizeof(struct sockaddr_un);
 	default:
@@ -251,8 +267,9 @@ __rpc_getconfip(const char *nettype)
 	char *netid;
 	char *netid_tcp = (char *)NULL;
 	char *netid_udp = (char *)NULL;
+	char *netid_vsock = (char *)NULL;
 	struct netconfig *dummy;
-	extern thread_key_t tcp_key, udp_key;
+	extern thread_key_t tcp_key, udp_key, vsock_key;
 	extern mutex_t tsd_lock;
 
 	if (tcp_key == -1) {
@@ -269,6 +286,13 @@ __rpc_getconfip(const char *nettype)
 		mutex_unlock(&tsd_lock);
 	}
 	netid_udp = (char *)thr_getspecific(udp_key);
+	if (vsock_key == -1) {
+		mutex_lock(&tsd_lock);
+		if (vsock_key == -1)
+			thr_keycreate(&vsock_key, free);
+		mutex_unlock(&tsd_lock);
+	}
+	netid_vsock = (char *)thr_getspecific(vsock_key);
 	if (!netid_udp && !netid_tcp) {
 		struct netconfig *nconf;
 		void *confighandle;
@@ -293,7 +317,15 @@ __rpc_getconfip(const char *nettype)
 					thr_setspecific(udp_key,
 							(void *)netid_udp);
 				}
-			}
+			} /* NC_INET || NC_INET6 */
+			if (strcmp(nconf->nc_protofmly, NC_VSOCK) == 0) {
+				if (netid_vsock == NULL) {
+					netid_vsock =
+						rpc_strdup(nconf->nc_netid);
+					thr_setspecific(vsock_key,
+							(void *)netid_vsock);
+				}
+			} /* VSOCK */
 		}
 		endnetconfig(confighandle);
 	}
@@ -301,6 +333,8 @@ __rpc_getconfip(const char *nettype)
 		netid = netid_udp;
 	else if (strcmp(nettype, "tcp") == 0)
 		netid = netid_tcp;
+	else if (strcmp(nettype, "vsock") == 0)
+		netid = netid_vsock;
 	else
 		return (NULL);
 	if ((netid == NULL) || (netid[0] == 0))
@@ -338,6 +372,7 @@ __rpc_setconf(const char *nettype)
 	case _RPC_DATAGRAM_V:
 	case _RPC_TCP:
 	case _RPC_UDP:
+	case _RPC_VSOCK:
 		handle->nhandle = setnetconfig();
 		if (!handle->nhandle) {
 			__warnx(TIRPC_DEBUG_FLAG_DEFAULT,
@@ -426,6 +461,14 @@ __rpc_getconf(void *vhandle)
 			    || strcmp(nconf->nc_proto, NC_UDP))
 				continue;
 			break;
+                case _RPC_VSOCK:
+			/* accept stream sockets only, there is no valid
+			 * proto (i.e., it must be "-") */
+			if ((nconf->nc_semantics != NC_TPI_COTS_ORD) ||
+				(strcmp(nconf->nc_protofmly, NC_VSOCK)) ||
+				(strcmp(nconf->nc_proto, NC_NOPROTO)))
+				continue;
+			break;
 		}
 		break;
 	}
@@ -505,9 +548,19 @@ __rpc_fd2sockinfo(int fd, struct __rpc_sockinfo *sip)
 
 	/* XXX */
 	if (ss.ss_family != AF_LOCAL) {
-		if (type == SOCK_STREAM)
-			proto = IPPROTO_TCP;
-		else if (type == SOCK_DGRAM)
+		if (type == SOCK_STREAM) {
+			switch (ss.ss_family) {
+			case PF_INET:
+			case PF_INET6:
+				proto = IPPROTO_TCP;
+				break;
+#ifdef RPC_VSOCK
+			case AF_VSOCK:
+				proto = PF_VSOCK;
+				break;
+#endif /* VSOCK */
+			}
+		} else if (type == SOCK_DGRAM)
 			proto = IPPROTO_UDP;
 		else
 			return 0;
@@ -677,6 +730,20 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 		}
 		break;
 #endif
+#ifdef RPC_VSOCK
+	case AF_VSOCK:
+	{
+		struct sockaddr_vm *svm = nbuf->buf;
+		port = svm->svm_port;
+		if (sprintf
+			(ret, "%d.%u.%u", svm->svm_cid, ((u_int32_t)port) >> 8,
+				port & 0xff) < 0) {
+			mem_free(ret, 0);
+			return NULL;
+		}
+	}
+	break;
+#endif /* VSOCK */
 	case AF_LOCAL:
 		sun = nbuf->buf;
 		/* if (asprintf(&ret, "%.*s", (int)(sun->sun_len -
@@ -719,7 +786,7 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 
 	/*
 	 * AF_LOCAL addresses are expected to be absolute
-	 * pathnames, anything else will be AF_INET or AF_INET6.
+	 * pathnames.
 	 */
 	if (*addrstr != '/') {
 		p = strrchr(addrstr, '.');
@@ -775,6 +842,32 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 		ret->buf = sin6;
 		break;
 #endif
+#ifdef RPC_VSOCK
+	case AF_VSOCK:
+	{
+		struct sockaddr_in sin;
+		struct sockaddr_vm *svm;
+		svm = (struct sockaddr_vm *) mem_zalloc(
+			sizeof(struct sockaddr_vm));
+		if (svm == NULL)
+			goto out;
+		svm->svm_family = AF_VSOCK;
+		memset(&sin, 0, sizeof(sin));
+		sin.sin_family = AF_INET;
+		sin.sin_port = htons(port);
+		if (inet_pton(AF_INET, addrstr, &sin.sin_addr) <= 0) {
+			mem_free(svm, 0);
+			mem_free(ret, 0);
+			ret = NULL;
+			goto out;
+		}
+		svm->svm_cid = sin.sin_addr.s_addr;
+		svm->svm_port = port;
+		ret->maxlen = ret->len = sizeof(struct sockaddr_vm);
+		ret->buf = svm;
+	}
+	break;
+#endif /* VSOCK */
 	case AF_LOCAL:
 		sun = (struct sockaddr_un *)mem_zalloc(sizeof(*sun));
 		if (sun == NULL)
@@ -870,6 +963,9 @@ int __rpc_sockisbound(int fd)
 		struct sockaddr_in sin;
 		struct sockaddr_in6 sin6;
 		struct sockaddr_un usin;
+#ifdef RPC_VSOCK
+		struct sockaddr_vm svm;
+#endif /* VSOCK */
 	} u_addr;
 	socklen_t slen;
 
@@ -886,6 +982,11 @@ int __rpc_sockisbound(int fd)
 		memcpy(&u_addr.sin6, &ss, sizeof(u_addr.sin6));
 		return (u_addr.sin6.sin6_port != 0);
 #endif
+#ifdef RPC_VSOCK
+	case AF_VSOCK:
+		memcpy(&u_addr.svm, &ss, sizeof(u_addr.svm));
+		return (u_addr.svm.svm_port != 0);
+#endif /* VSOCK */
 	case AF_LOCAL:
 		/* XXX check this */
 		memcpy(&u_addr.usin, &ss, sizeof(u_addr.usin));
