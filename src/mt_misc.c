@@ -81,6 +81,7 @@ thread_key_t tcp_key = -1;
 thread_key_t udp_key = -1;
 thread_key_t nc_key = -1;
 thread_key_t rce_key = -1;
+thread_key_t vsock_key = -1;
 
 /* xprtlist (svc_generic.c) */
 pthread_mutex_t xprtlist_lock = MUTEX_INITIALIZER;
