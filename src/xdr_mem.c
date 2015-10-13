@@ -193,7 +193,7 @@ xdrmem_setpos(XDR *xdrs, u_int pos)
 	/* update the most recent data length, just in case */
 	xdr_tail_update(xdrs);
 
-	if (newaddr > xdrs->x_v.vio_tail)
+	if (newaddr > xdrs->x_v.vio_wrap)
 		return (false);
 	xdrs->x_private = newaddr;
 	return (true);

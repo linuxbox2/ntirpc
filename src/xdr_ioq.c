@@ -648,15 +648,20 @@ xdr_ioq_setpos(XDR *xdrs, u_int pos)
 
 	TAILQ_FOREACH(have, &(XIOQ(xdrs)->ioq_uv.uvqh.qh), q) {
 		struct xdr_ioq_uv *uv = IOQ_(have);
-		size_t len = ioquv_length(uv);
-		size_t off = pos - XIOQ(xdrs)->ioq_uv.plength;
+		u_int len = ioquv_length(uv);
+		u_int full = (uintptr_t)xdrs->x_v.vio_wrap
+			   - (uintptr_t)xdrs->x_v.vio_head;
 
-		if (len >= off) {
-			xdrs->x_private = uv->v.vio_head + off;
+		if (pos <= full) {
+			/* allow up to the end of the buffer,
+			 * assuming next operation will extend.
+			 */
+			xdrs->x_private = uv->v.vio_head + pos;
 			xdrs->x_base = &uv->v;
 			xdrs->x_v = uv->v;
 			return (true);
 		}
+		pos -= len;
 		XIOQ(xdrs)->ioq_uv.plength += len;
 		XIOQ(xdrs)->ioq_uv.pcount++;
 	}
