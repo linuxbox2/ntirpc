@@ -246,8 +246,8 @@ xdr_rdma_chunk_fetch(struct xdr_ioq *xioq, struct poolq_head *ioqh,
 	if (k > max_sge) {
 		__warnx(TIRPC_DEBUG_FLAG_XDR,
 			"%s() requested chunk %" PRIu32
-			" is too long (" PRIu32 ">" PRIu32 ")",
-			__func__, m, k, max_sge);
+			" is too long (%" PRIu32 ">%" PRIu32 ")",
+			__func__, length, k, max_sge);
 		k = max_sge;
 		m = sized;
 	}
@@ -555,7 +555,7 @@ xdr_rdma_post_send_n(RDMAXPRT *xprt, struct rpc_rdma_cbc *cbc, int sge,
 		if (ntohl(rs->length) < totalsize) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s() chunk bigger than the remote buffer "
-				"(" PRIu32 ">" PRIu32 ")",
+				"(%" PRIu32 ">%" PRIu32 ")",
 				__func__, totalsize, ntohl(rs->length));
 			return EMSGSIZE;
 		} else {
@@ -1522,8 +1522,8 @@ xdr_rdma_svc_flushout(struct rpc_rdma_cbc *cbc)
 			if (k > xprt->xa->max_send_sge) {
 				__warnx(TIRPC_DEBUG_FLAG_XDR,
 					"%s() requested chunk %" PRIu32
-					" is too long (" PRIu32 ">" PRIu32 ")",
-					__func__, m, k, xprt->xa->max_send_sge);
+					" is too long (%" PRIu32 ">%" PRIu32 ")",
+					__func__, length, k, xprt->xa->max_send_sge);
 				k = xprt->xa->max_send_sge;
 			}
 
