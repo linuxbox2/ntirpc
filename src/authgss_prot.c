@@ -148,9 +148,11 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	bool xdr_stat;
 	u_int databuflen, maxwrapsz;
 
-	/* Skip databody length. */
+	/* Write dummy for databody length. */
 	start = XDR_GETPOS(xdrs);
-	XDR_SETPOS(xdrs, start + 4);
+	databuflen = 0xaaaaaaaa;	/* should always overwrite */
+	if (!inline_xdr_u_int(xdrs, &databuflen))
+		return (FALSE);
 
 	memset(&databuf, 0, sizeof(databuf));
 	memset(&wrapbuf, 0, sizeof(wrapbuf));
@@ -162,16 +164,27 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 
 	/* Set databuf to marshalled rpc_gss_data_t. */
 	databuflen = end - start - 4;
-	XDR_SETPOS(xdrs, start + 4);
+	if (!XDR_SETPOS(xdrs, start+4)) {
+		log_debug("xdr_setpos#1 failed");
+		return (FALSE);
+	}
 	databuf.value = XDR_INLINE(xdrs, databuflen);
 	databuf.length = databuflen;
+
+	if (!databuf.value) {
+		log_debug("XDR_INLINE failed");
+		return (FALSE);
+	}
 
 	xdr_stat = FALSE;
 
 	if (svc == RPCSEC_GSS_SVC_INTEGRITY) {
 		/* Marshal databody_integ length. */
-		XDR_SETPOS(xdrs, start);
-		if (!inline_xdr_u_int(xdrs, (u_int *) &databuflen))
+		if (!XDR_SETPOS(xdrs, start)) {
+			log_debug("xdr_setpos#2 failed");
+			return (FALSE);
+		}
+		if (!inline_xdr_u_int(xdrs, &databuflen))
 			return (FALSE);
 
 		/* Checksum rpc_gss_data_t. */
@@ -181,7 +194,11 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 			return (FALSE);
 		}
 		/* Marshal checksum. */
-		XDR_SETPOS(xdrs, end);
+		if (!XDR_SETPOS(xdrs, end)) {
+			log_debug("xdr_setpos#3 failed");
+			gss_release_buffer(&min_stat, &wrapbuf);
+			return (FALSE);
+		}
 		maxwrapsz = (u_int) (wrapbuf.length + RPC_SLACK_SPACE);
 		xdr_stat = xdr_rpc_gss_buf(xdrs, &wrapbuf, maxwrapsz);
 		gss_release_buffer(&min_stat, &wrapbuf);
@@ -195,10 +212,17 @@ xdr_rpc_gss_wrap_data(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 			return (FALSE);
 		}
 		/* Marshal databody_priv. */
-		XDR_SETPOS(xdrs, start);
+		if (!XDR_SETPOS(xdrs, start)) {
+			log_debug("xdr_setpos#4 failed");
+			gss_release_buffer(&min_stat, &wrapbuf);
+			return (FALSE);
+		}
 		maxwrapsz = (u_int) (wrapbuf.length + RPC_SLACK_SPACE);
 		xdr_stat = xdr_rpc_gss_buf(xdrs, &wrapbuf, maxwrapsz);
 		gss_release_buffer(&min_stat, &wrapbuf);
+	}
+	if (!xdr_stat) {
+		log_debug("xdr_rpc_gss_wrap_data failed");
 	}
 	return (xdr_stat);
 }
