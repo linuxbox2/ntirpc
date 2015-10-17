@@ -167,7 +167,6 @@ svc_rqst_init()
 	if (initialized)
 		goto unlock;
 
-	mutex_init(&svc_rqst_set.mtx, NULL);
 	code = rbtx_init(&svc_rqst_set.xt, rqst_thrd_cmpf, SVC_RQST_PARTITIONS,
 			 RBT_X_FLAG_ALLOC | RBT_X_FLAG_CACHE_RT);
 	if (code)
