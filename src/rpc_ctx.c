@@ -85,6 +85,8 @@ alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
 			"%s: call ctx insert failed (xid %d client %p)",
 			__func__, ctx->xid, clnt);
 		REC_UNLOCK(rec);
+		mutex_destroy(&ctx->we.mtx);
+		cond_destroy(&ctx->we.cv);
 		mem_free(ctx, sizeof(rpc_ctx_t));
 		ctx = NULL;
 		goto out;
@@ -248,5 +250,7 @@ free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
 
 	if (ctx->msg)
 		free_rpc_msg(ctx->msg);
+	mutex_destroy(&ctx->we.mtx);
+	cond_destroy(&ctx->we.cv);
 	mem_free(ctx, sizeof(rpc_ctx_t));
 }

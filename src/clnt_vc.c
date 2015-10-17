@@ -316,6 +316,7 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 		if (cs) {
 			mem_free(cs, sizeof(struct ct_serialized));
 		}
+		mutex_destroy(&clnt->cl_lock);
 		mem_free(clnt, sizeof(CLIENT));
 	}
 	if (rec) {
@@ -800,6 +801,7 @@ clnt_vc_release(CLIENT *clnt, u_int flags)
 			mem_free(clnt->cl_netid, strlen(clnt->cl_netid) + 1);
 		if (clnt->cl_tp && clnt->cl_tp[0])
 			mem_free(clnt->cl_tp, strlen(clnt->cl_tp) + 1);
+		mutex_destroy(&clnt->cl_lock);
 		mem_free(clnt, sizeof(CLIENT));
 
 		REC_LOCK(rec);
@@ -861,6 +863,7 @@ clnt_vc_destroy(CLIENT *clnt)
 			mem_free(clnt->cl_netid, strlen(clnt->cl_netid) + 1);
 		if (clnt->cl_tp && clnt->cl_tp[0])
 			mem_free(clnt->cl_tp, strlen(clnt->cl_tp) + 1);
+		mutex_destroy(&clnt->cl_lock);
 		mem_free(clnt, sizeof(CLIENT));
 
 		if (xd_refcnt == 0) {
