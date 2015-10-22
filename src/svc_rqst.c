@@ -202,6 +202,16 @@ svc_rqst_init_xprt(SVCXPRT *xprt)
 	/* !!! not checking for duplicate xp_fd ??? */
 }
 
+/**
+ * @brief Lookup a channel
+ * @note Locking
+ * - SVC_RQST_FLAG_PART_UNLOCK - Unlock the tree partition before returning.
+ *   Otherwise, it is returned locked.
+ * - SVC_RQST_FLAG_SREC_LOCKED - The sr_rec is already locked; don't lock it
+ *   again.
+ * - SVC_RQST_FLAG_SREC_UNLOCK - Unlock the sr_rec before returning.  Otherwise,
+ *   it is returned locked.
+ */
 static inline struct svc_rqst_rec *
 svc_rqst_lookup_chan(uint32_t chan_id, struct rbtree_x_part **ref_t,
 		     uint32_t flags)
@@ -217,8 +227,7 @@ svc_rqst_lookup_chan(uint32_t chan_id, struct rbtree_x_part **ref_t,
 	t = rbtx_partition_of_scalar(&svc_rqst_set.xt, trec.id_k);
 	*ref_t = t;
 
-	if (!(flags & SVC_RQST_FLAG_PART_LOCKED))
-		mutex_lock(&t->mtx);
+	mutex_lock(&t->mtx);
 
 	ns = rbtree_x_cached_lookup(&svc_rqst_set.xt, t, &trec.node_k,
 				    trec.id_k);
@@ -357,6 +366,13 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 	return (code);
 }
 
+/*
+ * @note Lock flags
+ * - Locks xprt unless SVC_RQST_FLAG_LOCKED is passed
+ * - Locks sr_rec unless RVC_RQST_FLAG_SREC_LOCKED is passed
+ * - Returns with xprt locked unless SVC_RQST_FLAG_UNLOCK is passed
+ * - Returns with sr_rec locked unless SVC_RQST_FLAG_SREC_UNLOCKED is passed
+ */
 static inline void
 evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
 {
@@ -417,6 +433,12 @@ consume_ev_sig_nb(int fd)
 	return (sig);
 }
 
+/**
+ * Release a request
+ * @note Locking
+ * - sr_req is locked unless SVC_RQST_FLAG_SREC_LOCKED is passed
+ * - sr_req is unlocked unless SR_REQ_RELEASE_KEEP_LOCKED is passed
+ */
 static inline void
 sr_rec_release(struct svc_rqst_rec *sr_rec, uint32_t flags)
 {
@@ -444,8 +466,7 @@ svc_rqst_delete_evchan(uint32_t chan_id)
 	SVCXPRT *xprt = NULL;
 	int code = 0;
 
-	sr_rec = svc_rqst_lookup_chan(chan_id, &t, (SVC_RQST_FLAG_PART_LOCK |
-						    SVC_RQST_FLAG_SREC_LOCK));
+	sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_XPRT_FLAG_NONE);
 	if (!sr_rec) {
 		mutex_unlock(&t->mtx);
 		code = ENOENT;
@@ -461,8 +482,7 @@ svc_rqst_delete_evchan(uint32_t chan_id)
 
 		/* indirect on xp_ev */
 		/* stop processing events */
-		evchan_unreg_impl(sr_rec, xprt, (SVC_RQST_FLAG_LOCK |
-						 SVC_RQST_FLAG_UNLOCK |
+		evchan_unreg_impl(sr_rec, xprt, (SVC_RQST_FLAG_UNLOCK |
 						 SVC_RQST_FLAG_SREC_LOCKED));
 
 		/* wake up */
@@ -532,8 +552,7 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 		goto out;
 	}
 
-	sr_rec = svc_rqst_lookup_chan(chan_id, &t, (SVC_RQST_FLAG_PART_LOCK |
-						    SVC_RQST_FLAG_SREC_LOCK));
+	sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_XPRT_FLAG_NONE);
 	if (!sr_rec) {
 		mutex_unlock(&t->mtx);
 		code = ENOENT;
@@ -574,7 +593,11 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 }
 
 /**
- * Note: returns with xp_lock locked!
+ * Unregister an evchan
+ * @note Locking
+ * - Takes sr_req lock, unless SVC_RQST_FLAG_SREC_LOCKED is passed
+ * - Takes xprt lock, unless SVC_RQST_FLAG_LOCKED is passed
+ * - Returns with sr_req locked and xprt locked at all times
  */
 static int
 svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
@@ -583,9 +606,7 @@ svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 	struct rbtree_x_part *t;
 	int code = EINVAL;
 
-	sr_rec = svc_rqst_lookup_chan(chan_id, &t, (flags |
-						    SVC_RQST_FLAG_PART_LOCK |
-						    SVC_RQST_FLAG_SREC_LOCK));
+	sr_rec = svc_rqst_lookup_chan(chan_id, &t, flags);
 	if (!sr_rec) {
 		code = ENOENT;
 		if (flags & SVC_RQST_FLAG_UNLOCK)
@@ -593,9 +614,7 @@ svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 		goto unlock;
 	}
 
-	evchan_unreg_impl(sr_rec, xprt, (flags |
-					 SVC_RQST_FLAG_LOCK |
-					 SVC_RQST_FLAG_SREC_LOCKED));
+	evchan_unreg_impl(sr_rec, xprt, (flags | SVC_RQST_FLAG_SREC_LOCKED));
 
  unlock:
 	mutex_unlock(&t->mtx);
@@ -828,15 +847,13 @@ xprt_unregister(SVCXPRT *xprt)
 		__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 			"%s:%u %p xp_refs %" PRIu32,
 			__func__, __LINE__, xprt, xprt->xp_refs);
-		evchan_unreg_impl(sr_rec, xprt, (SVC_RQST_FLAG_LOCK |
-						 SVC_RQST_FLAG_SREC_LOCK |
-						 SVC_RQST_FLAG_SREC_UNLOCK));
+		evchan_unreg_impl(sr_rec, xprt, SVC_RQST_FLAG_SREC_UNLOCK);
 	} else {
 		__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 			"%s:%u %p xp_refs %" PRIu32,
 			__func__, __LINE__, xprt, xprt->xp_refs);
 		(void)svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id, xprt,
-					    SVC_RQST_FLAG_LOCK);
+					    SVC_RQST_FLAG_NONE);
 	}
 
 	/* remove xprt from xprt table */
@@ -966,9 +983,7 @@ svc_rqst_thrd_run(uint32_t chan_id, __attribute__ ((unused)) uint32_t flags)
 	struct rbtree_x_part *t;
 	int code = 0;
 
-	sr_rec = svc_rqst_lookup_chan(chan_id, &t, (SVC_RQST_FLAG_PART_LOCK |
-						    SVC_RQST_FLAG_PART_UNLOCK |
-						    SVC_RQST_FLAG_SREC_LOCK));
+	sr_rec = svc_rqst_lookup_chan(chan_id, &t, (SVC_RQST_FLAG_PART_UNLOCK));
 	if (!sr_rec) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
 			"svc_rqst_thrd_run: unknown chan_id %d", chan_id);
@@ -1010,9 +1025,7 @@ svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags)
 	struct rbtree_x_part *t;
 	int code = 0;
 
-	sr_rec = svc_rqst_lookup_chan(chan_id, &t, (SVC_RQST_FLAG_PART_LOCK |
-						    SVC_RQST_FLAG_PART_UNLOCK |
-						    SVC_RQST_FLAG_SREC_LOCK));
+	sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_RQST_FLAG_PART_UNLOCK);
 	if (!sr_rec) {
 		code = ENOENT;
 		goto out;

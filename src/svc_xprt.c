@@ -172,6 +172,14 @@ svc_xprt_set(SVCXPRT *xprt, uint32_t flags)
 	return (srec);
 }
 
+/**
+ * Clear an xprt
+ *
+ * @note Locking
+ * - xprt is locked, unless SVC_XPRT_FLAG_LOCKED is passed
+ * - xprt is unlocked if SVC_XPRT_FLAG_UNLOCK is passed, otherwise it is
+ *   returned locked
+ */
 void
 svc_xprt_clear(SVCXPRT *xprt, uint32_t flags)
 {
