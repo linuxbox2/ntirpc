@@ -376,11 +376,11 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 static inline void
 evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
 {
-	if (!(flags & SVC_RQST_FLAG_LOCKED))
-		mutex_lock(&xprt->xp_lock);
-
 	if (!(flags & SVC_RQST_FLAG_SREC_LOCKED))
 		mutex_lock(&sr_rec->mtx);
+
+	if (!(flags & SVC_RQST_FLAG_LOCKED))
+		mutex_lock(&xprt->xp_lock);
 
 	TAILQ_REMOVE(&sr_rec->xprt_q, xprt, xp_evq);
 
@@ -395,11 +395,11 @@ evchan_unreg_impl(struct svc_rqst_rec *sr_rec, SVCXPRT *xprt, uint32_t flags)
 		" after remove, before channel release",
 		__func__, xprt, xprt->xp_refs);
 
-	if (flags & SVC_RQST_FLAG_SREC_UNLOCK)
-		mutex_unlock(&sr_rec->mtx);
-
 	if (flags & SVC_RQST_FLAG_UNLOCK)
 		mutex_unlock(&xprt->xp_lock);
+
+	if (flags & SVC_RQST_FLAG_SREC_UNLOCK)
+		mutex_unlock(&sr_rec->mtx);
 }
 
 /*
@@ -448,9 +448,13 @@ sr_rec_release(struct svc_rqst_rec *sr_rec, uint32_t flags)
 		mutex_lock(&sr_rec->mtx);
 
 	refcnt = --(sr_rec->refcnt);
-	mutex_unlock(&sr_rec->mtx);
+
+	if (!(flags & SR_REQ_RELEASE_KEEP_LOCKED))
+		mutex_unlock(&sr_rec->mtx);
 
 	if (refcnt == 0) {
+		if (flags & SR_REQ_RELEASE_KEEP_LOCKED)
+			mutex_unlock(&sr_rec->mtx);
 		/* assert sr_rec DESTROYED */
 		mutex_destroy(&sr_rec->mtx);
 		mem_free(sr_rec, sizeof(struct svc_rqst_rec));
@@ -572,7 +576,6 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 	}
 
 	TAILQ_INSERT_TAIL(&sr_rec->xprt_q, xprt, xp_evq);
-	mutex_unlock(&t->mtx);
 
 	/* link from xprt */
 	xprt->xp_ev = sr_rec;
@@ -580,14 +583,15 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 	/* register on event channel */
 	(void)svc_rqst_hook_events(xprt, sr_rec);
 
-	sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED);
-
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 		"%s: pre channel %p xp_refs %" PRIu32,
 		__func__, xprt, xprt->xp_refs);
 
 	mutex_unlock(&xprt->xp_lock);
 
+	sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED);
+
+	mutex_unlock(&t->mtx);
  out:
 	return (code);
 }
@@ -606,11 +610,12 @@ svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 	struct rbtree_x_part *t;
 	int code = EINVAL;
 
+	/* Don't let them force unlocking of the part; we need that */
+	flags &= ~(SVC_RQST_FLAG_PART_UNLOCK | SVC_RQST_FLAG_SREC_UNLOCK);
+
 	sr_rec = svc_rqst_lookup_chan(chan_id, &t, flags);
 	if (!sr_rec) {
 		code = ENOENT;
-		if (flags & SVC_RQST_FLAG_UNLOCK)
-			mutex_unlock(&xprt->xp_lock);
 		goto unlock;
 	}
 
@@ -620,7 +625,8 @@ svc_rqst_evchan_unreg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 	mutex_unlock(&t->mtx);
 
 	if (sr_rec)
-		sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED);
+		sr_rec_release(sr_rec, SVC_RQST_FLAG_SREC_LOCKED |
+			       SR_REQ_RELEASE_KEEP_LOCKED);
 
 	return (code);
 }
@@ -847,13 +853,13 @@ xprt_unregister(SVCXPRT *xprt)
 		__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 			"%s:%u %p xp_refs %" PRIu32,
 			__func__, __LINE__, xprt, xprt->xp_refs);
-		evchan_unreg_impl(sr_rec, xprt, SVC_RQST_FLAG_SREC_UNLOCK);
+		evchan_unreg_impl(sr_rec, xprt, SVC_RQST_FLAG_NONE);
 	} else {
 		__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 			"%s:%u %p xp_refs %" PRIu32,
 			__func__, __LINE__, xprt, xprt->xp_refs);
 		(void)svc_rqst_evchan_unreg(__svc_params->ev_u.evchan.id, xprt,
-					    SVC_RQST_FLAG_NONE);
+					    SVC_RQST_FLAG_PART_UNLOCK);
 	}
 
 	/* remove xprt from xprt table */
@@ -862,7 +868,10 @@ xprt_unregister(SVCXPRT *xprt)
 	/* free state */
 	xprt->xp_ev = NULL;
 
+	/* xprt must be unlocked before sr_rec */
 	mutex_unlock(&xprt->xp_lock);
+
+	mutex_unlock(&sr_rec->mtx);
 }
 
 bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
