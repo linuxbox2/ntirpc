@@ -870,7 +870,8 @@ xprt_unregister(SVCXPRT *xprt)
 	/* xprt must be unlocked before sr_rec */
 	mutex_unlock(&xprt->xp_lock);
 
-	mutex_unlock(&sr_rec->mtx);
+	if (sr_rec)
+		mutex_unlock(&sr_rec->mtx);
 }
 
 bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
