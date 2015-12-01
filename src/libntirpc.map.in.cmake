@@ -217,6 +217,7 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_dplx_msg;
     xdr_enum;
     xdr_float;
+    xdr_free_null_stream;
     xdr_hyper;
     xdr_inrec_cksum;
     xdr_inrec_create;
