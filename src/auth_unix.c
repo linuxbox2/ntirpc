@@ -102,21 +102,8 @@ authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 	 */
 	au = NULL;
 	auth = mem_alloc(sizeof(*auth));
-#ifndef _KERNEL
-	if (auth == NULL) {
-		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-		rpc_createerr.cf_error.re_errno = ENOMEM;
-		goto cleanup_authunix_create;
-	}
-#endif
 	au = mem_alloc(sizeof(*au));
-#ifndef _KERNEL
-	if (au == NULL) {
-		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-		rpc_createerr.cf_error.re_errno = ENOMEM;
-		goto cleanup_authunix_create;
-	}
-#endif
+
 	auth->ah_ops = authunix_ops();
 	auth->ah_private = (caddr_t) au;
 	auth->ah_verf = au->au_shcred = _null_auth;
@@ -145,16 +132,8 @@ authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 	}
 	au->au_origcred.oa_length = len = XDR_GETPOS(&xdrs);
 	au->au_origcred.oa_flavor = AUTH_UNIX;
-#ifdef _KERNEL
-	au->au_origcred.oa_base = mem_alloc((u_int) len);
-#else
-	au->au_origcred.oa_base = mem_alloc((u_int) len);
-	if (au->au_origcred.oa_base == NULL) {
-		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-		rpc_createerr.cf_error.re_errno = ENOMEM;
-		goto cleanup_authunix_create;
-	}
-#endif
+
+	au->au_origcred.oa_base = mem_alloc((size_t) len);
 	memmove(au->au_origcred.oa_base, mymem, (size_t) len);
 
 	/*
@@ -165,17 +144,16 @@ authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 	marshal_new_auth(auth);
 	/* */
 	return (auth);
-#ifndef _KERNEL
+
 cleanup_authunix_create:
 	if (auth)
 		mem_free(auth, sizeof(*auth));
 	if (au) {
 		if (au->au_origcred.oa_base)
-			mem_free(au->au_origcred.oa_base, (u_int) len);
+			mem_free(au->au_origcred.oa_base, (size_t) len);
 		mem_free(au, sizeof(*au));
 	}
 	return (NULL);
-#endif
 }
 
 /*
@@ -215,15 +193,11 @@ retry:
 	 * NULL calloc(3) result, which is not reliably distinguishable
 	 * from a memory allocation error. */
 	gids = mem_alloc((len + 1) * sizeof(gid_t));
-	if (gids == NULL) {
-		rpc_createerr.cf_error.re_errno = ENOMEM;
-		goto out_err;
-	}
 
 	len = getgroups(len, gids);
 	if (len == -1) {
 		rpc_createerr.cf_error.re_errno = errno;
-		mem_free(gids, 0);	/* XXX */
+		mem_free(gids, (len + 1) * sizeof(gid_t));
 		if (rpc_createerr.cf_error.re_errno == EINVAL) {
 			rpc_createerr.cf_error.re_errno = 0;
 			goto retry;
@@ -240,7 +214,7 @@ retry:
 
 	/* XXX: interface problem; those should all have been unsigned */
 	result = authunix_ncreate(machname, uid, gid, len, gids);
-	mem_free(gids, 0);	/* XXX */
+	mem_free(gids, (len + 1) * sizeof(gid_t));
 	return result;
 
 out_err:

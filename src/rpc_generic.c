@@ -59,21 +59,65 @@
 
 #include "rpc_com.h"
 
+void
+thr_keyfree(void *k)
+{
+	mem_free(k, 0);	/* XXX */
+}
+
+static void
+tirpc_free(void *p, size_t unused)
+{
+	free(p);
+}
+
+static void *
+tirpc_malloc(size_t size, const char *file, int line, const char *function)
+{
+	return malloc(size);
+}
+
+static void *
+tirpc_aligned(size_t alignment, size_t size, const char *file, int line,
+	      const char *function)
+{
+	return aligned_alloc(alignment, size);
+}
+
+static void *
+tirpc_calloc(size_t count, size_t size, const char *file, int line,
+	     const char *function)
+{
+	return calloc(count, size);
+}
+
+static void *
+tirpc_realloc(void *p, size_t size, const char *file, int line,
+	      const char *function)
+{
+	return realloc(p, size);
+}
+
 tirpc_pkg_params __ntirpc_pkg_params = {
 	TIRPC_FLAG_NONE,
 	TIRPC_DEBUG_FLAG_NONE,
-	warnx
+	warnx,
+	tirpc_free,
+	tirpc_malloc,
+	tirpc_aligned,
+	tirpc_calloc,
+	tirpc_realloc,
 };
 
 bool
 tirpc_control(const u_int rq, void *in)
 {
 	switch (rq) {
-	case TIRPC_GET_FLAGS:
-		*(u_int *) in = __ntirpc_pkg_params.flags;
+	case TIRPC_GET_PARAMETERS:
+		*(tirpc_pkg_params *)in = __ntirpc_pkg_params;
 		break;
-	case TIRPC_SET_FLAGS:
-		__ntirpc_pkg_params.flags = *(int *)in;
+	case TIRPC_PUT_PARAMETERS:
+		__ntirpc_pkg_params = *(tirpc_pkg_params *)in;
 		break;
 	case TIRPC_GET_DEBUG_FLAGS:
 		*(u_int *) in = __ntirpc_pkg_params.debug_flags;
@@ -81,11 +125,11 @@ tirpc_control(const u_int rq, void *in)
 	case TIRPC_SET_DEBUG_FLAGS:
 		__ntirpc_pkg_params.debug_flags = *(int *)in;
 		break;
-	case TIRPC_GET_WARNX:
-		*(warnx_t *) in = __ntirpc_pkg_params.warnx;
+	case TIRPC_GET_OTHER_FLAGS:
+		*(u_int *) in = __ntirpc_pkg_params.other_flags;
 		break;
-	case TIRPC_SET_WARNX:
-		__ntirpc_pkg_params.warnx = *(warnx_t) in;
+	case TIRPC_SET_OTHER_FLAGS:
+		__ntirpc_pkg_params.other_flags = *(int *)in;
 		break;
 	default:
 		return (false);
@@ -258,14 +302,14 @@ __rpc_getconfip(const char *nettype)
 	if (tcp_key == -1) {
 		mutex_lock(&tsd_lock);
 		if (tcp_key == -1)
-			thr_keycreate(&tcp_key, free);	/* XXX */
+			thr_keycreate(&tcp_key, thr_keyfree);
 		mutex_unlock(&tsd_lock);
 	}
 	netid_tcp = (char *)thr_getspecific(tcp_key);
 	if (udp_key == -1) {
 		mutex_lock(&tsd_lock);
 		if (udp_key == -1)
-			thr_keycreate(&udp_key, free);
+			thr_keycreate(&udp_key, thr_keyfree);
 		mutex_unlock(&tsd_lock);
 	}
 	netid_udp = (char *)thr_getspecific(udp_key);
@@ -284,12 +328,12 @@ __rpc_getconfip(const char *nettype)
 			    || strcmp(nconf->nc_protofmly, NC_INET6) == 0) {
 				if (strcmp(nconf->nc_proto, NC_TCP) == 0
 				    && netid_tcp == NULL) {
-					netid_tcp = rpc_strdup(nconf->nc_netid);
+					netid_tcp = mem_strdup(nconf->nc_netid);
 					thr_setspecific(tcp_key,
 							(void *)netid_tcp);
 				} else if (strcmp(nconf->nc_proto, NC_UDP) == 0
 					   && netid_udp == NULL) {
-					netid_udp = rpc_strdup(nconf->nc_netid);
+					netid_udp = mem_strdup(nconf->nc_netid);
 					thr_setspecific(udp_key,
 							(void *)netid_udp);
 				}
@@ -317,18 +361,15 @@ __rpc_getconfip(const char *nettype)
 void *
 __rpc_setconf(const char *nettype)
 {
-	struct handle *handle;
+	struct handle *handle = (struct handle *)mem_zalloc(sizeof(*handle));
 
-	handle = (struct handle *)mem_zalloc(sizeof(struct handle));
-	if (handle == NULL)
-		return (NULL);
 	switch (handle->nettype = getnettype(nettype)) {
 	case _RPC_NETPATH:
 	case _RPC_CIRCUIT_N:
 	case _RPC_DATAGRAM_N:
 		handle->nhandle = setnetpath();
 		if (!handle->nhandle) {
-			mem_free(handle, 0);	/* XXX */
+			mem_free(handle, sizeof(*handle));
 			return (NULL);
 		}
 		handle->nflag = true;
@@ -342,13 +383,13 @@ __rpc_setconf(const char *nettype)
 		if (!handle->nhandle) {
 			__warnx(TIRPC_DEBUG_FLAG_DEFAULT,
 				"rpc: failed to open %s", NETCONFIG);
-			mem_free(handle, 0);
+			mem_free(handle, sizeof(*handle));
 			return (NULL);
 		}
 		handle->nflag = false;
 		break;
 	default:
-		mem_free(handle, 0);
+		mem_free(handle, sizeof(*handle));
 		return (NULL);
 	}
 
@@ -362,10 +403,9 @@ __rpc_setconf(const char *nettype)
 struct netconfig *
 __rpc_getconf(void *vhandle)
 {
-	struct handle *handle;
 	struct netconfig *nconf;
+	struct handle *handle = (struct handle *)vhandle;
 
-	handle = (struct handle *)vhandle;
 	if (handle == NULL)
 		return (NULL);
 	for (;;) {
@@ -435,16 +475,15 @@ __rpc_getconf(void *vhandle)
 void
 __rpc_endconf(void *vhandle)
 {
-	struct handle *handle;
+	struct handle *handle = (struct handle *)vhandle;
 
-	handle = (struct handle *)vhandle;
 	if (handle == NULL)
 		return;
 	if (handle->nflag)
 		endnetpath(handle->nhandle);
 	else
 		endnetconfig(handle->nhandle);
-	mem_free(handle, 0);
+	mem_free(handle, sizeof(*handle));
 }
 
 /*
@@ -642,9 +681,8 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 		goto out;
 
 	/* XXX check (fix) this */
-	ret = mem_zalloc(INET6_ADDRSTRLEN + (2 * 6) + 1);
-	if (!ret)
-		return (NULL);
+#define RETURN_SIZE (INET6_ADDRSTRLEN + (2 * 6) + 1)
+	ret = mem_zalloc(RETURN_SIZE);
 
 	switch (af) {
 	case AF_INET:
@@ -656,7 +694,7 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 		if (sprintf
 		    (ret, "%s.%u.%u", namebuf, ((u_int32_t) port) >> 8,
 		     port & 0xff) < 0) {
-			mem_free(ret, 0);
+			mem_free(ret, RETURN_SIZE);
 			return NULL;
 		}
 		break;
@@ -665,14 +703,15 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 		sin6 = nbuf->buf;
 		if (inet_ntop(af, &sin6->sin6_addr, namebuf6, sizeof(namebuf6))
 		    == NULL) {
-			mem_free(ret, 0);
+			mem_free(ret, RETURN_SIZE);
 			return NULL;
 		}
 		port = ntohs(sin6->sin6_port);
-		if (sprintf
-		    (ret, "%s.%u.%u", namebuf6, ((u_int32_t) port) >> 8,
-		     port & 0xff) < 0) {
-			mem_free(ret, 0);
+		if (sprintf(ret, "%s.%u.%u",
+				namebuf6,
+				((u_int32_t) port) >> 8,
+				port & 0xff) < 0) {
+			mem_free(ret, RETURN_SIZE);
 			return NULL;
 		}
 		break;
@@ -686,12 +725,12 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 			    (int)(sizeof(*sun) -
 				  offsetof(struct sockaddr_un, sun_path)),
 			    sun->sun_path) < 0) {
-			mem_free(ret, 0);
+			mem_free(ret, RETURN_SIZE);
 			return NULL;
 		}
 		break;
 	default:
-		mem_free(ret, 0);
+		mem_free(ret, RETURN_SIZE);
 		return NULL;
 	}
 
@@ -713,9 +752,7 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 
 	port = 0;
 	sin = NULL;
-	addrstr = rpc_strdup(uaddr);
-	if (addrstr == NULL)
-		return NULL;
+	addrstr = mem_strdup(uaddr);
 
 	/*
 	 * AF_LOCAL addresses are expected to be absolute
@@ -737,20 +774,16 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 	}
 
 	ret = (struct netbuf *)mem_zalloc(sizeof(*ret));
-	if (ret == NULL)
-		goto out;
 
 	switch (af) {
 	case AF_INET:
 		sin = (struct sockaddr_in *)mem_zalloc(sizeof(*sin));
-		if (sin == NULL)
-			goto out;
-		memset(sin, 0, sizeof(*sin));
+
 		sin->sin_family = AF_INET;
 		sin->sin_port = htons(port);
 		if (inet_pton(AF_INET, addrstr, &sin->sin_addr) <= 0) {
-			mem_free(sin, 0);	/* XXX */
-			mem_free(ret, 0);
+			mem_free(sin, sizeof(*sin));
+			mem_free(ret, sizeof(*ret));
 			ret = NULL;
 			goto out;
 		}
@@ -760,14 +793,12 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 #ifdef INET6
 	case AF_INET6:
 		sin6 = (struct sockaddr_in6 *)mem_zalloc(sizeof(*sin6));
-		if (sin6 == NULL)
-			goto out;
-		memset(sin6, 0, sizeof(*sin6));
+
 		sin6->sin6_family = AF_INET6;
 		sin6->sin6_port = htons(port);
 		if (inet_pton(AF_INET6, addrstr, &sin6->sin6_addr) <= 0) {
-			mem_free(sin6, 0);
-			mem_free(ret, 0);
+			mem_free(sin6, sizeof(*sin6));
+			mem_free(ret, sizeof(*ret));
 			ret = NULL;
 			goto out;
 		}
@@ -777,9 +808,7 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 #endif
 	case AF_LOCAL:
 		sun = (struct sockaddr_un *)mem_zalloc(sizeof(*sun));
-		if (sun == NULL)
-			goto out;
-		memset(sun, 0, sizeof(*sun));
+
 		sun->sun_family = AF_LOCAL;
 		strncpy(sun->sun_path, addrstr, sizeof(sun->sun_path) - 1);
 		ret->len = SUN_LEN(sun);
@@ -787,7 +816,7 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 		ret->buf = sun;
 		break;
 	default:
-		mem_free(ret, 0);
+		mem_free(ret, sizeof(*ret));
 		ret = NULL;
 		break;
 	}
@@ -907,9 +936,6 @@ __rpc_set_netbuf(struct netbuf *nb, const void *ptr, size_t len)
 		if (nb->len)
 			mem_free(nb->buf, nb->len);
 		nb->buf = mem_zalloc(len);
-		if (nb->buf == NULL)
-			return NULL;
-
 		nb->maxlen = nb->len = len;
 	}
 	memcpy(nb->buf, ptr, len);

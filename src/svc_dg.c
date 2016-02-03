@@ -120,21 +120,15 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 	}
 
 	xprt = mem_zalloc(sizeof(SVCXPRT));
-	if (xprt == NULL)
-		goto freedata;
 
 	/* Init SVCXPRT locks, etc */
 	mutex_init(&xprt->xp_lock, NULL);
 	mutex_init(&xprt->xp_auth_lock, NULL);
 
 	su = mem_alloc(sizeof(*su));
-	if (su == NULL)
-		goto freedata;
 
 	su->su_iosz = ((MAX(sendsize, recvsize) + 3) / 4) * 4;
 	rpc_buffer(xprt) = mem_alloc(su->su_iosz);
-	if (!rpc_buffer(xprt))
-		goto freedata;
 
 	xdrmem_create(&(su->su_xdrs), rpc_buffer(xprt), su->su_iosz,
 		      XDR_DECODE);
@@ -190,9 +184,9 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 	__warnx(TIRPC_DEBUG_FLAG_SVC_DG, svc_dg_str, __no_mem_str);
 	if (xprt) {
 		if (su)
-			(void)mem_free(su, sizeof(*su));
+			mem_free(su, sizeof(*su));
 		xprt_unregister(xprt);
-		(void)mem_free(xprt, sizeof(SVCXPRT));
+		mem_free(xprt, sizeof(SVCXPRT));
 	}
 	return (NULL);
 }
@@ -464,11 +458,11 @@ svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		(void)close(xprt->xp_fd);
 
 	XDR_DESTROY(&(su->su_xdrs));
-	(void)mem_free(rpc_buffer(xprt), su->su_iosz);
-	(void)mem_free(su, sizeof(*su));
+	mem_free(rpc_buffer(xprt), su->su_iosz);
+	mem_free(su, sizeof(*su));
 
 	if (xprt->xp_tp)
-		(void)free(xprt->xp_tp);
+		mem_free(xprt->xp_tp, 0);
 
 	rpc_dplx_unref((struct rpc_dplx_rec *)xprt->xp_p5, RPC_DPLX_FLAG_NONE);
 
@@ -480,7 +474,7 @@ svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	if (xprt->blkin.svc_name)
 		mem_free(xprt->blkin.svc_name, 2*INET6_ADDRSTRLEN);
 #endif
-	(void)mem_free(xprt, sizeof(SVCXPRT));
+	mem_free(xprt, sizeof(SVCXPRT));
 }
 
 extern mutex_t ops_lock;
@@ -593,35 +587,14 @@ svc_dg_enablecache(SVCXPRT *transp, u_int size)
 		mutex_unlock(&dupreq_lock);
 		return (0);
 	}
-	uc = ALLOC(struct cl_cache, 1);
-	if (uc == NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_DG, cache_enable_str, alloc_err,
-			" ");
-		mutex_unlock(&dupreq_lock);
-		return (0);
-	}
+	uc = mem_alloc(sizeof(*uc));
 	uc->uc_size = size;
 	uc->uc_nextvictim = 0;
-	uc->uc_entries = ALLOC(cache_ptr, size * SPARSENESS);
-	if (uc->uc_entries == NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_DG, cache_enable_str, alloc_err,
-			"data");
-		FREE(uc, struct cl_cache, 1);
-		mutex_unlock(&dupreq_lock);
-		return (0);
-	}
-	MEMZERO(uc->uc_entries, cache_ptr, size * SPARSENESS);
-	uc->uc_fifo = ALLOC(cache_ptr, size);
-	if (uc->uc_fifo == NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_DG, cache_enable_str, alloc_err,
-			"fifo");
-		FREE(uc->uc_entries, cache_ptr, size * SPARSENESS);
-		FREE(uc, struct cl_cache, 1);
-		mutex_unlock(&dupreq_lock);
-		return (0);
-	}
-	MEMZERO(uc->uc_fifo, cache_ptr, size);
+	uc->uc_entries = mem_calloc(size * SPARSENESS, sizeof(cache_ptr));
+
+	uc->uc_fifo = mem_calloc(size, sizeof(cache_ptr));
 	su->su_cache = (char *)(void *)uc;
+
 	mutex_unlock(&dupreq_lock);
 	return (1);
 }
@@ -671,21 +644,8 @@ svc_dg_cache_set(SVCXPRT *xprt, size_t replylen)
 		*vicp = victim->cache_next;	/* remove from cache */
 		newbuf = victim->cache_reply;
 	} else {
-		victim = ALLOC(struct cache_node, 1);
-		if (victim == NULL) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC_DG, cache_set_str,
-				cache_set_err2);
-			mutex_unlock(&dupreq_lock);
-			return;
-		}
+		victim = mem_alloc(sizeof(struct cache_node));
 		newbuf = mem_alloc(su->su_iosz);
-		if (newbuf == NULL) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC_DG, cache_set_str,
-				cache_set_err3);
-			FREE(victim, struct cache_node, 1);
-			mutex_unlock(&dupreq_lock);
-			return;
-		}
 	}
 
 	/*
@@ -713,7 +673,7 @@ svc_dg_cache_set(SVCXPRT *xprt, size_t replylen)
 	victim->cache_vers = uc->uc_vers;
 	victim->cache_prog = uc->uc_prog;
 	victim->cache_addr = xprt->xp_remote.nb;
-	victim->cache_addr.buf = ALLOC(char, xprt->xp_remote.nb.len);
+	victim->cache_addr.buf = mem_alloc(xprt->xp_remote.nb.len);
 	(void)memcpy(victim->cache_addr.buf, xprt->xp_remote.nb.buf,
 		     (size_t) xprt->xp_remote.nb.len);
 	loc = CACHE_LOC(xprt, victim->cache_xid);

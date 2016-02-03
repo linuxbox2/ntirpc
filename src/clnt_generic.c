@@ -299,9 +299,9 @@ clnt_tp_ncreate_timed(const char *hostname, rpcprog_t prog,
 		/* Reuse the CLIENT handle and change the appropriate fields */
 		if (CLNT_CONTROL(cl, CLSET_SVC_ADDR, (void *)svcaddr) == true) {
 			if (cl->cl_netid == NULL)
-				cl->cl_netid = rpc_strdup(nconf->nc_netid);
+				cl->cl_netid = mem_strdup(nconf->nc_netid);
 			if (cl->cl_tp == NULL)
-				cl->cl_tp = rpc_strdup(nconf->nc_device);
+				cl->cl_tp = mem_strdup(nconf->nc_device);
 			(void)CLNT_CONTROL(cl, CLSET_PROG, (void *)&prog);
 			(void)CLNT_CONTROL(cl, CLSET_VERS, (void *)&vers);
 		} else {
@@ -310,8 +310,8 @@ clnt_tp_ncreate_timed(const char *hostname, rpcprog_t prog,
 					      vers, 0, 0);
 		}
 	}
-	mem_free(svcaddr->buf, 0);	/* XXX */
-	mem_free(svcaddr, 0);
+	mem_free(svcaddr->buf, sizeof(*svcaddr->buf));
+	mem_free(svcaddr, sizeof(*svcaddr));
 	return (cl);
 }
 
@@ -389,8 +389,8 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 	if (cl == NULL)
 		goto err1;	/* borrow errors from clnt_dg/vc ncreates */
 	if (nconf) {
-		cl->cl_netid = rpc_strdup(nconf->nc_netid);
-		cl->cl_tp = rpc_strdup(nconf->nc_device);
+		cl->cl_netid = mem_strdup(nconf->nc_netid);
+		cl->cl_tp = mem_strdup(nconf->nc_device);
 	} else {
 		cl->cl_netid = "";
 		cl->cl_tp = "";

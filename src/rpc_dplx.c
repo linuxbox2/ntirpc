@@ -202,15 +202,14 @@ static inline struct rpc_dplx_rec *
 alloc_dplx_rec(void)
 {
 	struct rpc_dplx_rec *rec = mem_alloc(sizeof(struct rpc_dplx_rec));
-	if (rec) {
-		rec->refcnt = 0;
-		rec->hdl.xprt = NULL;
-		mutex_init(&rec->locktrace.mtx, NULL);
-		/* send channel */
-		rpc_dplx_lock_init(&rec->send.lock);
-		/* recv channel */
-		rpc_dplx_lock_init(&rec->recv.lock);
-	}
+
+	rec->refcnt = 0;
+	rec->hdl.xprt = NULL;
+	mutex_init(&rec->locktrace.mtx, NULL);
+	/* send channel */
+	rpc_dplx_lock_init(&rec->send.lock);
+	/* recv channel */
+	rpc_dplx_lock_init(&rec->recv.lock);
 	return (rec);
 }
 
@@ -247,12 +246,6 @@ rpc_dplx_lookup_rec(int fd, uint32_t iflags, uint32_t *oflags)
 		nv = opr_rbtree_lookup(&t->t, &rk.node_k);
 		if (!nv) {
 			rec = alloc_dplx_rec();
-			if (!rec) {
-				__warnx(TIRPC_DEBUG_FLAG_LOCK,
-					"%s: failed allocating rpc_dplx_rec",
-					__func__);
-				goto unlock;
-			}
 
 			/* tell the caller */
 			*oflags = RPC_DPLX_LKP_OFLAG_ALLOC;

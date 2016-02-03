@@ -252,6 +252,7 @@ static inline struct x_vc_data *
 alloc_x_vc_data(void)
 {
 	struct x_vc_data *xd = mem_zalloc(sizeof(struct x_vc_data));
+
 	TAILQ_INIT(&xd->shared.ioq.qh);
 	return (xd);
 }

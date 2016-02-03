@@ -975,9 +975,7 @@ xdr_rdma_create(XDR *xdrs, RDMAXPRT *xprt, const u_int sendsize,
 	xprt->buffer_total = recvsize * xprt->xa->rq_depth
 			   + sendsize * xprt->xa->sq_depth;
 
-	xprt->buffer_aligned = mem_alloc_aligned(xprt->buffer_total, ps);
-	if (xprt->buffer_aligned == NULL)
-		goto err;
+	xprt->buffer_aligned = mem_aligned(ps, xprt->buffer_total);
 
 	__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
 		"%s() buffer_aligned at %p",
@@ -1040,13 +1038,6 @@ xdr_rdma_create(XDR *xdrs, RDMAXPRT *xprt, const u_int sendsize,
 		xdr_rdma_callq(xprt);
 	}
 	return 0;
-
-err:
-	__warnx(TIRPC_DEBUG_FLAG_ERROR,
-		"%s() out of memory",
-		__func__);
-	xdr_rdma_destroy(xdrs);
-	return ENOMEM;
 }
 
 /** xdr_rdma_clnt_call

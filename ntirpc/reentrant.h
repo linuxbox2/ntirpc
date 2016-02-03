@@ -77,7 +77,7 @@ mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *a
 }
 
 #define mutex_lock(m)		pthread_mutex_lock(m)
-#define mutex_trylock(m)		pthread_mutex_trylock(m)
+#define mutex_trylock(m)	pthread_mutex_trylock(m)
 #define mutex_unlock(m)		pthread_mutex_unlock(m)
 #define mutex_destroy(m)	pthread_mutex_destroy(m)
 
@@ -102,6 +102,7 @@ mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *a
 #define spin_destroy(l)         pthread_spin_destroy(l)
 
 #define thr_keycreate(k, d)	pthread_key_create(k, d)
+extern void thr_keyfree(void *k);
 #define thr_setspecific(k, p)	pthread_setspecific(k, p)
 #define thr_getspecific(k)	pthread_getspecific(k)
 #define thr_sigsetmask(f, n, o)	pthread_sigmask(f, n, o)

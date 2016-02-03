@@ -115,12 +115,6 @@ inline_auth_decode_opaque(XDR *xdrs, struct opaque_auth *oa)
 	}
 	if (oa->oa_base == NULL) {
 		oa->oa_base = (caddr_t)mem_alloc(oa->oa_length);
-		if (oa->oa_base == NULL) {
-			__warnx(TIRPC_DEBUG_FLAG_ERROR,
-				"%s:%u ERROR mem_alloc(oa->oa_length)",
-				__func__, __LINE__);
-			return (false);
-		}
 	}
 
 	return (inline_xdr_getopaque(xdrs, oa->oa_base, oa->oa_length));

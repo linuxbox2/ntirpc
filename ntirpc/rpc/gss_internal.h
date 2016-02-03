@@ -105,6 +105,7 @@ svc_rpc_gss_data *alloc_svc_rpc_gss_data(void)
 	struct svc_rpc_gss_data *gd =
 		(struct svc_rpc_gss_data *)
 		mem_zalloc(sizeof(struct svc_rpc_gss_data));
+
 	mutex_init(&gd->lock, NULL);
 	TAILQ_INIT_ENTRY(gd, lru_q);
 	gd->refcnt = 1;

@@ -524,11 +524,6 @@ xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 			return (true);
 		if (sp == NULL)
 			*cpp = sp = mem_alloc(nodesize);
-		if (sp == NULL) {
-			__warnx(TIRPC_DEBUG_FLAG_XDR,
-				"xdr_bytes: out of memory");
-			return (false);
-		}
 		/* FALLTHROUGH */
 
 	case XDR_ENCODE:
@@ -653,11 +648,6 @@ xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 	case XDR_DECODE:
 		if (sp == NULL)
 			*cpp = sp = mem_alloc(nodesize);
-		if (sp == NULL) {
-			__warnx(TIRPC_DEBUG_FLAG_XDR,
-				"xdr_string: out of memory");
-			return (false);
-		}
 		sp[size] = 0;
 		/* FALLTHROUGH */
 

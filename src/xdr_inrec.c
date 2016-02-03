@@ -162,23 +162,9 @@ xdr_inrec_create(XDR *xdrs, u_int recvsize, void *tcp_handle,
 {
 	RECSTREAM *rstrm = mem_alloc(sizeof(RECSTREAM));
 
-	if (rstrm == NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_XDRREC,
-			"xdr_inrec_create: out of memory");
-		/*
-		 *  This is bad.  Should rework xdr_inrec_create to
-		 *  return a handle, and in this case return NULL
-		 */
-		return;
-	}
 	rstrm->recvsize = recvsize = fix_buf_size(recvsize);
 	rstrm->in_base = mem_alloc(recvsize);
-	if (rstrm->in_base == NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_XDRREC,
-			"xdr_inrec_create: out of memory");
-		mem_free(rstrm, sizeof(RECSTREAM));
-		return;
-	}
+
 	/*
 	 * now the rest ...
 	 */

@@ -128,11 +128,6 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 		return NULL;
 
 	rdvs = mem_alloc(sizeof(struct cf_rendezvous));
-	if (rdvs == NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_vc_ncreate: out of memory");
-		goto err;
-	}
 	rdvs->sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsize);
 	rdvs->recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsize);
 	rdvs->maxrec = __svc_maxrec;
@@ -188,11 +183,6 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	}
 
 	xprt = mem_zalloc(sizeof(SVCXPRT));
-	if (xprt == NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_vc_ncreate: out of memory");
-		goto err;
-	}
 	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
 	xprt->xp_refs = 1;
 	svc_vc_rendezvous_ops(xprt);
@@ -227,7 +217,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	}
 	__rpc_set_address(&xprt->xp_local, &sslocal, slen);
 
-	xprt->xp_netid = rpc_strdup(netid);
+	xprt->xp_netid = mem_strdup(netid);
 
 	/* make reachable from rec */
 	rec->hdl.xprt = xprt;
@@ -458,14 +448,6 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 
 	/* new xprt (the common case) */
 	xprt = mem_zalloc(sizeof(SVCXPRT));
-	if (xprt == NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_vc: makefd_xprt: out of memory");
-		/* return extra ref */
-		rpc_dplx_unref(rec,
-			       RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
-		goto done;
-	}
 
 	*allocated = TRUE;
 	xprt->xp_p5 = rec;
@@ -484,7 +466,7 @@ makefd_xprt(int fd, u_int sendsz, u_int recvsz, bool *allocated)
 
 	xprt->xp_p1 = xd;
 	if (newxd /* ensures valid si */ && __rpc_sockinfo2netid(&si, &netid))
-		xprt->xp_netid = rpc_strdup(netid);
+		xprt->xp_netid = mem_strdup(netid);
 
 	/* make reachable from rec */
 	rec->hdl.xprt = xprt;

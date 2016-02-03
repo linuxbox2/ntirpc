@@ -240,11 +240,6 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 	/* ANDROS: krb5 mechglue returns ctx of size 8 - two pointers,
 	 * one to the mechanism oid, one to the internal_ctx_id */
 	gr->gr_ctx.value = mem_alloc(sizeof(gss_union_ctx_id_desc));
-	if (!gr->gr_ctx.value) {
-		__warnx(TIRPC_DEBUG_FLAG_AUTH, "%s: out of memory", __func__);
-		gss_release_buffer(&min_stat, &gr->gr_token);
-		return (false);
-	}
 	memcpy(gr->gr_ctx.value, gd->ctx, sizeof(gss_union_ctx_id_desc));
 	gr->gr_ctx.length = sizeof(gss_union_ctx_id_desc);
 
@@ -468,18 +463,7 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 	if (!gd) {
 		/* Allocate and set up server auth handle. */
 		auth = mem_alloc(sizeof(SVCAUTH));
-		if (!auth) {
-			__warnx(TIRPC_DEBUG_FLAG_AUTH, "%s: alloc auth failed",
-				__func__);
-			svcauth_gss_return(AUTH_FAILED);
-		}
 		gd = alloc_svc_rpc_gss_data();
-		if (!gd) {
-			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-				"%s: alloc svc_rpc_gss_data failed", __func__);
-			mem_free(auth, sizeof(SVCAUTH));
-			svcauth_gss_return(AUTH_FAILED);
-		}
 		auth->svc_ah_ops = &svc_auth_gss_ops;
 		auth->svc_ah_private = (caddr_t) gd;
 		gd->auth = auth;
@@ -687,7 +671,7 @@ svcauth_gss_destroy(SVCAUTH *auth)
 	gss_release_buffer(&min_stat, &gd->checksum);
 	mutex_destroy(&gd->lock);
 
-	mem_free(gd, sizeof(struct svc_rpc_gss_data));
+	mem_free(gd, sizeof(*gd));
 	mem_free(auth, sizeof(*auth));
 
 	return (true);
@@ -741,9 +725,6 @@ svcauth_gss_get_principal(SVCAUTH *auth)
 		return (NULL);
 
 	pname = mem_alloc(gd->cname.length + 1);
-	if (!pname)
-		return (NULL);
-
 	memcpy(pname, gd->cname.value, gd->cname.length);
 	pname[gd->cname.length] = '\0';
 

@@ -144,8 +144,6 @@ __rpc_getbroadifs(int af, int proto, int socktype, broadlist_t *list)
 		    || !(ifap->ifa_flags & IFF_UP))
 			continue;
 		bip = (struct broadif *)mem_alloc(sizeof(*bip));
-		if (bip == NULL)
-			break;
 		bip->index = if_nametoindex(ifap->ifa_name);
 		if (
 #ifdef INET6
@@ -172,7 +170,7 @@ __rpc_getbroadifs(int af, int proto, int socktype, broadlist_t *list)
 		} else
 #endif
 		{
-			mem_free(bip, 0);
+			mem_free(bip, sizeof(*bip));
 			continue;
 		}
 		TAILQ_INSERT_TAIL(list, bip, link);
@@ -193,7 +191,7 @@ __rpc_freebroadifs(broadlist_t *list)
 
 	while (bip != NULL) {
 		next = TAILQ_NEXT(bip, link);
-		mem_free(bip, 0);
+		mem_free(bip, sizeof(*bip));
 		bip = next;
 	}
 }
@@ -643,12 +641,12 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 
  done_broad:
 	if (inbuf)
-		mem_free(inbuf, 0);
+		mem_free(inbuf, maxbufsize);
 	if (outbuf)
-		mem_free(outbuf, 0);
+		mem_free(outbuf, maxbufsize);
 #ifdef PORTMAP
 	if (outbuf_pmap)
-		mem_free(outbuf_pmap, 0);
+		mem_free(outbuf_pmap, udpbufsz);
 #endif				/* PORTMAP */
 	for (i = 0; i < fdlistno; i++) {
 		(void)close(fdlist[i].fd);

@@ -89,22 +89,5 @@ bool __xdrrec_setnonblock(XDR *, int);
 bool __xdrrec_getrec(XDR *, enum xprt_stat *, bool);
 void __xprt_unregister_unlocked(SVCXPRT *);
 
-/*
- * Uses allocator with indirections, if any.
- */
-
-#include <string.h>
-
-static inline char *
-rpc_strdup(const char *s)
-{
-	char *t = mem_alloc(strlen(s) + 1);
-	if (t)
-		strcpy(t, s);
-	return (t);
-}
-
-void __rpc_free(void *ptr);
-
 __END_DECLS
 #endif				/* _TIRPC_RPCCOM_H */

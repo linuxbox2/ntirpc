@@ -73,7 +73,7 @@ work_pool_init(struct work_pool *pool, const char *name,
 	memset(pool, 0, sizeof(*pool));
 	poolq_head_setup(&pool->pqh);
 
-	pool->name = rpc_strdup(name);
+	pool->name = mem_strdup(name);
 	pool->params = *params;
 
 	if (pool->params.thrd_max < 1) {
@@ -256,13 +256,6 @@ work_pool_spawn(struct work_pool *pool)
 	int rc;
 	struct work_pool_thread *wpt = mem_zalloc(sizeof(*wpt));
 
-	if (!wpt) {
-		rc = errno;
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s() mem_zalloc failed (%d)\n",
-			__func__, rc);
-		return rc;
-	}
 	wpt->pool = pool;
 
 	rc = pthread_create(&wpt->id, &pool->attr, work_pool_thread, wpt);

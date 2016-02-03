@@ -435,7 +435,7 @@ clnt_broadcast(u_long prog,	/* program number */
 	if (clnt_broadcast_key == -1) {
 		mutex_lock(&tsd_lock);
 		if (clnt_broadcast_key == -1)
-			thr_keycreate(&clnt_broadcast_key, free); /* XXX */
+			thr_keycreate(&clnt_broadcast_key, thr_keyfree);
 		mutex_unlock(&tsd_lock);
 	}
 	thr_setspecific(clnt_broadcast_key, (void *)eachresult);
@@ -490,21 +490,10 @@ CLIENT *
 clntunix_ncreate(struct sockaddr_un *raddr, u_long prog, u_long vers,
 		 int *sockp, u_int sendsz, u_int recvsz)
 {
-	struct netbuf *svcaddr;
+	struct netbuf svcaddr;
 	CLIENT *cl = NULL;
 	int len;
 
-	svcaddr = mem_alloc(sizeof(struct netbuf));
-	if (svcaddr)
-		svcaddr->buf = mem_alloc(sizeof(struct sockaddr_un));
-	if ((!svcaddr) ||
-	    (!svcaddr->buf)) {
-		if (svcaddr)
-			mem_free(svcaddr, 0);
-		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-		rpc_createerr.cf_error.re_errno = errno;
-		return (cl);
-	}
 	if (*sockp < 0) {
 		*sockp = socket(AF_LOCAL, SOCK_STREAM, 0);
 		len = SUN_LEN(raddr);
@@ -517,13 +506,11 @@ clntunix_ncreate(struct sockaddr_un *raddr, u_long prog, u_long vers,
 			goto done;
 		}
 	}
-	svcaddr->buf = raddr;
-	svcaddr->len = sizeof(raddr);
-	svcaddr->maxlen = sizeof(struct sockaddr_un);
-	cl = clnt_vc_ncreate(*sockp, svcaddr, prog, vers, sendsz, recvsz);
+	svcaddr.buf = raddr;
+	svcaddr.len = sizeof(*raddr);
+	svcaddr.maxlen = sizeof(struct sockaddr_un);
+	cl = clnt_vc_ncreate(*sockp, &svcaddr, prog, vers, sendsz, recvsz);
  done:
-	mem_free(svcaddr->buf, 0);
-	mem_free(svcaddr, 0);
 	return (cl);
 }
 
@@ -559,7 +546,7 @@ svcunix_ncreate(int sock, u_int sendsize, u_int recvsize, char *path)
 	memset(&sun, 0, sizeof(sun));
 	sun.sun_family = AF_LOCAL;
 	strncpy(sun.sun_path, path, sizeof(sun.sun_path));
-	sun.sun_path[sizeof(sun.sun_path)-1] = 0;
+	sun.sun_path[sizeof(sun.sun_path)-1] = '\0';
 	addrlen = sizeof(struct sockaddr_un);
 	sa = (struct sockaddr *)&sun;
 
@@ -568,13 +555,11 @@ svcunix_ncreate(int sock, u_int sendsize, u_int recvsize, char *path)
 
 	taddr.addr.len = taddr.addr.maxlen = addrlen;
 	taddr.addr.buf = mem_alloc(addrlen);
-	if (taddr.addr.buf == NULL)
-		goto done;
 	memcpy(taddr.addr.buf, sa, addrlen);
 
 	if (nconf->nc_semantics != NC_TPI_CLTS) {
 		if (listen(sock, SOMAXCONN) < 0) {
-			mem_free(taddr.addr.buf, 0);
+			mem_free(taddr.addr.buf, addrlen);
 			goto done;
 		}
 	}

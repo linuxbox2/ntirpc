@@ -113,13 +113,6 @@ svc_ncreate(void (*dispatch) (struct svc_req *req, SVCXPRT *xprt),
 			    svc_tp_ncreate(dispatch, prognum, versnum, nconf);
 			if (xprt) {
 				l = (struct xlist *)mem_alloc(sizeof(*l));
-				if (l == NULL) {
-					__warnx(TIRPC_DEBUG_FLAG_SVC,
-						"svc_ncreate: no memory");
-					mutex_unlock(&xprtlist_lock);
-					__rpc_endconf(handle);
-					return (0);
-				}
 				l->xprt = xprt;
 				l->next = xprtlist;
 				xprtlist = l;
@@ -297,8 +290,8 @@ svc_tli_ncreate(int fd,	/* Connection end point */
 	xprt->xp_si_type = __rpc_socktype2seman(si.si_socktype);
 
 	if (nconf) {
-		xprt->xp_netid = rpc_strdup(nconf->nc_netid);
-		xprt->xp_tp = rpc_strdup(nconf->nc_device);
+		xprt->xp_netid = mem_strdup(nconf->nc_netid);
+		xprt->xp_tp = mem_strdup(nconf->nc_device);
 	}
 	return (xprt);
 

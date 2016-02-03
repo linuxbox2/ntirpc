@@ -100,8 +100,6 @@ svc_rdma_ncreate(void *arg, const u_int sendsize, const u_int recvsize,
 	}
 
 	sm = mem_zalloc(sizeof (*sm));
-	if (sm == NULL)
-		goto freedata;
 
 	sm->sm_xdrs.x_lib[1] = xprt;
 	xprt->xprt.xp_p2 = sm;
@@ -129,11 +127,8 @@ svc_rdma_ncreate(void *arg, const u_int sendsize, const u_int recvsize,
 	return (&xprt->xprt);
 
 freedata:
-	__warnx(TIRPC_DEBUG_FLAG_ERROR,
-		"%s() out of memory",
-		__func__);
 	if (sm) {
-		(void) mem_free(sm, sizeof (*sm));
+		mem_free(sm, sizeof (*sm));
 		xprt->xprt.xp_p2 = NULL;
 	}
 	xprt_unregister(&xprt->xprt);
@@ -292,7 +287,7 @@ svc_rdma_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		__func__, xprt, xprt->xp_refs, tag, line);
 
 	xdr_rdma_destroy(&(sm->sm_xdrs));
-	(void) mem_free(sm, sizeof (*sm));
+	mem_free(sm, sizeof (*sm));
 
 	if (xprt->xp_ops->xp_free_user_data) {
 		/* call free hook */

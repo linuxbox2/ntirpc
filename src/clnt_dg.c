@@ -137,8 +137,6 @@ clnt_dg_ncreate(int fd,	/* open file descriptor */
 	}
 
 	clnt = mem_alloc(sizeof(CLIENT));
-	if (clnt == NULL)
-		goto err1;
 
 	mutex_init(&clnt->cl_lock, NULL);
 	clnt->cl_flags = CLNT_FLAG_NONE;

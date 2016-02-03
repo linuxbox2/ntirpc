@@ -195,13 +195,11 @@ epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 	ts.tv_sec = timeout / 1000000;
 	ts.tv_nsec = (timeout % 1000000) * 1000;
 
-	kevp = calloc(maxevents, sizeof(*kevp));
+	kevp = mem_calloc(maxevents, sizeof(*kevp));
 	/*
 	 * ENOMEM is not expected from epoll_wait.
 	 * Maybe we should translate that but I don't think it matters at all.
 	 */
-	if (!kevp)
-		return -ENOMEM;
 
 	rc = kevent(epfd, NULL, 0, kevp, maxevents, &ts);
 
@@ -210,7 +208,7 @@ epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 		kevent_to_epoll_arr(kevp, rc, events);
 	}
 
-	free(kevp);
+	mem_free(kevp, sizeof(struct kevent) * maxevents);
 	return rc;
 }
 

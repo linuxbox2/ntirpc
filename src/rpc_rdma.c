@@ -41,11 +41,7 @@
 #endif
 
 #include <stdio.h>	//printf
-#include <stdlib.h>	//malloc
-#include <string.h>	//memcpy
 #include <limits.h>	//INT_MAX
-#include <errno.h>	//ENOMEM
-#include <err.h>	//warnx
 #include <sys/socket.h> //sockaddr
 #include <sys/un.h>     //sockaddr_un
 #include <pthread.h>	//pthread_* (think it's included by another one)
@@ -221,18 +217,11 @@ rpc_rdma_pd_by_verbs(RDMAXPRT *xprt)
 	}
 
 	pd = mem_zalloc(sizeof(*pd));
-	if (pd) {
-		rc = 0;
-		pd->context = xprt->cm_id->verbs;
-		pd->pd_used = 1;
+	rc = 0;
+	pd->context = xprt->cm_id->verbs;
+	pd->pd_used = 1;
 
-		LIST_INSERT_HEAD(&rpc_rdma_state.pdh, pd, pdl);
-	} else {
-		rc = ENOSPC;
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s() couldn't malloc rdma pd",
-			__func__);
-	}
+	LIST_INSERT_HEAD(&rpc_rdma_state.pdh, pd, pdl);
 	mutex_unlock(&rpc_rdma_state.lock);
 	xprt->pd = pd;
 	return rc;
@@ -1377,12 +1366,6 @@ rpc_rdma_allocate(struct rpc_rdma_attr *xa)
 	}
 
 	xprt = mem_zalloc(sizeof(RDMAXPRT));
-	if (!xprt) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s() Out of memory",
-			__func__);
-		return NULL;
-	}
 
 	xprt->xprt.xp_type = XPRT_RDMA;
 	xprt->xprt.xp_refs = 1;
@@ -1516,12 +1499,6 @@ rpc_rdma_create(struct rpc_rdma_attr *xa)
 	}
 	rpc_rdma_state.c_r.id_queue = mem_alloc(rpc_rdma_state.c_r.q_size
 						* sizeof(struct rdma_cm_id *));
-	if (!rpc_rdma_state.c_r.id_queue) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s() Could not allocate connection_requests queue",
-			__func__);
-		goto failure;
-	}
 	sem_init(&rpc_rdma_state.c_r.u_sem, 0, rpc_rdma_state.c_r.q_size);
 
 	rc = rpc_rdma_bind_server(xprt);
@@ -1530,11 +1507,10 @@ rpc_rdma_create(struct rpc_rdma_attr *xa)
 			"%s() NFS/RDMA dispatcher could not bind engine",
 			__func__);
 		goto failure;
-	} else {
-		__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
-			"%s() NFS/RDMA engine bound",
-			__func__);
 	}
+	__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
+		"%s() NFS/RDMA engine bound",
+		__func__);
 
 	return (&xprt->xprt);
 
@@ -1685,12 +1661,7 @@ rpc_rdma_setup_cbq(struct poolq_head *ioqh, u_int depth, u_int sge)
 	 */
 	while (depth--) {
 		cbc = mem_zalloc(ioqh->qsize);
-		if (!cbc) {
-			__warnx(TIRPC_DEBUG_FLAG_ERROR,
-				"%s() couldn't mem_zalloc callback context",
-				__func__);
-			return ENOMEM;
-		}
+
 		xdr_ioq_setup(&cbc->workq);
 		xdr_ioq_setup(&cbc->holdq);
 

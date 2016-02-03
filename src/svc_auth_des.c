@@ -319,13 +319,8 @@ _svcauth_des(struct svc_req *req, struct rpc_msg *msg)
 		cred->adc_nickname = (u_long) sid;	/* save nickname */
 		if (entry->rname != NULL)
 			mem_free(entry->rname, strlen(entry->rname) + 1);
-		entry->rname =
-		    (char *)mem_alloc((u_int) strlen(cred->adc_fullname.name)
-				      + 1);
-		if (entry->rname != NULL)
-			(void)strcpy(entry->rname, cred->adc_fullname.name);
-		else
-			debug("out of memory");
+		entry->rname = (char *)mem_strdup(cred->adc_fullname.name));
+
 		entry->key = *sessionkey;
 		entry->window = window;
 		invalidate(entry->localcred); /* mark any cached cred invalid */
@@ -350,11 +345,9 @@ void cache_init(void)
 	int i;
 
 	authdes_cache = (struct cache_entry *)
-	    mem_alloc(sizeof(struct cache_entry) * AUTHDES_CACHESZ);
-	bzero((char *)authdes_cache,
-	      sizeof(struct cache_entry) * AUTHDES_CACHESZ);
+		mem_calloc(AUTHDES_CACHESZ, sizeof(struct cache_entry));
 
-	authdes_lru = (short *)mem_alloc(sizeof(short) * AUTHDES_CACHESZ);
+	authdes_lru = (short *)mem_calloc(AUTHDES_CACHESZ, sizeof(short));
 	/*
 	 * Initialize the lru list
 	 */

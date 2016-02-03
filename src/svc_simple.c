@@ -157,17 +157,7 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 				continue;
 			}
 			xdrbuf = mem_alloc((unsigned)recvsz);
-			if (xdrbuf)
-				netid = rpc_strdup(nconf->nc_netid);
-			if ((!xdrbuf) ||
-			    (!netid)) {
-				if (xdrbuf)
-					mem_free(xdrbuf, (unsigned)recvsz);
-				__warnx(TIRPC_DEBUG_FLAG_SVC, rpc_reg_err,
-					rpc_reg_msg, __no_mem_str);
-				SVC_DESTROY(svcxprt);
-				break;
-			}
+			netid = mem_strdup(nconf->nc_netid);
 			madenow = true;
 		}
 		/*
@@ -193,23 +183,13 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 				(unsigned)versnum, netid);
 			if (madenow) {
 				SVC_DESTROY(svcxprt);
-				mem_free(xdrbuf, 0);
+				mem_free(xdrbuf, (unsigned)recvsz);
 				mem_free(netid, 0);
 			}
 			continue;
 		}
 
 		pl = mem_alloc(sizeof(struct proglst));
-		if (pl == NULL) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC, rpc_reg_err, rpc_reg_msg,
-				__no_mem_str);
-			if (madenow) {
-				SVC_DESTROY(svcxprt);
-				mem_free(xdrbuf, 0);
-				mem_free(netid, 0);
-			}
-			break;
-		}
 		pl->p_progname = progname;
 		pl->p_prognum = prognum;
 		pl->p_versnum = versnum;

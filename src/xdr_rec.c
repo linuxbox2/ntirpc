@@ -153,7 +153,7 @@ static bool fill_input_buf(RECSTREAM *);
 static bool get_input_bytes(RECSTREAM *, char *, int);
 static bool set_input_fragment(RECSTREAM *);
 static bool skip_input_bytes(RECSTREAM *, long);
-static bool realloc_stream(RECSTREAM *, int);
+static void realloc_stream(RECSTREAM *, int);
 
 /*
  * Create an xdr handle for xdrrec
@@ -173,32 +173,11 @@ xdrrec_create(XDR *xdrs, u_int sendsize, u_int recvsize, void *tcp_handle,
 {
 	RECSTREAM *rstrm = mem_alloc(sizeof(RECSTREAM));
 
-	if (rstrm == NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_XDRREC,
-			"xdrrec_create: out of memory");
-		/*
-		 *  This is bad.  Should rework xdrrec_create to
-		 *  return a handle, and in this case return NULL
-		 */
-		return;
-	}
 	rstrm->sendsize = sendsize = fix_buf_size(sendsize);
 	rstrm->out_base = mem_alloc(rstrm->sendsize);
-	if (rstrm->out_base == NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_XDRREC,
-			"xdrrec_create: out of memory");
-		mem_free(rstrm, sizeof(RECSTREAM));
-		return;
-	}
 	rstrm->recvsize = recvsize = fix_buf_size(recvsize);
 	rstrm->in_base = mem_alloc(recvsize);
-	if (rstrm->in_base == NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_XDRREC,
-			"xdrrec_create: out of memory");
-		mem_free(rstrm->out_base, sendsize);
-		mem_free(rstrm, sizeof(RECSTREAM));
-		return;
-	}
+
 	/*
 	 * now the rest ...
 	 */
@@ -743,16 +722,15 @@ fix_buf_size(u_int s)
 /*
  * Reallocate the input buffer for a non-block stream.
  */
-static bool
+static void
 realloc_stream(RECSTREAM *rstrm, int size)
 {
 	ptrdiff_t diff;
 	char *buf;
 
 	if (size > rstrm->recvsize) {
-		buf = realloc(rstrm->in_base, (size_t) size);
-		if (buf == NULL)
-			return false;
+		buf = mem_realloc(rstrm->in_base, size);
+
 		diff = buf - rstrm->in_base;
 		rstrm->in_finger += diff;
 		rstrm->in_base = buf;
@@ -760,8 +738,6 @@ realloc_stream(RECSTREAM *rstrm, int size)
 		rstrm->recvsize = size;
 		rstrm->in_size = size;
 	}
-
-	return (true);
 }
 
 static bool

@@ -75,10 +75,6 @@ svc_raw_ncreate(void)
 	srp = svc_raw_private;
 	if (srp == NULL) {
 		srp = (struct svc_raw_private *)mem_alloc(sizeof(*srp));
-		if (srp == NULL) {
-			mutex_unlock(&svcraw_lock);
-			return (NULL);
-		}
 		if (__rpc_rawcombuf == NULL)
 			__rpc_rawcombuf = mem_alloc(UDPMSGSIZE * sizeof(char));
 		srp->raw_buf = __rpc_rawcombuf;	/* Share it with the client */

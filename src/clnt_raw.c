@@ -88,14 +88,10 @@ clnt_raw_ncreate(rpcprog_t prog, rpcvers_t vers)
 	mutex_lock(&clntraw_lock);
 	clp = clntraw_private;
 	if (clp == NULL) {
-		clp = (struct clntraw_private *)calloc(1, sizeof(*clp));
-		if (clp == NULL) {
-			mutex_unlock(&clntraw_lock);
-			return NULL;
-		}
+		clp = (struct clntraw_private *)mem_zalloc(sizeof(*clp));
 		if (__rpc_rawcombuf == NULL)
 			__rpc_rawcombuf =
-			    (char *)calloc(UDPMSGSIZE, sizeof(char));
+			    (char *)mem_zalloc(UDPMSGSIZE);
 		clp->_raw_buf = __rpc_rawcombuf;
 		clntraw_private = clp;
 	}

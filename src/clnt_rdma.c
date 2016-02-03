@@ -106,14 +106,11 @@ clnt_rdma_create(RDMAXPRT *xprt,		/* init but NOT connect()ed descriptor */
 	u_int sendsz = 1024;
 	u_int recvsz = 1024;
 
-	if ((cl = mem_alloc(sizeof (CLIENT))) == NULL)
-		goto err1;
+	cl = mem_alloc(sizeof (CLIENT));
 	/*
 	 * Should be multiple of 4 for XDR.
 	 */
 	cx = alloc_cx_data(CX_MSK_DATA, sendsz, recvsz);
-	if (cx == NULL)
-		goto err1;
 	cm = CM_DATA(cx);
 	/* Other values can also be set through clnt_control() */
 	cm->cm_xdrs.x_lib[1] = (void *)xprt;
@@ -148,16 +145,6 @@ clnt_rdma_create(RDMAXPRT *xprt,		/* init but NOT connect()ed descriptor */
 	cl->cl_netid = NULL;
 
 	return (cl);
-err1:
-	__warnx(TIRPC_DEBUG_FLAG_CLNT_RDMA, "%s: err, out of memory", __func__);
-	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-	rpc_createerr.cf_error.re_errno = errno;
-	if (cl) {
-		mem_free(cl, sizeof (CLIENT));
-		if (cx)
-		    free_cx_data(cx);
-	}
-	return (NULL);
 }
 
 static enum clnt_stat

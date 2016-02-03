@@ -137,15 +137,6 @@ extern struct __svc_ops *svc_ops;
 
 #define	SPARSENESS 4		/* 75% sparse */
 
-#define	ALLOC(type, size) \
-	((type *) mem_alloc((sizeof(type) * (size))))
-
-#define	MEMZERO(addr, type, size) \
-	((void) memset((void *) (addr), 0, sizeof(type) * (int) (size)))
-
-#define	FREE(addr, type, size)	\
-	(mem_free((addr), (sizeof(type) * (size))))
-
 /*
  * An entry in the cache
  */

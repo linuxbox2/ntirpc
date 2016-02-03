@@ -84,7 +84,7 @@ _rpcdata(void)
 {
 	struct rpcdata *d = rpcdata;
 
-	if (d == 0) {
+	if (!d) {
 		d = (struct rpcdata *)mem_alloc(sizeof(struct rpcdata));
 		rpcdata = d;
 	}
