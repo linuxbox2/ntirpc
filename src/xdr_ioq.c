@@ -59,7 +59,7 @@ static bool xdr_ioq_noop(void) __attribute__ ((unused));
 static uint64_t next_id;
 
 #if 0				/* jemalloc docs warn about reclaim */
-#define alloc_buffer(size) mem_alloc_aligned(0x8, (size))
+#define alloc_buffer(size) mem_aligned(0x8, (size))
 #else
 #define alloc_buffer(size) mem_alloc((size))
 #endif				/* 0 */
@@ -70,15 +70,8 @@ xdr_ioq_uv_create(u_int size, u_int uio_flags)
 {
 	struct xdr_ioq_uv *uv = mem_zalloc(sizeof(struct xdr_ioq_uv));
 
-	if (!uv)
-		return (NULL);
-
 	if (size) {
 		uv->v.vio_base = alloc_buffer(size);
-		if (!uv->v.vio_base) {
-			mem_free(uv, sizeof(struct xdr_ioq_uv));
-			return (NULL);
-		}
 		uv->v.vio_head = uv->v.vio_base;
 		uv->v.vio_tail = uv->v.vio_base;
 		uv->v.vio_wrap = uv->v.vio_base + size;

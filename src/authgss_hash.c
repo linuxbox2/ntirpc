@@ -115,18 +115,11 @@ authgss_hash_init()
 		struct rbtree_x_part *xp = &(authgss_hash_st.xt.tree[ix]);
 		struct authgss_x_part *axp;
 		xp->cache =
-		    mem_zalloc(authgss_hash_st.xt.cachesz *
+		    mem_calloc(authgss_hash_st.xt.cachesz,
 			       sizeof(struct opr_rbtree_node *));
-		if (unlikely(!xp->cache)) {
-			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-				"%s: rbtx cache partition alloc failed",
-				__func__);
-			authgss_hash_st.xt.cachesz = 0;
-			break;
-		}
+
 		/* partition ctx LRU */
-		axp = (struct authgss_x_part *)
-		    mem_alloc(sizeof(struct authgss_x_part));
+		axp = (struct authgss_x_part *)mem_alloc(sizeof(*axp));
 		TAILQ_INIT(&axp->lru_q);
 		xp->u1 = axp;
 	}

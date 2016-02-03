@@ -86,8 +86,6 @@ int __svc_maxiov = 1024; /* UIO_MAXIOV value from sys/uio.h */
 #endif
 int __svc_maxrec = 0;
 
-extern tirpc_pkg_params __ntirpc_pkg_params;
-
 struct svc_params __svc_params[1] = {
 	{
 	 false /* !initialized */ ,
@@ -144,11 +142,6 @@ svc_init(svc_init_params *params)
 	}
 	__svc_params->max_connections =
 	    (params->max_connections) ? params->max_connections : FD_SETSIZE;
-
-	if (params->flags & SVC_INIT_WARNX)
-		__ntirpc_pkg_params.warnx = params->warnx;
-	else
-		__ntirpc_pkg_params.warnx = warnx;
 
 	/* svc_vc */
 	__svc_params->xprt_u.vc.nconns = 0;
@@ -234,8 +227,6 @@ struct rpc_msg *
 alloc_rpc_msg(void)
 {
 	struct rpc_msg *msg = mem_alloc(sizeof(struct rpc_msg));
-	if (!msg)
-		goto out;
 
 	TAILQ_INIT_ENTRY(msg, msg_q);
 
@@ -248,7 +239,6 @@ alloc_rpc_msg(void)
 	msg->acpted_rply.ar_results.where = NULL;
 	msg->acpted_rply.ar_results.proc = (xdrproc_t) xdr_void;
 
- out:
 	return (msg);
 }
 
@@ -324,15 +314,15 @@ svc_reg(SVCXPRT *xprt, const rpcprog_t prog, const rpcvers_t vers,
 
 	/* VARIABLES PROTECTED BY svc_lock: s, prev, svc_head */
 	if (xprt->xp_netid) {
-		netid = rpc_strdup(xprt->xp_netid);
+		netid = mem_strdup(xprt->xp_netid);
 		flag = 1;
 	} else if (nconf) {
-		netid = rpc_strdup(nconf->nc_netid);
+		netid = mem_strdup(nconf->nc_netid);
 		flag = 1;
 	} else {
 		tnconf = __rpcgettp(xprt->xp_fd);
 		if (tnconf) {
-			netid = rpc_strdup(tnconf->nc_netid);
+			netid = mem_strdup(tnconf->nc_netid);
 			flag = 1;
 			freenetconfigent(tnconf);
 		}
@@ -351,13 +341,6 @@ svc_reg(SVCXPRT *xprt, const rpcprog_t prog, const rpcvers_t vers,
 		return (false);
 	}
 	s = mem_alloc(sizeof(struct svc_callout));
-	if (s == NULL) {
-		if (netid)
-			mem_free(netid, 0);
-		rwlock_unlock(&svc_lock);
-		return (false);
-	}
-
 	s->rec.sc_prog = prog;
 	s->rec.sc_vers = vers;
 	s->rec.sc_dispatch = dispatch;
@@ -366,7 +349,7 @@ svc_reg(SVCXPRT *xprt, const rpcprog_t prog, const rpcvers_t vers,
 	svc_head = s;
 
 	if ((xprt->xp_netid == NULL) && (flag == 1) && netid)
-		((SVCXPRT *) xprt)->xp_netid = rpc_strdup(netid);
+		((SVCXPRT *) xprt)->xp_netid = mem_strdup(netid);
 
  rpcb_it:
 	rwlock_unlock(&svc_lock);
@@ -432,8 +415,6 @@ svc_register(SVCXPRT *xprt, u_long prog, u_long vers,
 		return (false);
 	}
 	s = mem_alloc(sizeof(struct svc_callout));
-	if (!s)
-		return (false);
 	s->rec.sc_prog = (rpcprog_t) prog;
 	s->rec.sc_vers = (rpcvers_t) vers;
 	s->rec.sc_dispatch = dispatch;

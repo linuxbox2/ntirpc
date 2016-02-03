@@ -55,7 +55,7 @@ static char *
 _buf(void)
 {
 
-	if (buf == 0)
+	if (!buf)
 		buf = (char *)mem_alloc(CLNT_PERROR_BUFLEN);
 	return (buf);
 }

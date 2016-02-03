@@ -168,15 +168,15 @@ delete_cache(struct netbuf *addr)
 		if (!memcmp(cptr->ac_taddr->buf, addr->buf, addr->len)) {
 			mem_free(cptr->ac_host, 0);	/* XXX */
 			mem_free(cptr->ac_netid, 0);
-			mem_free(cptr->ac_taddr->buf, 0);
-			mem_free(cptr->ac_taddr, 0);
+			mem_free(cptr->ac_taddr->buf, cptr->ac_taddr->len);
+			mem_free(cptr->ac_taddr, sizeof(struct netbuf));
 			if (cptr->ac_uaddr)
 				mem_free(cptr->ac_uaddr, 0);
 			if (prevptr)
 				prevptr->ac_next = cptr->ac_next;
 			else
 				front = cptr->ac_next;
-			mem_free(cptr, 0);
+			mem_free(cptr, sizeof(struct address_cache));
 			cachesize--;
 			break;
 		}
@@ -190,21 +190,18 @@ add_cache(const char *host, const char *netid, struct netbuf *taddr,
 {
 	struct address_cache *ad_cache, *cptr, *prevptr;
 
-	ad_cache = (struct address_cache *)
-	    mem_zalloc(sizeof(struct address_cache));
-	if (!ad_cache)
+	if (!host) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s: missing host", __func__);
 		return;
-	ad_cache->ac_host = (host) ? rpc_strdup(host) : NULL;
-	ad_cache->ac_netid = rpc_strdup(netid);
-	ad_cache->ac_uaddr = uaddr ? rpc_strdup(uaddr) : NULL;
+	}
+	ad_cache = (struct address_cache *)mem_zalloc(sizeof(*ad_cache));
+
+	ad_cache->ac_host = mem_strdup(host);
+	ad_cache->ac_netid = mem_strdup(netid);
+	ad_cache->ac_uaddr = uaddr ? mem_strdup(uaddr) : NULL;
 	ad_cache->ac_taddr = (struct netbuf *)mem_zalloc(sizeof(struct netbuf));
-	if (!ad_cache->ac_host || !ad_cache->ac_netid || !ad_cache->ac_taddr
-	    || (uaddr && !ad_cache->ac_uaddr))
-		goto out_free;
 	ad_cache->ac_taddr->len = ad_cache->ac_taddr->maxlen = taddr->len;
 	ad_cache->ac_taddr->buf = (char *)mem_zalloc(taddr->len);
-	if (ad_cache->ac_taddr->buf == NULL)
-		goto out_free;
 	memcpy(ad_cache->ac_taddr->buf, taddr->buf, taddr->len);
 #ifdef ND_DEBUG
 	fprintf(stderr, "Added to cache: %s : %s\n", host, netid);
@@ -231,8 +228,8 @@ add_cache(const char *host, const char *netid, struct netbuf *taddr,
 #endif
 		mem_free(cptr->ac_host, 0);	/* XXX */
 		mem_free(cptr->ac_netid, 0);
-		mem_free(cptr->ac_taddr->buf, 0);
-		mem_free(cptr->ac_taddr, 0);
+		mem_free(cptr->ac_taddr->buf, cptr->ac_taddr->len);
+		mem_free(cptr->ac_taddr, sizeof(struct netbuf));
 		if (cptr->ac_uaddr)
 			mem_free(cptr->ac_uaddr, 0);
 
@@ -244,17 +241,10 @@ add_cache(const char *host, const char *netid, struct netbuf *taddr,
 			front = ad_cache;
 			ad_cache->ac_next = NULL;
 		}
-		mem_free(cptr, 0);
+		mem_free(cptr, sizeof(struct address_cache));
 	}
 	rwlock_unlock(&rpcbaddr_cache_lock);
 	return;
-
- out_free:
-	mem_free(ad_cache->ac_host, 0);	/* XXX */
-	mem_free(ad_cache->ac_netid, 0);
-	mem_free(ad_cache->ac_uaddr, 0);
-	mem_free(ad_cache->ac_taddr, 0);
-	mem_free(ad_cache, 0);
 }
 
 /*
@@ -296,16 +286,13 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 				     (rpcvers_t) RPCBVERS4, 0, 0);
 		if (client != NULL) {
 			if (targaddr)
-				*targaddr = rpc_strdup(ad_cache->ac_uaddr);
+				*targaddr = mem_strdup(ad_cache->ac_uaddr);
 			rwlock_unlock(&rpcbaddr_cache_lock);
 			return (client);
 		}
 		addr_to_delete.len = addr->len;
 		addr_to_delete.buf = (char *)mem_zalloc(addr->len);
-		if (addr_to_delete.buf == NULL)
-			addr_to_delete.len = 0;
-		else
-			memcpy(addr_to_delete.buf, addr->buf, addr->len);
+		memcpy(addr_to_delete.buf, addr->buf, addr->len);
 	}
 	rwlock_unlock(&rpcbaddr_cache_lock);
 	if (addr_to_delete.len != 0) {
@@ -316,7 +303,7 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 		rwlock_wrlock(&rpcbaddr_cache_lock);
 		delete_cache(&addr_to_delete);
 		rwlock_unlock(&rpcbaddr_cache_lock);
-		mem_free(addr_to_delete.buf, 0);	/* XXX */
+		mem_free(addr_to_delete.buf, addr_to_delete.len);
 	}
 	if (!__rpc_nconf2sockinfo(nconf, &si)) {
 		rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
@@ -702,18 +689,9 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		port = htons(port);
 		CLNT_CONTROL(client, CLGET_SVC_ADDR, (char *)&remote);
 
-		address = (struct netbuf *)  mem_zalloc(sizeof(struct netbuf));
-		if (address)
-			address->buf = (char *) mem_zalloc(remote.len);
-		if ((!address) || (!address->buf)) {
-			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-			clnt_geterr(client, &rpc_createerr.cf_error);
-			if (address) {
-				mem_free(address, 0);
-				address = NULL;
-			}
-			goto error;
-		}
+		address = (struct netbuf *)mem_zalloc(sizeof(struct netbuf));
+		address->buf = (char *)mem_alloc(remote.len);
+
 		memcpy(address->buf, remote.buf, remote.len);
 		memcpy(&((char *)address->buf)[sizeof(short)],
 		       (char *)(void *)&port, sizeof(short));
@@ -1141,15 +1119,11 @@ struct netbuf *rpcb_uaddr2taddr(struct netconfig *nconf, char *uaddr)
 	auth = authnone_ncreate();	/* idempotent */
 
 	taddr = (struct netbuf *)mem_zalloc(sizeof(struct netbuf));
-	if (taddr == NULL) {
-		CLNT_DESTROY(client);
-		return (NULL);
-	}
 	if (CLNT_CALL
 	    (client, auth, RPCBPROC_UADDR2TADDR, (xdrproc_t) xdr_wrapstring,
 	     (char *)(void *)&uaddr, (xdrproc_t) xdr_netbuf,
 	     (char *)(void *)taddr, tottimeout) != RPC_SUCCESS) {
-		mem_free(taddr, 0);	/* XXX */
+		mem_free(taddr, sizeof(*taddr));
 		taddr = NULL;
 	}
 	CLNT_DESTROY(client);

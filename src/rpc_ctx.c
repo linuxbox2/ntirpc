@@ -54,11 +54,7 @@ alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
 {
 	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;
-	rpc_ctx_t *ctx;
-
-	ctx = mem_alloc(sizeof(rpc_ctx_t));
-	if (!ctx)
-		goto out;
+	rpc_ctx_t *ctx = mem_alloc(sizeof(rpc_ctx_t));
 
 	/* potects this */
 	mutex_init(&ctx->we.mtx, NULL);
@@ -87,7 +83,7 @@ alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
 		REC_UNLOCK(rec);
 		mutex_destroy(&ctx->we.mtx);
 		cond_destroy(&ctx->we.cv);
-		mem_free(ctx, sizeof(rpc_ctx_t));
+		mem_free(ctx, sizeof(*ctx));
 		ctx = NULL;
 		goto out;
 	}
@@ -252,5 +248,5 @@ free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
 		free_rpc_msg(ctx->msg);
 	mutex_destroy(&ctx->we.mtx);
 	cond_destroy(&ctx->we.cv);
-	mem_free(ctx, sizeof(rpc_ctx_t));
+	mem_free(ctx, sizeof(*ctx));
 }

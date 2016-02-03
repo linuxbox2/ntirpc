@@ -79,7 +79,6 @@
 #define SVC_INIT_DEFAULT        0x0000
 #define SVC_INIT_XPRTS          0x0001
 #define SVC_INIT_EPOLL          0x0002
-#define SVC_INIT_WARNX          0x0004
 #define SVC_INIT_NOREG_XPRTS    0x0008
 #define SVC_INIT_BLKIN          0x0010
 
@@ -129,7 +128,6 @@ enum svc_event_type {
 
 typedef struct svc_init_params {
 	u_long flags;
-	warnx_t warnx;
 	u_int max_connections;	/* xprts */
 	u_int max_events;	/* evchan events */
 	u_int svc_ioq_maxbuf;

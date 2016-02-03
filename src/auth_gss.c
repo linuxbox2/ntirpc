@@ -152,36 +152,28 @@ authgss_ncreate(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 {
 	AUTH *auth;
 	struct rpc_gss_data *gd;
+	OM_uint32 maj_stat;
 	OM_uint32 min_stat = 0;
 
 	log_debug("in authgss_ncreate()");
 
 	memset(&rpc_createerr, 0, sizeof(rpc_createerr));
 	auth = mem_alloc(sizeof(*auth));
-	if (auth == NULL) {
-		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-		rpc_createerr.cf_error.re_errno = ENOMEM;
-		return (NULL);
-	}
+
 	/* XXX move to ctor */
 	gd = mem_alloc(sizeof(*gd));
-	if (gd == NULL) {
-		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-		rpc_createerr.cf_error.re_errno = ENOMEM;
-		mem_free(auth, 0);
-		return (NULL);
-	}
+
 	mutex_init(&gd->lock, NULL);
 #ifdef DEBUG
 	__warnx(TIRPC_DEBUG_FLAG_AUTH, "authgss_ncreate: name is %p\n", name);
 #endif
 	if (name != GSS_C_NO_NAME) {
-		if (gss_duplicate_name(&min_stat, name, &gd->name)
-		    != GSS_S_COMPLETE) {
+		maj_stat = gss_duplicate_name(&min_stat, name, &gd->name);
+		if (maj_stat != GSS_S_COMPLETE) {
 			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-			rpc_createerr.cf_error.re_errno = ENOMEM;
-			mem_free(gd, 0);
-			mem_free(auth, 0);
+			rpc_createerr.cf_error.re_errno = EINVAL;
+			mem_free(gd, sizeof(*gd));
+			mem_free(auth, sizeof(*auth));
 			return (NULL);
 		}
 	} else
@@ -362,11 +354,6 @@ authgss_validate(AUTH *auth, struct opaque_auth *verf)
 		 * status is GSS_S_COMPLETE
 		 */
 		gd->gc_wire_verf.value = mem_alloc(verf->oa_length);
-		if (gd->gc_wire_verf.value == NULL) {
-			__warnx(TIRPC_DEBUG_FLAG_AUTH,
-				"gss_validate: out of memory\n");
-			return (false);
-		}
 		memcpy(gd->gc_wire_verf.value, verf->oa_base, verf->oa_length);
 		gd->gc_wire_verf.length = verf->oa_length;
 		return (true);
@@ -621,8 +608,8 @@ authgss_destroy(AUTH *auth)
 	if (gd->name != GSS_C_NO_NAME)
 		gss_release_name(&min_stat, &gd->name);
 
-	mem_free(gd, 0);
-	mem_free(auth, 0);
+	mem_free(gd, sizeof(*gd));
+	mem_free(auth, sizeof(*auth));
 }
 
 bool

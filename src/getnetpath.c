@@ -86,8 +86,7 @@ setnetpath(void)
 
 	np_sessionp = (struct netpath_vars *)
 		mem_zalloc(sizeof(struct netpath_vars));
-	if (!np_sessionp)
-		return (NULL);
+
 	np_sessionp->nc_handlep = setnetconfig();
 	if (!np_sessionp->nc_handlep) {
 		mem_free(np_sessionp, sizeof(struct netpath_vars));
@@ -104,11 +103,7 @@ setnetpath(void)
 			/* won't need nc session */
 		np_sessionp->nc_handlep = NULL;
 		np_sessionp->netpath = mem_zalloc(strlen(npp) + 1);
-		if (!np_sessionp->netpath) {
-			mem_free(np_sessionp, 0);	/* XXX */
-			return (NULL);
-		} else
-			(void)strcpy(np_sessionp->netpath, npp);
+		(void)strcpy(np_sessionp->netpath, npp);
 	}
 	np_sessionp->netpath_start = np_sessionp->netpath;
 	return ((void *)np_sessionp);
@@ -210,7 +205,7 @@ endnetpath(void *handlep)
 		freenetconfigent(chainp->ncp);
 	}
 
-	mem_free(np_sessionp, 0);
+	mem_free(np_sessionp, sizeof(*np_sessionp));
 #ifdef MEM_CHK
 	if (malloc_verify() == 0) {
 		fprintf(stderr, "memory heap corrupted in endnetpath\n");

@@ -241,13 +241,6 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	}
 
 	clnt = (CLIENT *) mem_alloc(sizeof(CLIENT));
-	if (!clnt) {
-		(void)syslog(LOG_ERR, clnt_vc_errstr, clnt_vc_str,
-			     __no_mem_str);
-		rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-		rpc_createerr.cf_error.re_errno = errno;
-		goto err;
-	}
 
 	mutex_init(&clnt->cl_lock, NULL);
 	clnt->cl_flags = CLNT_FLAG_NONE;
@@ -256,13 +249,13 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	/* private data struct */
 	xd->cx.data.ct_fd = fd;
 	cs = mem_alloc(sizeof(struct ct_serialized));
+
 	ct = &xd->cx.data;
 	ct->ct_closeit = false;
 	ct->ct_wait.tv_usec = 0;
 	ct->ct_waitset = false;
 	ct->ct_addr.buf = mem_alloc(raddr->maxlen);
-	if (ct->ct_addr.buf == NULL)
-		goto err;
+
 	memcpy(ct->ct_addr.buf, raddr->buf, raddr->len);
 	ct->ct_addr.len = raddr->len;
 	ct->ct_addr.maxlen = raddr->maxlen;

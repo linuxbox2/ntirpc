@@ -176,16 +176,9 @@ svc_rqst_init()
 	/* init read-through cache */
 	for (ix = 0; ix < SVC_RQST_PARTITIONS; ++ix) {
 		struct rbtree_x_part *xp = &(svc_rqst_set.xt.tree[ix]);
-		xp->cache =
-		    mem_zalloc(svc_rqst_set.xt.cachesz *
-			       sizeof(struct opr_rbtree_node *));
-		if (!xp->cache) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-				"%s: rbtx cache partition alloc failed",
-				__func__);
-			svc_rqst_set.xt.cachesz = 0;
-			break;
-		}
+
+		xp->cache = mem_calloc(svc_rqst_set.xt.cachesz,
+					sizeof(struct opr_rbtree_node *));
 	}
 	initialized = true;
 
@@ -258,13 +251,7 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 
 	flags |= SVC_RQST_FLAG_EPOLL;	/* XXX */
 
-	sr_rec = mem_alloc(sizeof(struct svc_rqst_rec));
-	if (!sr_rec) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-			"%s: failed allocating svc_rqst_rec", __func__);
-		goto out;
-	}
-	memset(sr_rec, 0, sizeof(struct svc_rqst_rec));
+	sr_rec = mem_zalloc(sizeof(struct svc_rqst_rec));
 
 	/* create a pair of anonymous sockets for async event channel wakeups */
 	code = socketpair(AF_UNIX, SOCK_STREAM, 0, sr_rec->sv);
@@ -293,11 +280,6 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 		sr_rec->ev_u.epoll.events = (struct epoll_event *)
 		    mem_alloc(sr_rec->ev_u.epoll.max_events *
 			      sizeof(struct epoll_event));
-		if (!sr_rec->ev_u.epoll.events) {
-			mem_free(sr_rec, sizeof(struct svc_rqst_rec));
-			code = ENOMEM;
-			goto out;
-		}
 
 		/* create epoll fd */
 		sr_rec->ev_u.epoll.epoll_fd =

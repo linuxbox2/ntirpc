@@ -176,10 +176,6 @@ int svc_auth_reg(int cred_flavor,
 
 		/* this is a new one, so go ahead and register it */
 		asp = mem_alloc(sizeof(*asp));
-		if (asp == NULL) {
-			mutex_unlock(&authsvc_lock);
-			return (-1);
-		}
 		asp->flavor = cred_flavor;
 		asp->handler = handler;
 		asp->next = Auths;

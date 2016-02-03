@@ -94,13 +94,6 @@ ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd, struct xdr_ioq *xioq)
 
 	if (unlikely(vsize > MAXALLOCA)) {
 		iov = mem_alloc(vsize);
-		if (unlikely(iov == NULL)) {
-			__warnx(TIRPC_DEBUG_FLAG_ERROR,
-				"%s() malloc failed (%d)\n",
-				__func__, errno);
-			cfconn_set_dead(xprt, xd);
-			return;
-		}
 	} else {
 		iov = alloca(vsize);
 	}

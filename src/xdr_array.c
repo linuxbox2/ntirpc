@@ -91,13 +91,7 @@ xdr_array(XDR *xdrs, caddr_t *addrp,	/* array pointer */
 		case XDR_DECODE:
 			if (c == 0)
 				return (true);
-			*addrp = target = mem_alloc(nodesize);
-			if (target == NULL) {
-				__warnx(TIRPC_DEBUG_FLAG_XDR,
-					"xdr_array: out of memory");
-				return (false);
-			}
-			memset(target, 0, nodesize);
+			*addrp = target = mem_zalloc(nodesize);
 			break;
 
 		case XDR_FREE:

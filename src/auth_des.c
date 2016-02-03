@@ -61,8 +61,6 @@
 #define RTIME_TIMEOUT  5	/* seconds to wait for sync */
 
 #define AUTH_PRIVATE(auth) ((struct ad_private *) (auth)->ah_private)
-#define ALLOC(object_type) ((object_type *) mem_alloc(sizeof(object_type)))
-#define FREE(ptr, size)  mem_free((char *)(ptr), (int) size)
 #define ATTEMPT(xdr_op)  if (!(xdr_op)) return (false)
 
 bool xdr_authdes_cred(XDR *, struct authdes_cred *);
@@ -159,18 +157,8 @@ authdes_pk_nseccreate(const char *servername, netobj *pkey, u_int window,
 	/*
 	 * Allocate everything now
 	 */
-	auth = ALLOC(AUTH);
-	if (auth == NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_AUTH,
-			"authdes_pk_nseccreate: out of memory");
-		return (NULL);
-	}
-	ad = ALLOC(struct ad_private);
-	if (ad == NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_AUTH,
-			"authdes_pk_nseccreate: out of memory");
-		goto failed;
-	}
+	auth = mem_alloc(sizeof(AUTH));
+	ad = mem_alloc(sizeof(struct ad_private));
 	ad->ad_fullname = ad->ad_servername = NULL;	/* Sanity reasons */
 	ad->ad_timehost = NULL;
 	ad->ad_netid = NULL;
@@ -179,6 +167,7 @@ authdes_pk_nseccreate(const char *servername, netobj *pkey, u_int window,
 	ad->ad_timediff.tv_sec = 0;
 	ad->ad_timediff.tv_usec = 0;
 	memcpy(ad->ad_pkey, pkey->n_bytes, pkey->n_len);
+
 	if (!getnetname(namebuf))
 		goto failed;
 	ad->ad_fullnamelen = RNDUP((u_int) strlen(namebuf));
@@ -186,19 +175,8 @@ authdes_pk_nseccreate(const char *servername, netobj *pkey, u_int window,
 	ad->ad_servernamelen = strlen(servername);
 	ad->ad_servername = (char *)mem_alloc(ad->ad_servernamelen + 1);
 
-	if (ad->ad_fullname == NULL || ad->ad_servername == NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_AUTH,
-			"authdes_nseccreate: out of memory");
-		goto failed;
-	}
 	if (timehost != NULL) {
-		ad->ad_timehost = (char *)mem_alloc(strlen(timehost) + 1);
-		if (ad->ad_timehost == NULL) {
-			__warnx(TIRPC_DEBUG_FLAG_AUTH,
-				"authdes_nseccreate: out of memory");
-			goto failed;
-		}
-		memcpy(ad->ad_timehost, timehost, strlen(timehost) + 1);
+		ad->ad_timehost = mem_strdup(timehost);
 		ad->ad_dosync = true;
 	} else if (srvr != NULL) {
 		ad->ad_nis_srvr = srvr;	/* transient */
@@ -237,19 +215,19 @@ authdes_pk_nseccreate(const char *servername, netobj *pkey, u_int window,
 
  failed:
 	if (auth)
-		FREE(auth, sizeof(AUTH));
+		mem_free(auth, sizeof(AUTH));
 	if (ad) {
 		if (ad->ad_fullname)
-			FREE(ad->ad_fullname, ad->ad_fullnamelen + 1);
+			mem_free(ad->ad_fullname, ad->ad_fullnamelen + 1);
 		if (ad->ad_servername)
-			FREE(ad->ad_servername, ad->ad_servernamelen + 1);
+			mem_free(ad->ad_servername, ad->ad_servernamelen + 1);
 		if (ad->ad_timehost)
-			FREE(ad->ad_timehost, strlen(ad->ad_timehost) + 1);
+			mem_free(ad->ad_timehost, strlen(ad->ad_timehost) + 1);
 		if (ad->ad_netid)
-			FREE(ad->ad_netid, strlen(ad->ad_netid) + 1);
+			mem_free(ad->ad_netid, strlen(ad->ad_netid) + 1);
 		if (ad->ad_uaddr)
-			FREE(ad->ad_uaddr, strlen(ad->ad_uaddr) + 1);
-		FREE(ad, sizeof(struct ad_private));
+			mem_free(ad->ad_uaddr, strlen(ad->ad_uaddr) + 1);
+		mem_free(ad, sizeof(struct ad_private));
 	}
 	return (NULL);
 }
@@ -474,16 +452,16 @@ authdes_destroy(AUTH *auth)
 /* LINTED pointer alignment */
 	struct ad_private *ad = AUTH_PRIVATE(auth);
 
-	FREE(ad->ad_fullname, ad->ad_fullnamelen + 1);
-	FREE(ad->ad_servername, ad->ad_servernamelen + 1);
+	mem_free(ad->ad_fullname, ad->ad_fullnamelen + 1);
+	mem_free(ad->ad_servername, ad->ad_servernamelen + 1);
 	if (ad->ad_timehost)
-		FREE(ad->ad_timehost, strlen(ad->ad_timehost) + 1);
+		mem_free(ad->ad_timehost, strlen(ad->ad_timehost) + 1);
 	if (ad->ad_netid)
-		FREE(ad->ad_netid, strlen(ad->ad_netid) + 1);
+		mem_free(ad->ad_netid, strlen(ad->ad_netid) + 1);
 	if (ad->ad_uaddr)
-		FREE(ad->ad_uaddr, strlen(ad->ad_uaddr) + 1);
-	FREE(ad, sizeof(struct ad_private));
-	FREE(auth, sizeof(AUTH));
+		mem_free(ad->ad_uaddr, strlen(ad->ad_uaddr) + 1);
+	mem_free(ad, sizeof(struct ad_private));
+	mem_free(auth, sizeof(AUTH));
 }
 
 static bool

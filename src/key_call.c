@@ -308,8 +308,6 @@ getkeyserv_handle(int vers)
 	kcp = (struct key_call_private *)thr_getspecific(key_call_key);
 	if (kcp == (struct key_call_private *)NULL) {
 		kcp = (struct key_call_private *)mem_alloc(sizeof(*kcp));
-		if (kcp == (struct key_call_private *)NULL)
-			return ((CLIENT *) NULL);
 		thr_setspecific(key_call_key, (void *)kcp);
 		kcp->client = NULL;
 	}

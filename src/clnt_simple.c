@@ -77,7 +77,7 @@ static void rpc_call_destroy(void *vp)
 	if (rcp) {
 		if (rcp->client)
 			CLNT_DESTROY(rcp->client);
-		mem_free(rcp, 0);
+		mem_free(rcp, sizeof(*rcp));
 	}
 }
 
@@ -113,11 +113,6 @@ rpc_call(const char *host,	/* host name */
 	rcp = (struct rpc_call_private *)thr_getspecific(rpc_call_key);
 	if (rcp == NULL) {
 		rcp = mem_alloc(sizeof(*rcp));
-		if (rcp == NULL) {
-			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-			rpc_createerr.cf_error.re_errno = errno;
-			return (rpc_createerr.cf_stat);
-		}
 		thr_setspecific(rpc_call_key, (void *)rcp);
 		rcp->valid = 0;
 		rcp->client = NULL;
