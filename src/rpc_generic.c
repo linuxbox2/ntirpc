@@ -81,7 +81,13 @@ static void *
 tirpc_aligned(size_t alignment, size_t size, const char *file, int line,
 	      const char *function)
 {
+#if defined(_ISOC11_SOURCE)
 	return aligned_alloc(alignment, size);
+#else
+	void *ptr;
+	(void) posix_memalign(&ptr, alignment, size);
+	return ptr;
+#endif
 }
 
 static void *
