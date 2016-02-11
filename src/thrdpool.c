@@ -52,7 +52,7 @@ thrdpool_init(struct thrdpool *pool, const char *name,
 	init_wait_entry(&pool->we);
 
 	mutex_lock(&pool->we.mtx);
-	pool->name = rpc_strdup(name);
+	pool->name = mem_strdup(name);
 	pool->params = *params;
 	TAILQ_INIT(&pool->idle_q);
 	TAILQ_INIT(&pool->work_q);
