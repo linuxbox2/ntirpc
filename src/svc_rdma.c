@@ -164,7 +164,7 @@ svc_rdma_recv(SVCXPRT *xprt, struct svc_req *req)
 
 	if (!xdr_rdma_svc_recv(cbc, 0)){
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RDMA,
-			"%s: xdr_rdma_svc_recv failed (will set dead)",
+			"%s: xdr_rdma_svc_recv failed",
 			__func__);
 		return (FALSE);
 	}
@@ -175,7 +175,7 @@ svc_rdma_recv(SVCXPRT *xprt, struct svc_req *req)
 	 */
 	if (!xdr_dplx_decode(xdrs, req->rq_msg)) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RDMA,
-			"%s: xdr_dplx_decode failed (will set dead)",
+			"%s: xdr_dplx_decode failed",
 			__func__);
 		return (FALSE);
 	}

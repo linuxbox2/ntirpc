@@ -57,6 +57,7 @@
 
 #define CALLQ_SIZE (2)
 #define RFC5666_BUFFER_SIZE (1024)
+#define RPCRDMA_VERSION (1)
 
 static const struct	xdr_ops xdr_rdma_ops_aligned;
 static const struct	xdr_ops xdr_rdma_ops_unaligned;
@@ -123,7 +124,7 @@ quit:
 #endif /* rpcrdma_dump_msg */
 
 /*
-** match RFC-5666 as cloely as possible
+** match RFC-5666bis as closely as possible
 */
 struct xdr_rdma_segment {
 	uint32_t handle;	/* Registered memory handle */
@@ -160,21 +161,20 @@ struct rpc_rdma_header_nomsg {
 	uint32_t rdma_reply;
 };
 
-struct rpc_rdma_header_padded {
-	uint32_t rdma_align;	/* Padding alignment */
-	uint32_t rdma_thresh;	/* Padding threshold */
-	uint32_t rdma_reads;
-	uint32_t rdma_writes;
-	uint32_t rdma_reply;
-	/* rpc body follows */
-};
-
 enum rdma_proc {
 	RDMA_MSG = 0,	/* An RPC call or reply msg */
 	RDMA_NOMSG = 1,	/* An RPC call or reply msg - separate body */
-	RDMA_MSGP = 2,	/* An RPC call or reply msg with padding */
-	RDMA_DONE = 3,	/* Client signals reply completion */
 	RDMA_ERROR = 4	/* An RPC RDMA encoding error */
+};
+
+enum rpcrdma_errcode {
+	RDMA_ERR_VERS = 1,
+	RDMA_ERR_BADHEADER = 2
+};
+
+struct rpcrdma_err_vers {
+	uint32_t rdma_vers_low;
+	uint32_t rdma_vers_high;
 };
 
 struct rdma_msg {
@@ -185,7 +185,6 @@ struct rdma_msg {
 	union {
 		struct rpc_rdma_header		rdma_msg;
 		struct rpc_rdma_header_nomsg	rdma_nomsg;
-		struct rpc_rdma_header_padded	rdma_padmsg;
 	} rdma_body;
 };
 
@@ -816,27 +815,27 @@ xdr_rdma_header_length(struct rdma_msg *rmsg)
 	return ((uintptr_t)ptr - (uintptr_t)rmsg);
 }
 
-#ifdef UNUSED
-int
-xdr_rdma_encode_error(struct svcxprt_rdma *xprt,
-			      struct rdma_msg *rmsgp,
-			      enum xdr_rdma_errcode err, u32 *va)
+void
+xdr_rdma_encode_error(struct xdr_ioq_uv *call_uv, enum rpcrdma_errcode err)
 {
-	u32 *startp = va;
+	struct rdma_msg *cmsg = m_(call_uv->v.vio_head);
+	uint32_t *va = &cmsg->rdma_type;
 
-	*va++ = htonl(rmsgp->rdma_xid);
-	*va++ = htonl(rmsgp->rdma_vers);
-	*va++ = htonl(xprt->sc_max_requests);
 	*va++ = htonl(RDMA_ERROR);
 	*va++ = htonl(err);
-	if (err == ERR_VERS) {
-		*va++ = htonl(RPCRDMA_VERSION);
-		*va++ = htonl(RPCRDMA_VERSION);
-	}
 
-	return (int)((unsigned long)va - (unsigned long)startp);
+	switch (err) {
+	case RDMA_ERR_VERS:
+		*va++ = htonl(RPCRDMA_VERSION);
+		*va++ = htonl(RPCRDMA_VERSION);
+		break;
+	case RDMA_ERR_BADHEADER:
+		break;
+	}
+	call_uv->v.vio_tail = va;
 }
 
+#ifdef UNUSED
 void
 xdr_rdma_encode_reply_array(wl_t *ary, int chunks)
 {
@@ -1169,15 +1168,37 @@ xdr_rdma_svc_recv(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 	xdr_ioq_release(&cbc->holdq.ioq_uv.uvqh);
 	xdr_rdma_callq(xprt);
 
-	/* swap calling message from workq to holdq */
-	TAILQ_CONCAT(&cbc->holdq.ioq_uv.uvqh.qh, &cbc->workq.ioq_uv.uvqh.qh, q);
-	cbc->holdq.ioq_uv.uvqh.qcount = cbc->workq.ioq_uv.uvqh.qcount;
-	cbc->workq.ioq_uv.uvqh.qcount = 0;
-
-	cbc->call_uv = IOQ_(TAILQ_FIRST(&cbc->holdq.ioq_uv.uvqh.qh));
+	cbc->call_uv = IOQ_(TAILQ_FIRST(&cbc->workq.ioq_uv.uvqh.qh));
 	(cbc->call_uv->u.uio_references)++;
 	rmsg = m_(cbc->call_uv->v.vio_head);
 	rpcrdma_dump_msg(cbc->call_uv, "call", rmsg->rdma_xid);
+
+	switch (ntohl(rmsg->rdma_vers)) {
+	case RPCRDMA_VERSION:
+		break;
+	default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() rdma_vers %" PRIu32 "?",
+			__func__, ntohl(rmsg->rdma_vers));
+		xdr_rdma_encode_error(cbc->call_uv, RDMA_ERR_VERS);
+		xdr_rdma_post_send_cb(xprt, cbc, 1);
+		xdr_ioq_uv_release(cbc->call_uv);
+		return (false);
+	}
+
+	switch (ntohl(rmsg->rdma_type)) {
+	case RDMA_MSG:
+	case RDMA_NOMSG:
+		break;
+	default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() rdma_type %" PRIu32 "?",
+			__func__, ntohl(rmsg->rdma_type));
+		xdr_rdma_encode_error(cbc->call_uv, RDMA_ERR_BADHEADER);
+		xdr_rdma_post_send_cb(xprt, cbc, 1);
+		xdr_ioq_uv_release(cbc->call_uv);
+		return (false);
+	}
 
 	/* locate NFS/RDMA (RFC-5666) chunk positions */
 	cbc->read_chunk = xdr_rdma_get_read_list(rmsg);
@@ -1188,21 +1209,14 @@ xdr_rdma_svc_recv(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 	cbc->call_data = cbc->reply_chunk;
 	xdr_rdma_skip_reply_array((uint32_t **)&cbc->call_data);
 
+	/* swap calling message from workq to holdq */
+	TAILQ_CONCAT(&cbc->holdq.ioq_uv.uvqh.qh, &cbc->workq.ioq_uv.uvqh.qh, q);
+	cbc->holdq.ioq_uv.uvqh.qcount = cbc->workq.ioq_uv.uvqh.qcount;
+	cbc->workq.ioq_uv.uvqh.qcount = 0;
+
 	/* skip past the header for the calling buffer */
 	xdr_ioq_reset(&cbc->holdq, ((uintptr_t)cbc->call_data
 				  - (uintptr_t)rmsg));
-
-	switch (ntohl(rmsg->rdma_type)) {
-	case RDMA_MSG:
-		return (true);
-	case RDMA_NOMSG:
-		break;
-	default:
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s() rdma_type %" PRIu32 "?",
-			__func__, ntohl(rmsg->rdma_type));
-		return (false);
-	}
 
 	while (rl(cbc->read_chunk)->present != 0
 	    && rl(cbc->read_chunk)->position == 0) {
@@ -1368,7 +1382,7 @@ xdr_rdma_clnt_flushout(XDR *xdrs)
 
 	rmsg = m_(head_uv->v.vio_head);
 	rmsg->rdma_xid = msg->rm_xid;
-	rmsg->rdma_vers = htonl(1);
+	rmsg->rdma_vers = htonl(RPCRDMA_VERSION);
 	rmsg->rdma_credit = htonl(xprt->xa->credits);
 	rmsg->rdma_type = htonl(RDMA_MSG);
 
@@ -1414,6 +1428,7 @@ xdr_rdma_svc_flushout(struct rpc_rdma_cbc *cbc)
 {
 	RDMAXPRT *xprt;
 	struct rpc_msg *msg;
+	struct rdma_msg *cmsg;
 	struct rdma_msg *rmsg;
 	struct xdr_write_list *w_array;
 	struct xdr_write_list *reply_array;
@@ -1463,10 +1478,12 @@ xdr_rdma_svc_flushout(struct rpc_rdma_cbc *cbc)
 	head_uv->v.vio_wrap = (char *)head_uv->v.vio_base + xprt->sendsize;
 
 	/* build the header that goes with the data */
+	cmsg = m_(cbc->call_uv->v.vio_head);
 	rmsg = m_(head_uv->v.vio_head);
-	rmsg->rdma_xid = msg->rm_xid;
-	/* TODO: check it matches call_uv xid */
-	rmsg->rdma_vers = htonl(1);
+	rmsg->rdma_xid = cmsg->rdma_xid;
+	/* TODO: check it matches msg->rm_xid */
+
+	rmsg->rdma_vers = cmsg->rdma_vers;
 	rmsg->rdma_credit = htonl(xprt->xa->credits);
 
 	/* no read, write chunks. */
