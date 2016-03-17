@@ -185,6 +185,7 @@ typedef struct rpc_xdr {
 	void *x_public; /* users' data */
 	void *x_private; /* pointer to private data */
 	void *x_lib[2]; /* RPC library private */
+	void *x_data;  /* private used for position inline */
 	void *x_base;  /* private used for position info */
 	struct xdr_vio x_v; /* private buffer vector */
 	u_int x_handy; /* extra private word */
@@ -196,21 +197,21 @@ typedef struct rpc_xdr {
 static inline size_t
 xdr_size_inline(XDR *xdrs)
 {
-	return ((uintptr_t)xdrs->x_v.vio_wrap - (uintptr_t)xdrs->x_private);
+	return ((uintptr_t)xdrs->x_v.vio_wrap - (uintptr_t)xdrs->x_data);
 }
 
 static inline size_t
 xdr_tail_inline(XDR *xdrs)
 {
-	return ((uintptr_t)xdrs->x_v.vio_tail - (uintptr_t)xdrs->x_private);
+	return ((uintptr_t)xdrs->x_v.vio_tail - (uintptr_t)xdrs->x_data);
 }
 
 static inline void
 xdr_tail_update(XDR *xdrs)
 {
-	if ((uintptr_t)xdrs->x_v.vio_tail < (uintptr_t)xdrs->x_private) {
-		xdrs->x_v.vio_tail = xdrs->x_private;
-		XDR_VIO(xdrs)->vio_tail = xdrs->x_private;
+	if ((uintptr_t)xdrs->x_v.vio_tail < (uintptr_t)xdrs->x_data) {
+		xdrs->x_v.vio_tail = xdrs->x_data;
+		XDR_VIO(xdrs)->vio_tail = xdrs->x_data;
 	}
 }
 
@@ -247,12 +248,12 @@ xdr_getlong(XDR *xdrs, long *lp)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
 						> xdrs->x_v.vio_tail)) {
 		return (*xdrs->x_ops->x_getlong)(xdrs, lp);
 	}
-	*lp = (long)ntohl(*((uint32_t *) (xdrs->x_private)));
-	xdrs->x_private = future;
+	*lp = (long)ntohl(*((uint32_t *) (xdrs->x_data)));
+	xdrs->x_data = future;
 	return (true);
 }
 
@@ -262,12 +263,12 @@ xdr_putlong(XDR *xdrs, const long *lp)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
 						> xdrs->x_v.vio_wrap)) {
 		return (*xdrs->x_ops->x_putlong)(xdrs, lp);
 	}
-	*((int32_t *) (xdrs->x_private)) = (int32_t) htonl((int32_t) (*lp));
-	xdrs->x_private = future;
+	*((int32_t *) (xdrs->x_data)) = (int32_t) htonl((int32_t) (*lp));
+	xdrs->x_data = future;
 	return (true);
 }
 
@@ -406,7 +407,7 @@ xdr_getuint32(XDR *xdrs, uint32_t *ip)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
 						> xdrs->x_v.vio_tail)) {
 		long l;
 
@@ -415,8 +416,8 @@ xdr_getuint32(XDR *xdrs, uint32_t *ip)
 		*ip = (uint32_t) l;
 		return (true);
 	}
-	*ip = ntohl(*((uint32_t *) (xdrs->x_private)));
-	xdrs->x_private = future;
+	*ip = ntohl(*((uint32_t *) (xdrs->x_data)));
+	xdrs->x_data = future;
 	return (true);
 }
 
@@ -426,14 +427,14 @@ xdr_putuint32(XDR *xdrs, uint32_t *ip)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
 						> xdrs->x_v.vio_wrap)) {
 		long l = (long)*ip;
 
 		return (*xdrs->x_ops->x_putlong)(xdrs, &l);
 	}
-	*((int32_t *) (xdrs->x_private)) = htonl(*ip);
-	xdrs->x_private = future;
+	*((int32_t *) (xdrs->x_data)) = htonl(*ip);
+	xdrs->x_data = future;
 	return (true);
 }
 
@@ -461,7 +462,7 @@ xdr_getuint16(XDR *xdrs, uint16_t *ip)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
 						> xdrs->x_v.vio_tail)) {
 		long l;
 
@@ -470,8 +471,8 @@ xdr_getuint16(XDR *xdrs, uint16_t *ip)
 		*ip = (uint16_t) l;
 		return (true);
 	}
-	*ip = (uint16_t)ntohl(*((uint32_t *) (xdrs->x_private)));
-	xdrs->x_private = future;
+	*ip = (uint16_t)ntohl(*((uint32_t *) (xdrs->x_data)));
+	xdrs->x_data = future;
 	return (true);
 }
 
@@ -481,14 +482,14 @@ xdr_putuint16(XDR *xdrs, uint32_t uint16v)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
 						> xdrs->x_v.vio_wrap)) {
 		long l = (long)uint16v;
 
 		return (*xdrs->x_ops->x_putlong)(xdrs, &l);
 	}
-	*((int32_t *) (xdrs->x_private)) = htonl(uint16v);
-	xdrs->x_private = future;
+	*((int32_t *) (xdrs->x_data)) = htonl(uint16v);
+	xdrs->x_data = future;
 	return (true);
 }
 
@@ -517,7 +518,7 @@ xdr_getuint8(XDR *xdrs, uint8_t *ip)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
 						> xdrs->x_v.vio_tail)) {
 		long l;
 
@@ -526,8 +527,8 @@ xdr_getuint8(XDR *xdrs, uint8_t *ip)
 		*ip = (uint8_t) l;
 		return (true);
 	}
-	*ip = (uint8_t)ntohl(*((uint32_t *) (xdrs->x_private)));
-	xdrs->x_private = future;
+	*ip = (uint8_t)ntohl(*((uint32_t *) (xdrs->x_data)));
+	xdrs->x_data = future;
 	return (true);
 }
 
@@ -537,14 +538,14 @@ xdr_putuint8(XDR *xdrs, uint32_t uint8v)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_private + sizeof(uint32_t))
+	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
 						> xdrs->x_v.vio_wrap)) {
 		long l = (long)uint8v;
 
 		return (*xdrs->x_ops->x_putlong)(xdrs, &l);
 	}
-	*((int32_t *) (xdrs->x_private)) = htonl(uint8v);
-	xdrs->x_private = future;
+	*((int32_t *) (xdrs->x_data)) = htonl(uint8v);
+	xdrs->x_data = future;
 	return (true);
 }
 

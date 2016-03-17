@@ -173,6 +173,8 @@ xdr_inrec_create(XDR *xdrs, u_int recvsize, void *tcp_handle,
 	xdrs->x_lib[1] = NULL;
 	xdrs->x_public = NULL;
 	xdrs->x_private = rstrm;
+	xdrs->x_data = NULL;
+	xdrs->x_base = NULL;
 	xdrs->x_flags = XDR_FLAG_CKSUM;
 	rstrm->xdrs = xdrs;
 	rstrm->tcp_handle = tcp_handle;

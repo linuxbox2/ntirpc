@@ -234,7 +234,7 @@ xdr_ioq_reset(struct xdr_ioq *xioq, u_int wh_pos)
 	}
 	xioq->xdrs[0].x_v = uv->v;
 	xioq->xdrs[0].x_base = &uv->v;
-	xioq->xdrs[0].x_private = uv->v.vio_head;
+	xioq->xdrs[0].x_data = uv->v.vio_head;
 
 	__warnx(TIRPC_DEBUG_FLAG_XDR,
 		"%s() xioq %p head %p wh_pos %d",
@@ -259,6 +259,7 @@ xdr_ioq_setup(struct xdr_ioq *xioq)
 	xdrs->x_op = XDR_ENCODE;
 	xdrs->x_public = NULL;
 	xdrs->x_private = NULL;
+	xdrs->x_data = NULL;
 	xdrs->x_base = NULL;
 	xdrs->x_flags = XDR_FLAG_VIO;
 
@@ -346,7 +347,7 @@ xdr_ioq_uv_next(struct xdr_ioq *xioq, u_int ioq_flags)
 				uv->v.vio_wrap = base
 						+ xioq->ioq_uv.max_bsize;
 				xioq->xdrs[0].x_v = uv->v;
-				xioq->xdrs[0].x_private = uv->v.vio_tail
+				xioq->xdrs[0].x_data = uv->v.vio_tail
 							- delta;
 				return (uv);
 			}
@@ -366,7 +367,7 @@ xdr_ioq_uv_next(struct xdr_ioq *xioq, u_int ioq_flags)
 		}
 
 		/* advance iterator */
-		xioq->xdrs[0].x_private = uv->v.vio_head;
+		xioq->xdrs[0].x_data = uv->v.vio_head;
 		xioq->xdrs[0].x_base = &uv->v;
 		xioq->xdrs[0].x_v = uv->v;
 		(xioq->ioq_uv.pcount)++;
@@ -380,13 +381,13 @@ static bool
 xdr_ioq_getlong(XDR *xdrs, long *lp)
 {
 	struct xdr_ioq_uv *uv;
-	void *future = xdrs->x_private + sizeof(uint32_t);
+	void *future = xdrs->x_data + sizeof(uint32_t);
 
 	while (future > xdrs->x_v.vio_tail) {
-		if (unlikely(xdrs->x_private != xdrs->x_v.vio_tail)) {
+		if (unlikely(xdrs->x_data != xdrs->x_v.vio_tail)) {
 			/* FIXME: insufficient data or unaligned? stop! */
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
-				"%s() x_private != x_v.vio_tail\n",
+				"%s() x_data != x_v.vio_tail\n",
 				__func__);
 			return (false);
 		}
@@ -395,11 +396,11 @@ xdr_ioq_getlong(XDR *xdrs, long *lp)
 			return (false);
 		}
 		/* fill pointer has changed */
-		future = xdrs->x_private + sizeof(uint32_t);
+		future = xdrs->x_data + sizeof(uint32_t);
 	}
 
-	*lp = (long)ntohl(*((uint32_t *) (xdrs->x_private)));
-	xdrs->x_private = future;
+	*lp = (long)ntohl(*((uint32_t *) (xdrs->x_data)));
+	xdrs->x_data = future;
 	return (true);
 }
 
@@ -407,7 +408,7 @@ static bool
 xdr_ioq_putlong(XDR *xdrs, const long *lp)
 {
 	struct xdr_ioq_uv *uv;
-	void *future = xdrs->x_private + sizeof(uint32_t);
+	void *future = xdrs->x_data + sizeof(uint32_t);
 
 	while (future > xdrs->x_v.vio_wrap) {
 		/* advance fill pointer, skipping unaligned */
@@ -417,11 +418,11 @@ xdr_ioq_putlong(XDR *xdrs, const long *lp)
 			return (false);
 		}
 		/* fill pointer has changed */
-		future = xdrs->x_private + sizeof(uint32_t);
+		future = xdrs->x_data + sizeof(uint32_t);
 	}
 
-	*((int32_t *) (xdrs->x_private)) = (int32_t) htonl((int32_t) (*lp));
-	xdrs->x_private = future;
+	*((int32_t *) (xdrs->x_data)) = (int32_t) htonl((int32_t) (*lp));
+	xdrs->x_data = future;
 	return (true);
 }
 
@@ -439,7 +440,7 @@ xdr_ioq_getbytes(XDR *xdrs, char *addr, u_int len)
 	while (len > 0
 		&& XIOQ(xdrs)->ioq_uv.pcount < XIOQ(xdrs)->ioq_uv.uvqh.qcount) {
 		delta = (uintptr_t)xdrs->x_v.vio_tail
-			- (uintptr_t)xdrs->x_private;
+			- (uintptr_t)xdrs->x_data;
 
 		if (unlikely(delta > len)) {
 			delta = len;
@@ -451,8 +452,8 @@ xdr_ioq_getbytes(XDR *xdrs, char *addr, u_int len)
 			}
 			continue;
 		}
-		memcpy(addr, xdrs->x_private, delta);
-		xdrs->x_private += delta;
+		memcpy(addr, xdrs->x_data, delta);
+		xdrs->x_data += delta;
 		addr += delta;
 		len -= delta;
 	}
@@ -469,7 +470,7 @@ xdr_ioq_putbytes(XDR *xdrs, const char *addr, u_int len)
 
 	while (len > 0) {
 		delta = (uintptr_t)xdrs->x_v.vio_wrap
-			- (uintptr_t)xdrs->x_private;
+			- (uintptr_t)xdrs->x_data;
 
 		if (unlikely(delta > len)) {
 			delta = len;
@@ -482,8 +483,8 @@ xdr_ioq_putbytes(XDR *xdrs, const char *addr, u_int len)
 			}
 			continue;
 		}
-		memcpy(xdrs->x_private, addr, delta);
-		xdrs->x_private += delta;
+		memcpy(xdrs->x_data, addr, delta);
+		xdrs->x_data += delta;
 		addr += delta;
 		len -= delta;
 	}
@@ -519,7 +520,7 @@ xdr_ioq_getbufs(XDR *xdrs, xdr_uio *uio, u_int flags)
 	while (len > 0
 		&& XIOQ(xdrs)->ioq_uv.pcount < XIOQ(xdrs)->ioq_uv.uvqh.qcount) {
 		delta = (uintptr_t)XDR_VIO(xioq->xdrs)->vio_tail
-			- (uintptr_t)xdrs->x_private;
+			- (uintptr_t)xdrs->x_data;
 
 		if (unlikely(delta > len)) {
 			delta = len;
@@ -531,9 +532,9 @@ xdr_ioq_getbufs(XDR *xdrs, xdr_uio *uio, u_int flags)
 		}
 		(uio->xbs_buf[ix]).xb_p1 = uv;
 		uv->u.uio_references)++;
-		(uio->xbs_buf[ix]).xb_base = xdrs->x_private;
+		(uio->xbs_buf[ix]).xb_base = xdrs->x_data;
 		XIOQ(xdrs)->ioq_uv.plength += delta;
-		xdrs->x_private += delta;
+		xdrs->x_data += delta;
 		len -= delta;
 	}
 #endif /* 0 */
@@ -616,7 +617,7 @@ xdr_ioq_getpos(XDR *xdrs)
 	xdr_tail_update(xdrs);
 
 	return (XIOQ(xdrs)->ioq_uv.plength
-		+ ((uintptr_t)xdrs->x_private
+		+ ((uintptr_t)xdrs->x_data
 		   - (uintptr_t)xdrs->x_v.vio_head));
 }
 
@@ -649,7 +650,7 @@ xdr_ioq_setpos(XDR *xdrs, u_int pos)
 			/* allow up to the end of the buffer,
 			 * assuming next operation will extend.
 			 */
-			xdrs->x_private = uv->v.vio_head + pos;
+			xdrs->x_data = uv->v.vio_head + pos;
 			xdrs->x_base = &uv->v;
 			xdrs->x_v = uv->v;
 			return (true);
@@ -666,15 +667,15 @@ static int32_t *
 xdr_ioq_inline(XDR *xdrs, u_int len)
 {
 	/* bugfix:  return fill pointer, not head! */
-	int32_t *buf = (int32_t *)xdrs->x_private;
-	void *future = xdrs->x_private + len;
+	int32_t *buf = (int32_t *)xdrs->x_data;
+	void *future = xdrs->x_data + len;
 
 	/* bugfix: do not move fill position beyond tail or wrap */
 	switch (xdrs->x_op) {
 	case XDR_ENCODE:
 		if (future <= xdrs->x_v.vio_wrap) {
 			/* bugfix:  do not move head! */
-			xdrs->x_private = future;
+			xdrs->x_data = future;
 			/* bugfix: do not move tail beyond pfoff or wrap! */
 			xdr_tail_update(xdrs);
 			return (buf);
@@ -685,7 +686,7 @@ xdr_ioq_inline(XDR *xdrs, u_int len)
 		 * (after SETPOS/rewind) */
 		if (future <= xdrs->x_v.vio_tail) {
 			/* bugfix:  do not move head! */
-			xdrs->x_private = future;
+			xdrs->x_data = future;
 			/* bugfix:  do not move tail! */
 			return (buf);
 		}

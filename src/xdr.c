@@ -71,6 +71,7 @@ XDR xdr_free_null_stream = {
 	.x_public = NULL,
 	.x_private = NULL,
 	.x_lib = {NULL, NULL},
+	.x_data = NULL,
 	.x_base = NULL,
 	.x_v = {NULL, NULL, NULL, NULL},
 };

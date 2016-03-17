@@ -74,10 +74,11 @@ xdrmem_ncreate(XDR *xdrs, char *addr, u_int size, enum xdr_op op)
 		xdrs->x_ops = &xdrmem_ops_aligned;
 		xdrs->x_flags = XDR_FLAG_VIO;
 	}
+	xdrs->x_public = NULL;
+	xdrs->x_private = NULL;
 	xdrs->x_lib[0] = NULL;
 	xdrs->x_lib[1] = NULL;
-	xdrs->x_public = NULL;
-	xdrs->x_private = addr;
+	xdrs->x_data = addr;
 	xdrs->x_v.vio_base = addr;
 	xdrs->x_v.vio_head = addr;
 	switch (op) {
@@ -98,24 +99,24 @@ xdrmem_ncreate(XDR *xdrs, char *addr, u_int size, enum xdr_op op)
 static bool
 xdrmem_getlong_aligned(XDR *xdrs, long *lp)
 {
-	void *future = xdrs->x_private + sizeof(uint32_t);
+	void *future = xdrs->x_data + sizeof(uint32_t);
 
 	if (future > xdrs->x_v.vio_tail)
 		return (false);
-	*lp = ntohl(*(u_int32_t *) xdrs->x_private);
-	xdrs->x_private = future;
+	*lp = ntohl(*(u_int32_t *) xdrs->x_data);
+	xdrs->x_data = future;
 	return (true);
 }
 
 static bool
 xdrmem_putlong_aligned(XDR *xdrs, const long *lp)
 {
-	void *future = xdrs->x_private + sizeof(uint32_t);
+	void *future = xdrs->x_data + sizeof(uint32_t);
 
 	if (future > xdrs->x_v.vio_wrap)
 		return (false);
-	*(u_int32_t *) xdrs->x_private = htonl((u_int32_t) *lp);
-	xdrs->x_private = future;
+	*(u_int32_t *) xdrs->x_data = htonl((u_int32_t) *lp);
+	xdrs->x_data = future;
 	return (true);
 }
 
@@ -128,13 +129,13 @@ static bool
 xdrmem_getlong_unaligned(XDR *xdrs, long *lp)
 {
 	u_int32_t l;
-	void *future = xdrs->x_private + sizeof(uint32_t);
+	void *future = xdrs->x_data + sizeof(uint32_t);
 
 	if (future > xdrs->x_v.vio_tail)
 		return (false);
-	memcpy(&l, xdrs->x_private, sizeof(int32_t));
+	memcpy(&l, xdrs->x_data, sizeof(int32_t));
 	*lp = ntohl(l);
-	xdrs->x_private = future;
+	xdrs->x_data = future;
 	return (true);
 }
 
@@ -142,37 +143,37 @@ static bool
 xdrmem_putlong_unaligned(XDR *xdrs, const long *lp)
 {
 	u_int32_t l;
-	void *future = xdrs->x_private + sizeof(uint32_t);
+	void *future = xdrs->x_data + sizeof(uint32_t);
 
 	if (future > xdrs->x_v.vio_wrap)
 		return (false);
 	l = htonl((u_int32_t) *lp);
-	memcpy(xdrs->x_private, &l, sizeof(int32_t));
-	xdrs->x_private = future;
+	memcpy(xdrs->x_data, &l, sizeof(int32_t));
+	xdrs->x_data = future;
 	return (true);
 }
 
 static bool
 xdrmem_getbytes(XDR *xdrs, char *addr, u_int len)
 {
-	void *future = xdrs->x_private + len;
+	void *future = xdrs->x_data + len;
 
 	if (future > xdrs->x_v.vio_tail)
 		return (false);
-	memmove(addr, xdrs->x_private, len);
-	xdrs->x_private = future;
+	memmove(addr, xdrs->x_data, len);
+	xdrs->x_data = future;
 	return (true);
 }
 
 static bool
 xdrmem_putbytes(XDR *xdrs, const char *addr, u_int len)
 {
-	void *future = xdrs->x_private + len;
+	void *future = xdrs->x_data + len;
 
 	if (future > xdrs->x_v.vio_wrap)
 		return (false);
-	memmove(xdrs->x_private, addr, len);
-	xdrs->x_private = future;
+	memmove(xdrs->x_data, addr, len);
+	xdrs->x_data = future;
 	return (true);
 }
 
@@ -182,7 +183,7 @@ xdrmem_getpos(XDR *xdrs)
 	/* update the most recent data length, just in case */
 	xdr_tail_update(xdrs);
 
-	return ((uintptr_t)xdrs->x_private - (uintptr_t)xdrs->x_v.vio_head);
+	return ((uintptr_t)xdrs->x_data - (uintptr_t)xdrs->x_v.vio_head);
 }
 
 static bool
@@ -195,23 +196,23 @@ xdrmem_setpos(XDR *xdrs, u_int pos)
 
 	if (newaddr > xdrs->x_v.vio_wrap)
 		return (false);
-	xdrs->x_private = newaddr;
+	xdrs->x_data = newaddr;
 	return (true);
 }
 
 static int32_t *
 xdrmem_inline_aligned(XDR *xdrs, u_int len)
 {
-	int32_t *buf = (int32_t *)xdrs->x_private;
-	void *future = xdrs->x_private + len;
+	int32_t *buf = (int32_t *)xdrs->x_data;
+	void *future = xdrs->x_data + len;
 
 	switch (xdrs->x_op) {
 	case XDR_ENCODE:
 		if (future <= xdrs->x_v.vio_wrap) {
-			xdrs->x_private = future;
+			xdrs->x_data = future;
 			xdr_tail_update(xdrs);
 			/* temporarily backward compatible */
-			xdrs->x_handy = xdrs->x_v.vio_wrap - xdrs->x_private;
+			xdrs->x_handy = xdrs->x_v.vio_wrap - xdrs->x_data;
 			return (buf);
 		}
 		break;
@@ -219,9 +220,9 @@ xdrmem_inline_aligned(XDR *xdrs, u_int len)
 		/* re-consuming bytes in a stream
 		 * (after SETPOS/rewind) */
 		if (future <= xdrs->x_v.vio_tail) {
-			xdrs->x_private = future;
+			xdrs->x_data = future;
 			/* temporarily backward compatible */
-			xdrs->x_handy = xdrs->x_v.vio_tail - xdrs->x_private;
+			xdrs->x_handy = xdrs->x_v.vio_tail - xdrs->x_data;
 			return (buf);
 		}
 		break;
