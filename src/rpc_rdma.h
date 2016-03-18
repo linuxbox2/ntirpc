@@ -65,7 +65,7 @@ struct msk_stats {
 typedef struct rpc_rdma_xprt RDMAXPRT;
 
 struct rpc_rdma_cbc;
-typedef void (*rpc_rdma_callback_t)(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt);
+typedef int (*rpc_rdma_callback_t)(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt);
 
 /**
  * \struct rpc_rdma_cbc

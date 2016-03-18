@@ -265,7 +265,7 @@ xdr_rdma_chunk_fetch(struct xdr_ioq *xioq, struct poolq_head *ioqh,
 
 /* note parameter order matching svc.h svc_req callbacks */
 
-static void
+static int
 xdr_rdma_respond_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 {
 	__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -278,9 +278,10 @@ xdr_rdma_respond_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 	mutex_unlock(&xprt->waitq.ioq_uv.uvqh.qmutex);
 
 	xdr_ioq_destroy(&cbc->workq, sizeof(*cbc));
+	return (0);
 }
 
-static void
+static int
 xdr_rdma_destroy_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 {
 	__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -293,13 +294,14 @@ xdr_rdma_destroy_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 	mutex_unlock(&xprt->waitq.ioq_uv.uvqh.qmutex);
 
 	xdr_ioq_destroy(&cbc->workq, sizeof(*cbc));
+	return (0);
 }
 
 /**
  * xdr_rdma_wait_callback: send/recv callback that just unlocks a mutex.
  *
  */
-static void
+static int
 xdr_rdma_wait_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 {
 	mutex_t *lock = cbc->callback_arg;
@@ -309,13 +311,14 @@ xdr_rdma_wait_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 		__func__, xprt, xprt->state, cbc);
 
 	mutex_unlock(lock);
+	return (0);
 }
 
 /**
  * xdr_rdma_warn_callback: send/recv callback that just unlocks a mutex.
  *
  */
-static void
+static int
 xdr_rdma_warn_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 {
 	mutex_t *lock = cbc->callback_arg;
@@ -325,6 +328,17 @@ xdr_rdma_warn_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 		__func__, xprt, xprt->state, cbc);
 
 	mutex_unlock(lock);
+	return (0);
+}
+
+/**
+ * xdr_rdma_wrap_callback: send/recv callback converts enum to int.
+ *
+ */
+static int
+xdr_rdma_wrap_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
+{
+	return (int)xprt->xa->request_cb(cbc, &xprt->xprt);
 }
 
 /***********************************/
@@ -434,7 +448,7 @@ xdr_rdma_post_recv_n(RDMAXPRT *xprt, struct rpc_rdma_cbc *cbc, int sge)
 static int
 xdr_rdma_post_recv_cb(RDMAXPRT *xprt, struct rpc_rdma_cbc *cbc, int sge)
 {
-	cbc->positive_cb = (rpc_rdma_callback_t)xprt->xa->request_cb;
+	cbc->positive_cb = xdr_rdma_wrap_callback;
 	cbc->negative_cb = xdr_rdma_destroy_callback;
 	cbc->callback_arg = NULL;
 	return xdr_rdma_post_recv_n(xprt, cbc, sge);
