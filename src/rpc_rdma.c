@@ -63,7 +63,6 @@
 #define NSEC_IN_SEC (1000*1000*1000)
 
 #include "misc/portable.h"
-#include <infiniband/arch.h>
 #include <rdma/rdma_cma.h>
 #include <rpc/types.h>
 #include <rpc/xdr.h>

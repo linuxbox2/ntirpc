@@ -39,7 +39,6 @@
 #ifndef _TIRPC_RPC_RDMA_H
 #define _TIRPC_RPC_RDMA_H
 
-#include <infiniband/arch.h>
 #include <rdma/rdma_cma.h>
 #include <rpc/svc.h>
 #include <rpc/xdr_ioq.h>
