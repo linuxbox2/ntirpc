@@ -76,12 +76,6 @@
 #include <rpc/xdr_ioq.h>
 #include "svc_ioq.h"
 
-#ifndef __APPLE__
-struct cmessage {
-	struct cmsghdr cmsg;
-	struct cmsgcred cmcred;
-};
-#endif
 
 static enum clnt_stat clnt_vc_call(CLIENT *, AUTH *, rpcproc_t, xdrproc_t,
 				   void *, xdrproc_t, void *, struct timeval);
