@@ -75,7 +75,6 @@ static const char rpc_reg_msg[] = "rpc_reg: ";
 static const char __reg_err1[] = "can't find appropriate transport";
 static const char __reg_err2[] = "can't get protocol info";
 static const char __reg_err3[] = "unsupported transport size";
-static const char __no_mem_str[] = "out of memory";
 
 /*
  * For simplified, easy to use kind of rpc interfaces.

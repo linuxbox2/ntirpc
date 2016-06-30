@@ -59,9 +59,6 @@
 #define RFC5666_BUFFER_SIZE (1024)
 #define RPCRDMA_VERSION (1)
 
-static const struct	xdr_ops xdr_rdma_ops_aligned;
-static const struct	xdr_ops xdr_rdma_ops_unaligned;
-
 #define x_xprt(xdrs) ((RDMAXPRT *)((xdrs)->x_lib[1]))
 
 //#define rpcrdma_dump_msg(data, comment, xid)

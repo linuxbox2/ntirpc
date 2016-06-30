@@ -571,7 +571,6 @@ svc_dg_ops(SVCXPRT *xprt)
  * Note: there is no disable.
  */
 static const char cache_enable_str[] = "svc_enablecache: %s %s";
-static const char alloc_err[] = "could not allocate cache ";
 static const char enable_err[] = "cache already enabled";
 
 int
@@ -609,8 +608,6 @@ svc_dg_enablecache(SVCXPRT *transp, u_int size)
 
 static const char cache_set_str[] = "cache_set: %s";
 static const char cache_set_err1[] = "victim not found";
-static const char cache_set_err2[] = "victim alloc failed";
-static const char cache_set_err3[] = "could not allocate new rpc buffer";
 
 static void
 svc_dg_cache_set(SVCXPRT *xprt, size_t replylen)
