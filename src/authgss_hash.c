@@ -126,7 +126,7 @@ authgss_hash_init()
 
 	authgss_hash_st.size = 0;
 	authgss_hash_st.max_part =
-	    __svc_params->gss.max_gc / authgss_hash_st.xt.npart;
+	    __svc_params->gss.max_ctx / authgss_hash_st.xt.npart;
 	authgss_hash_st.initialized = true;
 
  unlock:
@@ -262,12 +262,11 @@ void authgss_ctx_gc_idle(void)
 		if (!gd)
 			goto next_t;
 
-		if (unlikely((authgss_hash_st.size > __svc_params->gss.max_gc)
-			     ||
-			     ((((axp->gen > gd->gen) ? 
-                                axp->gen - gd->gen : gd->gen - axp->gen) >
-			       __svc_params->gss.max_idle_gen))
-			     || (authgss_ctx_expired(gd)))) {
+		/* Remove the least-recently-used entry in this hash
+		 * partition iff it is expired, or the partition size
+		 * limit is exceeded */
+		if (unlikely((authgss_hash_st.size > authgss_hash_st.max_part)
+				|| (authgss_ctx_expired(gd)))) {
 
 			/* remove entry */
 			rbtree_x_cached_remove(&authgss_hash_st.xt, xp,
