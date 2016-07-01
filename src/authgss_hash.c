@@ -251,11 +251,12 @@ void authgss_ctx_gc_idle(void)
 
 	cond_init_authgss_hash();
 
-	for (ix = 0, part = IDLE_NEXT(); ix < authgss_hash_st.xt.npart;
+	for (ix = 0, cnt = 0, part = IDLE_NEXT();
+	     ((ix < authgss_hash_st.xt.npart) &&
+		     (cnt < __svc_params->gss.max_gc));
 	     ++ix, part = IDLE_NEXT()) {
 		xp = &(authgss_hash_st.xt.tree[part]);
 		axp = (struct authgss_x_part *)xp->u1;
-		cnt = 0;
 		mutex_lock(&xp->mtx);
  again:
 		gd = TAILQ_FIRST(&axp->lru_q);
@@ -277,7 +278,7 @@ void authgss_ctx_gc_idle(void)
 			/* drop sentinel ref (may free gd) */
 			unref_svc_rpc_gss_data(gd, SVC_RPC_GSS_FLAG_NONE);
 
-			if (++cnt < authgss_hash_st.max_part)
+			if (++cnt < __svc_params->gss.max_gc)
 				goto again;
 		}
  next_t:
