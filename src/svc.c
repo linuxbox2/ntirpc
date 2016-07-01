@@ -202,8 +202,9 @@ svc_init(svc_init_params *params)
 	if (params->gss_max_ctx)
 		__svc_params->gss.max_ctx = params->gss_max_ctx;
 	else
-		__svc_params->gss.max_ctx = 1024;
+		__svc_params->gss.max_ctx = 16384; /* 16K clients */
 
+	/* XXX deprecating */
 	if (params->gss_max_idle_gen)
 		__svc_params->gss.max_idle_gen = params->gss_max_idle_gen;
 	else
