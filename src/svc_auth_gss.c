@@ -451,10 +451,14 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 	if ((gc->gc_proc == RPCSEC_GSS_DATA)
 	    || (gc->gc_proc == RPCSEC_GSS_DESTROY)) {
 
-		/* XXX fix prototype, toss junk args */
+		/* Per RFC 2203 5.3.3.3, if a valid security context
+		 * cannot be found to authorize a request, the
+		 * implementation returns RPCSEC_GSS_CREDPROBLEM.
+		 * N.B., we are explicitly allowed to discard contexts
+		 * for any reason (e.g., to save space). */
 		gd = authgss_ctx_hash_get(gc);
 		if (!gd)
-			svcauth_gss_return(AUTH_REJECTEDCRED);
+			svcauth_gss_return(RPCSEC_GSS_CREDPROBLEM);
 		gd_hashed = true;
 		if (gc->gc_svc != gd->sec.svc)
 			gd->sec.svc = gc->gc_svc;
