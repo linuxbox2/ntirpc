@@ -349,6 +349,10 @@ rpc_dplx_unref(struct rpc_dplx_rec *rec, u_int flags)
 
 	if (rec->refcnt == 0) {
 		t = rbtx_partition_of_scalar(&rpc_dplx_rec_set.xt, rec->fd_k);
+		if (rec->hdl.xd) {
+			rec->hdl.xd->refcnt--;
+			rec->hdl.xd->rec = NULL;
+		}
 		REC_UNLOCK(rec);
 		rwlock_wrlock(&t->lock);
 		nv = opr_rbtree_lookup(&t->t, &rec->node_k);
