@@ -293,23 +293,32 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	return (clnt);
 
  err:
+	/* XXX fix */
+	if (cs) {
+		mem_free(cs, sizeof(struct ct_serialized));
+	}
+
 	if (clnt) {
-		/* XXX fix */
-		if (xd) {
-			if (ct->ct_addr.len)
-				mem_free(ct->ct_addr.buf, ct->ct_addr.len);
-			free_x_vc_data(xd);
-		}
-		if (cs) {
-			mem_free(cs, sizeof(struct ct_serialized));
-		}
 		mutex_destroy(&clnt->cl_lock);
 		mem_free(clnt, sizeof(CLIENT));
 	}
+
 	if (rec) {
 		if (rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED))
 			REC_UNLOCK(rec);
 	}
+
+	if (xd) {
+		if (ct->ct_addr.len)
+			mem_free(ct->ct_addr.buf, ct->ct_addr.len);
+
+		if (xd->refcnt == 1) {
+			XDR_DESTROY(&xd->shared.xdrs_in);
+			XDR_DESTROY(&xd->shared.xdrs_out);
+			free_x_vc_data(xd);
+		}
+	}
+
 	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 	return (NULL);
 }
