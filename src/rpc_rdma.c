@@ -1758,7 +1758,7 @@ rpc_rdma_bind_server(RDMAXPRT *xprt)
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s() %p[%u] rpc_rdma_thread_create_epoll failed: %s (%d)",
 			__func__, xprt, xprt->state, strerror(rc), rc);
-		atomic_dec_int32_t(&rpc_rdma_state.run_count);
+		(void) atomic_dec_int32_t(&rpc_rdma_state.run_count);
 		return rc;
 	}
 

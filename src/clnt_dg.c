@@ -205,11 +205,9 @@ clnt_dg_ncreate(int fd,	/* open file descriptor */
 	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 	rpc_createerr.cf_error.re_errno = errno;
  err2:
-	if (clnt) {
-		mem_free(clnt, sizeof(CLIENT));
-		if (cx)
-			free_cx_data(cx);
-	}
+	mem_free(clnt, sizeof(CLIENT));
+	if (cx)
+		free_cx_data(cx);
 	return (NULL);
 }
 

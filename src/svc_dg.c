@@ -182,12 +182,9 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 
  freedata:
 	__warnx(TIRPC_DEBUG_FLAG_SVC_DG, svc_dg_str, __no_mem_str);
-	if (xprt) {
-		if (su)
-			mem_free(su, sizeof(*su));
-		xprt_unregister(xprt);
-		mem_free(xprt, sizeof(SVCXPRT));
-	}
+	mem_free(su, sizeof(*su));
+	xprt_unregister(xprt);
+	mem_free(xprt, sizeof(SVCXPRT));
 	return (NULL);
 }
 
