@@ -100,7 +100,6 @@ authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 	/*
 	 * Allocate and set up auth handle
 	 */
-	au = NULL;
 	auth = mem_alloc(sizeof(*auth));
 	au = mem_alloc(sizeof(*au));
 
@@ -146,13 +145,8 @@ authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 	return (auth);
 
 cleanup_authunix_create:
-	if (auth)
-		mem_free(auth, sizeof(*auth));
-	if (au) {
-		if (au->au_origcred.oa_base)
-			mem_free(au->au_origcred.oa_base, (size_t) len);
-		mem_free(au, sizeof(*au));
-	}
+	mem_free(auth, sizeof(*auth));
+	mem_free(au, sizeof(*au));
 	return (NULL);
 }
 

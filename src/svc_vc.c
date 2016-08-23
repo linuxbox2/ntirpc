@@ -113,7 +113,7 @@ SVCXPRT *
 svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 {
 	SVCXPRT *xprt = NULL;
-	struct cf_rendezvous *rdvs = NULL;
+	struct cf_rendezvous *rdvs;
 	struct __rpc_sockinfo si;
 	struct sockaddr_storage sslocal;
 	struct sockaddr *salocal;
@@ -249,8 +249,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	return (xprt);
 
  err:
-	if (rdvs)
-		mem_free(rdvs, sizeof(struct cf_rendezvous));
+	mem_free(rdvs, sizeof(struct cf_rendezvous));
 
 	if (xprt) {
 #if defined(HAVE_BLKIN)

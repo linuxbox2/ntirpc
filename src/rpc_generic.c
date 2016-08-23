@@ -581,7 +581,7 @@ int
 __rpc_fd2sockinfo(int fd, struct __rpc_sockinfo *sip)
 {
 	socklen_t len;
-	int type, proto;
+	int type, proto = 0;
 	struct sockaddr_storage ss;
 
 	len = sizeof(ss);
