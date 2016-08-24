@@ -242,14 +242,16 @@ typedef bool(*xdrproc_t) (XDR *, ...);
  * u_int  pos;
  */
 
+#define char_ptr(x) ((char*)(x))
+
 static inline bool
 xdr_getlong(XDR *xdrs, long *lp)
 {
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
-						> xdrs->x_v.vio_tail)) {
+		|| unlikely((future = char_ptr(xdrs->x_data)
+				+ sizeof(uint32_t)) > xdrs->x_v.vio_tail)) {
 		return (*xdrs->x_ops->x_getlong)(xdrs, lp);
 	}
 	*lp = (long)ntohl(*((uint32_t *) (xdrs->x_data)));
@@ -263,8 +265,8 @@ xdr_putlong(XDR *xdrs, const long *lp)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
-						> xdrs->x_v.vio_wrap)) {
+		|| unlikely((future = char_ptr(xdrs->x_data) + sizeof(uint32_t))
+			> xdrs->x_v.vio_wrap)) {
 		return (*xdrs->x_ops->x_putlong)(xdrs, lp);
 	}
 	*((int32_t *) (xdrs->x_data)) = (int32_t) htonl((int32_t) (*lp));
@@ -407,8 +409,8 @@ xdr_getuint32(XDR *xdrs, uint32_t *ip)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
-						> xdrs->x_v.vio_tail)) {
+		|| unlikely((future = char_ptr(xdrs->x_data) + sizeof(uint32_t))
+			> xdrs->x_v.vio_tail)) {
 		long l;
 
 		if (!(*xdrs->x_ops->x_getlong)(xdrs, &l))
@@ -427,8 +429,8 @@ xdr_putuint32(XDR *xdrs, uint32_t *ip)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
-						> xdrs->x_v.vio_wrap)) {
+		|| unlikely((future = char_ptr(xdrs->x_data) + sizeof(uint32_t))
+			> xdrs->x_v.vio_wrap)) {
 		long l = (long)*ip;
 
 		return (*xdrs->x_ops->x_putlong)(xdrs, &l);
@@ -462,8 +464,8 @@ xdr_getuint16(XDR *xdrs, uint16_t *ip)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
-						> xdrs->x_v.vio_tail)) {
+		|| unlikely((future = char_ptr(xdrs->x_data) + sizeof(uint32_t))
+			> xdrs->x_v.vio_tail)) {
 		long l;
 
 		if (!(*xdrs->x_ops->x_getlong)(xdrs, &l))
@@ -482,8 +484,8 @@ xdr_putuint16(XDR *xdrs, uint32_t uint16v)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
-						> xdrs->x_v.vio_wrap)) {
+		|| unlikely((future = char_ptr(xdrs->x_data) + sizeof(uint32_t))
+			> xdrs->x_v.vio_wrap)) {
 		long l = (long)uint16v;
 
 		return (*xdrs->x_ops->x_putlong)(xdrs, &l);
@@ -518,8 +520,8 @@ xdr_getuint8(XDR *xdrs, uint8_t *ip)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
-						> xdrs->x_v.vio_tail)) {
+		|| unlikely((future = char_ptr(xdrs->x_data) + sizeof(uint32_t))
+			> xdrs->x_v.vio_tail)) {
 		long l;
 
 		if (!(*xdrs->x_ops->x_getlong)(xdrs, &l))
@@ -538,8 +540,8 @@ xdr_putuint8(XDR *xdrs, uint32_t uint8v)
 	void *future;
 
 	if (!(xdrs->x_flags & XDR_FLAG_VIO)
-	 || unlikely((future = xdrs->x_data + sizeof(uint32_t))
-						> xdrs->x_v.vio_wrap)) {
+		|| unlikely((future = char_ptr(xdrs->x_data) + sizeof(uint32_t))
+			> xdrs->x_v.vio_wrap)) {
 		long l = (long)uint8v;
 
 		return (*xdrs->x_ops->x_putlong)(xdrs, &l);

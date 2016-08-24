@@ -214,11 +214,11 @@ mem_free(void *p, size_t n)
 
 #include <string.h>
 
-static inline char *
+static inline void *
 mem_strdup_(const char *s, const char *file, int line, const char *function)
 {
 	size_t l = strlen(s) + 1;
-	char *t = __ntirpc_pkg_params.malloc_(l, file, line, function);
+	void *t = __ntirpc_pkg_params.malloc_(l, file, line, function);
 
 	memcpy(t, s, l);
 	return (t);
