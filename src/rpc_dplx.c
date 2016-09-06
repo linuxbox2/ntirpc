@@ -201,10 +201,8 @@ rpc_dplx_init()
 static inline struct rpc_dplx_rec *
 alloc_dplx_rec(void)
 {
-	struct rpc_dplx_rec *rec = mem_alloc(sizeof(struct rpc_dplx_rec));
+	struct rpc_dplx_rec *rec = mem_zalloc(sizeof(struct rpc_dplx_rec));
 
-	rec->refcnt = 0;
-	rec->hdl.xprt = NULL;
 	mutex_init(&rec->locktrace.mtx, NULL);
 	/* send channel */
 	rpc_dplx_lock_init(&rec->send.lock);
