@@ -658,10 +658,13 @@ svc_rdvs_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	mem_free(rdvs, sizeof(struct cf_rendezvous));
 	mem_free(xprt, sizeof(SVCXPRT));
 
-	refcnt = rpc_dplx_unref(rec,
-				RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
-	if (!refcnt)
-		mem_free(xd, sizeof(struct x_vc_data));
+	(void)rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
+
+	if (xd->refcnt == 0) {
+		XDR_DESTROY(&xd->shared.xdrs_in);
+		XDR_DESTROY(&xd->shared.xdrs_out);
+		free_x_vc_data(xd);
+	}
 }
 
 static void
