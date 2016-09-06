@@ -312,7 +312,7 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 		if (ct->ct_addr.len)
 			mem_free(ct->ct_addr.buf, ct->ct_addr.len);
 
-		if (xd->refcnt == 1) {
+		if (xd->refcnt == 0) {
 			XDR_DESTROY(&xd->shared.xdrs_in);
 			XDR_DESTROY(&xd->shared.xdrs_out);
 			free_x_vc_data(xd);
