@@ -628,7 +628,6 @@ svc_rdvs_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	struct cf_rendezvous *rdvs = (struct cf_rendezvous *)xprt->xp_p1;
 	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p2;
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)xprt->xp_p5;
-	int refcnt;
 
 	/* clears xprt from the xprt table (eg, idle scans) */
 	xprt_unregister(xprt);
