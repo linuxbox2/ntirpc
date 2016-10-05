@@ -24,14 +24,20 @@ set(NTIRPC_VERSION
   "${NTIRPC_MAJOR_VERSION}.${NTIRPC_MINOR_VERSION}.${NTIRPC_PATCH_LEVEL}")
 
 # Install destination, if built standalone
-get_property(USE_LIB64 GLOBAL PROPERTY FIND_LIBRARY_USE_LIB64_PATHS)
-if (USE_LIB64)
-	set(LIB_INSTALL_DIR lib64 CACHE PATH
-		"Specify name of libdir inside install path")
-else (USE_LIB64)
-	set(LIB_INSTALL_DIR lib CACHE PATH
-		"Specify name of libdir inside install path")
-endif (USE_LIB64)
+include(GNUInstallDirs OPTIONAL)
+# support old CMake without GNUInstallDirs
+if (NOT CMAKE_INSTALL_LIBDIR)
+	get_property(USE_LIB64 GLOBAL PROPERTY FIND_LIBRARY_USE_LIB64_PATHS)
+	if (USE_LIB64)
+		set(LIB_INSTALL_DIR lib64 CACHE PATH
+			"Specify name of libdir inside install path")
+	else (USE_LIB64)
+		set(LIB_INSTALL_DIR lib CACHE PATH
+			"Specify name of libdir inside install path")
+	endif (USE_LIB64)
+else (NOT CMAKE_INSTALL_LIBDIR)
+	set(LIB_INSTALL_DIR ${CMAKE_INSTALL_LIBDIR})
+endif (NOT CMAKE_INSTALL_LIBDIR)
 
 set(SYSTEM_LIBRARIES ${SYSTEM_LIBRARIES})
 
