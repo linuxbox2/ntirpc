@@ -571,7 +571,7 @@ inline_xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep,
 
 	case XDR_FREE:
 		if (sp != NULL) {
-			mem_free(sp, nodesize);
+			mem_free(sp, -1);
 			*cpp = NULL;
 		}
 		return (true);
@@ -661,7 +661,7 @@ inline_xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 	case XDR_FREE:
 		if (sp == NULL)
 			return (true);	/* already free */
-		/* FALLTHROUGH */
+		break;
 	case XDR_ENCODE:
 		if (sp == NULL)
 			return false;
@@ -672,7 +672,7 @@ inline_xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 	}
 	if (!inline_xdr_u_int(xdrs, &size))
 		return (false);
-	if (size > maxsize)
+	if (size > maxsize && xdrs->x_op != XDR_FREE)
 		return (false);
 	nodesize = size + 1;
 	if (nodesize == 0) {
@@ -698,7 +698,7 @@ inline_xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 		return (inline_xdr_putopaque(xdrs, sp, size));
 
 	case XDR_FREE:
-		mem_free(sp, nodesize);
+		mem_free(sp, -1);
 		*cpp = NULL;
 		return (true);
 	}
