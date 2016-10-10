@@ -139,7 +139,6 @@ unref_svc_rpc_gss_data(struct svc_rpc_gss_data *gd,
 		mutex_unlock(&gd->lock);
 }
 
-void authgss_hash_init();
 struct svc_rpc_gss_data *authgss_ctx_hash_get(struct rpc_gss_cred *gc);
 bool authgss_ctx_hash_set(struct svc_rpc_gss_data *gd);
 bool authgss_ctx_hash_del(struct svc_rpc_gss_data *gd);
