@@ -92,16 +92,12 @@ svc_rpc_gss_cmpf(const struct opr_rbtree_node *lhs,
 	return (1);
 }
 
-void
+static void
 authgss_hash_init()
 {
 	int ix, code = 0;
 
 	mutex_lock(&authgss_hash_st.lock);
-
-	/* once */
-	if (authgss_hash_st.initialized)
-		goto unlock;
 
 	code =
 	    rbtx_init(&authgss_hash_st.xt, svc_rpc_gss_cmpf,
@@ -130,7 +126,6 @@ authgss_hash_init()
 	    __svc_params->gss.max_ctx / authgss_hash_st.xt.npart;
 	authgss_hash_st.initialized = true;
 
- unlock:
 	mutex_unlock(&authgss_hash_st.lock);
 }
 
