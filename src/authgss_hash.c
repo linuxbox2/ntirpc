@@ -187,7 +187,7 @@ authgss_ctx_hash_set(struct svc_rpc_gss_data *gd)
 	gss_ctx = (gss_union_ctx_id_desc *) (gd->ctx);
 	gd->hk.k = gss_ctx_hash(gss_ctx);
 
-	++(gd->refcnt);		/* locked */
+	(void)atomic_inc_uint32_t(&gd->refcnt);
 	t = rbtx_partition_of_scalar(&authgss_hash_st.xt, gd->hk.k);
 	mutex_lock(&t->mtx);
 	rslt =

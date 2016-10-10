@@ -612,7 +612,7 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 
 		*no_dispatch = true;
 
-		(void)authgss_ctx_hash_del(gd);	/* unrefs, can destroy gd */
+		(void)authgss_ctx_hash_del(gd);
 
 		/* avoid lock order reversal gd->lock, xprt->xp_lock */
 		mutex_unlock(&gd->lock);
@@ -622,6 +622,11 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 		    svc_sendreply(req->rq_xprt, req, (xdrproc_t) xdr_void,
 				  (caddr_t) NULL);
 
+		/* We acquired a reference on gd with authgss_ctx_hash_get
+		 * call.  Time to release the reference as we don't need
+		 * gd anymore.
+		 */
+		unref_svc_rpc_gss_data(gd, SVC_RPC_GSS_FLAG_NONE);
 		req->rq_auth = &svc_auth_none;
 
 		break;
