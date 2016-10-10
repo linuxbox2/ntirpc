@@ -633,7 +633,7 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 		 * call.  Time to release the reference as we don't need
 		 * gd anymore.
 		 */
-		unref_svc_rpc_gss_data(gd, SVC_RPC_GSS_FLAG_NONE);
+		unref_svc_rpc_gss_data(gd);
 		req->rq_auth = &svc_auth_none;
 
 		break;
@@ -653,7 +653,7 @@ svcauth_gss_release(SVCAUTH *auth, struct svc_req *req)
 
 	gd = SVCAUTH_PRIVATE(auth);
 	if (gd)
-		unref_svc_rpc_gss_data(gd, SVC_RPC_GSS_FLAG_NONE);
+		unref_svc_rpc_gss_data(gd);
 	req->rq_auth = NULL;
 	return (true);
 }
@@ -676,6 +676,8 @@ svcauth_gss_destroy(SVCAUTH *auth)
 		gss_release_buffer(&min_stat, &gd->pac.ms_pac);
 
 	gss_release_buffer(&min_stat, &gd->checksum);
+
+	mutex_unlock(&gd->lock);
 	mutex_destroy(&gd->lock);
 
 	mem_free(gd, sizeof(*gd));
