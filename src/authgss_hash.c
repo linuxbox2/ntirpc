@@ -210,9 +210,23 @@ authgss_ctx_hash_del(struct svc_rpc_gss_data *gd)
 
 	t = rbtx_partition_of_scalar(&authgss_hash_st.xt, gd->hk.k);
 	mutex_lock(&t->mtx);
+
+	/* Another thread could have removed the entry from the hash.
+	 * We use its presence in the lru list to detect this. @todo:
+	 * can rbtree_x_cached_remove return a value indicating if such
+	 * an entry exists in the hash or not? Also, should we deal with
+	 * multiple gd's pointing to same context getting inserted into
+	 * the hash as well?
+	 */
+	if (!TAILQ_IS_ENQUEUED(gd, lru_q)) {
+		mutex_unlock(&t->mtx);
+		return false;
+	}
+
 	rbtree_x_cached_remove(&authgss_hash_st.xt, t, &gd->node_k, gd->hk.k);
 	axp = (struct authgss_x_part *)t->u1;
 	TAILQ_REMOVE(&axp->lru_q, gd, lru_q);
+	TAILQ_INIT_ENTRY(gd, lru_q);
 	--(axp->size);
 	mutex_unlock(&t->mtx);
 
@@ -271,6 +285,7 @@ void authgss_ctx_gc_idle(void)
 			rbtree_x_cached_remove(&authgss_hash_st.xt, xp,
 					       &gd->node_k, gd->hk.k);
 			TAILQ_REMOVE(&axp->lru_q, gd, lru_q);
+			TAILQ_INIT_ENTRY(gd, lru_q);
 			--(axp->size);
 			(void)atomic_dec_uint32_t(&authgss_hash_st.size);
 
