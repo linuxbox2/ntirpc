@@ -76,6 +76,7 @@ struct rpc_rdma_cbc {
 	struct xdr_ioq holdq;
 
 	struct xdr_ioq_uv *call_uv;
+	void *call_head;
 	void *read_chunk;	/* current in indexed list of arrays */
 	void *write_chunk;	/* current in list of arrays */
 	void *reply_chunk;	/* current in array */
