@@ -71,6 +71,7 @@
 
 #include "misc/abstract_atomic.h"
 #include "rpc_rdma.h"
+#include "svc_internal.h"
 
 #ifdef HAVE_VALGRIND_MEMCHECK_H
 #  include <valgrind/memcheck.h>
@@ -1441,13 +1442,6 @@ rpc_rdma_create(struct rpc_rdma_attr *xa)
 		return NULL;
 	}
 
-	if (xa->worker_count > 256) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s() worker_count (%u) much too large",
-			__func__, xa->worker_count);
-		return NULL;
-	}
-
 	xprt = rpc_rdma_allocate(xa);
 	if (!xprt) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -1488,7 +1482,6 @@ rpc_rdma_create(struct rpc_rdma_attr *xa)
 			__func__);
 		goto failure;
 	}
-	svc_work_pool.params.thrd_max += xa->worker_count;
 	pthread_mutex_unlock(&svc_work_pool.pqh.qmutex);
 
 	/* round up to the next power of two */
@@ -2050,7 +2043,8 @@ rpc_rdma_bind_client(RDMAXPRT *xprt)
 		}
 
 		rc = rdma_resolve_addr(xprt->cm_id, res->ai_src_addr,
-					res->ai_dst_addr, xprt->xa->timeout);
+					res->ai_dst_addr,
+					__svc_params->idle_timeout);
 		if (rc) {
 			rc = errno;
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -2075,7 +2069,8 @@ rpc_rdma_bind_client(RDMAXPRT *xprt)
 			break;
 		}
 
-		rc = rdma_resolve_route(xprt->cm_id, xprt->xa->timeout);
+		rc = rdma_resolve_route(xprt->cm_id,
+					__svc_params->idle_timeout);
 		if (rc) {
 			xprt->state = RDMAXS_ERROR;
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
