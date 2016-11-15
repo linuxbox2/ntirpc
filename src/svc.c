@@ -141,7 +141,8 @@ svc_init(svc_init_params *params)
 	mutex_lock(&__svc_params->mtx);
 	if (__svc_params->initialized) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC,
-			"svc_init: multiple initialization attempt (nothing happens)");
+			"%s: multiple initialization attempt (nothing happens)",
+			__func__);
 		mutex_unlock(&__svc_params->mtx);
 		return true;
 	}

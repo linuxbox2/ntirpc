@@ -814,9 +814,6 @@ extern SVCXPRT *svc_raw_ncreate(void);
 /*
  * RDMA based rpc
  */
-extern SVCXPRT *svc_rdma_ncreate(void *arg, const u_int sendsize,
-				 const u_int recvsize, const u_int flags);
-
 struct rpc_rdma_attr {
 	char *statistics_prefix;
 	/* silly char * to pass to rdma_getaddrinfo() */
@@ -826,7 +823,6 @@ struct rpc_rdma_attr {
 	void (*disconnect_cb)(SVCXPRT *);
 	enum xprt_stat (*request_cb)(void *, SVCXPRT *);
 
-	u_long timeout;			/**< ms wait for events */
 	u_int sq_depth;			/**< depth of Send Queue */
 	u_int max_send_sge;		/**< s/g elements per send */
 	u_int rq_depth;			/**< depth of Receive Queue. */
@@ -834,13 +830,15 @@ struct rpc_rdma_attr {
 
 	u_int backlog;			/**< connection backlog */
 	u_int credits;			/**< parallel messages */
-	u_int worker_count;		/**< worker threads */
-	u_int worker_queue_size;	/**< worker data queue */
 
 	bool destroy_on_disconnect;	/**< should perform cleanup */
 	bool use_srq;			/**< server use srq? */
 };
+
 extern SVCXPRT *rpc_rdma_create(struct rpc_rdma_attr *arg);
+
+extern SVCXPRT *svc_rdma_ncreate(void *arg, const u_int sendsize,
+                                const u_int recvsize, const u_int flags);
 
 /*
  * Getreq plug-out prototype

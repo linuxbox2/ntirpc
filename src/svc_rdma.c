@@ -76,8 +76,6 @@ struct svc_rdma_xdr {
 
 #define	sm_data(xprt)	((struct svc_rdma_xdr *)(xprt->xp_p2))
 
-extern struct svc_params __svc_params[1];
-
 static void svc_rdma_ops(SVCXPRT *);
 
 /*
@@ -90,7 +88,8 @@ svc_rdma_ncreate(void *arg, const u_int sendsize, const u_int recvsize,
 	struct svc_rdma_xdr *sm;
 	struct sockaddr_storage *ss;
 	RDMAXPRT *l_xprt = arg;
-	RDMAXPRT *xprt = rpc_rdma_accept_wait(l_xprt, l_xprt->xa->timeout);
+	RDMAXPRT *xprt = rpc_rdma_accept_wait(l_xprt,
+						__svc_params->idle_timeout);
 
 	if (!xprt) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
