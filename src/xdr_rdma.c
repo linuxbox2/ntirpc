@@ -1163,7 +1163,7 @@ bool
 xdr_rdma_svc_recv(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 {
 	RDMAXPRT *xprt;
-	struct rdma_msg *rmsg;
+	struct rdma_msg *cmsg;
 	uint32_t k;
 	uint32_t l;
 
@@ -1181,30 +1181,31 @@ xdr_rdma_svc_recv(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 
 	cbc->call_uv = IOQ_(TAILQ_FIRST(&cbc->workq.ioq_uv.uvqh.qh));
 	(cbc->call_uv->u.uio_references)++;
-	rmsg = m_(cbc->call_uv->v.vio_head);
-	rpcrdma_dump_msg(cbc->call_uv, "call", rmsg->rdma_xid);
+	cbc->call_head = cbc->call_uv->v.vio_head;
+	cmsg = m_(cbc->call_head);
+	rpcrdma_dump_msg(cbc->call_uv, "call", cmsg->rdma_xid);
 
-	switch (ntohl(rmsg->rdma_vers)) {
+	switch (ntohl(cmsg->rdma_vers)) {
 	case RPCRDMA_VERSION:
 		break;
 	default:
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s() rdma_vers %" PRIu32 "?",
-			__func__, ntohl(rmsg->rdma_vers));
+			__func__, ntohl(cmsg->rdma_vers));
 		xdr_rdma_encode_error(cbc->call_uv, RDMA_ERR_VERS);
 		xdr_rdma_post_send_cb(xprt, cbc, 1);
 		xdr_ioq_uv_release(cbc->call_uv);
 		return (false);
 	}
 
-	switch (ntohl(rmsg->rdma_type)) {
+	switch (ntohl(cmsg->rdma_type)) {
 	case RDMA_MSG:
 	case RDMA_NOMSG:
 		break;
 	default:
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s() rdma_type %" PRIu32 "?",
-			__func__, ntohl(rmsg->rdma_type));
+			__func__, ntohl(cmsg->rdma_type));
 		xdr_rdma_encode_error(cbc->call_uv, RDMA_ERR_BADHEADER);
 		xdr_rdma_post_send_cb(xprt, cbc, 1);
 		xdr_ioq_uv_release(cbc->call_uv);
@@ -1212,7 +1213,7 @@ xdr_rdma_svc_recv(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 	}
 
 	/* locate NFS/RDMA (RFC-5666) chunk positions */
-	cbc->read_chunk = xdr_rdma_get_read_list(rmsg);
+	cbc->read_chunk = xdr_rdma_get_read_list(cmsg);
 	cbc->write_chunk = (wl_t *)cbc->read_chunk;
 	xdr_rdma_skip_read_list((uint32_t **)&cbc->write_chunk);
 	cbc->reply_chunk = cbc->write_chunk;
@@ -1227,7 +1228,7 @@ xdr_rdma_svc_recv(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 
 	/* skip past the header for the calling buffer */
 	xdr_ioq_reset(&cbc->holdq, ((uintptr_t)cbc->call_data
-				  - (uintptr_t)rmsg));
+				  - (uintptr_t)cmsg));
 
 	while (rl(cbc->read_chunk)->present != 0
 	    && rl(cbc->read_chunk)->position == 0) {
@@ -1239,7 +1240,7 @@ xdr_rdma_svc_recv(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 
 		xdr_rdma_wait_read_cb(xprt, cbc, k, &rl(cbc->read_chunk)->target);
 		rpcrdma_dump_msg(IOQ_(TAILQ_FIRST(&cbc->workq.ioq_uv.uvqh.qh)),
-				 "call chunk", rmsg->rdma_xid);
+				 "call chunk", cmsg->rdma_xid);
 
 		/* concatenate any additional buffers after the calling message,
 		 * faking there is more call data in the calling buffer.
@@ -1478,6 +1479,14 @@ xdr_rdma_svc_flushout(struct rpc_rdma_cbc *cbc)
 			__func__, ntohl(msg->rm_direction));
 		return (false);
 	}
+	cmsg = m_(cbc->call_head);
+
+	if (cmsg->rdma_xid != msg->rm_xid) {
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s() xid (%u) not equal RPC (%u)",
+			__func__, ntohl(cmsg->rdma_xid), ntohl(msg->rm_xid));
+		return (false);
+	}
 
 	/* usurp the holdq for the head, move to workq later */
 	head_uv = IOQ_(xdr_ioq_uv_fetch(&cbc->holdq, &xprt->outbufs.uvqh,
@@ -1489,11 +1498,8 @@ xdr_rdma_svc_flushout(struct rpc_rdma_cbc *cbc)
 	head_uv->v.vio_wrap = (char *)head_uv->v.vio_base + xprt->sendsize;
 
 	/* build the header that goes with the data */
-	cmsg = m_(cbc->call_uv->v.vio_head);
 	rmsg = m_(head_uv->v.vio_head);
 	rmsg->rdma_xid = cmsg->rdma_xid;
-	/* TODO: check it matches msg->rm_xid */
-
 	rmsg->rdma_vers = cmsg->rdma_vers;
 	rmsg->rdma_credit = htonl(xprt->xa->credits);
 
