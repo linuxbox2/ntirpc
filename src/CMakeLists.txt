@@ -6,7 +6,7 @@ add_definitions(
 )
 
 # ok on Linux and FreeBSD w/GCC and clang compilers
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -pthread")
 
 ########### next target ###############
 
@@ -125,6 +125,12 @@ set_target_properties(ntirpc PROPERTIES LINK_FLAGS
   VERSION ${NTIRPC_VERSION}
   SOVERSION "${NTIRPC_MAJOR_VERSION}.${NTIRPC_MINOR_VERSION}"
   )
+
+add_executable(rpc-ping-mt
+  rpc-ping-mt.c
+  )
+target_link_libraries(rpc-ping-mt ntirpc
+  ${SYSTEM_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 
 install(TARGETS ntirpc DESTINATION ${LIB_INSTALL_DIR})
 
