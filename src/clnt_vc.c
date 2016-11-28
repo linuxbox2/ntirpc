@@ -499,6 +499,9 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 				vc_call_return_rlocked(ctx->error.re_status);
 			}
 
+			/* try to prime for xdr_inline */
+			(void)xdr_inrec_readahead(xdrs, 384);
+
 			/* now decode and validate the response header */
 			if (!xdr_dplx_decode(xdrs, ctx->msg)) {
 				__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
@@ -566,7 +569,154 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	free_rpc_call_ctx(ctx, RPC_CTX_FLAG_NONE);
 
 	return (result);
+} /* clnt_vc_call */
+
+void *clnt_vc_get_fast_ctx(void)
+{
+	rpc_ctx_t *ctx = (rpc_ctx_t *) mem_zalloc(sizeof(rpc_ctx_t));
+	ctx->msg = alloc_rpc_msg();
+	return (ctx);
+
 }
+
+void clnt_vc_put_fast_ctx(void *ctx)
+{
+	free_rpc_msg(((rpc_ctx_t *) ctx)->msg); /* free call header */
+}
+
+enum clnt_stat
+clnt_vc_call_fast(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
+		xdrproc_t xdr_args, void *args_ptr,
+		xdrproc_t xdr_results, void *results_ptr,
+		struct timeval timeout, void *rpc_ctx)
+{
+	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
+	struct ct_data *ct = &(xd->cx.data);
+	struct ct_serialized *cs = (struct ct_serialized *)clnt->cl_p3;
+	rpc_ctx_t *ctx = (rpc_ctx_t *) rpc_ctx;
+	XDR *xdrs;
+	int refreshes = 2;
+	bool shipnow;
+
+	ctx->xid = ++(xd->cx.calls.xid);
+
+	if (!ct->ct_waitset) {
+		/* If time is not within limits, we ignore it. */
+		if (time_not_ok(&timeout) == false)
+			ct->ct_wait = timeout;
+	}
+
+	shipnow = (xdr_results == NULL && timeout.tv_sec == 0
+		   && timeout.tv_usec == 0) ? false : true;
+
+ call_again:
+	xdrs = &(xd->shared.xdrs_out);
+	xdrs->x_lib[0] = (void *)RPC_DPLX_CLNT;
+	xdrs->x_lib[1] = (void *)ctx;	/* thread call ctx */
+
+	ctx->error.re_status = RPC_SUCCESS;
+	cs->ct_u.ct_mcalli = ntohl(ctx->xid);
+
+	if ((!XDR_PUTBYTES(xdrs, cs->ct_u.ct_mcallc, cs->ct_mpos))
+	    || (!XDR_PUTINT32(xdrs, (int32_t *) &proc))
+	    || (!AUTH_MARSHALL(auth, xdrs))
+	    || (!AUTH_WRAP(auth, xdrs, xdr_args, args_ptr))) {
+		if (ctx->error.re_status == RPC_SUCCESS)
+			ctx->error.re_status = RPC_CANTENCODEARGS;
+		/* error case */
+		(void)xdrrec_endofrecord(xdrs, true);
+		return(ctx->error.re_status);
+	}
+
+	if (!xdrrec_endofrecord(xdrs, shipnow))
+		return(ctx->error.re_status = RPC_CANTSEND);
+	if (!shipnow)
+		return(RPC_SUCCESS);
+
+	/*
+	 * Hack to provide rpc-based message passing
+	 */
+	if (timeout.tv_sec == 0 && timeout.tv_usec == 0)
+		return(ctx->error.re_status = RPC_TIMEDOUT);
+
+	/* reply */
+	xdrs = &(xd->shared.xdrs_in);
+
+	xdrs->x_lib[0] = (void *)RPC_DPLX_CLNT;
+	xdrs->x_lib[1] = (void *)ctx;	/* transiently thread call ctx */
+
+	/*
+	 * Keep receiving until we get a valid transaction id.
+	 */
+	while (true) {
+		/* skiprecord */
+		if (!xdr_inrec_skiprecord(xdrs)) {
+			__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+				"%s: error at skiprecord", __func__);
+			return(ctx->error.re_status);
+		}
+
+		/* try to prime for xdr_inline */
+		(void)xdr_inrec_readahead(xdrs, 256);
+
+		/* now decode and validate the response header */
+		if (!xdr_dplx_decode(xdrs, ctx->msg)) {
+			__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+				"%s: error at xdr_dplx_decode",
+				__func__);
+			return(ctx->error.re_status);
+		}
+
+		/* switch on direction */
+		switch (ctx->msg->rm_direction) {
+		case REPLY:
+			if (ctx->msg->rm_xid == ctx->xid)
+				goto replied;
+			break;
+		case CALL:
+			/* in this configuration, we do not expect
+			 * calls */
+			break;
+		default:
+			break;
+		}
+	}		/* while (true) */
+
+
+	/*
+	 * process header
+	 */
+ replied:
+	/* XXX move into routine which can be called from rpc_ctx_xfer_replymsg,
+	 * for (maybe) reduced MP overhead */
+	_seterr_reply(ctx->msg, &(ctx->error));
+	if (ctx->error.re_status == RPC_SUCCESS) {
+		if (!AUTH_VALIDATE(auth, &(ctx->msg->acpted_rply.ar_verf))) {
+			ctx->error.re_status = RPC_AUTHERROR;
+			ctx->error.re_why = AUTH_INVALIDRESP;
+		} else if (xdr_results /* XXX caller setup error? */ &&
+			   !AUTH_UNWRAP(auth, xdrs, xdr_results, results_ptr)) {
+			if (ctx->error.re_status == RPC_SUCCESS)
+				ctx->error.re_status = RPC_CANTDECODERES;
+		}
+		/* free verifier ... */
+		if (ctx->msg->acpted_rply.ar_verf.oa_base != NULL) {
+			xdrs->x_op = XDR_FREE;
+			(void)xdr_opaque_auth(xdrs,
+					      &(ctx->msg->acpted_rply.ar_verf));
+		}
+	} /* end successful completion */
+	else {
+		/* maybe our credentials need to be refreshed ... */
+		if (refreshes-- && AUTH_REFRESH(auth, &(ctx->msg))) {
+			++(xd->cx.calls.xid);
+			goto call_again;
+		}
+	}			/* end of unsuccessful completion */
+
+	return(ctx->error.re_status);
+
+} /* clnt_vc_call_fast */
 
 static void
 clnt_vc_geterr(CLIENT *clnt, struct rpc_err *errp)

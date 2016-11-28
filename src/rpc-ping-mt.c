@@ -13,6 +13,7 @@ struct state {
     unsigned long requests;
     CLIENT *handle;
     AUTH *auth;
+    void *rpc_ctx;
     int id;
     int count;
 
@@ -49,8 +50,10 @@ void * worker(void *arg) {
 
     rtime = times(&dumm);
     for (i = 0; i < s->count; i++) {
-        status = clnt_call(s->handle, s->auth, s->proc, (xdrproc_t) xdr_void,
-			NULL, (xdrproc_t) xdr_void, NULL, t);
+        status = clnt_vc_call_fast(s->handle, s->auth, s->proc,
+				(xdrproc_t) xdr_void, NULL,
+				(xdrproc_t) xdr_void, NULL, t,
+				s->rpc_ctx);
 
         if (status == RPC_SUCCESS) {
             /* NOP */
@@ -61,6 +64,7 @@ void * worker(void *arg) {
 
     auth_destroy(s->auth);
     clnt_destroy(s->handle);
+    clnt_vc_put_fast_ctx(s->rpc_ctx);
     worker_done();
     return NULL;
 }
@@ -108,6 +112,7 @@ int main(int argc, char *argv[]) {
                 exit(2);
             }
 	    s->auth = authnone_ncreate();
+	    s->rpc_ctx = clnt_vc_get_fast_ctx();
 
             s->id = i;
             s->count = count;

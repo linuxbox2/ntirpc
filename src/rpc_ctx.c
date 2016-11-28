@@ -56,7 +56,7 @@ alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
 	struct rpc_dplx_rec *rec = xd->rec;
 	rpc_ctx_t *ctx = mem_alloc(sizeof(rpc_ctx_t));
 
-	/* potects this */
+	/* protects this */
 	mutex_init(&ctx->we.mtx, NULL);
 	cond_init(&ctx->we.cv, 0, NULL);
 

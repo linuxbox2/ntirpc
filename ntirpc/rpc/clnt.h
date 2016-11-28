@@ -602,6 +602,15 @@ extern enum clnt_stat rpc_broadcast_exp(const rpcprog_t, const rpcvers_t,
 					caddr_t, const xdrproc_t, caddr_t,
 					const resultproc_t, const int,
 					const int, const char *);
+
+extern void *clnt_vc_get_fast_ctx(void);
+extern void clnt_vc_put_fast_ctx(void *);
+
+extern enum clnt_stat
+clnt_vc_call_fast(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
+		xdrproc_t xdr_args, void *args_ptr,
+		xdrproc_t xdr_results, void *results_ptr,
+		struct timeval timeout, void *rpc_ctx);
 __END_DECLS
 /* For backward compatibility */
 #include <rpc/clnt_soc.h>

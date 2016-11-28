@@ -78,6 +78,11 @@ NTIRPC_${NTIRPC_VERSION} {
     clntudp_ncreate;
     clntunix_ncreate;
 
+    # hmm
+    clnt_vc_call_fast;
+    clnt_vc_get_fast_ctx;
+    clnt_vc_put_fast_ctx;
+    
     # e*
     endnetconfig;
     endnetpath;
