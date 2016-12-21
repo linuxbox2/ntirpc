@@ -85,7 +85,6 @@ NTIRPC_${NTIRPC_VERSION} {
 
     # f*
     freenetconfigent;
-    free_rpc_msg;
 
     # g*
     get_myaddress;

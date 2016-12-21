@@ -88,7 +88,6 @@ enum reject_stat {
  * accepted.
  */
 struct accepted_reply {
-	struct opaque_auth ar_verf;
 	enum accept_stat ar_stat;
 	union {
 		struct {
@@ -103,6 +102,9 @@ struct accepted_reply {
 	} ru;
 #define ar_results ru.AR_results
 #define ar_vers  ru.AR_versions
+
+	/* after union to avoid (rare) corruption by rejected_reply */
+	struct opaque_auth ar_verf;
 };
 
 /*
@@ -139,11 +141,6 @@ struct reply_body {
  */
 struct call_body {
 	rpcvers_t cb_rpcvers;	/* must be equal to two */
-	rpcprog_t cb_prog;
-	rpcvers_t cb_vers;
-	rpcproc_t cb_proc;
-	struct opaque_auth cb_cred;
-	struct opaque_auth cb_verf; /* protocol specific - provided by client */
 };
 
 /*
@@ -164,15 +161,20 @@ struct rpc_msg {
 
 	int32_t *rm_ibuf;
 	uint32_t rm_flags;
-	/* queue of msgs for control xfer */
-	 TAILQ_ENTRY(rpc_msg) msg_q;
+
+	/* Moved in N TI-RPC; used by auth, logging, replies */
+	rpcprog_t cb_prog;
+	rpcvers_t cb_vers;
+	rpcproc_t cb_proc;
+
+	struct opaque_auth cb_cred;
+	struct opaque_auth cb_verf; /* protocol specific - provided by client */
+
 	/* avoid separate alloc/free */
-	char cb_cred_body[MAX_AUTH_BYTES];
-	char cb_verf_body[MAX_AUTH_BYTES];
 	char rq_cred_body[MAX_AUTH_BYTES];	/* size is excessive */
 };
-#define acpted_rply ru.RM_rmb.ru.RP_ar
-#define rjcted_rply ru.RM_rmb.ru.RP_dr
+#define RPCM_ack ru.RM_rmb.ru.RP_ar
+#define RPCM_rej ru.RM_rmb.ru.RP_dr
 
 __BEGIN_DECLS
 /*

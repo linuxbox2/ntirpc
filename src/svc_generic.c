@@ -65,7 +65,7 @@ extern int __svc_vc_setflag(SVCXPRT *, int);
  * created earlier instead of creating a new handle every time.
  */
 int
-svc_ncreate(void (*dispatch) (struct svc_req *req, SVCXPRT *xprt),
+svc_ncreate(void (*dispatch) (struct svc_req *req),
 	    rpcprog_t prognum,
 	    rpcvers_t versnum,	/* Version number */
 	    const char *nettype /* Networktype token */)
@@ -135,7 +135,7 @@ svc_ncreate(void (*dispatch) (struct svc_req *req, SVCXPRT *xprt),
  * with the rpcbind. It calls svc_tli_ncreate();
  */
 SVCXPRT *
-svc_tp_ncreate(void (*dispatch) (struct svc_req *req, SVCXPRT *xprt),
+svc_tp_ncreate(void (*dispatch) (struct svc_req *req),
 	       rpcprog_t prognum,	/* Program number */
 	       rpcvers_t versnum,	/* Version number */
 	       const struct netconfig *nconf /* Network */)

@@ -2197,10 +2197,10 @@ rpc_rdma_connect(RDMAXPRT *xprt)
 
 static struct xp_ops rpc_rdma_ops = {
 	/* XXX wow */
-	.xp_getargs = (bool(*)(SVCXPRT *, struct svc_req *, xdrproc_t,
-				void *, void *))abort,
-	.xp_reply = (bool(*)(SVCXPRT *, struct svc_req *,
-				struct rpc_msg *))abort,
-	.xp_freeargs = (bool(*)(SVCXPRT *, struct svc_req *, xdrproc_t,
+	.xp_getargs = (bool(*)(struct svc_req *, xdrproc_t, void *,
 				void *))abort,
+	.xp_reply = (bool(*)(struct svc_req *))
+				abort,
+	.xp_freeargs = (bool(*)(struct svc_req *, xdrproc_t, void *))
+				abort,
 };

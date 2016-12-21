@@ -63,7 +63,7 @@ xdr_rpc_gss_buf(XDR *xdrs, gss_buffer_t buf, u_int maxsize)
 			tmplen = buf->length;
 	}
 	xdr_stat =
-	    inline_xdr_bytes(xdrs, (char **)&buf->value, &tmplen, maxsize);
+	    inline_xdr_opaques(xdrs, buf->value, &tmplen, maxsize);
 
 	if (xdr_stat && xdrs->x_op == XDR_DECODE)
 		buf->length = tmplen;

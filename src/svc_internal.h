@@ -27,6 +27,7 @@
 #define TIRPC_SVC_INTERNAL_H
 
 #include <misc/os_epoll.h>
+#include <rpc/rpc_msg.h>
 
 extern int __svc_maxiov;
 extern int __svc_maxrec;
@@ -203,6 +204,7 @@ epoll_create_wr(size_t size, int flags)
 extern void __rpc_set_blkin_endpoint(SVCXPRT *xprt, const char *tag);
 #endif
 
+void rpc_msg_init(struct rpc_msg *msg);
 void svc_rqst_shutdown(void);
 
 #endif				/* TIRPC_SVC_INTERNAL_H */

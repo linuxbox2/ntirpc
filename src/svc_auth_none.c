@@ -80,7 +80,7 @@ svcauth_none_destroy(SVCAUTH *auth)
 }
 
 enum auth_stat
-_svcauth_none(struct svc_req *req, struct rpc_msg *msg)
+_svcauth_none(struct svc_req *req)
 {
 	req->rq_auth = &svc_auth_none;
 

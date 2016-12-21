@@ -230,39 +230,13 @@ svc_init(svc_init_params *params)
 	return true;
 }
 
-struct rpc_msg *
-alloc_rpc_msg(void)
-{
-	struct rpc_msg *msg = mem_alloc(sizeof(struct rpc_msg));
-
-	TAILQ_INIT_ENTRY(msg, msg_q);
-
-	/* avoid separate alloc/free */
-	msg->rm_call.cb_cred.oa_base = msg->cb_cred_body;
-	msg->rm_call.cb_verf.oa_base = msg->cb_verf_body;
-
-	/* required for REPLY decodes */
-	msg->acpted_rply.ar_verf = _null_auth;
-	msg->acpted_rply.ar_results.where = NULL;
-	msg->acpted_rply.ar_results.proc = (xdrproc_t) xdr_void;
-
-	return (msg);
-}
-
 void
-free_rpc_msg(struct rpc_msg *msg)
+rpc_msg_init(struct rpc_msg *msg)
 {
-	mem_free(msg, sizeof(struct rpc_msg));
-}
-
-static inline void
-free_req_rpc_msg(struct svc_req *req)
-{
-	if (req->rq_msg) {
-		struct rpc_msg *msg = req->rq_msg;
-		mem_free(msg, sizeof(struct rpc_msg));
-		req->rq_msg = NULL;
-	}
+	/* required for REPLY decodes */
+	msg->RPCM_ack.ar_verf = _null_auth;
+	msg->RPCM_ack.ar_results.where = NULL;
+	msg->RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
 }
 
 /* ***************  SVCXPRT related stuff **************** */
@@ -315,7 +289,7 @@ __rpc_set_address(struct rpc_address *rpca, const struct sockaddr_storage *ss,
  */
 bool
 svc_reg(SVCXPRT *xprt, const rpcprog_t prog, const rpcvers_t vers,
-	void (*dispatch) (struct svc_req *req, SVCXPRT *xprt),
+	void (*dispatch) (struct svc_req *req),
 	const struct netconfig *nconf)
 {
 	bool dummy;
@@ -412,7 +386,7 @@ svc_unreg(const rpcprog_t prog, const rpcvers_t vers)
  */
 bool
 svc_register(SVCXPRT *xprt, u_long prog, u_long vers,
-	     void (*dispatch) (struct svc_req *req, SVCXPRT *xprt),
+	     void (*dispatch) (struct svc_req *req),
 	     int protocol)
 {
 	struct svc_callout *prev;
@@ -555,81 +529,60 @@ svc_lookup(svc_rec_t **rec, svc_vers_range_t *vrange,
 /*
  * Send a reply to an rpc request (MT-SAFE).
  *
- * XXX Rather than marshal an rpc_msg on the stack, we may
- * want another variant which takes a message, perhaps one from
- * a reply cache (e.g., CITI Windows NFS client).
- *
  */
 bool
-svc_sendreply(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_results,
-	      void *xdr_location)
+svc_sendreply(struct svc_req *req, xdrproc_t xdr_results, void *xdr_location)
 {
-	struct rpc_msg rply;
+	assert(req != NULL);
 
-	assert(xprt != NULL);
-
-	rply.rm_direction = REPLY;
-	rply.rm_reply.rp_stat = MSG_ACCEPTED;
-	rply.rm_xid = req->rq_xid;
-	rply.acpted_rply.ar_verf = req->rq_verf;
-	rply.acpted_rply.ar_stat = SUCCESS;
-	rply.acpted_rply.ar_results.where = xdr_location;
-	rply.acpted_rply.ar_results.proc = xdr_results;
-	return (SVC_REPLY(xprt, req, &rply));
+	req->rq_msg.rm_direction = REPLY;
+	req->rq_msg.rm_reply.rp_stat = MSG_ACCEPTED;
+	req->rq_msg.RPCM_ack.ar_stat = SUCCESS;
+	req->rq_msg.RPCM_ack.ar_results.where = xdr_location;
+	req->rq_msg.RPCM_ack.ar_results.proc = xdr_results;
+	return (SVC_REPLY(req));
 }
 
 /*
  * No procedure error reply (MT-SAFE)
  */
 void
-svcerr_noproc(SVCXPRT *xprt, struct svc_req *req)
+svcerr_noproc(struct svc_req *req)
 {
-	struct rpc_msg rply;
+	assert(req != NULL);
 
-	assert(xprt != NULL);
-
-	rply.rm_direction = REPLY;
-	rply.rm_reply.rp_stat = MSG_ACCEPTED;
-	rply.rm_xid = req->rq_xid;
-	rply.acpted_rply.ar_verf = req->rq_verf;
-	rply.acpted_rply.ar_stat = PROC_UNAVAIL;
-	SVC_REPLY(xprt, req, &rply);
+	req->rq_msg.rm_direction = REPLY;
+	req->rq_msg.rm_reply.rp_stat = MSG_ACCEPTED;
+	req->rq_msg.RPCM_ack.ar_stat = PROC_UNAVAIL;
+	SVC_REPLY(req);
 }
 
 /*
  * Can't decode args error reply (MT-SAFE)
  */
 void
-svcerr_decode(SVCXPRT *xprt, struct svc_req *req)
+svcerr_decode(struct svc_req *req)
 {
-	struct rpc_msg rply;
+	assert(req != NULL);
 
-	assert(xprt != NULL);
-
-	rply.rm_direction = REPLY;
-	rply.rm_reply.rp_stat = MSG_ACCEPTED;
-	rply.rm_xid = req->rq_xid;
-	rply.acpted_rply.ar_verf = req->rq_verf;
-	rply.acpted_rply.ar_stat = GARBAGE_ARGS;
-	SVC_REPLY(xprt, req, &rply);
+	req->rq_msg.rm_direction = REPLY;
+	req->rq_msg.rm_reply.rp_stat = MSG_ACCEPTED;
+	req->rq_msg.RPCM_ack.ar_stat = GARBAGE_ARGS;
+	SVC_REPLY(req);
 }
 
 /*
  * Some system error (MT-SAFE)
  */
 void
-svcerr_systemerr(SVCXPRT *xprt, struct svc_req *req)
+svcerr_systemerr(struct svc_req *req)
 {
-	struct rpc_msg rply;
+	assert(req != NULL);
 
-	assert(xprt != NULL);
-
-	rply.rm_direction = REPLY;
-	rply.rm_reply.rp_stat = MSG_ACCEPTED;
-	rply.rm_xid = req->rq_xid;
-	rply.acpted_rply.ar_verf = req->rq_verf;
-	rply.acpted_rply.ar_stat = SYSTEM_ERR;
-	SVC_REPLY(xprt, req, &rply);
+	req->rq_msg.rm_direction = REPLY;
+	req->rq_msg.rm_reply.rp_stat = MSG_ACCEPTED;
+	req->rq_msg.RPCM_ack.ar_stat = SYSTEM_ERR;
+	SVC_REPLY(req);
 }
 
 #if 0
@@ -674,68 +627,54 @@ __svc_versquiet_get(SVCXPRT *xprt)
  * Authentication error reply (MT-SAFE)
  */
 void
-svcerr_auth(SVCXPRT *xprt, struct svc_req *req, enum auth_stat why)
+svcerr_auth(struct svc_req *req, enum auth_stat why)
 {
-	struct rpc_msg rply;
+	assert(req != NULL);
 
-	assert(xprt != NULL);
-
-	rply.rm_direction = REPLY;
-	rply.rm_reply.rp_stat = MSG_DENIED;
-	rply.rm_xid = req->rq_xid;
-	rply.rjcted_rply.rj_stat = AUTH_ERROR;
-	rply.rjcted_rply.rj_why = why;
-	SVC_REPLY(xprt, req, &rply);
+	req->rq_msg.rm_direction = REPLY;
+	req->rq_msg.rm_reply.rp_stat = MSG_DENIED;
+	req->rq_msg.RPCM_rej.rj_stat = AUTH_ERROR;
+	req->rq_msg.RPCM_rej.rj_why = why;
+	SVC_REPLY(req);
 }
 
 /*
  * Auth too weak error reply (MT-SAFE)
  */
 void
-svcerr_weakauth(SVCXPRT *xprt, struct svc_req *req)
+svcerr_weakauth(struct svc_req *req)
 {
-	assert(xprt != NULL);
-
-	svcerr_auth(xprt, req, AUTH_TOOWEAK);
+	svcerr_auth(req, AUTH_TOOWEAK);
 }
 
 /*
  * Program unavailable error reply (MT-SAFE)
  */
 void
-svcerr_noprog(SVCXPRT *xprt, struct svc_req *req)
+svcerr_noprog(struct svc_req *req)
 {
-	struct rpc_msg rply;
+	assert(req != NULL);
 
-	assert(xprt != NULL);
-
-	rply.rm_direction = REPLY;
-	rply.rm_reply.rp_stat = MSG_ACCEPTED;
-	rply.rm_xid = req->rq_xid;
-	rply.acpted_rply.ar_verf = req->rq_verf;
-	rply.acpted_rply.ar_stat = PROG_UNAVAIL;
-	SVC_REPLY(xprt, req, &rply);
+	req->rq_msg.rm_direction = REPLY;
+	req->rq_msg.rm_reply.rp_stat = MSG_ACCEPTED;
+	req->rq_msg.RPCM_ack.ar_stat = PROG_UNAVAIL;
+	SVC_REPLY(req);
 }
 
 /*
  * Program version mismatch error reply
  */
 void
-svcerr_progvers(SVCXPRT *xprt, struct svc_req *req, rpcvers_t low_vers,
-		rpcvers_t high_vers)
+svcerr_progvers(struct svc_req *req, rpcvers_t low_vers, rpcvers_t high_vers)
 {
-	struct rpc_msg rply;
+	assert(req != NULL);
 
-	assert(xprt != NULL);
-
-	rply.rm_direction = REPLY;
-	rply.rm_reply.rp_stat = MSG_ACCEPTED;
-	rply.rm_xid = req->rq_xid;
-	rply.acpted_rply.ar_verf = req->rq_verf;
-	rply.acpted_rply.ar_stat = PROG_MISMATCH;
-	rply.acpted_rply.ar_vers.low = (u_int32_t) low_vers;
-	rply.acpted_rply.ar_vers.high = (u_int32_t) high_vers;
-	SVC_REPLY(xprt, req, &rply);
+	req->rq_msg.rm_direction = REPLY;
+	req->rq_msg.rm_reply.rp_stat = MSG_ACCEPTED;
+	req->rq_msg.RPCM_ack.ar_stat = PROG_MISMATCH;
+	req->rq_msg.RPCM_ack.ar_vers.low = (u_int32_t) low_vers;
+	req->rq_msg.RPCM_ack.ar_vers.high = (u_int32_t) high_vers;
+	SVC_REPLY(req);
 }
 
 /* ******************* SERVER INPUT STUFF ******************* */
@@ -851,9 +790,6 @@ svc_validate_xprt_list(SVCXPRT *xprt)
 	return (code);
 }
 
-extern enum auth_stat
-svc_auth_authenticate(struct svc_req *, struct rpc_msg *, bool *);
-
 void
 svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg)
 {
@@ -866,30 +802,31 @@ svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg)
 	bool no_dispatch = false;
 
 	r.rq_xprt = xprt;
-	r.rq_prog = msg->rm_call.cb_prog;
-	r.rq_vers = msg->rm_call.cb_vers;
-	r.rq_proc = msg->rm_call.cb_proc;
-	r.rq_cred = msg->rm_call.cb_cred;
-	r.rq_xid = msg->rm_xid;
+	r.rq_msg.cb_prog = msg->cb_prog;
+	r.rq_msg.cb_vers = msg->cb_vers;
+	r.rq_msg.cb_proc = msg->cb_proc;
+	r.rq_msg.cb_cred = msg->cb_cred;
+	r.rq_msg.rm_xid = msg->rm_xid;
 
 	/* first authenticate the message */
-	why = svc_auth_authenticate(&r, msg, &no_dispatch);
+	why = svc_auth_authenticate(&r, &no_dispatch);
 	if ((why != AUTH_OK) || no_dispatch) {
-		svcerr_auth(xprt, &r, why);
+		svcerr_auth(&r, why);
 		return;
 	}
 
-	lkp_res = svc_lookup(&svc_rec, &vrange, r.rq_prog, r.rq_vers, NULL, 0);
+	lkp_res = svc_lookup(&svc_rec, &vrange, r.rq_msg.cb_prog,
+			     r.rq_msg.cb_vers, NULL, 0);
 	switch (lkp_res) {
 	case SVC_LKP_SUCCESS:
 		/* call it */
-		(*svc_rec->sc_dispatch) (&r, xprt);
+		(*svc_rec->sc_dispatch) (&r);
 		return;
 	case SVC_LKP_VERS_NOTFOUND:
-		svcerr_progvers(xprt, &r, vrange.lowvers, vrange.highvers);
+		svcerr_progvers(&r, vrange.lowvers, vrange.highvers);
 		break;
 	default:
-		svcerr_noprog(xprt, &r);
+		svcerr_noprog(&r);
 		break;
 	}
 }
@@ -905,7 +842,7 @@ svc_getreq_default(SVCXPRT *xprt)
 
 	/* now receive msgs from xprt (support batch calls) */
 	do {
-		if (SVC_RECV(xprt, &req)) {
+		if (SVC_RECV(&req)) {
 
 			/* now find the exported program and call it */
 			svc_vers_range_t vrange;
@@ -914,47 +851,38 @@ svc_getreq_default(SVCXPRT *xprt)
 			enum auth_stat why;
 
 			/* first authenticate the message */
-			why =
-			    svc_auth_authenticate(&req, req.rq_msg,
-						  &no_dispatch);
+			why = svc_auth_authenticate(&req, &no_dispatch);
 			if ((why != AUTH_OK) || no_dispatch) {
-				svcerr_auth(xprt, &req, why);
+				svcerr_auth(&req, why);
 				goto call_done;
 			}
 
 			lkp_res =
-			    svc_lookup(&svc_rec, &vrange, req.rq_prog,
-				       req.rq_vers, NULL, 0);
+			    svc_lookup(&svc_rec, &vrange, req.rq_msg.cb_prog,
+				       req.rq_msg.cb_vers, NULL, 0);
 			switch (lkp_res) {
 			case SVC_LKP_SUCCESS:
-				(*svc_rec->sc_dispatch) (&req, xprt);
+				(*svc_rec->sc_dispatch) (&req);
 				goto call_done;
 				break;
 			case SVC_LKP_VERS_NOTFOUND:
 				__warnx(TIRPC_DEBUG_FLAG_SVC,
 					"%s: dispatch prog vers notfound\n",
 					__func__);
-				svcerr_progvers(xprt, &req, vrange.lowvers,
+				svcerr_progvers(&req, vrange.lowvers,
 						vrange.highvers);
 				break;
 			default:
 				__warnx(TIRPC_DEBUG_FLAG_SVC,
 					"%s: dispatch prog notfound\n",
 					__func__);
-				svcerr_noprog(xprt, &req);
+				svcerr_noprog(&req);
 				break;
 			}
-
-			/* dispose RPC header */
-			free_req_rpc_msg(&req);
 
 		}
 		/* SVC_RECV again? */
  call_done:
-
-		/* dispose RPC header */
-		free_req_rpc_msg(&req); /* SAFE */
-
 		stat = SVC_STAT(xprt);
 		if (stat == XPRT_DIED) {
 			__warnx(TIRPC_DEBUG_FLAG_SVC,

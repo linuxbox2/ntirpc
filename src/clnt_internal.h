@@ -73,7 +73,6 @@ typedef struct rpc_call_ctx {
 	struct wait_entry we;
 	uint32_t xid;
 	uint32_t flags;
-	struct rpc_msg *msg;
 	struct rpc_err error;
 	union {
 		struct {
@@ -85,6 +84,7 @@ typedef struct rpc_call_ctx {
 			/* nothing */
 		} svc;
 	} ctx_u;
+	struct rpc_msg cc_msg;
 } rpc_ctx_t;
 
 static inline int call_xid_cmpf(const struct opr_rbtree_node *lhs,

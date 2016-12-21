@@ -104,7 +104,7 @@ static struct {
  * Service side authenticator for AUTH_DES
  */
 enum auth_stat
-_svcauth_des(struct svc_req *req, struct rpc_msg *msg)
+_svcauth_des(struct svc_req *req)
 {
 	long *ixdr;
 	des_block cryptbuf[2];
@@ -124,18 +124,18 @@ _svcauth_des(struct svc_req *req, struct rpc_msg *msg)
 	} *area;
 
 	/* Initialize reply. */
-	req->rq_verf = _null_auth;
+	req->rq_msg.RPCM_ack.ar_verf = _null_auth;
 
 	if (!authdes_cache)
 		cache_init();
 
-	area = (struct area *)req->rq_clntcred;
+	area = (struct area *)req->rq_msg.rq_cred_body;
 	cred = (struct authdes_cred *)&area->area_cred;
 
 	/*
 	 * Get the credential
 	 */
-	ixdr = (long *)msg->rm_call.cb_cred.oa_base;
+	ixdr = (long *)req->rq_msg.cb_cred.oa_body;
 	cred->adc_namekind = IXDR_GET_ENUM(ixdr, enum authdes_namekind);
 	switch (cred->adc_namekind) {
 	case ADN_FULLNAME:
@@ -160,7 +160,7 @@ _svcauth_des(struct svc_req *req, struct rpc_msg *msg)
 	/*
 	 * Get the verifier
 	 */
-	ixdr = (long *)msg->rm_call.cb_verf.oa_base;
+	ixdr = (long *)req->rq_msg.cb_verf.oa_body;
 	verf.adv_xtimestamp.key.high = (u_long) *ixdr++;
 	verf.adv_xtimestamp.key.low = (u_long) *ixdr++;
 	verf.adv_int_u = (u_long) *ixdr++;
@@ -298,14 +298,17 @@ _svcauth_des(struct svc_req *req, struct rpc_msg *msg)
 	/*
 	 * Serialize the reply verifier, and update req
 	 */
-	ixdr = (long *)msg->rm_call.cb_verf.oa_base;
+	ixdr = (long *)req->rq_msg.cb_verf.oa_body;
 	*ixdr++ = (long)verf.adv_xtimestamp.key.high;
 	*ixdr++ = (long)verf.adv_xtimestamp.key.low;
 	*ixdr++ = (long)verf.adv_int_u;
 
-	req->rq_verf.oa_flavor = AUTH_DES;
-	req->rq_verf.oa_base = msg->rm_call.cb_verf.oa_base;
-	req->rq_verf.oa_length = (char *)ixdr - msg->rm_call.cb_verf.oa_base;
+	req->rq_msg.RPCM_ack.ar_verf.oa_flavor = AUTH_DES;
+	req->rq_msg.RPCM_ack.ar_verf.oa_length =
+		(char *)ixdr - req->rq_msg.cb_verf.oa_body;
+	memcpy(req->rq_msg.RPCM_ack.ar_verf.oa_body,
+	       req->rq_msg.cb_verf.oa_body,
+	       req->rq_msg.RPCM_ack.ar_verf.oa_length);
 
 	/*
 	 * We succeeded, commit the data to the cache now and

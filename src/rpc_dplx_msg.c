@@ -97,7 +97,7 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 			IXDR_PUT_ENUM(buf, oa->oa_flavor);
 			IXDR_PUT_INT32(buf, oa->oa_length);
 			if (oa->oa_length) {
-				memcpy(buf, oa->oa_base, oa->oa_length);
+				memcpy(buf, oa->oa_body, oa->oa_length);
 				buf += RNDUP(oa->oa_length) / sizeof(int32_t);
 			}
 

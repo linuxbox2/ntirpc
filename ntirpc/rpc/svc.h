@@ -42,6 +42,7 @@
 #define _TIRPC_SVC_H
 
 #include <sys/cdefs.h>
+#include <rpc/rpc_msg.h>
 #include <rpc/types.h>
 #include <rpc/work_pool.h>
 #include <misc/portable.h>
@@ -202,6 +203,7 @@ struct cf_rendezvous {		/* kept in xprt->xp_p1 for rendezvouser */
 };
 
 struct SVCAUTH;			/* forward decl. */
+struct svc_req;			/* forward decl. */
 
 /*
  * Server side transport handle
@@ -209,22 +211,20 @@ struct SVCAUTH;			/* forward decl. */
 typedef struct rpc_svcxprt {
 	struct xp_ops {
 		/* receive incoming requests */
-		bool (*xp_recv) (struct rpc_svcxprt *, struct svc_req *);
+		bool (*xp_recv) (struct svc_req *);
 
 		/* get transport status */
 		enum xprt_stat (*xp_stat) (struct rpc_svcxprt *);
 
 		/* get arguments, thread u_data in arg4 */
-		bool (*xp_getargs) (struct rpc_svcxprt *, struct svc_req *,
-				    xdrproc_t, void *, void *);
+		bool (*xp_getargs) (struct svc_req *, xdrproc_t, void *,
+				    void *);
 
 		/* send reply */
-		bool (*xp_reply) (struct rpc_svcxprt *, struct svc_req *,
-				  struct rpc_msg *);
+		bool (*xp_reply) (struct svc_req *);
 
 		/* free mem allocated for args */
-		bool (*xp_freeargs) (struct rpc_svcxprt *, struct svc_req *,
-				     xdrproc_t, void *);
+		bool (*xp_freeargs) (struct svc_req *, xdrproc_t, void *);
 
 		/* actually destroy after xp_destroy_it and xp_release_it */
 		void (*xp_destroy) (struct rpc_svcxprt *, u_int,
@@ -316,7 +316,7 @@ typedef struct svc_record {
 	rpcprog_t sc_prog;
 	rpcvers_t sc_vers;
 	char *sc_netid;
-	void (*sc_dispatch) (struct svc_req *, SVCXPRT *);
+	void (*sc_dispatch) (struct svc_req *);
 } svc_rec_t;
 
 typedef struct svc_vers_range {
@@ -334,7 +334,7 @@ typedef enum svc_lookup_result {
 
 /* functions which can be installed using a control function, e.g.,
  * xp_ops->xp_control */
-typedef bool(*xp_recv_t) (struct rpc_svcxprt *, struct svc_req *);
+typedef bool(*xp_recv_t) (struct svc_req *);
 typedef bool(*xp_getreq_t) (struct rpc_svcxprt *);
 typedef void (*xp_dispatch_t) (struct rpc_svcxprt *, struct rpc_msg **);
 typedef u_int(*xp_recv_user_data_t) (struct rpc_svcxprt *, struct rpc_svcxprt *,
@@ -345,12 +345,6 @@ typedef bool(*xp_free_user_data_t) (struct rpc_svcxprt *);
  * Service request
  */
 struct svc_req {
-	u_int32_t rq_prog;	/* service program number */
-	u_int32_t rq_vers;	/* service protocol version */
-	u_int32_t rq_proc;	/* the desired procedure */
-
-	struct opaque_auth rq_cred;	/* raw creds from the wire */
-	void *rq_clntcred;	/* read only cooked cred */
 	SVCXPRT *rq_xprt;	/* associated transport */
 
 	/* New with TI-RPC */
@@ -358,18 +352,18 @@ struct svc_req {
 	caddr_t rq_svcname;	/* read only cooked service cred */
 
 	/* New with N TI-RPC */
-	struct rpc_msg *rq_msg;	/* decoded rpc_msg */
 	void *rq_context;	/* private context */
 	void *rq_u1;		/* user data */
 	void *rq_u2;		/* user data */
 	uint64_t rq_cksum;
-	u_int32_t rq_xid;	/* xid */
 
 	/* Moved in N TI-RPC */
-	struct opaque_auth rq_verf;	/* raw response verifier */
 	struct SVCAUTH *rq_auth;	/* auth handle */
 	void *rq_ap1;		/* auth private */
 	void *rq_ap2;		/* auth private */
+
+	/* avoid separate alloc/free */
+	struct rpc_msg rq_msg;
 
 	/* copy of remote transport address */
 	struct sockaddr_storage rq_raddr;
@@ -422,32 +416,30 @@ __END_DECLS
  * xdrproc_t xargs;
  * void * argsp;
  */
-#define SVC_RECV(xprt, req) \
-	(*(xprt)->xp_ops->xp_recv)((xprt), (req))
-#define svc_recv(xprt, req)			\
-	(*(xprt)->xp_ops->xp_recv)((xprt), (req))
+#define SVC_RECV(req) \
+	(*((req)->rq_xprt)->xp_ops->xp_recv)((req))
+#define svc_recv(req)				\
+	(*((req)->rq_xprt)->xp_ops->xp_recv)((req))
 
 #define SVC_STAT(xprt) \
 	(*(xprt)->xp_ops->xp_stat)(xprt)
 #define svc_stat(xprt)				\
 	(*(xprt)->xp_ops->xp_stat)(xprt)
 
-#define SVC_GETARGS(xprt, req, xargs, argsp, u_data)			\
-	(*(xprt)->xp_ops->xp_getargs)((xprt), (req), (xargs), (argsp),	\
-				      (u_data))
-#define svc_getargs(xprt, req, xargs, argsp, u_data)		       \
-	(*(xprt)->xp_ops->xp_getargs)((xprt), (req), (xargs), (argsp), \
-				      (u_data))
+#define SVC_GETARGS(req, xargs, argsp, u_data)			\
+	(*((req)->rq_xprt)->xp_ops->xp_getargs)((req),(xargs),(argsp),(u_data))
+#define svc_getargs(req, xargs, argsp, u_data)			\
+	(*((req)->rq_xprt)->xp_ops->xp_getargs)((req),(xargs),(argsp),(u_data))
 
-#define SVC_REPLY(xprt, req, msg)				\
-	(*(xprt)->xp_ops->xp_reply) ((xprt), (req), (msg))
-#define svc_reply(xprt, req, msg) \
-	(*(xprt)->xp_ops->xp_reply) ((xprt), (req), (msg))
+#define SVC_REPLY(req)				\
+	(*((req)->rq_xprt)->xp_ops->xp_reply)((req))
+#define svc_reply(req) 				\
+	(*((req)->rq_xprt)->xp_ops->xp_reply)((req))
 
-#define SVC_FREEARGS(xprt, req, xargs, argsp)			\
-	(*(xprt)->xp_ops->xp_freeargs)((xprt), (req), (xargs), (argsp))
-#define svc_freeargs(xprt, req, xargs, argsp)			\
-	(*(xprt)->xp_ops->xp_freeargs)((xprt), (req), (xargs), (argsp))
+#define SVC_FREEARGS(req, xargs, argsp)			\
+	(*((req)->rq_xprt)->xp_ops->xp_freeargs)((req),(xargs),(argsp))
+#define svc_freeargs(req, xargs, argsp)			\
+	(*((req)->rq_xprt)->xp_ops->xp_freeargs)((req),(xargs),(argsp))
 
 /* Protect a SVCXPRT with a SVC_REF for each call or request.
  */
@@ -578,7 +570,7 @@ __END_DECLS
  */
 __BEGIN_DECLS
 extern bool svc_reg(SVCXPRT *, const rpcprog_t, const rpcvers_t,
-		    void (*)(struct svc_req *, SVCXPRT *),
+		    void (*)(struct svc_req *),
 		    const struct netconfig *);
 __END_DECLS
 /*
@@ -644,15 +636,14 @@ __END_DECLS
  * deadlock the caller and server processes!
  */
 __BEGIN_DECLS
-extern bool svc_sendreply(SVCXPRT *, struct svc_req *, xdrproc_t,
-			  void *);
-extern void svcerr_decode(SVCXPRT *, struct svc_req *);
-extern void svcerr_weakauth(SVCXPRT *, struct svc_req *);
-extern void svcerr_noproc(SVCXPRT *, struct svc_req *);
-extern void svcerr_progvers(SVCXPRT *, struct svc_req *, rpcvers_t, rpcvers_t);
-extern void svcerr_auth(SVCXPRT *, struct svc_req *, enum auth_stat);
-extern void svcerr_noprog(SVCXPRT *, struct svc_req *);
-extern void svcerr_systemerr(SVCXPRT *, struct svc_req *);
+extern bool svc_sendreply(struct svc_req *, xdrproc_t, void *);
+extern void svcerr_decode(struct svc_req *);
+extern void svcerr_weakauth(struct svc_req *);
+extern void svcerr_noproc(struct svc_req *);
+extern void svcerr_progvers(struct svc_req *, rpcvers_t, rpcvers_t);
+extern void svcerr_auth(struct svc_req *, enum auth_stat);
+extern void svcerr_noprog(struct svc_req *);
+extern void svcerr_systemerr(struct svc_req *);
 extern int rpc_reg(rpcprog_t, rpcvers_t, rpcproc_t, char *(*)(char *),
 		   xdrproc_t, xdrproc_t, char *);
 __END_DECLS
@@ -684,7 +675,7 @@ __BEGIN_DECLS
 /*
  * Transport independent svc_create routine.
  */
-extern int svc_ncreate(void (*)(struct svc_req *, SVCXPRT *), const rpcprog_t,
+extern int svc_ncreate(void (*)(struct svc_req *), const rpcprog_t,
 		       const rpcvers_t, const char *);
 /*
  *      void (*dispatch)();             -- dispatch routine
@@ -698,7 +689,7 @@ extern int svc_ncreate(void (*)(struct svc_req *, SVCXPRT *), const rpcprog_t,
  * instead of a nettype.
  */
 
-extern SVCXPRT *svc_tp_ncreate(void (*)(struct svc_req *, SVCXPRT *),
+extern SVCXPRT *svc_tp_ncreate(void (*)(struct svc_req *),
 			       const rpcprog_t, const rpcvers_t,
 			       const struct netconfig *);
 /*
@@ -854,8 +845,6 @@ extern void svc_dispatch_default(SVCXPRT *, struct rpc_msg **);
  * Convenience functions for implementing these
  */
 extern bool svc_validate_xprt_list(SVCXPRT *);
-extern struct rpc_msg *alloc_rpc_msg(void);
-extern void free_rpc_msg(struct rpc_msg *);
 
 /*
  * svc_dg_enable_cache() enables the cache on dg transports.

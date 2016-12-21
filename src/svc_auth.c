@@ -60,7 +60,7 @@
 /* declarations to allow servers to specify new authentication flavors */
 struct authsvc {
 	int flavor;
-	enum auth_stat (*handler) (struct svc_req *, struct rpc_msg *);
+	enum auth_stat (*handler) (struct svc_req *);
 	struct authsvc *next;
 };
 static struct authsvc *Auths;
@@ -70,48 +70,45 @@ static struct authsvc *Auths;
  * the raw form of credentials and verifiers.  authenticate returns AUTH_OK
  * if the msg is successfully authenticated.  If AUTH_OK then the routine also
  * does the following things:
- * set req->rq_verf to the appropriate response verifier;
- * sets req->rq_client_cred to the "cooked" form of the credentials.
+ * set req->rq_msg.RPCM_ack.ar_verf to the appropriate response verifier;
+ * set req->rq_msg.rq_cred_body to the "cooked" form of the credentials.
  *
- * NB: req->rq_verf must be pre-alloctaed, its length is set appropriately.
+ * NB: ar_verf must be pre-allocated, its length is set appropriately.
  *
- * The caller still owns and is responsible for msg->u.cmb.cred and
- * msg->u.cmb.verf.  The authentication system retains ownership of
- * req->rq_client_cred, the cooked credentials.
+ * The caller still owns and is responsible for msg->cb_cred and
+ * msg->cb_verf.  The authentication system retains ownership of
+ * rq_cred_body, the cooked credentials.
  *
  * There is an assumption that any flavour less than AUTH_NULL is invalid.
  */
 enum auth_stat
-svc_auth_authenticate(struct svc_req *req, struct rpc_msg *msg,
-		      bool *no_dispatch)
+svc_auth_authenticate(struct svc_req *req, bool *no_dispatch)
 {
-	int cred_flavor;
 	struct authsvc *asp;
 	enum auth_stat rslt;
+	int cred_flavor;
 	extern mutex_t authsvc_lock;
 
 	/* VARIABLES PROTECTED BY authsvc_lock: asp, Auths */
-	req->rq_cred = msg->rm_call.cb_cred;
-	req->rq_verf.oa_flavor = _null_auth.oa_flavor;
-	req->rq_verf.oa_length = 0;
-	cred_flavor = req->rq_cred.oa_flavor;
+	req->rq_msg.RPCM_ack.ar_verf = _null_auth;
+	cred_flavor = req->rq_msg.cb_cred.oa_flavor;
 	switch (cred_flavor) {
 	case RPCSEC_GSS:
-		rslt = _svcauth_gss(req, msg, no_dispatch);
+		rslt = _svcauth_gss(req, no_dispatch);
 		return (rslt);
 	case AUTH_NONE:
-		rslt = _svcauth_none(req, msg);
+		rslt = _svcauth_none(req);
 		return (rslt);
 		break;
 	case AUTH_SYS:
-		rslt = _svcauth_unix(req, msg);
+		rslt = _svcauth_unix(req);
 		return (rslt);
 	case AUTH_SHORT:
-		rslt = _svcauth_short(req, msg);
+		rslt = _svcauth_short(req);
 		return (rslt);
 #ifdef DES_BUILTIN
 	case AUTH_DES:
-		rslt = _svcauth_des(req, msg);
+		rslt = _svcauth_des(req);
 		return (rslt);
 #endif
 	default:
@@ -123,7 +120,7 @@ svc_auth_authenticate(struct svc_req *req, struct rpc_msg *msg,
 	for (asp = Auths; asp; asp = asp->next) {
 		if (asp->flavor == cred_flavor) {
 			enum auth_stat as;
-			as = (*asp->handler) (req, msg);
+			as = (*asp->handler) (req);
 			mutex_unlock(&authsvc_lock);
 			return (as);
 		}
@@ -148,7 +145,7 @@ svc_auth_authenticate(struct svc_req *req, struct rpc_msg *msg,
  */
 
 int svc_auth_reg(int cred_flavor,
-		 enum auth_stat (*handler) (struct svc_req *, struct rpc_msg *))
+		 enum auth_stat (*handler) (struct svc_req *))
 {
 	struct authsvc *asp;
 	extern mutex_t authsvc_lock;

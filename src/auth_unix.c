@@ -108,7 +108,6 @@ authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 	auth->ah_verf = au->au_shcred = _null_auth;
 	auth->ah_refcnt = 1;
 	au->au_shfaults = 0;
-	au->au_origcred.oa_base = NULL;
 
 	/*
 	 * fill in param struct from the given params
@@ -132,8 +131,7 @@ authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 	au->au_origcred.oa_length = len = XDR_GETPOS(&xdrs);
 	au->au_origcred.oa_flavor = AUTH_UNIX;
 
-	au->au_origcred.oa_base = mem_alloc((size_t) len);
-	memmove(au->au_origcred.oa_base, mymem, (size_t) len);
+	memcpy(au->au_origcred.oa_body, mymem, (size_t) len);
 
 	/*
 	 * set auth handle to reflect new cred.
@@ -250,20 +248,12 @@ authunix_validate(AUTH *auth, struct opaque_auth *verf)
 
 	if (verf->oa_flavor == AUTH_SHORT) {
 		au = AUTH_PRIVATE(auth);
-		xdrmem_create(&xdrs, verf->oa_base, verf->oa_length,
+		xdrmem_create(&xdrs, verf->oa_body, verf->oa_length,
 			      XDR_DECODE);
 
-		if (au->au_shcred.oa_base != NULL) {
-			mem_free(au->au_shcred.oa_base,
-				 au->au_shcred.oa_length);
-			au->au_shcred.oa_base = NULL;
-		}
 		if (xdr_opaque_auth(&xdrs, &au->au_shcred)) {
 			auth->ah_cred = au->au_shcred;
 		} else {
-			xdrs.x_op = XDR_FREE;
-			(void)xdr_opaque_auth(&xdrs, &au->au_shcred);
-			au->au_shcred.oa_base = NULL;
 			auth->ah_cred = au->au_origcred;
 		}
 		marshal_new_auth(auth);
@@ -282,7 +272,8 @@ authunix_refresh(AUTH *auth, void *dummy)
 
 	assert(auth != NULL);
 
-	if (auth->ah_cred.oa_base == au->au_origcred.oa_base) {
+	if (memcmp(&auth->ah_cred, &au->au_origcred, sizeof(struct opaque_auth))
+	    == 0) {
 		/* there is no hope.  Punt */
 		return (false);
 	}
@@ -291,7 +282,7 @@ authunix_refresh(AUTH *auth, void *dummy)
 	/* first deserialize the creds back into a struct authunix_parms */
 	aup.aup_machname = NULL;
 	aup.aup_gids = NULL;
-	xdrmem_create(&xdrs, au->au_origcred.oa_base, au->au_origcred.oa_length,
+	xdrmem_create(&xdrs, au->au_origcred.oa_body, au->au_origcred.oa_length,
 		      XDR_DECODE);
 	stat = xdr_authunix_parms(&xdrs, &aup);
 	if (!stat)
@@ -318,21 +309,9 @@ authunix_refresh(AUTH *auth, void *dummy)
 static void
 authunix_destroy(AUTH *auth)
 {
-	struct audata *au;
-
 	assert(auth != NULL);
 
-	au = AUTH_PRIVATE(auth);
-	mem_free(au->au_origcred.oa_base, au->au_origcred.oa_length);
-
-	if (au->au_shcred.oa_base != NULL)
-		mem_free(au->au_shcred.oa_base, au->au_shcred.oa_length);
-
 	mem_free(auth->ah_private, sizeof(struct audata));
-
-	if (auth->ah_verf.oa_base != NULL)
-		mem_free(auth->ah_verf.oa_base, auth->ah_verf.oa_length);
-
 	mem_free(auth, sizeof(*auth));
 }
 

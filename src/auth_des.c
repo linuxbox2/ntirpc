@@ -357,7 +357,7 @@ authdes_validate(AUTH *auth, struct opaque_auth *rverf)
 		return (false);
 
 	/* LINTED pointer alignment */
-	ixdr = (uint32_t *) rverf->oa_base;
+	ixdr = (uint32_t *) rverf->oa_body;
 	buf.key.high = (uint32_t) *ixdr++;
 	buf.key.low = (uint32_t) *ixdr++;
 	verf.adv_int_u = (uint32_t) *ixdr++;
