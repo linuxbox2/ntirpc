@@ -693,13 +693,14 @@ svcauth_gss_wrap(SVCAUTH *auth, struct svc_req *req, XDR *xdrs,
 	bool result;
 	struct svc_rpc_gss_data *gd = SVCAUTH_PRIVATE(req->rq_auth);
 	u_int gc_seq = (u_int) (uintptr_t) req->rq_ap1;
+	struct rpc_gss_cred *gc = (struct rpc_gss_cred *)req->rq_clntcred;
 
-	if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE)
+	if (!gd->established || gc->gc_svc == RPCSEC_GSS_SVC_NONE)
 		return ((*xdr_func) (xdrs, xdr_ptr));
 
 	mutex_lock(&gd->lock);
 	result = xdr_rpc_gss_data(xdrs, xdr_func, xdr_ptr, gd->ctx,
-				  gd->sec.qop, gd->sec.svc, gc_seq);
+				  gd->sec.qop, gc->gc_svc, gc_seq);
 	mutex_unlock(&gd->lock);
 	return (result);
 }
