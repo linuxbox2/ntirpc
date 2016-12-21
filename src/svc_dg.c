@@ -232,8 +232,9 @@ static void svc_dg_set_pktinfo(struct cmsghdr *cmsg, struct svc_req *req)
 }
 
 static bool
-svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
+svc_dg_recv(struct svc_req *req)
 {
+	SVCXPRT *xprt = req->rq_xprt;
 	struct svc_dg_data *su = su_data(xprt);
 	XDR *xdrs = &(su->su_xdrs);
 	char *reply;
@@ -244,11 +245,10 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 	size_t replylen;
 	ssize_t rlen;
 
+	rpc_msg_init(&req->rq_msg);
+
+	/* Magic marker value to check we didn't get the header. */
 	memset(&ss, 0xff, sizeof(struct sockaddr_storage));
-
-	/* Magic marker value to see if we didn't get the header. */
-
-	req->rq_msg = alloc_rpc_msg();
 
  again:
 	iov.iov_base = rpc_buffer(xprt);
@@ -285,15 +285,8 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 
 	xdrs->x_op = XDR_DECODE;
 	XDR_SETPOS(xdrs, 0);
-	if (!xdr_callmsg(xdrs, req->rq_msg))
+	if (!xdr_callmsg(xdrs, &req->rq_msg))
 		return (false);
-
-	req->rq_xprt = xprt;
-	req->rq_prog = req->rq_msg->rm_call.cb_prog;
-	req->rq_vers = req->rq_msg->rm_call.cb_vers;
-	req->rq_proc = req->rq_msg->rm_call.cb_proc;
-	req->rq_xid = req->rq_msg->rm_xid;
-	req->rq_clntcred = req->rq_msg->rq_cred_body;
 
 	/* save remote address */
 	req->rq_raddr_len = xprt->xp_remote.nb.len;
@@ -308,9 +301,9 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 #endif
 
 	/* XXX su->su_xid !MT-SAFE */
-	su->su_xid = req->rq_msg->rm_xid;
+	su->su_xid = req->rq_msg.rm_xid;
 	if (su->su_cache != NULL) {
-		if (svc_dg_cache_get(xprt, req->rq_msg, &reply, &replylen)) {
+		if (svc_dg_cache_get(xprt, &req->rq_msg, &reply, &replylen)) {
 			iov.iov_base = reply;
 			iov.iov_len = replylen;
 
@@ -336,8 +329,9 @@ svc_dg_recv(SVCXPRT *xprt, struct svc_req *req)
 }
 
 static bool
-svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
+svc_dg_reply(struct svc_req *req)
 {
+	SVCXPRT *xprt = req->rq_xprt;
 	struct svc_dg_data *su = su_data(xprt);
 	XDR *xdrs = &(su->su_xdrs);
 	bool stat = false;
@@ -347,13 +341,13 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 	caddr_t xdr_location;
 	bool has_args;
 
-	if (msg->rm_reply.rp_stat == MSG_ACCEPTED
-	    && msg->rm_reply.rp_acpt.ar_stat == SUCCESS) {
+	if (req->rq_msg.rm_reply.rp_stat == MSG_ACCEPTED
+	    && req->rq_msg.rm_reply.rp_acpt.ar_stat == SUCCESS) {
 		has_args = true;
-		xdr_results = msg->acpted_rply.ar_results.proc;
-		xdr_location = msg->acpted_rply.ar_results.where;
-		msg->acpted_rply.ar_results.proc = (xdrproc_t) xdr_void;
-		msg->acpted_rply.ar_results.where = NULL;
+		xdr_results = req->rq_msg.RPCM_ack.ar_results.proc;
+		xdr_location = req->rq_msg.RPCM_ack.ar_results.where;
+		req->rq_msg.RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
+		req->rq_msg.RPCM_ack.ar_results.where = NULL;
 	} else {
 		xdr_results = NULL;
 		xdr_location = NULL;
@@ -363,7 +357,7 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 	xdrs->x_op = XDR_ENCODE;
 	XDR_SETPOS(xdrs, 0);
 
-	if (xdr_replymsg(xdrs, msg) && req->rq_raddr_len
+	if (xdr_replymsg(xdrs, &req->rq_msg) && req->rq_raddr_len
 	    && (!has_args
 		||
 		(SVCAUTH_WRAP
@@ -397,17 +391,16 @@ svc_dg_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 }
 
 static bool
-svc_dg_freeargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
-		void *args_ptr)
+svc_dg_freeargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr)
 {
 	return xdr_free(xdr_args, args_ptr);
 }
 
 static bool
-svc_dg_getargs(SVCXPRT *xprt, struct svc_req *req,
-	       xdrproc_t xdr_args, void *args_ptr, void *u_data)
+svc_dg_getargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr,
+	       void *u_data)
 {
-	struct svc_dg_data *su = su_data(xprt);
+	struct svc_dg_data *su = su_data(req->rq_xprt);
 	XDR *xdrs = &(su->su_xdrs);
 	bool rslt;
 
@@ -416,7 +409,7 @@ svc_dg_getargs(SVCXPRT *xprt, struct svc_req *req,
 
 	rslt = SVCAUTH_UNWRAP(req->rq_auth, req, xdrs, xdr_args, args_ptr);
 	if (!rslt) {
-		svc_dg_freeargs(xprt, req, xdr_args, args_ptr);
+		svc_dg_freeargs(req, xdr_args, args_ptr);
 	}
 
 	return (rslt);
@@ -697,9 +690,9 @@ svc_dg_cache_get(SVCXPRT *xprt, struct rpc_msg *msg, char **replyp,
 	loc = CACHE_LOC(xprt, su->su_xid);
 	for (ent = uc->uc_entries[loc]; ent != NULL; ent = ent->cache_next) {
 		if (ent->cache_xid == su->su_xid
-		    && ent->cache_proc == msg->rm_call.cb_proc
-		    && ent->cache_vers == msg->rm_call.cb_vers
-		    && ent->cache_prog == msg->rm_call.cb_prog
+		    && ent->cache_proc == msg->cb_proc
+		    && ent->cache_vers == msg->cb_vers
+		    && ent->cache_prog == msg->cb_prog
 		    && ent->cache_addr.len == xprt->xp_remote.nb.len
 		    &&
 		    (memcmp
@@ -716,9 +709,9 @@ svc_dg_cache_get(SVCXPRT *xprt, struct rpc_msg *msg, char **replyp,
 						"cache entry found for xid=%x prog=%d "
 						"vers=%d proc=%d for rmtaddr=%s\n",
 						su->su_xid,
-						msg->rm_call.cb_prog,
-						msg->rm_call.cb_vers,
-						msg->rm_call.cb_proc, uaddr);
+						msg->cb_prog,
+						msg->cb_vers,
+						msg->cb_proc, uaddr);
 					mem_free(uaddr, 0);
 				}
 			}	/* RPC_CACHE_DEBUG */
@@ -732,9 +725,9 @@ svc_dg_cache_get(SVCXPRT *xprt, struct rpc_msg *msg, char **replyp,
 	 * Failed to find entry
 	 * Remember a few things so we can do a set later
 	 */
-	uc->uc_proc = msg->rm_call.cb_proc;
-	uc->uc_vers = msg->rm_call.cb_vers;
-	uc->uc_prog = msg->rm_call.cb_prog;
+	uc->uc_proc = msg->cb_proc;
+	uc->uc_vers = msg->cb_vers;
+	uc->uc_prog = msg->cb_prog;
 	mutex_unlock(&dupreq_lock);
 	return (0);
 }

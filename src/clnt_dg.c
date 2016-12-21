@@ -164,8 +164,8 @@ clnt_dg_ncreate(int fd,	/* open file descriptor */
 	cu->cu_connected = false;
 	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &now);
 	call_msg.rm_xid = __RPC_GETXID(&now);	/* XXX? */
-	call_msg.rm_call.cb_prog = program;
-	call_msg.rm_call.cb_vers = version;
+	call_msg.cb_prog = program;
+	call_msg.cb_vers = version;
 	xdrmem_create(&(cu->cu_outxdrs), cu->cu_outbuf, sendsz, XDR_ENCODE);
 	if (!xdr_callhdr(&(cu->cu_outxdrs), &call_msg)) {
 		rpc_createerr.cf_stat = RPC_CANTENCODEARGS;	/* XXX */
@@ -316,9 +316,9 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	rpc_dplx_rlc(clnt);
 	rlocked = true;
 
-	reply_msg.acpted_rply.ar_verf = _null_auth;
-	reply_msg.acpted_rply.ar_results.where = NULL;
-	reply_msg.acpted_rply.ar_results.proc = (xdrproc_t) xdr_void;
+	reply_msg.RPCM_ack.ar_verf = _null_auth;
+	reply_msg.RPCM_ack.ar_results.where = NULL;
+	reply_msg.RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
 
 	fd.fd = cu->cu_fd;
 	fd.events = POLLIN;
@@ -428,14 +428,14 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	/* XDR_DESTROY(&reply_xdrs); save a few cycles on noop destroy */
 	if (ok) {
 		if ((reply_msg.rm_reply.rp_stat == MSG_ACCEPTED)
-		    && (reply_msg.acpted_rply.ar_stat == SUCCESS))
+		    && (reply_msg.RPCM_ack.ar_stat == SUCCESS))
 			cu->cu_error.re_status = RPC_SUCCESS;
 		else
 			_seterr_reply(&reply_msg, &(cu->cu_error));
 
 		if (cu->cu_error.re_status == RPC_SUCCESS) {
 			if (!AUTH_VALIDATE
-			    (auth, &reply_msg.acpted_rply.ar_verf)) {
+			    (auth, &reply_msg.RPCM_ack.ar_verf)) {
 				cu->cu_error.re_status = RPC_AUTHERROR;
 				cu->cu_error.re_why = AUTH_INVALIDRESP;
 			} else
@@ -444,12 +444,6 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 				if (cu->cu_error.re_status == RPC_SUCCESS)
 					cu->cu_error.re_status =
 					    RPC_CANTDECODERES;
-			}
-			if (reply_msg.acpted_rply.ar_verf.oa_base != NULL) {
-				xdrs->x_op = XDR_FREE;
-				(void)xdr_opaque_auth(xdrs,
-						      &(reply_msg.acpted_rply.
-							ar_verf));
 			}
 		}
 		/* end successful completion */

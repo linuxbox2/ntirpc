@@ -296,8 +296,12 @@ authgss_marshal(AUTH *auth, XDR *xdrs)
 		return (false);
 	}
 	auth->ah_cred.oa_flavor = RPCSEC_GSS;
-	auth->ah_cred.oa_base = tmp;
 	auth->ah_cred.oa_length = XDR_GETPOS(&tmpxdrs);
+	if (auth->ah_cred.oa_length > MAX_AUTH_BYTES) {
+		XDR_DESTROY(&tmpxdrs);
+		return (false);
+	}
+	memcpy(auth->ah_cred.oa_body, tmp, auth->ah_cred.oa_length);
 
 	XDR_DESTROY(&tmpxdrs);
 
@@ -324,9 +328,14 @@ authgss_marshal(AUTH *auth, XDR *xdrs)
 		}
 		return (false);
 	}
+	if (checksum.length > MAX_AUTH_BYTES) {
+		log_status("checksum.length", maj_stat, min_stat);
+		gss_release_buffer(&min_stat, &checksum);
+		return (false);
+	}
 	auth->ah_verf.oa_flavor = RPCSEC_GSS;
-	auth->ah_verf.oa_base = checksum.value;
 	auth->ah_verf.oa_length = checksum.length;
+	memcpy(auth->ah_verf.oa_body, checksum.value, checksum.length);
 
 	xdr_stat = xdr_opaque_auth(xdrs, &auth->ah_verf);
 	gss_release_buffer(&min_stat, &checksum);
@@ -354,7 +363,7 @@ authgss_validate(AUTH *auth, struct opaque_auth *verf)
 		 * status is GSS_S_COMPLETE
 		 */
 		gd->gc_wire_verf.value = mem_alloc(verf->oa_length);
-		memcpy(gd->gc_wire_verf.value, verf->oa_base, verf->oa_length);
+		memcpy(gd->gc_wire_verf.value, verf->oa_body, verf->oa_length);
 		gd->gc_wire_verf.length = verf->oa_length;
 		return (true);
 	}
@@ -368,7 +377,7 @@ authgss_validate(AUTH *auth, struct opaque_auth *verf)
 	signbuf.value = &num;
 	signbuf.length = sizeof(num);
 
-	checksum.value = verf->oa_base;
+	checksum.value = verf->oa_body;
 	checksum.length = verf->oa_length;
 
 	maj_stat =

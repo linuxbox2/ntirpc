@@ -262,8 +262,8 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	call_msg.rm_xid = 1;
 	call_msg.rm_direction = CALL;
 	call_msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
-	call_msg.rm_call.cb_prog = (u_int32_t) prog;
-	call_msg.rm_call.cb_vers = (u_int32_t) vers;
+	call_msg.cb_prog = prog;
+	call_msg.cb_vers = vers;
 
 	/*
 	 * pre-serialize the static part of the call msg and stash it away
@@ -473,9 +473,9 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 			goto unlock;
 		}
 		/* switch on direction */
-		switch (ctx->msg->rm_direction) {
+		switch (ctx->cc_msg.rm_direction) {
 		case REPLY:
-			if (ctx->msg->rm_xid == ctx->xid) {
+			if (ctx->cc_msg.rm_xid == ctx->xid) {
 				ctx_needack = true;
 				goto replied;
 			}
@@ -500,7 +500,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 			}
 
 			/* now decode and validate the response header */
-			if (!xdr_dplx_decode(xdrs, ctx->msg)) {
+			if (!xdr_dplx_decode(xdrs, &ctx->cc_msg)) {
 				__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
 					"%s: error at xdr_dplx_decode",
 					__func__);
@@ -508,9 +508,9 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 			}
 
 			/* switch on direction */
-			switch (ctx->msg->rm_direction) {
+			switch (ctx->cc_msg.rm_direction) {
 			case REPLY:
-				if (ctx->msg->rm_xid == ctx->xid)
+				if (ctx->cc_msg.rm_xid == ctx->xid)
 					goto replied;
 				break;
 			case CALL:
@@ -529,9 +529,9 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
  replied:
 	/* XXX move into routine which can be called from rpc_ctx_xfer_replymsg,
 	 * for (maybe) reduced MP overhead */
-	_seterr_reply(ctx->msg, &(ctx->error));
+	_seterr_reply(&ctx->cc_msg, &(ctx->error));
 	if (ctx->error.re_status == RPC_SUCCESS) {
-		if (!AUTH_VALIDATE(auth, &(ctx->msg->acpted_rply.ar_verf))) {
+		if (!AUTH_VALIDATE(auth, &(ctx->cc_msg.RPCM_ack.ar_verf))) {
 			ctx->error.re_status = RPC_AUTHERROR;
 			ctx->error.re_why = AUTH_INVALIDRESP;
 		} else if (xdr_results /* XXX caller setup error? */ &&
@@ -539,18 +539,12 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 			if (ctx->error.re_status == RPC_SUCCESS)
 				ctx->error.re_status = RPC_CANTDECODERES;
 		}
-		/* free verifier ... */
-		if (ctx->msg->acpted_rply.ar_verf.oa_base != NULL) {
-			xdrs->x_op = XDR_FREE;
-			(void)xdr_opaque_auth(xdrs,
-					      &(ctx->msg->acpted_rply.ar_verf));
-		}
 		if (ctx_needack)
 			rpc_ctx_ack_xfer(ctx);
 	} /* end successful completion */
 	else {
 		/* maybe our credentials need to be refreshed ... */
-		if (refreshes-- && AUTH_REFRESH(auth, &(ctx->msg))) {
+		if (refreshes-- && AUTH_REFRESH(auth, &(ctx->cc_msg))) {
 			rpc_ctx_next_xid(ctx, RPC_CTX_FLAG_NONE);
 			rpc_dplx_ruc(clnt);
 			if (ctx_needack)

@@ -52,7 +52,7 @@ extern SVCAUTH svc_auth_none;
  * Unix longhand authenticator
  */
 enum auth_stat
-_svcauth_unix(struct svc_req *req, struct rpc_msg *msg)
+_svcauth_unix(struct svc_req *req)
 {
 	enum auth_stat stat;
 	XDR xdrs;
@@ -68,16 +68,15 @@ _svcauth_unix(struct svc_req *req, struct rpc_msg *msg)
 	u_int i;
 
 	assert(req != NULL);
-	assert(msg != NULL);
 
 	req->rq_auth = &svc_auth_none;
 
-	area = (struct area *)req->rq_clntcred;
+	area = (struct area *)req->rq_msg.rq_cred_body;
 	aup = &area->area_aup;
 	aup->aup_machname = area->area_machname;
 	aup->aup_gids = area->area_gids;
-	auth_len = (u_int) msg->rm_call.cb_cred.oa_length;
-	xdrmem_create(&xdrs, msg->rm_call.cb_cred.oa_base, auth_len,
+	auth_len = (u_int) req->rq_msg.cb_cred.oa_length;
+	xdrmem_create(&xdrs, req->rq_msg.cb_cred.oa_body, auth_len,
 		      XDR_DECODE);
 	buf = XDR_INLINE(&xdrs, auth_len);
 	if (buf != NULL) {
@@ -122,14 +121,7 @@ _svcauth_unix(struct svc_req *req, struct rpc_msg *msg)
 	}
 
 	/* get the verifier */
-	if ((u_int) msg->rm_call.cb_verf.oa_length) {
-		req->rq_verf.oa_flavor = msg->rm_call.cb_verf.oa_flavor;
-		req->rq_verf.oa_base = msg->rm_call.cb_verf.oa_base;
-		req->rq_verf.oa_length = msg->rm_call.cb_verf.oa_length;
-	} else {
-		req->rq_verf.oa_flavor = AUTH_NULL;
-		req->rq_verf.oa_length = 0;
-	}
+	req->rq_msg.RPCM_ack.ar_verf = req->rq_msg.cb_verf;
 	stat = AUTH_OK;
  done:
 	XDR_DESTROY(&xdrs);
@@ -143,7 +135,7 @@ _svcauth_unix(struct svc_req *req, struct rpc_msg *msg)
  */
  /*ARGSUSED*/
 enum auth_stat
-_svcauth_short(struct svc_req *req, struct rpc_msg *msg)
+_svcauth_short(struct svc_req *req)
 {
 	req->rq_auth = &svc_auth_none;
 	return (AUTH_REJECTEDCRED);

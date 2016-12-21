@@ -534,6 +534,45 @@ inline_xdr_opaque(XDR *xdrs, caddr_t cp, u_int cnt)
 }
 
 /*
+ * XDR counted opaques
+ * *sp is a pointer to the bytes, *sizep is the count.
+ */
+static inline bool
+inline_xdr_opaques(XDR *xdrs, char *sp, u_int *sizep, u_int maxsize)
+{
+	u_int nodesize;
+
+	/*
+	 * first deal with the length since xdr bytes are counted
+	 */
+	if (!inline_xdr_u_int(xdrs, sizep))
+		return (false);
+
+	nodesize = *sizep;
+	if ((nodesize > maxsize) && (xdrs->x_op != XDR_FREE))
+		return (false);
+
+	/*
+	 * now deal with the actual bytes
+	 */
+	switch (xdrs->x_op) {
+
+	case XDR_DECODE:
+		if (nodesize == 0)
+			return (true);
+		return (inline_xdr_getopaque(xdrs, sp, nodesize));
+
+	case XDR_ENCODE:
+		return (inline_xdr_putopaque(xdrs, sp, nodesize));
+
+	case XDR_FREE:
+		return (true);
+	}
+	/* NOTREACHED */
+	return (false);
+}
+
+/*
  * XDR counted bytes
  * *cpp is a pointer to the bytes, *sizep is the count.
  * If *cpp is NULL maxsize bytes are allocated
@@ -578,17 +617,6 @@ inline_xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep,
 	}
 	/* NOTREACHED */
 	return (false);
-}
-
-/*
- * Implemented here due to commonality of the object.
- */
-static inline bool
-inline_xdr_netobj(XDR *xdrs, struct netobj *np)
-{
-
-	return (inline_xdr_bytes
-		(xdrs, &np->n_bytes, &np->n_len, MAX_NETOBJ_SZ));
 }
 
 /*

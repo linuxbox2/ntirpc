@@ -72,7 +72,6 @@ alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
 	ctx->ctx_u.clnt.timeout.tv_sec = 0;
 	ctx->ctx_u.clnt.timeout.tv_nsec = 0;
 	timespec_addms(&ctx->ctx_u.clnt.timeout, tv_to_ms(&timeout));
-	ctx->msg = alloc_rpc_msg();
 	ctx->flags = 0;
 
 	/* stash it */
@@ -130,8 +129,8 @@ rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg)
 	if (nv) {
 		ctx = opr_containerof(nv, rpc_ctx_t, node_k);
 		opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
-		free_rpc_msg(ctx->msg);	/* free call header */
-		ctx->msg = msg;	/* and stash reply header */
+		ctx->cc_msg = *msg;	/* and stash reply header */
+
 		ctx->flags |= RPC_CTX_FLAG_SYNCDONE;
 		REC_UNLOCK(xd->rec);
 		cond_signal(&lk->we.cv);	/* XXX we hold lk->we.mtx */
@@ -194,9 +193,9 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 	ctx->flags &= ~RPC_CTX_FLAG_SYNCDONE;
 
 	/* switch on direction */
-	switch (ctx->msg->rm_direction) {
+	switch (ctx->cc_msg.rm_direction) {
 	case REPLY:
-		if (ctx->msg->rm_xid == ctx->xid)
+		if (ctx->cc_msg.rm_xid == ctx->xid)
 			return (RPC_SUCCESS);
 		break;
 	case CALL:
@@ -244,8 +243,6 @@ free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
 	mutex_unlock(&ctx->we.mtx);
 	REC_UNLOCK(rec);
 
-	if (ctx->msg)
-		free_rpc_msg(ctx->msg);
 	mutex_destroy(&ctx->we.mtx);
 	cond_destroy(&ctx->we.cv);
 	mem_free(ctx, sizeof(*ctx));

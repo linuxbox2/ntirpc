@@ -208,15 +208,14 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 #define INDEF_EXPIRE 60*60*24	/* from mit k5 src/lib/rpc/svc_auth_gssapi.c */
 	OM_uint32 time_rec;
 
-	gc = (struct rpc_gss_cred *)req->rq_clntcred;
+	gc = (struct rpc_gss_cred *)req->rq_msg.rq_cred_body;
 	memset(gr, 0, sizeof(*gr));
 
 	/* Deserialize arguments. */
 	memset(&recv_tok, 0, sizeof(recv_tok));
 
-	if (!svc_getargs
-	    (req->rq_xprt, req, (xdrproc_t) xdr_rpc_gss_init_args,
-	     (caddr_t) &recv_tok, NULL /* u_data */))
+	if (!svc_getargs(req, (xdrproc_t) xdr_rpc_gss_init_args,
+			 (caddr_t) &recv_tok, NULL /* u_data */))
 		return (false);
 
 	gr->gr_major =
@@ -225,7 +224,7 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 				   &gd->client_name, &mech, &gr->gr_token,
 				   &ret_flags, &time_rec, NULL);
 
-	svc_freeargs(req->rq_xprt, req, (xdrproc_t) xdr_rpc_gss_init_args,
+	svc_freeargs(req, (xdrproc_t) xdr_rpc_gss_init_args,
 		     (caddr_t) &recv_tok);
 
 	if ((gr->gr_major != GSS_S_COMPLETE)
@@ -305,9 +304,14 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 		}
 
 		/* XXX ref? (assert gd->locked?) */
-		req->rq_verf.oa_flavor = RPCSEC_GSS;
-		req->rq_verf.oa_base = checksum.value;
-		req->rq_verf.oa_length = checksum.length;
+		if (checksum.length > MAX_AUTH_BYTES){
+			gss_release_buffer(&min_stat, &gr->gr_token);
+			return (false);
+		}
+		req->rq_msg.RPCM_ack.ar_verf.oa_flavor = RPCSEC_GSS;
+		req->rq_msg.RPCM_ack.ar_verf.oa_length = checksum.length;
+		memcpy(req->rq_msg.RPCM_ack.ar_verf.oa_body, checksum.value,
+		       checksum.length);
 	}
 	return (true);
 }
@@ -316,19 +320,18 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 
 static int
 svcauth_gss_validate(struct svc_req *req,
-		     struct svc_rpc_gss_data *gd,
-		     struct rpc_msg *msg)
+		     struct svc_rpc_gss_data *gd)
 {
 	struct opaque_auth *oa;
+	int32_t *buf;
 	gss_buffer_desc rpcbuf, checksum;
 	OM_uint32 maj_stat, min_stat, qop_state;
 	u_char rpchdr[RPCHDR_LEN];
-	int32_t *buf;
 
 	memset(rpchdr, 0, RPCHDR_LEN);
 
 	/* XXX - Reconstruct RPC header for signing (from xdr_callmsg). */
-	oa = &msg->rm_call.cb_cred;
+	oa = &req->rq_msg.cb_cred;
 	if (oa->oa_length > MAX_AUTH_BYTES)
 		return GSS_S_CALL_BAD_STRUCTURE;
 	/* XXX since MAX_AUTH_BYTES is 400, the following code trivially
@@ -336,23 +339,23 @@ svcauth_gss_validate(struct svc_req *req,
 	 * what is marshalled below). */
 
 	buf = (int32_t *) rpchdr;
-	IXDR_PUT_LONG(buf, msg->rm_xid);
-	IXDR_PUT_ENUM(buf, msg->rm_direction);
-	IXDR_PUT_LONG(buf, msg->rm_call.cb_rpcvers);
-	IXDR_PUT_LONG(buf, msg->rm_call.cb_prog);
-	IXDR_PUT_LONG(buf, msg->rm_call.cb_vers);
-	IXDR_PUT_LONG(buf, msg->rm_call.cb_proc);
+	IXDR_PUT_LONG(buf, req->rq_msg.rm_xid);
+	IXDR_PUT_ENUM(buf, req->rq_msg.rm_direction);
+	IXDR_PUT_LONG(buf, req->rq_msg.rm_call.cb_rpcvers);
+	IXDR_PUT_LONG(buf, req->rq_msg.cb_prog);
+	IXDR_PUT_LONG(buf, req->rq_msg.cb_vers);
+	IXDR_PUT_LONG(buf, req->rq_msg.cb_proc);
 	IXDR_PUT_ENUM(buf, oa->oa_flavor);
 	IXDR_PUT_LONG(buf, oa->oa_length);
 	if (oa->oa_length) {
-		memcpy((caddr_t) buf, oa->oa_base, oa->oa_length);
+		memcpy((caddr_t) buf, oa->oa_body, oa->oa_length);
 		buf += RNDUP(oa->oa_length) / sizeof(int32_t);
 	}
 	rpcbuf.value = rpchdr;
 	rpcbuf.length = (u_char *) buf - rpchdr;
 
-	checksum.value = msg->rm_call.cb_verf.oa_base;
-	checksum.length = msg->rm_call.cb_verf.oa_length;
+	checksum.value = req->rq_msg.cb_verf.oa_body;
+	checksum.length = req->rq_msg.cb_verf.oa_length;
 
 	maj_stat =
 	    gss_verify_mic(&min_stat, gd->ctx, &rpcbuf, &checksum, &qop_state);
@@ -360,9 +363,8 @@ svcauth_gss_validate(struct svc_req *req,
 	if (maj_stat != GSS_S_COMPLETE) {
 		__warnx(TIRPC_DEBUG_FLAG_AUTH, "%s: %d %d", __func__, maj_stat,
 			min_stat);
-		return (maj_stat);
 	}
-	return GSS_S_COMPLETE;
+	return (maj_stat);
 }
 
 bool
@@ -382,9 +384,14 @@ svcauth_gss_nextverf(struct svc_req *req, struct svc_rpc_gss_data *gd,
 		log_status("gss_get_mic", maj_stat, min_stat);
 		return (false);
 	}
-	req->rq_verf.oa_flavor = RPCSEC_GSS;
-	req->rq_verf.oa_base = (caddr_t) checksum.value;
-	req->rq_verf.oa_length = (u_int) checksum.length;
+	if (checksum.length > MAX_AUTH_BYTES) {
+		log_status("checksum.length", maj_stat, min_stat);
+		return (false);
+	}
+	req->rq_msg.RPCM_ack.ar_verf.oa_flavor = RPCSEC_GSS;
+	req->rq_msg.RPCM_ack.ar_verf.oa_length = checksum.length;
+	memcpy(req->rq_msg.RPCM_ack.ar_verf.oa_body, checksum.value,
+	       checksum.length);
 
 	return (true);
 }
@@ -399,8 +406,7 @@ svcauth_gss_nextverf(struct svc_req *req, struct svc_rpc_gss_data *gd,
 	} while (0)
 
 enum auth_stat
-_svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
-	     bool *no_dispatch)
+_svcauth_gss(struct svc_req *req, bool *no_dispatch)
 {
 	XDR xdrs[1];
 	SVCAUTH *auth;
@@ -413,17 +419,17 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 	bool gd_hashed = false;
 
 	/* Initialize reply. */
-	req->rq_verf = _null_auth;
+	req->rq_msg.RPCM_ack.ar_verf = _null_auth;
 
 	/* Unserialize client credentials. */
-	if (req->rq_cred.oa_length <= 0)
+	if (req->rq_msg.cb_cred.oa_length <= 0)
 		svcauth_gss_return(AUTH_BADCRED);
 
-	gc = (struct rpc_gss_cred *)req->rq_clntcred;
+	gc = (struct rpc_gss_cred *)req->rq_msg.rq_cred_body;
 	memset(gc, 0, sizeof(struct rpc_gss_cred));
 
-	xdrmem_create(xdrs, req->rq_cred.oa_base, req->rq_cred.oa_length,
-		      XDR_DECODE);
+	xdrmem_create(xdrs, req->rq_msg.cb_cred.oa_body,
+		      req->rq_msg.cb_cred.oa_length, XDR_DECODE);
 
 	if (!xdr_rpc_gss_cred(xdrs, gc)) {
 		XDR_DESTROY(xdrs);
@@ -513,7 +519,7 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 	case RPCSEC_GSS_INIT:
 	case RPCSEC_GSS_CONTINUE_INIT:
 
-		if (req->rq_proc != NULLPROC)
+		if (req->rq_msg.cb_proc != NULLPROC)
 			svcauth_gss_return(AUTH_FAILED); /* XXX ? */
 
 		/* XXX why unconditionally acquire creds? */
@@ -533,7 +539,7 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 		*no_dispatch = true;
 
 		call_stat =
-		    svc_sendreply(req->rq_xprt, req,
+		    svc_sendreply(req,
 				  (xdrproc_t) xdr_rpc_gss_init_res,
 				  (caddr_t) &gr);
 
@@ -588,7 +594,7 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 		 * after a validate or verf failure ? */
 
 	case RPCSEC_GSS_DATA:
-		call_stat = svcauth_gss_validate(req, gd, msg);
+		call_stat = svcauth_gss_validate(req, gd);
 		switch (call_stat) {
 		default:
 			svcauth_gss_return(RPCSEC_GSS_CREDPROBLEM);
@@ -601,10 +607,10 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 		break;
 
 	case RPCSEC_GSS_DESTROY:
-		if (req->rq_proc != NULLPROC)
+		if (req->rq_msg.cb_proc != NULLPROC)
 			svcauth_gss_return(AUTH_FAILED);	/* XXX ? */
 
-		if (svcauth_gss_validate(req, gd, msg))
+		if (svcauth_gss_validate(req, gd))
 			svcauth_gss_return(RPCSEC_GSS_CREDPROBLEM);
 
 		if (!svcauth_gss_nextverf(req, gd, htonl(gc->gc_seq)))
@@ -619,7 +625,8 @@ _svcauth_gss(struct svc_req *req, struct rpc_msg *msg,
 		gd_locked = false;
 
 		call_stat =
-		    svc_sendreply(req->rq_xprt, req, (xdrproc_t) xdr_void,
+		    svc_sendreply(req,
+				  (xdrproc_t) xdr_void,
 				  (caddr_t) NULL);
 
 		/* We acquired a reference on gd with authgss_ctx_hash_get
@@ -643,20 +650,11 @@ static bool
 svcauth_gss_release(SVCAUTH *auth, struct svc_req *req)
 {
 	struct svc_rpc_gss_data *gd;
-	caddr_t last_oa_base;
 
 	gd = SVCAUTH_PRIVATE(auth);
 	if (gd)
 		unref_svc_rpc_gss_data(gd, SVC_RPC_GSS_FLAG_NONE);
 	req->rq_auth = NULL;
-
-	if ((last_oa_base = req->rq_verf.oa_base)) {
-		/* XXX wrapper conflict: mem_free vs. gssalloc_free ? */
-		/* ... but this only matters for win32 | kernel */
-		req->rq_verf.oa_base = 0;
-		mem_free(last_oa_base, req->rq_verf.oa_length);
-	}
-
 	return (true);
 }
 
@@ -693,7 +691,8 @@ svcauth_gss_wrap(SVCAUTH *auth, struct svc_req *req, XDR *xdrs,
 	bool result;
 	struct svc_rpc_gss_data *gd = SVCAUTH_PRIVATE(req->rq_auth);
 	u_int gc_seq = (u_int) (uintptr_t) req->rq_ap1;
-	struct rpc_gss_cred *gc = (struct rpc_gss_cred *)req->rq_clntcred;
+	struct rpc_gss_cred *gc = (struct rpc_gss_cred *)
+					req->rq_msg.rq_cred_body;
 
 	if (!gd->established || gc->gc_svc == RPCSEC_GSS_SVC_NONE)
 		return ((*xdr_func) (xdrs, xdr_ptr));

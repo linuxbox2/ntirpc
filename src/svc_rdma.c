@@ -148,16 +148,16 @@ svc_rdma_stat(SVCXPRT *xprt)
 }
 
 static bool
-svc_rdma_recv(SVCXPRT *xprt, struct svc_req *req)
+svc_rdma_recv(struct svc_req *req)
 {
 	struct rpc_rdma_cbc *cbc = req->rq_context;
 	XDR *xdrs = cbc->holdq.xdrs;
 
 	__warnx(TIRPC_DEBUG_FLAG_SVC_RDMA,
-		"%s() xprt %p cbc %p incoming xdr %p\n",
-		__func__, xprt, cbc, xdrs);
+		"%s() xprt %p req %p cbc %p incoming xdr %p\n",
+		__func__, req->rq_xprt, req, cbc, xdrs);
 
-	req->rq_msg = alloc_rpc_msg();
+	rpc_msg_init(&req->rq_msg);
 
 	if (!xdr_rdma_svc_recv(cbc, 0)){
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RDMA,
@@ -170,19 +170,12 @@ svc_rdma_recv(SVCXPRT *xprt, struct svc_req *req)
 	/* No need, already positioned to beginning ...
 	XDR_SETPOS(xdrs, 0);
 	 */
-	if (!xdr_dplx_decode(xdrs, req->rq_msg)) {
+	if (!xdr_dplx_decode(xdrs, &req->rq_msg)) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RDMA,
 			"%s: xdr_dplx_decode failed",
 			__func__);
 		return (FALSE);
 	}
-
-	req->rq_xprt = xprt;
-	req->rq_prog = req->rq_msg->rm_call.cb_prog;
-	req->rq_vers = req->rq_msg->rm_call.cb_vers;
-	req->rq_proc = req->rq_msg->rm_call.cb_proc;
-	req->rq_xid = req->rq_msg->rm_xid;
-	req->rq_clntcred = req->rq_msg->rq_cred_body;
 
 	/* the checksum */
 	req->rq_cksum = 0;
@@ -191,7 +184,7 @@ svc_rdma_recv(SVCXPRT *xprt, struct svc_req *req)
 }
 
 static bool
-svc_rdma_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
+svc_rdma_reply(struct svc_req *req)
 {
 	struct rpc_rdma_cbc *cbc = req->rq_context;
 	XDR *xdrs = cbc->holdq.xdrs;
@@ -200,16 +193,16 @@ svc_rdma_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 	bool has_args;
 
 	__warnx(TIRPC_DEBUG_FLAG_SVC_RDMA,
-		"%s() xprt %p cbc %p outgoing xdr %p\n",
-		__func__, xprt, cbc, xdrs);
+		"%s() xprt %p req %p cbc %p outgoing xdr %p\n",
+		__func__, req->rq_xprt, req, cbc, xdrs);
 
-	if (msg->rm_reply.rp_stat == MSG_ACCEPTED
-	 && msg->rm_reply.rp_acpt.ar_stat == SUCCESS) {
+	if (req->rq_msg.rm_reply.rp_stat == MSG_ACCEPTED
+	 && req->rq_msg.rm_reply.rp_acpt.ar_stat == SUCCESS) {
 	    has_args = TRUE;
-	    proc = msg->acpted_rply.ar_results.proc;
-	    where = msg->acpted_rply.ar_results.where;
-	    msg->acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
-	    msg->acpted_rply.ar_results.where = NULL;
+	    proc = req->rq_msg.RPCM_ack.ar_results.proc;
+	    where = req->rq_msg.RPCM_ack.ar_results.where;
+	    req->rq_msg.RPCM_ack.ar_results.proc = (xdrproc_t)xdr_void;
+	    req->rq_msg.RPCM_ack.ar_results.where = NULL;
 	} else {
 	    has_args = FALSE;
 	    proc = NULL;
@@ -224,7 +217,7 @@ svc_rdma_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 	}
 	xdrs->x_op = XDR_ENCODE;
 
-	if (!xdr_reply_encode(xdrs, msg)) {
+	if (!xdr_reply_encode(xdrs, &req->rq_msg)) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RDMA,
 			"%s: xdr_reply_encode failed (will set dead)",
 			__func__);
@@ -245,8 +238,7 @@ svc_rdma_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 }
 
 static bool
-svc_rdma_freeargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
-		  void *args_ptr)
+svc_rdma_freeargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr)
 {
 	struct rpc_rdma_cbc *cbc = req->rq_context;
 	XDR *xdrs = cbc->holdq.xdrs;
@@ -256,8 +248,8 @@ svc_rdma_freeargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
 }
 
 static bool
-svc_rdma_getargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
-		 void *args_ptr, void *u_data)
+svc_rdma_getargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr,
+		 void *u_data)
 {
 	struct rpc_rdma_cbc *cbc = req->rq_context;
 	XDR *xdrs = cbc->holdq.xdrs;
@@ -268,7 +260,7 @@ svc_rdma_getargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
 
 	rslt = SVCAUTH_UNWRAP(req->rq_auth, req, xdrs, xdr_args, args_ptr);
 	if (!rslt)
-		svc_rdma_freeargs(xprt, req, xdr_args, args_ptr);
+		svc_rdma_freeargs(req, xdr_args, args_ptr);
 
 	return (rslt);
 }

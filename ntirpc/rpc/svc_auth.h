@@ -74,10 +74,7 @@ typedef struct SVCAUTH {
  * Server side authenticator
  */
 __BEGIN_DECLS
-extern enum auth_stat svc_auth_authenticate(struct svc_req *,
-					    struct rpc_msg *,
-					    bool *);
-extern int svc_auth_reg(int,
-			enum auth_stat (*)(struct svc_req *, struct rpc_msg *));
+extern enum auth_stat svc_auth_authenticate(struct svc_req *, bool *);
+extern int svc_auth_reg(int, enum auth_stat (*)(struct svc_req *));
 __END_DECLS
 #endif				/* !_RPC_SVC_AUTH_H */

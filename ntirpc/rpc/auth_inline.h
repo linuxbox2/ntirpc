@@ -65,7 +65,7 @@ inline_auth_encode_opaque(XDR *xdrs, struct opaque_auth *oa)
 		return (false);
 	}
 
-	return (inline_xdr_putopaque(xdrs, oa->oa_base, oa->oa_length));
+	return (inline_xdr_putopaque(xdrs, oa->oa_body, oa->oa_length));
 }
 
 /*
@@ -113,11 +113,8 @@ inline_auth_decode_opaque(XDR *xdrs, struct opaque_auth *oa)
 			MAX_AUTH_BYTES);
 		return (false);
 	}
-	if (oa->oa_base == NULL) {
-		oa->oa_base = (caddr_t)mem_alloc(oa->oa_length);
-	}
 
-	return (inline_xdr_getopaque(xdrs, oa->oa_base, oa->oa_length));
+	return (inline_xdr_getopaque(xdrs, oa->oa_body, oa->oa_length));
 }
 
 /*
@@ -156,10 +153,6 @@ inline_auth_decode(XDR *xdrs, struct opaque_auth *oa, int32_t *buf)
 static inline bool
 inline_auth_free(XDR *xdrs, struct opaque_auth *oa)
 {
-	if (oa->oa_base != NULL) {
-		mem_free(oa->oa_base, oa->oa_length);
-		oa->oa_base = NULL;
-	}
 	return (true);
 }
 

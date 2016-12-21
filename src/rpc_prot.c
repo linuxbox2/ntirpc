@@ -66,8 +66,8 @@ xdr_opaque_auth(XDR *xdrs, struct opaque_auth *ap)
 	assert(ap != NULL);
 
 	if (inline_xdr_enum(xdrs, &(ap->oa_flavor)))
-		return (inline_xdr_bytes
-			(xdrs, &ap->oa_base, &ap->oa_length, MAX_AUTH_BYTES));
+		return (inline_xdr_opaques
+			(xdrs, ap->oa_body, &ap->oa_length, MAX_AUTH_BYTES));
 	return (false);
 }
 
@@ -188,8 +188,8 @@ xdr_ncallhdr(XDR *xdrs, struct rpc_msg *cmsg)
 	    && inline_xdr_u_int32_t(xdrs, &(cmsg->rm_xid))
 	    && inline_xdr_enum(xdrs, (enum_t *) &(cmsg->rm_direction))
 	    && inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_rpcvers))
-	    && inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_prog)))
-		return (inline_xdr_u_int32_t(xdrs, &(cmsg->rm_call.cb_vers)));
+	    && inline_xdr_u_int32_t(xdrs, &(cmsg->cb_prog)))
+		return (inline_xdr_u_int32_t(xdrs, &(cmsg->cb_vers)));
 	return (false);
 }
 
@@ -267,15 +267,15 @@ _seterr_reply(struct rpc_msg *msg, struct rpc_err *error)
 	switch (msg->rm_reply.rp_stat) {
 
 	case MSG_ACCEPTED:
-		if (msg->acpted_rply.ar_stat == SUCCESS) {
+		if (msg->RPCM_ack.ar_stat == SUCCESS) {
 			error->re_status = RPC_SUCCESS;
 			return;
 		}
-		accepted(msg->acpted_rply.ar_stat, error);
+		accepted(msg->RPCM_ack.ar_stat, error);
 		break;
 
 	case MSG_DENIED:
-		rejected(msg->rjcted_rply.rj_stat, error);
+		rejected(msg->RPCM_rej.rj_stat, error);
 		break;
 
 	default:
@@ -286,17 +286,17 @@ _seterr_reply(struct rpc_msg *msg, struct rpc_err *error)
 	switch (error->re_status) {
 
 	case RPC_VERSMISMATCH:
-		error->re_vers.low = msg->rjcted_rply.rj_vers.low;
-		error->re_vers.high = msg->rjcted_rply.rj_vers.high;
+		error->re_vers.low = msg->RPCM_rej.rj_vers.low;
+		error->re_vers.high = msg->RPCM_rej.rj_vers.high;
 		break;
 
 	case RPC_AUTHERROR:
-		error->re_why = msg->rjcted_rply.rj_why;
+		error->re_why = msg->RPCM_rej.rj_why;
 		break;
 
 	case RPC_PROGVERSMISMATCH:
-		error->re_vers.low = msg->acpted_rply.ar_vers.low;
-		error->re_vers.high = msg->acpted_rply.ar_vers.high;
+		error->re_vers.low = msg->RPCM_ack.ar_vers.low;
+		error->re_vers.high = msg->RPCM_ack.ar_vers.high;
 		break;
 
 	case RPC_FAILED:

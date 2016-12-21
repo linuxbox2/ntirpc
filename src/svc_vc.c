@@ -497,20 +497,20 @@ done:
 
  /*ARGSUSED*/
 static bool
-rendezvous_request(SVCXPRT *xprt, struct svc_req *req)
+rendezvous_request(struct svc_req *req)
 {
-	int fd;
-	socklen_t len;
-	struct cf_rendezvous *rdvs;
+	SVCXPRT *xprt = req->rq_xprt;
+	struct cf_rendezvous *rdvs = (struct cf_rendezvous *)xprt->xp_p1;
+	SVCXPRT *newxprt;
 	struct x_vc_data *xd;
 	struct sockaddr_storage addr;
 	struct __rpc_sockinfo si;
+	int fd;
+	socklen_t len;
 	socklen_t slen;
-	SVCXPRT *newxprt;
 	bool xprt_allocd;
 	static int n = 1;
 
-	rdvs = (struct cf_rendezvous *)xprt->xp_p1;
  again:
 	len = sizeof(addr);
 	fd = accept(xprt->xp_fd, (struct sockaddr *)(void *)&addr, &len);
@@ -869,8 +869,9 @@ svc_vc_stat(SVCXPRT *xprt)
 }
 
 static bool
-svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
+svc_vc_recv(struct svc_req *req)
 {
+	SVCXPRT *xprt = req->rq_xprt;
 	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
 	XDR *xdrs = &(xd->shared.xdrs_in);	/* recv queue */
 
@@ -888,28 +889,21 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
 	/* Consumes any remaining -fragment- bytes, and clears last_frag */
 	(void)xdr_inrec_skiprecord(xdrs);
 
-	req->rq_msg = alloc_rpc_msg();
-	req->rq_clntcred = req->rq_msg->rq_cred_body;
+	rpc_msg_init(&req->rq_msg);
 
 	/* Advances to next record, will read up to 1024 bytes
 	 * into the stream. */
 	(void)xdr_inrec_readahead(xdrs, 1024);
 
-	if (xdr_dplx_decode(xdrs, req->rq_msg)) {
-		switch (req->rq_msg->rm_direction) {
+	if (xdr_dplx_decode(xdrs, &req->rq_msg)) {
+		switch (req->rq_msg.rm_direction) {
 		case CALL:
 			/* an ordinary call header */
-			req->rq_xprt = xprt;
-			req->rq_prog = req->rq_msg->rm_call.cb_prog;
-			req->rq_vers = req->rq_msg->rm_call.cb_vers;
-			req->rq_proc = req->rq_msg->rm_call.cb_proc;
-			req->rq_xid = req->rq_msg->rm_xid;
 			return (TRUE);
 			break;
 		case REPLY:
 			/* reply header (xprt OK) */
-			rpc_ctx_xfer_replymsg(xd, req->rq_msg);
-			req->rq_msg = NULL;
+			rpc_ctx_xfer_replymsg(xd, &req->rq_msg);
 			break;
 		default:
 			/* not good (but xprt OK) */
@@ -924,17 +918,16 @@ svc_vc_recv(SVCXPRT *xprt, struct svc_req *req)
 }
 
 static bool
-svc_vc_freeargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
-		void *args_ptr)
+svc_vc_freeargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr)
 {
 	return xdr_free(xdr_args, args_ptr);
 }
 
 static bool
-svc_vc_getargs(SVCXPRT *xprt, struct svc_req *req,
-	       xdrproc_t xdr_args, void *args_ptr, void *u_data)
+svc_vc_getargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr,
+	       void *u_data)
 {
-	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
+	struct x_vc_data *xd = (struct x_vc_data *)req->rq_xprt->xp_p1;
 	XDR *xdrs = &xd->shared.xdrs_in;	/* recv queue */
 	bool rslt;
 
@@ -948,15 +941,15 @@ svc_vc_getargs(SVCXPRT *xprt, struct svc_req *req,
 	if (rslt)
 		req->rq_cksum = xdr_inrec_cksum(xdrs);
 	else
-		svc_vc_freeargs(xprt, req, xdr_args, args_ptr);
+		svc_vc_freeargs(req, xdr_args, args_ptr);
 
 	return (rslt);
 }
 
 static bool
-svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
+svc_vc_reply(struct svc_req *req)
 {
-	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
+	struct x_vc_data *xd = (struct x_vc_data *)req->rq_xprt->xp_p1;
 	XDR *xdrs_2;
 	xdrproc_t xdr_results;
 	caddr_t xdr_location;
@@ -964,14 +957,14 @@ svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 	bool has_args;
 	bool gss;
 
-	if (msg->rm_reply.rp_stat == MSG_ACCEPTED
-	    && msg->rm_reply.rp_acpt.ar_stat == SUCCESS) {
+	if (req->rq_msg.rm_reply.rp_stat == MSG_ACCEPTED
+	    && req->rq_msg.rm_reply.rp_acpt.ar_stat == SUCCESS) {
 		has_args = TRUE;
-		xdr_results = msg->acpted_rply.ar_results.proc;
-		xdr_location = msg->acpted_rply.ar_results.where;
+		xdr_results = req->rq_msg.RPCM_ack.ar_results.proc;
+		xdr_location = req->rq_msg.RPCM_ack.ar_results.where;
 
-		msg->acpted_rply.ar_results.proc = (xdrproc_t) xdr_void;
-		msg->acpted_rply.ar_results.where = NULL;
+		req->rq_msg.RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
+		req->rq_msg.RPCM_ack.ar_results.where = NULL;
 	} else {
 		has_args = FALSE;
 		xdr_results = NULL;
@@ -985,20 +978,20 @@ svc_vc_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 	 * Nb, we should probably use getpagesize() on Unix.  Need
 	 * an equivalent for Windows.
 	 */
-	gss = (req->rq_cred.oa_flavor == RPCSEC_GSS);
+	gss = (req->rq_msg.cb_cred.oa_flavor == RPCSEC_GSS);
 	xdrs_2 = xdr_ioq_create(8192 /* default segment size */ ,
 				__svc_params->svc_ioq_maxbuf + 8192,
 				gss
 				? UIO_FLAG_REALLOC | UIO_FLAG_FREE
 				: UIO_FLAG_FREE);
-	if (xdr_replymsg(xdrs_2, msg)
+	if (xdr_replymsg(xdrs_2, &req->rq_msg)
 	    && (!has_args
 		|| (req->rq_auth
 		    && SVCAUTH_WRAP(req->rq_auth, req, xdrs_2, xdr_results,
 				    xdr_location)))) {
 		rstat = TRUE;
 	}
-	svc_ioq_append(xprt, xd, xdrs_2);
+	svc_ioq_append(req->rq_xprt, xd, xdrs_2);
 	return (rstat);
 }
 
@@ -1094,13 +1087,12 @@ svc_vc_rendezvous_ops(SVCXPRT *xprt, u_int flags)
 		ops.xp_stat = rendezvous_stat;
 		/* XXX wow */
 		ops.xp_getargs = (bool(*)
-				  (SVCXPRT *, struct svc_req *, xdrproc_t,
+				  (struct svc_req *, xdrproc_t,
 				   void *, void *))abort;
 		ops.xp_reply = (bool(*)
-				(SVCXPRT *, struct svc_req *req,
-				 struct rpc_msg *))abort;
+				(struct svc_req *req))abort;
 		ops.xp_freeargs = (bool(*)
-				   (SVCXPRT *, struct svc_req *, xdrproc_t,
+				   (struct svc_req *, xdrproc_t,
 				    void *))abort;
 		ops.xp_destroy = svc_rdvs_destroy;
 		ops.xp_control = svc_vc_rendezvous_control;

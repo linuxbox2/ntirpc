@@ -120,8 +120,8 @@ clnt_rdma_create(RDMAXPRT *xprt,		/* init but NOT connect()ed descriptor */
 	(void) gettimeofday(&now, NULL);
 	//	cm->call_msg.rm_xid = __RPC_GETXID(&now);
 	cm->call_msg.rm_xid = 1;
-	cm->call_msg.rm_call.cb_prog = program;
-	cm->call_msg.rm_call.cb_vers = version;
+	cm->call_msg.cb_prog = program;
+	cm->call_msg.cb_vers = version;
 
 	rpc_rdma_connect(xprt);
 
@@ -214,9 +214,9 @@ get_reply:
 	 * some clock time to spare while the packets are in flight.
 	 * (We assume that this is actually only executed once.)
 	 */
-	reply_msg.acpted_rply.ar_verf = _null_auth;
-	reply_msg.acpted_rply.ar_results.where = NULL;
-	reply_msg.acpted_rply.ar_results.proc = (xdrproc_t)xdr_void;
+	reply_msg.RPCM_ack.ar_verf = _null_auth;
+	reply_msg.RPCM_ack.ar_results.where = NULL;
+	reply_msg.RPCM_ack.ar_results.proc = (xdrproc_t)xdr_void;
 
 	if (! xdr_rdma_clnt_reply(&cm->cm_xdrs, cm->call_msg.rm_xid)) {
 		//FIXME add timeout
@@ -231,14 +231,14 @@ get_reply:
 	ok = xdr_replymsg(&cm->cm_xdrs, &reply_msg);
 	if (ok) {
 		if ((reply_msg.rm_reply.rp_stat == MSG_ACCEPTED) &&
-			(reply_msg.acpted_rply.ar_stat == SUCCESS))
+			(reply_msg.RPCM_ack.ar_stat == SUCCESS))
 			cm->cm_error.re_status = RPC_SUCCESS;
 		else
 			_seterr_reply(&reply_msg, &(cm->cm_error));
 
 		if (cm->cm_error.re_status == RPC_SUCCESS) {
 			if (! AUTH_VALIDATE(auth,
-					    &reply_msg.acpted_rply.ar_verf)) {
+					    &(reply_msg.RPCM_ack.ar_verf))) {
 				cm->cm_error.re_status = RPC_AUTHERROR;
 				cm->cm_error.re_why = AUTH_INVALIDRESP;
 			} else if (! AUTH_UNWRAP(auth, &cm->cm_xdrs,
@@ -246,12 +246,7 @@ get_reply:
 				if (cm->cm_error.re_status == RPC_SUCCESS)
 				     cm->cm_error.re_status = RPC_CANTDECODERES;
 			}
-			if (reply_msg.acpted_rply.ar_verf.oa_base != NULL) {
-				xdrs->x_op = XDR_FREE;
-				(void) xdr_opaque_auth(xdrs,
-					&(reply_msg.acpted_rply.ar_verf));
-			}
-		}		/* end successful completion */
+		}	/* end successful completion */
 		/*
 		 * If unsuccesful AND error is an authentication error
 		 * then refresh credentials and try again, else break
@@ -390,19 +385,19 @@ clnt_rdma_control(CLIENT *cl, u_int request, void *info)
 		break;
 
 	case CLGET_VERS:
-		*(u_int32_t *)info = cm->call_msg.rm_call.cb_vers;
+		*(u_int32_t *)info = cm->call_msg.cb_vers;
 		break;
 
 	case CLSET_VERS:
-		cm->call_msg.rm_call.cb_vers = *(u_int32_t *)info;
+		cm->call_msg.cb_vers = *(u_int32_t *)info;
 		break;
 
 	case CLGET_PROG:
-		*(u_int32_t *)info = cm->call_msg.rm_call.cb_prog;
+		*(u_int32_t *)info = cm->call_msg.cb_prog;
 		break;
 
 	case CLSET_PROG:
-		cm->call_msg.rm_call.cb_prog = *(u_int32_t *)info;
+		cm->call_msg.cb_prog = *(u_int32_t *)info;
 		break;
 
 	case CLSET_ASYNC:

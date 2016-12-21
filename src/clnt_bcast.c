@@ -360,9 +360,9 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 	msg.rm_xid = __RPC_GETXID(&ts);
 	msg.rm_direction = CALL;
 	msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
-	msg.rm_call.cb_prog = RPCBPROG;
-	msg.rm_call.cb_vers = RPCBVERS;
-	msg.rm_call.cb_proc = RPCBPROC_CALLIT;
+	msg.cb_prog = RPCBPROG;
+	msg.cb_vers = RPCBVERS;
+	msg.cb_proc = RPCBPROC_CALLIT;
 	barg.prog = prog;
 	barg.vers = vers;
 	barg.proc = proc;
@@ -371,8 +371,8 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 	bres.addr = uaddrp;
 	bres.results.results_val = resultsp;
 	bres.xdr_res = xresults;
-	msg.rm_call.cb_cred = sys_auth->ah_cred;
-	msg.rm_call.cb_verf = sys_auth->ah_verf;
+	msg.cb_cred = sys_auth->ah_cred;
+	msg.cb_verf = sys_auth->ah_verf;
 	xdrmem_create(xdrs, outbuf, maxbufsize, XDR_ENCODE);
 	if ((!xdr_callmsg(xdrs, &msg))
 	    ||
@@ -393,9 +393,9 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 			goto done_broad;
 		}
 		msg.rm_xid++;	/* One way to distinguish */
-		msg.rm_call.cb_prog = PMAPPROG;
-		msg.rm_call.cb_vers = PMAPVERS;
-		msg.rm_call.cb_proc = PMAPPROC_CALLIT;
+		msg.cb_prog = PMAPPROG;
+		msg.cb_vers = PMAPVERS;
+		msg.cb_proc = PMAPPROC_CALLIT;
 		barg_pmap.prog = prog;
 		barg_pmap.vers = vers;
 		barg_pmap.proc = proc;
@@ -562,20 +562,20 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 			if (*((u_int32_t *) (void *)(inbuf)) ==
 			    *((u_int32_t *) (void *)(outbuf))) {
 				pmap_reply_flag = 0;
-				msg.acpted_rply.ar_verf = _null_auth;
-				msg.acpted_rply.ar_results.where =
+				msg.RPCM_ack.ar_verf = _null_auth;
+				msg.RPCM_ack.ar_results.where =
 				    (caddr_t) (void *)&bres;
-				msg.acpted_rply.ar_results.proc =
+				msg.RPCM_ack.ar_results.proc =
 				    (xdrproc_t) xdr_rpcb_rmtcallres;
 #ifdef PORTMAP
 			} else if (pmap_flag
 				   && *((u_int32_t *) (void *)(inbuf)) ==
 				   *((u_int32_t *) (void *)(outbuf_pmap))) {
 				pmap_reply_flag = 1;
-				msg.acpted_rply.ar_verf = _null_auth;
-				msg.acpted_rply.ar_results.where =
+				msg.RPCM_ack.ar_verf = _null_auth;
+				msg.RPCM_ack.ar_results.where =
 				    (caddr_t) (void *)&bres_pmap;
-				msg.acpted_rply.ar_results.proc =
+				msg.RPCM_ack.ar_results.proc =
 				    (xdrproc_t) xdr_rmtcallres;
 #endif				/* PORTMAP */
 			} else
@@ -583,7 +583,7 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 			xdrmem_create(xdrs, inbuf, (u_int) inlen, XDR_DECODE);
 			if (xdr_replymsg(xdrs, &msg)) {
 				if ((msg.rm_reply.rp_stat == MSG_ACCEPTED)
-				    && (msg.acpted_rply.ar_stat == SUCCESS)) {
+				    && (msg.RPCM_ack.ar_stat == SUCCESS)) {
 					struct netbuf *np;
 #ifdef PORTMAP
 					struct netbuf taddr;
@@ -626,7 +626,7 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 			/* else some kind of deserialization problem ... */
 
 			xdrs->x_op = XDR_FREE;
-			msg.acpted_rply.ar_results.proc = (xdrproc_t) xdr_void;
+			msg.RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
 			(void)xdr_replymsg(xdrs, &msg);
 			(void)(*xresults) (xdrs, resultsp);
 			XDR_DESTROY(xdrs);

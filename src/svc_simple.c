@@ -55,7 +55,7 @@
 
 #include "rpc_com.h"
 
-static void universal(struct svc_req *, SVCXPRT *);
+static void universal(struct svc_req *);
 
 static struct proglst {
 	char *(*p_progname) (char *);
@@ -221,7 +221,7 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
  */
 
 static void
-universal(struct svc_req *req, SVCXPRT *transp)
+universal(struct svc_req *req)
 {
 	rpcprog_t prog;
 	rpcvers_t vers;
@@ -234,21 +234,21 @@ universal(struct svc_req *req, SVCXPRT *transp)
 	/*
 	 * enforce "procnum 0 is echo" convention
 	 */
-	if (req->rq_proc == NULLPROC) {
-		if (svc_sendreply(transp, req, (xdrproc_t) xdr_void, NULL) ==
+	if (req->rq_msg.cb_proc == NULLPROC) {
+		if (svc_sendreply(req, (xdrproc_t) xdr_void, NULL) ==
 		    false) {
 			__warnx(TIRPC_DEBUG_FLAG_SVC, "svc_sendreply failed");
 		}
 		return;
 	}
-	prog = req->rq_prog;
-	vers = req->rq_vers;
-	proc = req->rq_proc;
+	prog = req->rq_msg.cb_prog;
+	vers = req->rq_msg.cb_vers;
+	proc = req->rq_msg.cb_proc;
 	mutex_lock(&proglst_lock);
 	for (pl = proglst; pl; pl = pl->p_nxt)
 		if (pl->p_prognum == prog && pl->p_procnum == proc
 		    && pl->p_versnum == vers
-		    && (strcmp(pl->p_netid, transp->xp_netid) == 0)) {
+		    && (strcmp(pl->p_netid, req->rq_xprt->xp_netid) == 0)) {
 			/* decode arguments into a CLEAN buffer */
 			xdrbuf = pl->p_xdrbuf;
 			/* Zero the arguments: reqd ! */
@@ -259,8 +259,8 @@ universal(struct svc_req *req, SVCXPRT *transp)
 			 * may bomb. BEWARE!
 			 */
 			if (!svc_getargs
-			    (transp, req, pl->p_inproc, xdrbuf, NULL)) {
-				svcerr_decode(transp, req);
+			    (req, pl->p_inproc, xdrbuf, NULL)) {
+				svcerr_decode(req);
 				mutex_unlock(&proglst_lock);
 				return;
 			}
@@ -271,7 +271,7 @@ universal(struct svc_req *req, SVCXPRT *transp)
 				mutex_unlock(&proglst_lock);
 				return;
 			}
-			if (!svc_sendreply(transp, req, pl->p_outproc,
+			if (!svc_sendreply(req, pl->p_outproc,
 					   outdata)) {
 				__warnx(TIRPC_DEBUG_FLAG_SVC,
 					"rpc: rpc_reg trouble replying to prog %u vers %u",
@@ -280,7 +280,7 @@ universal(struct svc_req *req, SVCXPRT *transp)
 				return;
 			}
 			/* free the decoded arguments */
-			(void)svc_freeargs(transp, req, pl->p_inproc, xdrbuf);
+			(void)svc_freeargs(req, pl->p_inproc, xdrbuf);
 			mutex_unlock(&proglst_lock);
 			return;
 		}

@@ -104,9 +104,8 @@ svc_raw_stat(SVCXPRT *xprt)
 
  /*ARGSUSED*/
 static bool
-svc_raw_recv(SVCXPRT *xprt, struct svc_req *req)
+svc_raw_recv(struct svc_req *req)
 {
-	struct rpc_msg *msg = req->rq_msg;
 	struct svc_raw_private *srp;
 	XDR *xdrs;
 
@@ -121,7 +120,7 @@ svc_raw_recv(SVCXPRT *xprt, struct svc_req *req)
 	xdrs = &srp->xdr_stream;
 	xdrs->x_op = XDR_DECODE;
 	(void)XDR_SETPOS(xdrs, 0);
-	if (!xdr_callmsg(xdrs, msg))
+	if (!xdr_callmsg(xdrs, &req->rq_msg))
 		return (false);
 
 	return (true);
@@ -129,7 +128,7 @@ svc_raw_recv(SVCXPRT *xprt, struct svc_req *req)
 
  /*ARGSUSED*/
 static bool
-svc_raw_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
+svc_raw_reply(struct svc_req *req)
 {
 	struct svc_raw_private *srp;
 	XDR *xdrs;
@@ -145,7 +144,7 @@ svc_raw_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 	xdrs = &srp->xdr_stream;
 	xdrs->x_op = XDR_ENCODE;
 	(void)XDR_SETPOS(xdrs, 0);
-	if (!xdr_replymsg(xdrs, msg))
+	if (!xdr_replymsg(xdrs, &req->rq_msg))
 		return (false);
 	(void)XDR_GETPOS(xdrs);	/* called just for overhead */
 
@@ -154,8 +153,7 @@ svc_raw_reply(SVCXPRT *xprt, struct svc_req *req, struct rpc_msg *msg)
 
  /*ARGSUSED*/
 static bool
-svc_raw_freeargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
-		 void *args_ptr)
+svc_raw_freeargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr)
 {
 	struct svc_raw_private *srp;
 	XDR *xdrs;
@@ -176,8 +174,8 @@ svc_raw_freeargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
 
  /*ARGSUSED*/
 static bool
-svc_raw_getargs(SVCXPRT *xprt, struct svc_req *req, xdrproc_t xdr_args,
-		void *args_ptr, void *u_data)
+svc_raw_getargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr,
+		void *u_data)
 {
 	struct svc_raw_private *srp;
 

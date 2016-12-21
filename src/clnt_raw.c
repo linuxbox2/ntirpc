@@ -102,9 +102,8 @@ clnt_raw_ncreate(rpcprog_t prog, rpcvers_t vers)
 	 */
 	call_msg.rm_direction = CALL;
 	call_msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
-	/* XXX: prog and vers have been long historically :-( */
-	call_msg.rm_call.cb_prog = (u_int32_t) prog;
-	call_msg.rm_call.cb_vers = (u_int32_t) vers;
+	call_msg.cb_prog = prog;
+	call_msg.cb_vers = vers;
 	xdrmem_create(xdrs, clp->u.mashl_callmsg, MCALL_MSG_SIZE, XDR_ENCODE);
 	if (!xdr_callhdr(xdrs, &call_msg))
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_RAW,
@@ -172,9 +171,9 @@ clnt_raw_call(CLIENT *h, AUTH *auth, rpcproc_t proc,
 	 */
 	xdrs->x_op = XDR_DECODE;
 	XDR_SETPOS(xdrs, 0);
-	msg.acpted_rply.ar_verf = _null_auth;
-	msg.acpted_rply.ar_results.where = resultsp;
-	msg.acpted_rply.ar_results.proc = xresults;
+	msg.RPCM_ack.ar_verf = _null_auth;
+	msg.RPCM_ack.ar_results.where = resultsp;
+	msg.RPCM_ack.ar_results.proc = xresults;
 	if (!xdr_replymsg(xdrs, &msg)) {
 		/*
 		 * It's possible for xdr_replymsg() to fail partway
@@ -196,7 +195,7 @@ clnt_raw_call(CLIENT *h, AUTH *auth, rpcproc_t proc,
 	status = error.re_status;
 
 	if (status == RPC_SUCCESS) {
-		if (!AUTH_VALIDATE(auth, &msg.acpted_rply.ar_verf))
+		if (!AUTH_VALIDATE(auth, &msg.RPCM_ack.ar_verf))
 			status = RPC_AUTHERROR;
 	} /* end successful completion */
 	else {
@@ -205,12 +204,8 @@ clnt_raw_call(CLIENT *h, AUTH *auth, rpcproc_t proc,
 	}			/* end of unsuccessful completion */
 
 	if (status == RPC_SUCCESS) {
-		if (!AUTH_VALIDATE(auth, &msg.acpted_rply.ar_verf))
+		if (!AUTH_VALIDATE(auth, &msg.RPCM_ack.ar_verf))
 			status = RPC_AUTHERROR;
-		if (msg.acpted_rply.ar_verf.oa_base != NULL) {
-			xdrs->x_op = XDR_FREE;
-			(void)xdr_opaque_auth(xdrs, &(msg.acpted_rply.ar_verf));
-		}
 	}
 
 	return (status);

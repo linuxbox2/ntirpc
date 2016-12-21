@@ -66,7 +66,7 @@
  */
 __BEGIN_DECLS
 extern bool svc_register(SVCXPRT *, u_long, u_long,
-			 void (*)(struct svc_req *, SVCXPRT *),
+			 void (*)(struct svc_req *),
 			 int);
 __END_DECLS
 /*

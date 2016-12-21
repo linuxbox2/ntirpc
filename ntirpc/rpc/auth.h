@@ -173,8 +173,8 @@ __END_DECLS
  */
 struct opaque_auth {
 	enum_t oa_flavor;	/* flavor of auth */
-	caddr_t oa_base;	/* address of more auth stuff */
 	u_int oa_length;	/* not to exceed MAX_AUTH_BYTES */
+	char oa_body[MAX_AUTH_BYTES];
 };
 
 /*
@@ -386,11 +386,10 @@ __END_DECLS
 
 __BEGIN_DECLS
 struct svc_req;
-struct rpc_msg;
-enum auth_stat _svcauth_none(struct svc_req *, struct rpc_msg *);
-enum auth_stat _svcauth_short(struct svc_req *, struct rpc_msg *);
-enum auth_stat _svcauth_unix(struct svc_req *, struct rpc_msg *);
-enum auth_stat _svcauth_gss(struct svc_req *, struct rpc_msg *, bool *);
+enum auth_stat _svcauth_none(struct svc_req *);
+enum auth_stat _svcauth_short(struct svc_req *);
+enum auth_stat _svcauth_unix(struct svc_req *);
+enum auth_stat _svcauth_gss(struct svc_req *, bool *);
 __END_DECLS
 
 #define AUTH_NONE 0		/* no authentication */
