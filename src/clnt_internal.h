@@ -43,10 +43,10 @@ struct ct_wait_entry
 	cond_t  cv;
 };
 
-#include <misc/rbtree_x.h>
 #include <rpc/work_pool.h>
 #include <rpc/xdr_ioq.h>
-#include <misc/wait_queue.h>
+
+#include "rpc_ctx.h"
 
 typedef struct rpc_dplx_lock {
 	struct wait_entry we;
@@ -58,34 +58,6 @@ typedef struct rpc_dplx_lock {
 } rpc_dplx_lock_t;
 
 #define MCALL_MSG_SIZE 24
-
-#define CT_NONE                 0x0000
-#define CT_EVENTS_BLOCKED       0x0002
-#define CT_EPOLL_ACTIVE         0x0004
-#define CT_XPRT_DESTROYED       0x0008
-
-/*
- * A client call context.  Intended to enable efficient multiplexing of
- * client calls sharing a client channel.
- */
-typedef struct rpc_call_ctx {
-	struct opr_rbtree_node node_k;
-	struct wait_entry we;
-	uint32_t xid;
-	uint32_t flags;
-	struct rpc_err error;
-	union {
-		struct {
-			struct rpc_client *clnt;
-			struct x_vc_data *xd;
-			struct timespec timeout;
-		} clnt;
-		struct {
-			/* nothing */
-		} svc;
-	} ctx_u;
-	struct rpc_msg cc_msg;
-} rpc_ctx_t;
 
 static inline int call_xid_cmpf(const struct opr_rbtree_node *lhs,
 				const struct opr_rbtree_node *rhs)

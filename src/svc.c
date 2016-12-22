@@ -230,15 +230,6 @@ svc_init(svc_init_params *params)
 	return true;
 }
 
-void
-rpc_msg_init(struct rpc_msg *msg)
-{
-	/* required for REPLY decodes */
-	msg->RPCM_ack.ar_verf = _null_auth;
-	msg->RPCM_ack.ar_results.where = NULL;
-	msg->RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
-}
-
 /* ***************  SVCXPRT related stuff **************** */
 
 /*

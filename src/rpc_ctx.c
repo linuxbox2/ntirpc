@@ -47,6 +47,15 @@
 
 #define tv_to_ms(tv) (1000 * ((tv)->tv_sec) + (tv)->tv_usec/1000)
 
+void
+rpc_msg_init(struct rpc_msg *msg)
+{
+	/* required for REPLY decodes */
+	msg->RPCM_ack.ar_verf = _null_auth;
+	msg->RPCM_ack.ar_results.where = NULL;
+	msg->RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
+}
+
 rpc_ctx_t *
 alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
 		   void *args_ptr, xdrproc_t xdr_results,
@@ -56,7 +65,9 @@ alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
 	struct rpc_dplx_rec *rec = xd->rec;
 	rpc_ctx_t *ctx = mem_alloc(sizeof(rpc_ctx_t));
 
-	/* potects this */
+	rpc_msg_init(&ctx->cc_msg);
+
+	/* protects this */
 	mutex_init(&ctx->we.mtx, NULL);
 	cond_init(&ctx->we.cv, 0, NULL);
 

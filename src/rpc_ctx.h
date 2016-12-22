@@ -26,12 +26,40 @@
 #ifndef TIRPC_RPC_CTX_H
 #define TIRPC_RPC_CTX_H
 
+#include <misc/rbtree_x.h>
+#include <misc/wait_queue.h>
+
 #define RPC_CTX_FLAG_NONE     0x0000
 #define RPC_CTX_FLAG_LOCKED   0x0001
 
 #define RPC_CTX_FLAG_WAITSYNC 0x0002
 #define RPC_CTX_FLAG_SYNCDONE 0x0004
 #define RPC_CTX_FLAG_ACKSYNC  0x0008
+
+/*
+ * A client call context.  Intended to enable efficient multiplexing of
+ * client calls sharing a client channel.
+ */
+typedef struct rpc_call_ctx {
+	struct opr_rbtree_node node_k;
+	struct wait_entry we;
+	uint32_t xid;
+	uint32_t flags;
+	struct rpc_err error;
+	union {
+		struct {
+			struct rpc_client *clnt;
+			struct x_vc_data *xd;
+			struct timespec timeout;
+		} clnt;
+		struct {
+			/* nothing */
+		} svc;
+	} ctx_u;
+	struct rpc_msg cc_msg;
+} rpc_ctx_t;
+
+void rpc_msg_init(struct rpc_msg *msg);
 
 rpc_ctx_t *alloc_rpc_call_ctx(CLIENT *, rpcproc_t, xdrproc_t,
 			      void *, xdrproc_t, void *, struct timeval);
