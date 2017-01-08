@@ -66,10 +66,45 @@
 #include <misc/opr.h>
 #include "svc_ioq.h"
 
+/* Queue per interface, determined per transport socket.
+ *
+ * Ideally, these would be some variant of weighted fair queuing.  Currently,
+ * assuming supplied by underlying OS.
+ *
+ * The assigned thread should have affinity for the interface.  Therefore, the
+ * first thread arriving for each interface is used for all subsequent work,
+ * until the interface is idle.  This assumes that the output interface is
+ * closely associated with the input interface.
+ *
+ * Note that this is a static fixed size list of interfaces.  In most cases,
+ * many of these entries will be unused.
+ *
+ * For efficiency, a mask is applied to the ifindex, possibly causing overlap of
+ * multiple interfaces.  The size is selected to be larger than expected number
+ * of concurrently active interfaces.  Size must be a power of 2 for mask.
+ */
+#define IOQ_IF_SIZE (16)
+#define IOQ_IF_MASK (IOQ_IF_SIZE - 1)
+struct poolq_head ioq_ifqh[IOQ_IF_SIZE];
+
+void
+svc_ioq_init(void)
+{
+	struct poolq_head *ifph = &ioq_ifqh[0];
+	int i = 0;
+
+	for (; i < IOQ_IF_SIZE; ifph++, i++) {
+		ifph->qcount = 0;
+		TAILQ_INIT(&ifph->qh);
+		mutex_init(&ifph->qmutex, NULL);
+	}
+}
 
 static inline void
-cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
+cfconn_set_dead(SVCXPRT *xprt)
 {
+	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
+
 	mutex_lock(&xprt->xp_lock);
 	xd->sx.strm_stat = XPRT_DIED;
 	mutex_unlock(&xprt->xp_lock);
@@ -79,7 +114,7 @@ cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
 #define MAXALLOCA (256)
 
 static inline void
-ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd, struct xdr_ioq *xioq)
+svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 {
 	struct iovec *iov, *tiov, *wiov;
 	struct poolq_entry *have;
@@ -156,7 +191,7 @@ ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd, struct xdr_ioq *xioq)
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s() writev failed (%d)\n",
 				__func__, errno);
-			cfconn_set_dead(xprt, xd);
+			cfconn_set_dead(xprt);
 			break;
 		}
 		fbytes -= result;
@@ -179,66 +214,52 @@ ioq_flushv(SVCXPRT *xprt, struct x_vc_data *xd, struct xdr_ioq *xioq)
 	}
 }
 
-static void
-svc_ioq_callback(struct work_pool_entry *wpe)
+static inline void
+svc_ioq_loop(SVCXPRT *xprt, struct xdr_ioq *xioq, struct poolq_head *ifph)
 {
-	struct x_vc_data *xd = (struct x_vc_data *)wpe;
-	SVCXPRT *xprt = (SVCXPRT *)wpe->arg;
 	struct poolq_entry *have;
-	struct xdr_ioq *xioq;
 
-	/* qmutex more fine grained than xp_lock */
 	for (;;) {
-		mutex_lock(&xd->shared.ioq.qmutex);
-		have = TAILQ_FIRST(&xd->shared.ioq.qh);
-		if (unlikely(!have)) {
-			xd->shared.active = false;
-			mutex_unlock(&xd->shared.ioq.qmutex);
-			SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-			return;
-		}
-
-		TAILQ_REMOVE(&xd->shared.ioq.qh, have, q);
-		(xd->shared.ioq.qcount)--;
 		/* do i/o unlocked */
-		mutex_unlock(&xd->shared.ioq.qmutex);
-		xioq = _IOQ(have);
+		mutex_unlock(&ifph->qmutex);
 
 		if (svc_work_pool.params.thrd_max
 		 && !(xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
 			/* all systems are go! */
-			ioq_flushv(xprt, xd, xioq);
+			svc_ioq_flushv(xprt, xioq);
 		}
+		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 		XDR_DESTROY(xioq->xdrs);
-	}
 
-	return;
+		mutex_lock(&ifph->qmutex);
+		if (--(ifph->qcount) == 0)
+			break;
+
+		have = TAILQ_FIRST(&ifph->qh);
+		TAILQ_REMOVE(&ifph->qh, have, q);
+		xioq = _IOQ(have);
+		xprt = (SVCXPRT *)xioq->xdrs[0].x_lib[1];
+	}
 }
 
 void
-svc_ioq_append(SVCXPRT *xprt, struct x_vc_data *xd, XDR *xdrs)
+svc_ioq_append(SVCXPRT *xprt, struct xdr_ioq *xioq)
 {
-	if (unlikely(!svc_work_pool.params.thrd_max
-		  || (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED))) {
-		/* discard */
-		XDR_DESTROY(xdrs);
-		return;
-	}
+	struct poolq_head *ifph = &ioq_ifqh[xprt->xp_ifindex & IOQ_IF_MASK];
 
-	/* qmutex more fine grained than xp_lock */
-	mutex_lock(&xd->shared.ioq.qmutex);
-	(xd->shared.ioq.qcount)++;
-	TAILQ_INSERT_TAIL(&xd->shared.ioq.qh, &(XIOQ(xdrs)->ioq_s), q);
+	SVC_REF(xprt, SVC_REF_FLAG_NONE);
+	mutex_lock(&ifph->qmutex);
 
-	if (!xd->shared.active) {
-		xd->shared.active = true;
-		xd->wpe.fun = svc_ioq_callback;
-		xd->wpe.arg = xprt;
-		mutex_unlock(&xd->shared.ioq.qmutex);
-		SVC_REF(xprt, SVC_REF_FLAG_NONE);
-		work_pool_submit(&svc_work_pool, &xd->wpe);
+	if ((ifph->qcount)++ > 0) {
+		/* queue additional output requests without task switch */
+		xioq->xdrs[0].x_lib[1] = (void *)xprt;
+		TAILQ_INSERT_TAIL(&ifph->qh, &(xioq->ioq_s), q);
 	} else {
-		/* queuing multiple output requests for worker efficiency */
-		mutex_unlock(&xd->shared.ioq.qmutex);
+		/* handle this output request without queuing,
+		 * and any additional output requests without task switch
+		 */
+		svc_ioq_loop(xprt, xioq, ifph);
 	}
+
+	mutex_unlock(&ifph->qmutex);
 }

@@ -43,7 +43,6 @@ struct ct_wait_entry
 	cond_t  cv;
 };
 
-#include <rpc/work_pool.h>
 #include <rpc/xdr_ioq.h>
 
 #include "rpc_ctx.h"
@@ -188,7 +187,6 @@ struct cx_data {
 };
 
 struct x_vc_data {
-	struct work_pool_entry wpe;	/*** 1st ***/
 	struct rpc_dplx_rec *rec;	/* unified sync */
 	uint32_t flags;
 	uint32_t refcnt;
@@ -205,8 +203,6 @@ struct x_vc_data {
 		int32_t maxrec;
 	} sx;
 	struct {
-		struct poolq_head ioq;
-		bool active;
 		bool nonblock;
 		u_int sendsz;
 		u_int recvsz;
@@ -225,7 +221,6 @@ alloc_x_vc_data(void)
 {
 	struct x_vc_data *xd = mem_zalloc(sizeof(struct x_vc_data));
 
-	TAILQ_INIT(&xd->shared.ioq.qh);
 	return (xd);
 }
 

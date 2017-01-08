@@ -435,7 +435,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	}
 
 	if (bidi) {
-		svc_ioq_append(rec->hdl.xprt, xd, xdrs);
+		svc_ioq_append(rec->hdl.xprt, XIOQ(xdrs));
 	} else {
 		if (!xdrrec_endofrecord(xdrs, shipnow))
 			vc_call_return_slocked(ctx->error.re_status =
