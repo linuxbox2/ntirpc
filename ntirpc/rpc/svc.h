@@ -292,6 +292,7 @@ typedef struct rpc_svcxprt {
 	uint32_t xp_requests;	/* related requests count */
 
 	int xp_fd;
+	int xp_ifindex;		/* interface index */
 	int xp_si_type;		/* si type */
 	int xp_type;		/* xprt type */
 

@@ -949,7 +949,6 @@ svc_vc_getargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr,
 static bool
 svc_vc_reply(struct svc_req *req)
 {
-	struct x_vc_data *xd = (struct x_vc_data *)req->rq_xprt->xp_p1;
 	XDR *xdrs_2;
 	xdrproc_t xdr_results;
 	caddr_t xdr_location;
@@ -991,7 +990,7 @@ svc_vc_reply(struct svc_req *req)
 				    xdr_location)))) {
 		rstat = TRUE;
 	}
-	svc_ioq_append(req->rq_xprt, xd, xdrs_2);
+	svc_ioq_append(req->rq_xprt, XIOQ(xdrs_2));
 	return (rstat);
 }
 

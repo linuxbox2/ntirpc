@@ -27,9 +27,9 @@
 #define SVC_IOQ_H
 
 #include <rpc/svc.h>
-#include <rpc/xdr.h>
-#include "clnt_internal.h"
+#include <rpc/xdr_ioq.h>
 
-void svc_ioq_append(SVCXPRT *, struct x_vc_data *, XDR *);
+void svc_ioq_append(SVCXPRT *, struct xdr_ioq *);
+void svc_ioq_init(void);
 
 #endif				/* SVC_IOQ_H */
