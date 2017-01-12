@@ -146,22 +146,22 @@ extern struct __svc_ops *svc_ops;
 typedef struct cache_node *cache_ptr;
 struct cache_node {
 	/*
-	 * Index into cache is xid, proc, vers, prog and address
+	 * Next node on the list, if there is a collision
 	 */
-	u_int32_t cache_xid;
-	rpcproc_t cache_proc;
-	rpcvers_t cache_vers;
-	rpcprog_t cache_prog;
-	struct netbuf cache_addr;
+	cache_ptr cache_next;
 	/*
 	 * The cached reply and length
 	 */
 	char *cache_reply;
 	size_t cache_replylen;
 	/*
-	 * Next node on the list, if there is a collision
+	 * Index into cache is xid, prog, vers, proc and address
 	 */
-	cache_ptr cache_next;
+	u_int32_t cache_xid;
+	rpcprog_t cache_prog;
+	rpcvers_t cache_vers;
+	rpcproc_t cache_proc;
+	struct rpc_address cache_addr;
 };
 
 /*
@@ -177,9 +177,9 @@ extern mutex_t dupreq_lock;
  * The entire cache
  */
 struct cl_cache {
-	u_int uc_size;		/* size of cache */
 	cache_ptr *uc_entries;	/* hash table of entries in cache */
 	cache_ptr *uc_fifo;	/* fifo list of entries in cache */
+	u_int uc_size;		/* size of cache */
 	u_int uc_nextvictim;	/* points to next victim in fifo list */
 	rpcprog_t uc_prog;	/* saved program number */
 	rpcvers_t uc_vers;	/* saved version number */

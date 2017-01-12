@@ -76,7 +76,7 @@ extern struct svc_params __svc_params[1];
 static void svc_dg_ops(SVCXPRT *);
 
 static int svc_dg_cache_get(SVCXPRT *, struct rpc_msg *, char **, size_t *);
-static void svc_dg_cache_set(SVCXPRT *, size_t);
+static void svc_dg_cache_set(SVCXPRT *, size_t, u_int32_t);
 static void svc_dg_enable_pktinfo(int, const struct __rpc_sockinfo *);
 static int svc_dg_store_pktinfo(struct msghdr *, struct svc_req *);
 
@@ -299,8 +299,6 @@ svc_dg_recv(struct svc_req *req)
 	    calculate_crc32c(0, iov.iov_base, MIN(256, iov.iov_len));
 #endif
 
-	/* XXX su->su_xid !MT-SAFE */
-	su->su_xid = req->rq_msg.rm_xid;
 	if (su->su_cache != NULL) {
 		if (svc_dg_cache_get(xprt, &req->rq_msg, &reply, &replylen)) {
 			iov.iov_base = reply;
@@ -383,7 +381,8 @@ svc_dg_reply(struct svc_req *req)
 		if (sendmsg(xprt->xp_fd, msg, 0) == (ssize_t) slen) {
 			stat = true;
 			if (su->su_cache)
-				svc_dg_cache_set(xprt, slen);
+				svc_dg_cache_set(xprt, slen,
+						 req->rq_msg.rm_xid);
 		}
 	}
 	return (stat);
@@ -599,7 +598,7 @@ static const char cache_set_str[] = "cache_set: %s";
 static const char cache_set_err1[] = "victim not found";
 
 static void
-svc_dg_cache_set(SVCXPRT *xprt, size_t replylen)
+svc_dg_cache_set(SVCXPRT *xprt, size_t replylen, u_int32_t xid)
 {
 	cache_ptr victim;
 	cache_ptr *vicp;
@@ -643,8 +642,12 @@ svc_dg_cache_set(SVCXPRT *xprt, size_t replylen)
 			uaddr = taddr2uaddr(nconf, &xprt->xp_remote.nb);
 			freenetconfigent(nconf);
 			__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
-				"cache set for xid= %x prog=%d vers=%d proc=%d "
-				"for rmtaddr=%s\n", su->su_xid, uc->uc_prog,
+				"cache set for xid= %" PRIu32
+				" prog=%" PRIu32
+				" vers=%" PRIu32
+				" proc=%" PRIu32
+				" for rmtaddr=%s\n",
+				xid, uc->uc_prog,
 				uc->uc_vers, uc->uc_proc, uaddr);
 			mem_free(uaddr, 0);	/* XXX */
 		}
@@ -654,14 +657,12 @@ svc_dg_cache_set(SVCXPRT *xprt, size_t replylen)
 	rpc_buffer(xprt) = newbuf;
 	xdrmem_create(&(su->su_xdrs), rpc_buffer(xprt), su->su_iosz,
 		      XDR_ENCODE);
-	victim->cache_xid = su->su_xid;
+	victim->cache_xid = xid;
 	victim->cache_proc = uc->uc_proc;
 	victim->cache_vers = uc->uc_vers;
 	victim->cache_prog = uc->uc_prog;
-	victim->cache_addr = xprt->xp_remote.nb;
-	victim->cache_addr.buf = mem_alloc(xprt->xp_remote.nb.len);
-	(void)memcpy(victim->cache_addr.buf, xprt->xp_remote.nb.buf,
-		     (size_t) xprt->xp_remote.nb.len);
+	victim->cache_addr = xprt->xp_remote;
+	victim->cache_addr.nb.buf = &victim->cache_addr.ss;
 	loc = CACHE_LOC(xprt, victim->cache_xid);
 	victim->cache_next = uc->uc_entries[loc];
 	uc->uc_entries[loc] = victim;
@@ -686,17 +687,15 @@ svc_dg_cache_get(SVCXPRT *xprt, struct rpc_msg *msg, char **replyp,
 	char *uaddr;
 
 	mutex_lock(&dupreq_lock);
-	loc = CACHE_LOC(xprt, su->su_xid);
+	loc = CACHE_LOC(xprt, msg->rm_xid);
 	for (ent = uc->uc_entries[loc]; ent != NULL; ent = ent->cache_next) {
-		if (ent->cache_xid == su->su_xid
+		if (ent->cache_xid == msg->rm_xid
 		    && ent->cache_proc == msg->cb_proc
 		    && ent->cache_vers == msg->cb_vers
 		    && ent->cache_prog == msg->cb_prog
-		    && ent->cache_addr.len == xprt->xp_remote.nb.len
-		    &&
-		    (memcmp
-		     (ent->cache_addr.buf, xprt->xp_remote.nb.buf,
-		      xprt->xp_remote.nb.len) == 0)) {
+		    && ent->cache_addr.nb.len == xprt->xp_remote.nb.len
+		    && (memcmp(ent->cache_addr.nb.buf, xprt->xp_remote.nb.buf,
+				xprt->xp_remote.nb.len) == 0)) {
 			if (__debug_flag(TIRPC_DEBUG_FLAG_RPC_CACHE)) {
 				nconf = getnetconfigent(xprt->xp_netid);
 				if (nconf) {
@@ -705,9 +704,12 @@ svc_dg_cache_get(SVCXPRT *xprt, struct rpc_msg *msg, char **replyp,
 							&xprt->xp_remote.nb);
 					freenetconfigent(nconf);
 					__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
-						"cache entry found for xid=%x prog=%d "
-						"vers=%d proc=%d for rmtaddr=%s\n",
-						su->su_xid,
+						"cache entry found for xid=%" PRIu32
+						" prog=%" PRIu32
+						" vers=%" PRIu32
+						" proc=%" PRIu32
+						" for rmtaddr=%s\n",
+						msg->rm_xid,
 						msg->cb_prog,
 						msg->cb_vers,
 						msg->cb_proc, uaddr);
