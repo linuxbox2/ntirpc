@@ -196,12 +196,6 @@ enum xprt_stat {
 	XPRT_DESTROYED
 };
 
-struct cf_rendezvous {		/* kept in xprt->xp_p1 for rendezvouser */
-	u_int sendsize;
-	u_int recvsize;
-	int maxrec;
-};
-
 struct SVCAUTH;			/* forward decl. */
 struct svc_req;			/* forward decl. */
 

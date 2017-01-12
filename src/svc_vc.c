@@ -113,7 +113,6 @@ SVCXPRT *
 svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 {
 	SVCXPRT *xprt = NULL;
-	struct cf_rendezvous *rdvs;
 	struct __rpc_sockinfo si;
 	struct sockaddr_storage sslocal;
 	struct sockaddr *salocal;
@@ -134,11 +133,6 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 #ifdef RPC_VSOCK
 	flags |= (si.si_af == AF_VSOCK) ? SVC_VC_CREATE_VSOCK : 0;
 #endif /* VSOCK */
-
-	rdvs = mem_alloc(sizeof(struct cf_rendezvous));
-	rdvs->sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsize);
-	rdvs->recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsize);
-	rdvs->maxrec = __svc_maxrec;
 
 	/* atomically find or create shared fd state */
 	rec = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_IFLAG_LOCKREC, &oflags);
@@ -174,7 +168,6 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 				xprt = rec->hdl.xprt;
 				/* inc xprt refcnt */
 				SVC_REF(xprt, SVC_REF_FLAG_NONE);
-				mem_free(rdvs, sizeof(struct cf_rendezvous));
 				goto done;
 			} else
 				++(xd->refcnt);
@@ -188,8 +181,7 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
 	xprt->xp_refs = 1;
 	svc_vc_rendezvous_ops(xprt, flags);
-	xprt->xp_p1 = rdvs;
-	xprt->xp_p2 = xd;
+	xprt->xp_p1 = xd;
 	xprt->xp_p5 = rec;
 	xprt->xp_fd = fd;
 	mutex_init(&xprt->xp_lock, NULL);
@@ -243,8 +235,6 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	return (xprt);
 
  err:
-	mem_free(rdvs, sizeof(struct cf_rendezvous));
-
 	if (xprt) {
 #if defined(HAVE_BLKIN)
 		if (xprt->blkin.svc_name)
@@ -483,7 +473,7 @@ static bool
 rendezvous_request(struct svc_req *req)
 {
 	SVCXPRT *xprt = req->rq_xprt;
-	struct cf_rendezvous *rdvs = (struct cf_rendezvous *)xprt->xp_p1;
+	struct x_vc_data *req_xd = (struct x_vc_data *)xprt->xp_p1;
 	SVCXPRT *newxprt;
 	struct x_vc_data *xd;
 	struct sockaddr_storage addr;
@@ -524,7 +514,8 @@ rendezvous_request(struct svc_req *req)
 	/*
 	 * make a new transport (re-uses xprt)
 	 */
-	newxprt = makefd_xprt(fd, rdvs->sendsize, rdvs->recvsize, &xprt_allocd);
+	newxprt = makefd_xprt(fd, req_xd->shared.sendsz, req_xd->shared.recvsz,
+				&xprt_allocd);
 	if ((!newxprt) || (!xprt_allocd)) /* ref'd existing xprt handle */
 		return (FALSE);
 
@@ -559,9 +550,9 @@ rendezvous_request(struct svc_req *req)
 #endif
 
 	xd = (struct x_vc_data *)newxprt->xp_p1;
-	xd->shared.recvsz = rdvs->recvsize;
-	xd->shared.sendsz = rdvs->sendsize;
-	xd->sx.maxrec = rdvs->maxrec;
+	xd->shared.recvsz = req_xd->shared.recvsz;
+	xd->shared.sendsz = req_xd->shared.sendsz;
+	xd->sx.maxrec = req_xd->sx.maxrec;
 
 #if 0  /* XXX vrec wont support atm (and it seems to need work) */
 	if (cd->maxrec != 0) {
@@ -608,8 +599,7 @@ rendezvous_stat(SVCXPRT *xprt)
 static void
 svc_rdvs_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
-	struct cf_rendezvous *rdvs = (struct cf_rendezvous *)xprt->xp_p1;
-	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p2;
+	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)xprt->xp_p5;
 
 	/* clears xprt from the xprt table (eg, idle scans) */
@@ -637,7 +627,6 @@ svc_rdvs_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	if (xprt->xp_netid)
 		mem_free(xprt->xp_netid, 0);
 
-	mem_free(rdvs, sizeof(struct cf_rendezvous));
 	mem_free(xprt, sizeof(SVCXPRT));
 
 	(void)rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
@@ -762,17 +751,14 @@ svc_vc_control(SVCXPRT *xprt, const u_int rq, void *in)
 static bool
 svc_vc_rendezvous_control(SVCXPRT *xprt, const u_int rq, void *in)
 {
-	struct cf_rendezvous *cfp;
+	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
 
-	cfp = (struct cf_rendezvous *)xprt->xp_p1;
-	if (cfp == NULL)
-		return (FALSE);
 	switch (rq) {
 	case SVCGET_CONNMAXREC:
-		*(int *)in = cfp->maxrec;
+		*(int *)in = xd->sx.maxrec;
 		break;
 	case SVCSET_CONNMAXREC:
-		cfp->maxrec = *(int *)in;
+		xd->sx.maxrec = *(int *)in;
 		break;
 	case SVCGET_XP_RECV:
 		mutex_lock(&ops_lock);
