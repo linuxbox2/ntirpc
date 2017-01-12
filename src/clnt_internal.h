@@ -63,15 +63,12 @@ struct cu_data {
 	char *cu_outbuf;
 };
 
-struct ct_serialized {
+struct ct_data {
 	union {
 		char ct_mcallc[MCALL_MSG_SIZE];	/* marshalled callmsg */
 		u_int32_t ct_mcalli;
 	} ct_u;
 	u_int ct_mpos;		/* pos after marshal */
-};
-
-struct ct_data {
 	int ct_fd;
 	bool ct_closeit;	/* close it on destroy */
 	struct timeval ct_wait;	/* wait interval in milliseconds */
