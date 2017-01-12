@@ -352,6 +352,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	struct ct_data *cs = CT_DATA(cx);
 	struct rpc_dplx_rec *rec = xd->rec;
 	enum clnt_stat result = RPC_SUCCESS;
+	SVCXPRT *xprt = rec->hdl.xprt;
 	rpc_ctx_t *ctx = NULL;
 	XDR *xdrs;
 	int code, refreshes = 2;
@@ -439,7 +440,8 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	}
 
 	if (bidi) {
-		svc_ioq_append(rec->hdl.xprt, XIOQ(xdrs));
+		xdrs->x_lib[1] = (void *)xprt;
+		svc_ioq_write_submit(xprt, XIOQ(xdrs));
 	} else {
 		if (!xdrrec_endofrecord(xdrs, shipnow))
 			vc_call_return_slocked(ctx->error.re_status =

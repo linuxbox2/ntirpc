@@ -959,7 +959,9 @@ svc_vc_reply(struct svc_req *req)
 				    xdr_location)))) {
 		rstat = TRUE;
 	}
-	svc_ioq_append(req->rq_xprt, XIOQ(xdrs_2));
+
+	xdrs_2->x_lib[1] = (void *)req->rq_xprt;
+	svc_ioq_write_now(req->rq_xprt, XIOQ(xdrs_2));
 	return (rstat);
 }
 
