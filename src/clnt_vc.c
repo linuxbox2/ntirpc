@@ -134,26 +134,13 @@ static const char __no_mem_str[] = "out of memory";
  * fd should be an open socket
  */
 CLIENT *
-clnt_vc_ncreate(int fd,	/* open file descriptor */
-		const struct netbuf *raddr,	/* servers address */
-		const rpcprog_t prog,	/* program number */
-		const rpcvers_t vers,	/* version number */
-		u_int sendsz,	/* buffer recv size */
-		u_int recvsz /* buffer send size */)
-{
-	return (clnt_vc_ncreate2
-		(fd, raddr, prog, vers, sendsz, recvsz,
-		 CLNT_CREATE_FLAG_CONNECT));
-}
-
-CLIENT *
-clnt_vc_ncreate2(int fd,	/* open file descriptor */
+clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 		 const struct netbuf *raddr,	/* servers address */
 		 const rpcprog_t prog,	/* program number */
 		 const rpcvers_t vers,	/* version number */
-		 u_int sendsz,	/* buffer send size */
-		 u_int recvsz,	/* buffer recv size */
-		 u_int flags)
+		 const u_int sendsz,	/* buffer send size */
+		 const u_int recvsz,	/* buffer recv size */
+		 const uint32_t flags)
 {
 	CLIENT *clnt = NULL;
 	struct rpc_dplx_rec *rec = NULL;
@@ -187,6 +174,9 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 				rpc_createerr.cf_error.re_errno = errno;
 				goto err;
 			}
+			__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+				"%s: fd %d connected",
+				__func__, fd);
 		}
 	}
 	/* connect */
@@ -286,6 +276,9 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	/* release rec */
 	REC_UNLOCK(rec);
 
+	__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+		"%s: fd %d completed",
+		__func__, fd);
 	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 	return (clnt);
 
@@ -317,6 +310,21 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 
 	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 	return (NULL);
+}
+
+/*
+ * Create an RPC client handle from an active service transport
+ * handle, i.e., to issue calls on the channel.
+ */
+CLIENT *
+clnt_vc_ncreate_svc(const SVCXPRT *xprt, const rpcprog_t prog,
+		    const rpcvers_t vers, const uint32_t flags)
+{
+	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
+
+	return clnt_vc_ncreatef(xprt->xp_fd, &xprt->xp_remote.nb, prog, vers,
+				xd->shared.sendsz, xd->shared.recvsz,
+				flags | CLNT_CREATE_FLAG_SVCXPRT);
 }
 
 #define vc_call_return_slocked(r)		\

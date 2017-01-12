@@ -736,9 +736,6 @@ extern SVCXPRT *svc_vc_ncreate2(const int, const u_int, const u_int,
 
 __END_DECLS
 #define SVC_VC_CREATE_NONE             0x0000
-#define SVC_VC_CREATE_BOTHWAYS         0x0001
-#define SVC_VC_CREATE_ONEWAY           0x0002	/* !bothways */
-#define SVC_VC_CREATE_DISPOSE          0x0004	/* !bothways */
 #define SVC_VC_CREATE_XPRT_NOREG       0x0008
 #define SVC_VC_CREATE_LISTEN           0x0010
 #define SVC_VC_CREATE_VSOCK            0x0020
@@ -746,28 +743,15 @@ __END_DECLS
 __BEGIN_DECLS
 /*
  * Create a client handle from an active service transport handle.
+ * (Defined here because this file knows about clnt.h, but not vice versa.)
  */
-extern CLIENT *clnt_vc_ncreate_svc(SVCXPRT *, const rpcprog_t, const rpcvers_t,
-				   const uint32_t);
+extern CLIENT *clnt_vc_ncreate_svc(const SVCXPRT *, const rpcprog_t,
+				   const rpcvers_t, const uint32_t);
 /*
- *      SVCXPRT *xprt;                          -- active service xprt
+ *      const SVCXPRT *xprt;                    -- active service xprt
  *      const rpcprog_t prog;                   -- RPC program number
  *      const rpcvers_t vers;                   -- RPC program version
- */
-
-__END_DECLS
-__BEGIN_DECLS
-/*
- * Create an RPC SVCXPRT handle from an active client transport
- * handle, i.e., to service RPC requests
- */
-extern SVCXPRT *svc_vc_ncreate_clnt(CLIENT *, u_int, u_int, const uint32_t);
-/*
- *
- * CLIENT *cl;                                  -- connected client
- * const u_int sendsize;                        -- max send size
- * const u_int recvsize;                        -- max recv size
- * const uint32_t flags;                        -- flags
+ *      const uint32_t flags;                   -- flags
  */
 
 /*

@@ -452,12 +452,18 @@ extern CLIENT *clnt_tli_ncreate(const int, const struct netconfig *,
 #define CLNT_CREATE_FLAG_XPRT_DOREG	0x80000000
 #define CLNT_CREATE_FLAG_XPRT_NOREG	0x08000000
 
-extern CLIENT *clnt_vc_ncreate(const int, const struct netbuf *,
-			       const rpcprog_t, const rpcvers_t, u_int, u_int);
+extern CLIENT *clnt_vc_ncreatef(const int, const struct netbuf *,
+				const rpcprog_t, const rpcvers_t,
+				const u_int, const u_int, const uint32_t);
 
-extern CLIENT *clnt_vc_ncreate2(const int, const struct netbuf *,
-				const rpcprog_t, const rpcvers_t, u_int, u_int,
-				u_int);
+static inline CLIENT *
+clnt_vc_ncreate(const int fd, const struct netbuf *raddr,
+		const rpcprog_t prog, const rpcvers_t vers,
+		const u_int sendsz, const u_int recvsz)
+{
+	return (clnt_vc_ncreatef(fd, raddr, prog, vers, sendsz, recvsz,
+				 CLNT_CREATE_FLAG_CONNECT));
+}
 
 #if !defined(_WIN32)
 /*

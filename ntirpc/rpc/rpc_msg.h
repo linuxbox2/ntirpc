@@ -46,6 +46,7 @@
 #define RPC_SERVICE_PORT ((u_short) 2048)
 
 #include <rpc/auth.h>
+#include <rpc/clnt.h>
 #include <misc/queue.h>
 
 /*
