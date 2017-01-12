@@ -382,8 +382,8 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	 * call contexts.  We'll keep the call parameters, control transfer
 	 * machinery, etc, in an rpc_ctx_t, to permit this.
 	 */
-	ctx = alloc_rpc_call_ctx(clnt, proc, xdr_args, args_ptr, xdr_results,
-				 results_ptr, timeout);	/*add total timeout? */
+	ctx = rpc_ctx_alloc(clnt, proc, xdr_args, args_ptr, xdr_results,
+			    results_ptr, timeout);	/*add total timeout? */
 
 	if (!ct->ct_waitset) {
 		/* If time is not within limits, we ignore it. */
@@ -558,7 +558,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	vc_call_return_rlocked(ctx->error.re_status);
 
  out:
-	free_rpc_call_ctx(ctx, RPC_CTX_FLAG_NONE);
+	rpc_ctx_free(ctx, RPC_CTX_FLAG_NONE);
 
 	return (result);
 }

@@ -29,6 +29,8 @@
 #include <misc/os_epoll.h>
 #include <rpc/rpc_msg.h>
 
+#include "clnt_internal.h"
+
 extern int __svc_maxiov;
 extern int __svc_maxrec;
 

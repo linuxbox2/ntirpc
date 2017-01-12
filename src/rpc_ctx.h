@@ -28,6 +28,10 @@
 
 #include <misc/rbtree_x.h>
 #include <misc/wait_queue.h>
+#include <rpc/clnt.h>
+#include <rpc/rpc_msg.h>
+
+#include "svc_internal.h"
 
 #define RPC_CTX_FLAG_NONE     0x0000
 #define RPC_CTX_FLAG_LOCKED   0x0001
@@ -37,10 +41,10 @@
 #define RPC_CTX_FLAG_ACKSYNC  0x0008
 
 /*
- * A client call context.  Intended to enable efficient multiplexing of
- * client calls sharing a client channel.
+ * RPC context.  Intended to enable efficient multiplexing of calls
+ * and replies sharing a common channel.
  */
-typedef struct rpc_call_ctx {
+typedef struct rpc_ctx_s {
 	struct opr_rbtree_node node_k;
 	struct wait_entry we;
 	uint32_t xid;
@@ -49,7 +53,6 @@ typedef struct rpc_call_ctx {
 	union {
 		struct {
 			struct rpc_client *clnt;
-			struct x_vc_data *xd;
 			struct timespec timeout;
 		} clnt;
 		struct {
@@ -58,15 +61,18 @@ typedef struct rpc_call_ctx {
 	} ctx_u;
 	struct rpc_msg cc_msg;
 } rpc_ctx_t;
+#define CTX_MSG(p) (opr_containerof((p), struct rpc_ctx_s, cc_msg))
 
+int call_xid_cmpf(const struct opr_rbtree_node *lhs,
+		  const struct opr_rbtree_node *rhs);
 void rpc_msg_init(struct rpc_msg *msg);
 
-rpc_ctx_t *alloc_rpc_call_ctx(CLIENT *, rpcproc_t, xdrproc_t,
-			      void *, xdrproc_t, void *, struct timeval);
+rpc_ctx_t *rpc_ctx_alloc(CLIENT *, rpcproc_t, xdrproc_t, void *, xdrproc_t,
+			 void *, struct timeval);
 void rpc_ctx_next_xid(rpc_ctx_t *, uint32_t);
 int rpc_ctx_wait_reply(rpc_ctx_t *, uint32_t);
 bool rpc_ctx_xfer_replymsg(struct x_vc_data *, struct rpc_msg *);
 void rpc_ctx_ack_xfer(rpc_ctx_t *);
-void free_rpc_call_ctx(rpc_ctx_t *, uint32_t);
+void rpc_ctx_free(rpc_ctx_t *, uint32_t);
 
 #endif				/* TIRPC_RPC_CTX_H */

@@ -47,6 +47,24 @@
 
 #define tv_to_ms(tv) (1000 * ((tv)->tv_sec) + (tv)->tv_usec/1000)
 
+int
+call_xid_cmpf(const struct opr_rbtree_node *lhs,
+	      const struct opr_rbtree_node *rhs)
+{
+	rpc_ctx_t *lk, *rk;
+
+	lk = opr_containerof(lhs, rpc_ctx_t, node_k);
+	rk = opr_containerof(rhs, rpc_ctx_t, node_k);
+
+	if (lk->xid < rk->xid)
+		return (-1);
+
+	if (lk->xid == rk->xid)
+		return (0);
+
+	return (1);
+}
+
 void
 rpc_msg_init(struct rpc_msg *msg)
 {
@@ -57,9 +75,8 @@ rpc_msg_init(struct rpc_msg *msg)
 }
 
 rpc_ctx_t *
-alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
-		   void *args_ptr, xdrproc_t xdr_results,
-		   void *results_ptr, struct timeval timeout)
+rpc_ctx_alloc(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args, void *args_ptr,
+	      xdrproc_t xdr_results, void *results_ptr, struct timeval timeout)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;
@@ -124,10 +141,11 @@ rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg)
 {
 	rpc_ctx_t ctx_k, *ctx;
 	struct opr_rbtree_node *nv;
-	rpc_dplx_lock_t *lk = &xd->rec->recv.lock;
+	struct rpc_dplx_rec *rec = xd->rec;
+	rpc_dplx_lock_t *lk = &rec->recv.lock;
 
 	ctx_k.xid = msg->rm_xid;
-	REC_LOCK(xd->rec);
+	REC_LOCK(rec);
 	nv = opr_rbtree_lookup(&xd->cx.calls.t, &ctx_k.node_k);
 	if (nv) {
 		ctx = opr_containerof(nv, rpc_ctx_t, node_k);
@@ -135,7 +153,7 @@ rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg)
 		ctx->cc_msg = *msg;	/* and stash reply header */
 
 		ctx->flags |= RPC_CTX_FLAG_SYNCDONE;
-		REC_UNLOCK(xd->rec);
+		REC_UNLOCK(rec);
 		cond_signal(&lk->we.cv);	/* XXX we hold lk->we.mtx */
 		/* now, we must ourselves wait for the other side to run */
 		while (!(ctx->flags & RPC_CTX_FLAG_ACKSYNC))
@@ -150,14 +168,15 @@ rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg)
 
 		return (true);
 	}
-	REC_UNLOCK(xd->rec);
+	REC_UNLOCK(rec);
 	return (false);
 }
 
 int
 rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 {
-	struct x_vc_data *xd = (struct x_vc_data *)ctx->ctx_u.clnt.clnt->cl_p1;
+	CLIENT *clnt = ctx->ctx_u.clnt.clnt;
+	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;
 	SVCXPRT *xprt = rec->hdl.xprt;
 	rpc_dplx_lock_t *lk = &rec->recv.lock;
@@ -210,17 +229,20 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 void
 rpc_ctx_ack_xfer(rpc_ctx_t *ctx)
 {
-	struct x_vc_data *xd = (struct x_vc_data *)ctx->ctx_u.clnt.clnt->cl_p1;
-	rpc_dplx_lock_t *lk = &xd->rec->recv.lock;
+	CLIENT *clnt = ctx->ctx_u.clnt.clnt;
+	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
+	struct rpc_dplx_rec *rec = xd->rec;
+	rpc_dplx_lock_t *lk = &rec->recv.lock;
 
 	ctx->flags |= RPC_CTX_FLAG_ACKSYNC;
 	cond_signal(&lk->we.cv);	/* XXX we hold lk->we.mtx */
 }
 
 void
-free_rpc_call_ctx(rpc_ctx_t *ctx, uint32_t flags)
+rpc_ctx_free(rpc_ctx_t *ctx, uint32_t flags)
 {
-	struct x_vc_data *xd = (struct x_vc_data *)ctx->ctx_u.clnt.clnt->cl_p1;
+	CLIENT *clnt = ctx->ctx_u.clnt.clnt;
+	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;
 	struct timespec ts;
 
