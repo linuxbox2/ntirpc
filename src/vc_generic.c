@@ -296,9 +296,6 @@ vc_shared_destroy(struct x_vc_data *xd)
 	XDR_DESTROY(&xd->shared.xdrs_out);
 	xdrs_destroyed = true;
 
-	if (ct->ct_addr.buf)
-		mem_free(ct->ct_addr.buf, 0);	/* XXX */
-
 	/* svc_vc */
 	xprt = rec->hdl.xprt;
 	if (xprt) {

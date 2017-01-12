@@ -73,8 +73,9 @@ struct ct_data {
 	bool ct_closeit;	/* close it on destroy */
 	struct timeval ct_wait;	/* wait interval in milliseconds */
 	bool ct_waitset;	/* wait set by clnt_control? */
-	struct netbuf ct_addr;	/* remote addr */
+	struct sockaddr_storage ct_raddr;	/* remote addr */
 	struct wait_entry ct_sync;	/* wait for completion */
+	int ct_rlen;
 };
 
 #ifdef USE_RPC_RDMA
