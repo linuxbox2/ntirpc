@@ -84,8 +84,6 @@ static void clnt_dg_abort(CLIENT *);
 static bool clnt_dg_control(CLIENT *, u_int, void *);
 static void clnt_dg_destroy(CLIENT *);
 
-static const char mem_err_clnt_dg[] = "clnt_dg_create: out of memory";
-
 /*
  * Connection less client creation returns with client handle parameters.
  * Default options are set, which the user can change using clnt_control().
@@ -106,9 +104,9 @@ clnt_dg_ncreate(int fd,	/* open file descriptor */
 		u_int sendsz,	/* buffer recv size */
 		u_int recvsz /* buffer send size */)
 {
-	CLIENT *clnt = NULL;	/* client handle */
-	struct cx_data *cx = NULL;	/* private data */
-	struct cu_data *cu = NULL;
+	CLIENT *clnt;		/* client handle */
+	struct cx_data *cx;
+	struct cu_data *cu;
 	struct timespec now;
 	struct rpc_msg call_msg;
 	struct __rpc_sockinfo si;
@@ -135,21 +133,15 @@ clnt_dg_ncreate(int fd,	/* open file descriptor */
 		rpc_createerr.cf_error.re_errno = 0;
 		return (NULL);
 	}
-
-	clnt = mem_alloc(sizeof(CLIENT));
-
-	mutex_init(&clnt->cl_lock, NULL);
-	clnt->cl_flags = CLNT_FLAG_NONE;
-
 	/*
 	 * Should be multiple of 4 for XDR.
 	 */
 	sendsz = ((sendsz + 3) / 4) * 4;
 	recvsz = ((recvsz + 3) / 4) * 4;
+
 	cx = alloc_cx_data(CX_DG_DATA, sendsz, recvsz);
-	if (cx == NULL)
-		goto err1;
 	cu = CU_DATA(cx);
+
 	(void)memcpy(&cu->cu_raddr, svcaddr->buf, (size_t) svcaddr->len);
 	cu->cu_rlen = svcaddr->len;
 	/* Other values can also be set through clnt_control() */
@@ -157,8 +149,6 @@ clnt_dg_ncreate(int fd,	/* open file descriptor */
 	cu->cu_wait.tv_usec = 0;
 	cu->cu_total.tv_sec = -1;
 	cu->cu_total.tv_usec = -1;
-	cu->cu_sendsz = sendsz;
-	cu->cu_recvsz = recvsz;
 	cu->cu_async = false;
 	cu->cu_connect = false;
 	cu->cu_connected = false;
@@ -170,7 +160,8 @@ clnt_dg_ncreate(int fd,	/* open file descriptor */
 	if (!xdr_callhdr(&(cu->cu_outxdrs), &call_msg)) {
 		rpc_createerr.cf_stat = RPC_CANTENCODEARGS;	/* XXX */
 		rpc_createerr.cf_error.re_errno = 0;
-		goto err2;
+		free_cx_data(cx);
+		return (NULL);
 	}
 	cu->cu_xdrpos = XDR_GETPOS(&(cu->cu_outxdrs));
 
@@ -192,23 +183,12 @@ clnt_dg_ncreate(int fd,	/* open file descriptor */
 	 */
 	cu->cu_closeit = false;
 	cu->cu_fd = fd;
+
+	clnt = &cx->cx_c;
 	clnt->cl_ops = clnt_dg_ops();
-	clnt->cl_p1 = cx;
 	clnt->cl_p2 = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_FLAG_NONE,
 					  &oflags); /* ref+1 */
-	clnt->cl_tp = NULL;
-	clnt->cl_netid = NULL;
-
 	return (clnt);
- err1:
-	__warnx(TIRPC_DEBUG_FLAG_CLNT_DG, mem_err_clnt_dg);
-	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-	rpc_createerr.cf_error.re_errno = errno;
- err2:
-	mem_free(clnt, sizeof(CLIENT));
-	if (cx)
-		free_cx_data(cx);
-	return (NULL);
 }
 
 static enum clnt_stat
@@ -222,7 +202,8 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	     struct timeval utimeout
 	     /* seconds to wait before giving up */)
 {
-	struct cu_data *cu = CU_DATA((struct cx_data *)clnt->cl_p1);
+	struct cx_data *cx = CX_DATA(clnt);
+	struct cu_data *cu = CU_DATA(cx);
 	XDR *xdrs;
 	size_t outlen = 0;
 	struct rpc_msg reply_msg;
@@ -476,14 +457,16 @@ out:
 static void
 clnt_dg_geterr(CLIENT *clnt, struct rpc_err *errp)
 {
-	struct cu_data *cu = CU_DATA((struct cx_data *)clnt->cl_p1);
+	struct cu_data *cu = CU_DATA(CX_DATA(clnt));
+
 	*errp = cu->cu_error;
 }
 
 static bool
 clnt_dg_freeres(CLIENT *clnt, xdrproc_t xdr_res, void *res_ptr)
 {
-	struct cu_data *cu = CU_DATA((struct cx_data *)clnt->cl_p1);
+	struct cx_data *cx = CX_DATA(clnt);
+	struct cu_data *cu = CU_DATA(cx);
 	XDR *xdrs;
 	sigset_t mask, newmask;
 	bool dummy = 0;
@@ -535,7 +518,8 @@ clnt_dg_abort(CLIENT *h)
 static bool
 clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 {
-	struct cu_data *cu = CU_DATA((struct cx_data *)clnt->cl_p1);
+	struct cx_data *cx = CX_DATA(clnt);
+	struct cu_data *cu = CU_DATA(cx);
 	struct netbuf *addr;
 	bool rslt = true;
 
@@ -673,9 +657,9 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 static void
 clnt_dg_destroy(CLIENT *clnt)
 {
-	struct cx_data *cx = (struct cx_data *)clnt->cl_p1;
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)clnt->cl_p2;
-	int cu_fd = CU_DATA(cx)->cu_fd;
+	struct cx_data *cx = CX_DATA(clnt);
+	struct cu_data *cu = CU_DATA(cx);
 	sigset_t mask, newmask;
 
 	/* Handle our own signal mask here, the signal section is
@@ -687,9 +671,9 @@ clnt_dg_destroy(CLIENT *clnt)
 	rpc_dplx_swc(clnt, rpc_flag_clear);
 	rpc_dplx_rwc(clnt, rpc_flag_clear);
 
-	if (CU_DATA(cx)->cu_closeit)
-		(void)close(cu_fd);
-	XDR_DESTROY(&(CU_DATA(cx)->cu_outxdrs));
+	if (cu->cu_closeit)
+		(void)close(cu->cu_fd);
+	XDR_DESTROY(&cu->cu_outxdrs);
 
 	/* signal both channels */
 	rpc_dplx_ssc(clnt, RPC_DPLX_FLAG_NONE);
@@ -699,11 +683,6 @@ clnt_dg_destroy(CLIENT *clnt)
 	rpc_dplx_unref(rec, RPC_DPLX_FLAG_NONE);
 	free_cx_data(cx);
 
-	if (clnt->cl_netid && clnt->cl_netid[0])
-		mem_free(clnt->cl_netid, strlen(clnt->cl_netid) + 1);
-	if (clnt->cl_tp && clnt->cl_tp[0])
-		mem_free(clnt->cl_tp, strlen(clnt->cl_tp) + 1);
-	mem_free(clnt, sizeof(CLIENT));
 	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
 }
 

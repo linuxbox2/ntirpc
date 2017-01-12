@@ -158,6 +158,7 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	CLIENT *clnt = NULL;
 	struct rpc_dplx_rec *rec = NULL;
 	struct x_vc_data *xd = NULL;
+	struct cx_data *cx = NULL;
 	struct ct_data *ct = NULL;
 	struct ct_serialized *cs = NULL;
 	struct rpc_msg call_msg;
@@ -234,11 +235,8 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 		++(xd->refcnt);
 	}
 
-	clnt = (CLIENT *) mem_alloc(sizeof(CLIENT));
-
-	mutex_init(&clnt->cl_lock, NULL);
-	clnt->cl_flags = CLNT_FLAG_NONE;
-	clnt->cl_refcnt = 1;
+	/* buffer sizes should match svc side */
+	cx = alloc_cx_data(CX_VC_DATA, xd->shared.sendsz, xd->shared.recvsz);
 
 	/* private data struct */
 	xd->cx.data.ct_fd = fd;
@@ -253,8 +251,6 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	memcpy(ct->ct_addr.buf, raddr->buf, raddr->len);
 	ct->ct_addr.len = raddr->len;
 	ct->ct_addr.maxlen = raddr->maxlen;
-	clnt->cl_netid = NULL;
-	clnt->cl_tp = NULL;
 
 	/*
 	 * initialize call message
@@ -281,6 +277,7 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	 * Create a client handle which uses xdrrec for serialization
 	 * and authnone for authentication.
 	 */
+	clnt = &cx->cx_c;
 	clnt->cl_ops = clnt_vc_ops();
 	clnt->cl_p1 = xd;
 	clnt->cl_p2 = rec;
@@ -298,9 +295,8 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 		mem_free(cs, sizeof(struct ct_serialized));
 	}
 
-	if (clnt) {
-		mutex_destroy(&clnt->cl_lock);
-		mem_free(clnt, sizeof(CLIENT));
+	if (cx) {
+		free_cx_data(cx);
 	}
 
 	if (rec) {
@@ -778,7 +774,7 @@ clnt_vc_release(CLIENT *clnt, u_int flags)
 
 	/* conditional destroy */
 	if ((clnt->cl_flags & CLNT_FLAG_DESTROYED) && (cl_refcnt == 0)) {
-
+		struct cx_data *cx = CX_DATA(clnt);
 		struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
 		struct rpc_dplx_rec *rec = xd->rec;
 		struct ct_serialized *cs = (struct ct_serialized *)clnt->cl_p3;
@@ -788,12 +784,7 @@ clnt_vc_release(CLIENT *clnt, u_int flags)
 
 		/* client handles are now freed directly */
 		mem_free(cs, sizeof(struct ct_serialized));
-		if (clnt->cl_netid && clnt->cl_netid[0])
-			mem_free(clnt->cl_netid, strlen(clnt->cl_netid) + 1);
-		if (clnt->cl_tp && clnt->cl_tp[0])
-			mem_free(clnt->cl_tp, strlen(clnt->cl_tp) + 1);
-		mutex_destroy(&clnt->cl_lock);
-		mem_free(clnt, sizeof(CLIENT));
+		free_cx_data(cx);
 
 		REC_LOCK(rec);
 		xd_refcnt = --(xd->refcnt);
@@ -845,17 +836,12 @@ clnt_vc_destroy(CLIENT *clnt)
 
 	/* conditional destroy */
 	if (cl_refcnt == 0) {
-
+		struct cx_data *cx = CX_DATA(clnt);
 		struct ct_serialized *cs = (struct ct_serialized *)clnt->cl_p3;
 
 		/* client handles are now freed directly */
 		mem_free(cs, sizeof(struct ct_serialized));
-		if (clnt->cl_netid && clnt->cl_netid[0])
-			mem_free(clnt->cl_netid, strlen(clnt->cl_netid) + 1);
-		if (clnt->cl_tp && clnt->cl_tp[0])
-			mem_free(clnt->cl_tp, strlen(clnt->cl_tp) + 1);
-		mutex_destroy(&clnt->cl_lock);
-		mem_free(clnt, sizeof(CLIENT));
+		free_cx_data(cx);
 
 		if (xd_refcnt == 0) {
 			__warnx(TIRPC_DEBUG_FLAG_REFCNT,

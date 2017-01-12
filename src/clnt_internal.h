@@ -37,12 +37,6 @@
 #ifndef _CLNT_INTERNAL_H
 #define _CLNT_INTERNAL_H
 
-struct ct_wait_entry
-{
-	mutex_t mtx;
-	cond_t  cv;
-};
-
 #include "rpc_dplx_internal.h"
 
 #define MCALL_MSG_SIZE 24
@@ -100,18 +94,13 @@ struct cm_data {
 };
 #endif
 
-enum CX_TYPE
-{
-	CX_DG_DATA,
-	CX_VC_DATA,
-	CX_MSK_DATA
-};
-
 #define X_VC_DATA_FLAG_NONE             0x0000
 #define X_VC_DATA_FLAG_SVC_DESTROYED    0x0001
 
 struct cx_data {
-	enum CX_TYPE type;
+	struct rpc_client cx_c;		/**< Transport Independent handle */
+	struct rpc_dplx_rec *cx_rec;	/* unified sync */
+
 	union {
 		struct cu_data cu;
 		struct ct_data ct;
@@ -119,9 +108,8 @@ struct cx_data {
 		struct cm_data cm;
 #endif
 	} c_u;
-	int cx_fd;		/* connection's fd */
-	struct rpc_dplx_rec *cx_rec;	/* unified sync */
 };
+#define CX_DATA(p) (opr_containerof((p), struct cx_data, cx_c))
 
 struct x_vc_data {
 	struct rpc_dplx_rec *rec;	/* unified sync */
@@ -168,13 +156,18 @@ free_x_vc_data(struct x_vc_data *xd)
 }
 
 static inline struct cx_data *
-alloc_cx_data(enum CX_TYPE type, uint32_t sendsz,
-	      uint32_t recvsz)
+alloc_cx_data(enum CX_TYPE type, uint32_t sendsz, uint32_t recvsz)
 {
 	struct cx_data *cx = mem_zalloc(sizeof(struct cx_data));
-	cx->type = type;
+
+	mutex_init(&cx->cx_c.cl_lock, NULL);
+	cx->cx_c.cl_refcnt = 1;
+
+	cx->cx_c.cl_type = type;
 	switch (type) {
 	case CX_DG_DATA:
+		cx->c_u.cu.cu_recvsz = recvsz;
+		cx->c_u.cu.cu_sendsz = sendsz;
 		cx->c_u.cu.cu_inbuf = mem_alloc(recvsz);
 		cx->c_u.cu.cu_outbuf = mem_alloc(sendsz);
 	case CX_VC_DATA:
@@ -193,7 +186,15 @@ alloc_cx_data(enum CX_TYPE type, uint32_t sendsz,
 static inline void
 free_cx_data(struct cx_data *cx)
 {
-	switch (cx->type) {
+	mutex_destroy(&cx->cx_c.cl_lock);
+
+	/* note seemingly pointers to constant ""? */
+	if (cx->cx_c.cl_netid && cx->cx_c.cl_netid[0])
+		mem_free(cx->cx_c.cl_netid, strlen(cx->cx_c.cl_netid) + 1);
+	if (cx->cx_c.cl_tp && cx->cx_c.cl_tp[0])
+		mem_free(cx->cx_c.cl_tp, strlen(cx->cx_c.cl_tp) + 1);
+
+	switch (cx->cx_c.cl_type) {
 	case CX_DG_DATA:
 		mem_free(cx->c_u.cu.cu_inbuf, cx->c_u.cu.cu_recvsz);
 		mem_free(cx->c_u.cu.cu_outbuf, cx->c_u.cu.cu_sendsz);

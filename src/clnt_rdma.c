@@ -61,7 +61,6 @@
 
 #include "clnt_internal.h"
 #include "rpc_rdma.h"
-#include "rpc_dplx_internal.h"
 
 #define MAX_DEFAULT_FDS		 20000
 
@@ -86,10 +85,9 @@ clnt_rdma_create(RDMAXPRT *xprt,		/* init but NOT connect()ed descriptor */
 		 rpcvers_t version,
 		 const u_int flags)
 {
-	CLIENT *cl = NULL;		/* client handle */
-	struct cx_data *cx = NULL;	/* private data */
-
-	struct cm_data *cm = NULL;
+	CLIENT *cl;		/* client handle */
+	struct cm_data *cm;
+	struct cx_data *cx;
 	struct timeval now;
 
 	if (!xprt || xprt->state != RDMAXS_INITIAL) {
@@ -105,8 +103,6 @@ clnt_rdma_create(RDMAXPRT *xprt,		/* init but NOT connect()ed descriptor */
 //	u_int recvsz = 4*8*1024;
 	u_int sendsz = 1024;
 	u_int recvsz = 1024;
-
-	cl = mem_alloc(sizeof (CLIENT));
 	/*
 	 * Should be multiple of 4 for XDR.
 	 */
@@ -135,14 +131,9 @@ clnt_rdma_create(RDMAXPRT *xprt,		/* init but NOT connect()ed descriptor */
 	 * to let clnt_destroy do it for him/her.
 	 */
 	cm->cm_closeit = FALSE;
+	cl = &cx->cx_c;
 	cl->cl_ops = clnt_rdma_ops();
-	//	cl->cl_private = (caddr_t)(void *) cx;
-	cl->cl_p1 =  (caddr_t)(void *) cx;
-	cl->cl_p2 =  NULL;
-	//	cl->cl_p2 =  rec;
 	//	cl->cl_auth = authnone_create();
-	cl->cl_tp = NULL;
-	cl->cl_netid = NULL;
 
 	return (cl);
 }
@@ -157,7 +148,8 @@ clnt_rdma_call(CLIENT *cl,		/* client handle */
 	       void *resultsp,		/* pointer to results */
 	       struct timeval utimeout	/* seconds to wait before giving up */)
 {
-	struct cm_data *cm = CM_DATA((struct cx_data *) cl->cl_p1);
+	struct cx_data *cx = CX_DATA(cl);
+	struct cm_data *cm = CM_DATA(cx);
 	XDR *xdrs;
 	struct rpc_msg reply_msg;
 	bool ok;
@@ -274,14 +266,16 @@ out:
 static void
 clnt_rdma_geterr(CLIENT *cl, struct rpc_err *errp)
 {
-	struct cm_data *cm = CM_DATA((struct cx_data *) cl->cl_p1);
+	struct cm_data *cm = CM_DATA(CX_DATA(cl));
+
 	*errp = cm->cm_error;
 }
 
 static bool
 clnt_rdma_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
 {
-	struct cm_data *cm = CM_DATA((struct cx_data *)cl->cl_p1);
+	struct cx_data *cx = CX_DATA(cl);
+	struct cm_data *cm = CM_DATA(cx);
 	XDR *xdrs;
 	sigset_t mask, newmask;
 	bool dummy = 0;
@@ -321,7 +315,8 @@ clnt_rdma_abort(CLIENT *h)
 static bool
 clnt_rdma_control(CLIENT *cl, u_int request, void *info)
 {
-	struct cm_data *cm = CM_DATA((struct cx_data *) cl->cl_p1);
+	struct cx_data *cx = CX_DATA(cl);
+	struct cm_data *cm = CM_DATA(cx);
 	sigset_t mask;
 	bool result = TRUE;
 
