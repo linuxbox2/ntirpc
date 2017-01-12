@@ -43,18 +43,8 @@ struct ct_wait_entry
 	cond_t  cv;
 };
 
-#include <rpc/xdr_ioq.h>
-
+#include "rpc_dplx_internal.h"
 #include "rpc_ctx.h"
-
-typedef struct rpc_dplx_lock {
-	struct wait_entry we;
-	int32_t lock_flag_value;	/* XXX killme */
-	struct {
-		const char *func;
-		int line;
-	} locktrace;
-} rpc_dplx_lock_t;
 
 #define MCALL_MSG_SIZE 24
 
@@ -137,41 +127,6 @@ enum CX_TYPE
 
 #define X_VC_DATA_FLAG_NONE             0x0000
 #define X_VC_DATA_FLAG_SVC_DESTROYED    0x0001
-
-/* new unified state */
-struct rpc_dplx_rec {
-	int fd_k;
-#if 0
-	mutex_t mtx;
-#else
-	struct {
-		mutex_t mtx;
-		const char *func;
-		int line;
-	} locktrace;
-#endif
-	struct opr_rbtree_node node_k;
-	uint32_t refcnt;
-	struct {
-		rpc_dplx_lock_t lock;
-	} send;
-	struct {
-		rpc_dplx_lock_t lock;
-	} recv;
-	struct {
-		struct x_vc_data *xd;
-		SVCXPRT *xprt;
-	} hdl;
-};
-
-#define REC_LOCK(rec) \
-	do { \
-		mutex_lock(&((rec)->locktrace.mtx)); \
-		(rec)->locktrace.func = __func__; \
-		(rec)->locktrace.line = __LINE__; \
-	} while (0)
-
-#define REC_UNLOCK(rec) mutex_unlock(&((rec)->locktrace.mtx))
 
 struct cx_data {
 	enum CX_TYPE type;
