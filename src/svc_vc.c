@@ -97,9 +97,7 @@ extern pthread_mutex_t svc_ctr_lock;
  * xprt = svc_vc_ncreate(sock, send_buf_size, recv_buf_size);
  *
  * Creates, registers, and returns a (rpc) tcp based transport.
- * Once *xprt is initialized, it is registered as a transport
- * see (svc.h, xprt_register).  This routine returns
- * a NULL if a problem occurred.
+ * If a problem occurred, this routine returns a NULL.
  *
  * Since streams do buffered io similar to stdio, the caller can specify
  * how big the send and receive buffers are via the second and third parms;
@@ -206,10 +204,11 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	/* make reachable from xprt list */
 	svc_rqst_init_xprt(xprt);
 
-	/* conditional xprt_register */
+	/* Conditional register */
 	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
 	    && (!(flags & SVC_VC_CREATE_XPRT_NOREG)))
-		xprt_register(xprt);
+		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+				    SVC_RQST_FLAG_CHAN_AFFINITY);
 
 #if defined(HAVE_BLKIN)
 	__rpc_set_blkin_endpoint(xprt, "svc_vc");
@@ -281,11 +280,12 @@ svc_fd_ncreatef(const int fd, const u_int sendsize, const u_int recvsize,
 	}
 	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
 
-	/* conditional xprt_register */
+	/* Conditional register */
 	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
 	     && !(flags & SVC_CREATE_FLAG_XPRT_NOREG))
 	    || (flags & SVC_CREATE_FLAG_XPRT_DOREG))
-		xprt_register(xprt);
+		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+				    SVC_RQST_FLAG_CHAN_AFFINITY);
 
 #if defined(HAVE_BLKIN)
 	__rpc_set_blkin_endpoint(xprt, "svc_vc");
@@ -559,7 +559,7 @@ svc_rdvs_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)xprt->xp_p5;
 
 	/* clears xprt from the xprt table (eg, idle scans) */
-	xprt_unregister(xprt);
+	svc_rqst_xprt_unregister(xprt);
 
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 		"%s() %p xp_refs %" PRIu32
@@ -588,8 +588,6 @@ svc_rdvs_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	(void)rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
 
 	if (xd->refcnt == 0) {
-		XDR_DESTROY(&xd->shared.xdrs_in);
-		XDR_DESTROY(&xd->shared.xdrs_out);
 		free_x_vc_data(xd);
 	}
 }
@@ -605,7 +603,7 @@ svc_vc_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	svc_vc_dec_nconns();
 
 	/* clears xprt from the xprt table (eg, idle scans) */
-	xprt_unregister(xprt);
+	svc_rqst_xprt_unregister(xprt);
 
 	/* bidirectional */
 	REC_LOCK(rec);
@@ -1100,16 +1098,10 @@ svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
 	if (xprt->xp_ops == NULL)
 		goto unlock;
 
-	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
-		/* XXX should not happen--but do no harm */
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"%s: destroyed xprt %p seen in clean idle\n",
-			__func__,
-			xprt);
-		goto unlock;
-	}
-
 	if (xprt->xp_ops->xp_recv != svc_vc_recv)
+		goto unlock;
+
+	if (xprt->xp_flags & (SVC_XPRT_FLAG_DESTROYED | SVC_XPRT_FLAG_UREG))
 		goto unlock;
 
 	{

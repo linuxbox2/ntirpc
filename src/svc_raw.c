@@ -44,6 +44,8 @@
 #include <sys/types.h>
 #include <rpc/raw.h>
 #include <stdlib.h>
+#include <rpc/svc_rqst.h>
+#include "svc_internal.h"
 
 #ifndef UDPMSGSIZE
 #define UDPMSGSIZE 8800
@@ -88,7 +90,8 @@ svc_raw_ncreate(void)
 	srp->server.xp_verf.oa_base = srp->verf_body;
 #endif
 	xdrmem_create(&srp->xdr_stream, srp->raw_buf, UDPMSGSIZE, XDR_DECODE);
-	xprt_register(&srp->server);
+	svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, &srp->server,
+			    SVC_RQST_FLAG_CHAN_AFFINITY);
 	mutex_unlock(&svcraw_lock);
 
 	return (&srp->server);

@@ -79,11 +79,10 @@ static int svc_dg_store_pktinfo(struct msghdr *, struct svc_req *);
 /*
  * Usage:
  * xprt = svc_dg_ncreate(sock, sendsize, recvsize);
- * Does other connectionless specific initializations.
- * Once *xprt is initialized, it is registered.
- * see (svc.h, xprt_register). If recvsize or sendsize are 0 suitable
+ *
+ * If recvsize or sendsize are 0 suitable,
  * system defaults are chosen.
- * The routines returns NULL if a problem occurred.
+ * If a problem occurred, this routine returns NULL.
  */
 static void
 svc_dg_xprt_free(struct svc_dg_xprt *su)
@@ -196,11 +195,12 @@ svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	REC_UNLOCK(rec);
 	svc_rqst_init_xprt(xprt);
 
-	/* Conditional xprt_register */
+	/* Conditional register */
 	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
 	     && !(flags & SVC_CREATE_FLAG_XPRT_NOREG))
 	    || (flags & SVC_CREATE_FLAG_XPRT_DOREG))
-		xprt_register(xprt);
+		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+				    SVC_RQST_FLAG_CHAN_AFFINITY);
 
 #if defined(HAVE_BLKIN)
 	__rpc_set_blkin_endpoint(xprt, "svc_dg");
@@ -455,7 +455,7 @@ svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	struct svc_dg_xprt *su = su_data(xprt);
 
 	/* clears xprt from the xprt table (eg, idle scans) */
-	xprt_unregister(xprt);
+	svc_rqst_xprt_unregister(xprt);
 
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 		"%s() %p xp_refs %" PRIu32

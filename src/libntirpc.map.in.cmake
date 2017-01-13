@@ -295,8 +295,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdrrec_eof;
     xdrrec_skiprecord;
     xdrstdio_create;
-    xprt_register;
-    xprt_unregister;
 
   local:
     *;

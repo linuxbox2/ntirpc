@@ -229,7 +229,8 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	slocked = true;
 
 	if (!xprt->xp_ev)
-		xprt_register(xprt);
+		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+				    SVC_RQST_FLAG_CHAN_AFFINITY);
 
 	if (cu->cu_total.tv_usec == -1)
 		timeout = utimeout;	/* use supplied timeout */

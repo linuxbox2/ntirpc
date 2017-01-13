@@ -130,7 +130,7 @@ svc_rdma_ncreate(void *arg, const u_int sendsize, const u_int recvsize,
 freedata:
 	mem_free(sm, sizeof (*sm));
 	xprt->xprt.xp_p2 = NULL;
-	xprt_unregister(&xprt->xprt);
+	svc_rqst_xprt_unregister(&xprt->xprt);
 	return (NULL);
 }
 
