@@ -103,7 +103,7 @@ svc_ioq_init(void)
 static inline void
 cfconn_set_dead(SVCXPRT *xprt)
 {
-	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
+	struct svc_vc_xprt *xd = VC_DR(REC_XPRT(xprt));
 
 	mutex_lock(&xprt->xp_lock);
 	xd->sx.strm_stat = XPRT_DIED;

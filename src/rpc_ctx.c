@@ -78,7 +78,7 @@ rpc_ctx_t *
 rpc_ctx_alloc(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args, void *args_ptr,
 	      xdrproc_t xdr_results, void *results_ptr, struct timeval timeout)
 {
-	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
+	struct svc_vc_xprt *xd = (struct svc_vc_xprt *)clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;
 	rpc_ctx_t *ctx = mem_alloc(sizeof(rpc_ctx_t));
 
@@ -118,7 +118,7 @@ void
 rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
 {
 	CLIENT *clnt = ctx->ctx_u.clnt.clnt;
-	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
+	struct svc_vc_xprt *xd = (struct svc_vc_xprt *)clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;
 
 	/* this lock protects both xid and rbtree */
@@ -137,7 +137,7 @@ rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
 }
 
 bool
-rpc_ctx_xfer_replymsg(struct x_vc_data *xd, struct rpc_msg *msg)
+rpc_ctx_xfer_replymsg(struct svc_vc_xprt *xd, struct rpc_msg *msg)
 {
 	rpc_ctx_t ctx_k, *ctx;
 	struct opr_rbtree_node *nv;
@@ -176,7 +176,7 @@ int
 rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 {
 	CLIENT *clnt = ctx->ctx_u.clnt.clnt;
-	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
+	struct svc_vc_xprt *xd = (struct svc_vc_xprt *)clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;
 	SVCXPRT *xprt = rec->hdl.xprt;
 	rpc_dplx_lock_t *lk = &rec->recv.lock;
@@ -230,7 +230,7 @@ void
 rpc_ctx_ack_xfer(rpc_ctx_t *ctx)
 {
 	CLIENT *clnt = ctx->ctx_u.clnt.clnt;
-	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
+	struct svc_vc_xprt *xd = (struct svc_vc_xprt *)clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;
 	rpc_dplx_lock_t *lk = &rec->recv.lock;
 
@@ -242,7 +242,7 @@ void
 rpc_ctx_free(rpc_ctx_t *ctx, uint32_t flags)
 {
 	CLIENT *clnt = ctx->ctx_u.clnt.clnt;
-	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
+	struct svc_vc_xprt *xd = (struct svc_vc_xprt *)clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;
 	struct timespec ts;
 

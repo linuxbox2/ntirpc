@@ -71,7 +71,7 @@ rpc_ctx_t *rpc_ctx_alloc(CLIENT *, rpcproc_t, xdrproc_t, void *, xdrproc_t,
 			 void *, struct timeval);
 void rpc_ctx_next_xid(rpc_ctx_t *, uint32_t);
 int rpc_ctx_wait_reply(rpc_ctx_t *, uint32_t);
-bool rpc_ctx_xfer_replymsg(struct x_vc_data *, struct rpc_msg *);
+bool rpc_ctx_xfer_replymsg(struct svc_vc_xprt *, struct rpc_msg *);
 void rpc_ctx_ack_xfer(rpc_ctx_t *);
 void rpc_ctx_free(rpc_ctx_t *, uint32_t);
 

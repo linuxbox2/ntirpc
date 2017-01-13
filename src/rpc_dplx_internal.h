@@ -33,8 +33,6 @@
 #include <rpc/rpc_dplx.h>
 #include <rpc/svc.h>
 
-struct x_vc_data; /* in clnt_internal.h (avoids circular dependency) */
-
 typedef struct rpc_dplx_lock {
 	struct wait_entry we;
 	int32_t lock_flag_value;	/* XXX killme */
@@ -67,7 +65,6 @@ struct rpc_dplx_rec {
 		rpc_dplx_lock_t lock;
 	} recv;
 	struct {
-		struct x_vc_data *xd;
 		SVCXPRT *xprt;
 	} hdl;
 };
@@ -90,11 +87,6 @@ struct rpc_dplx_rec_set {
 /* XXX perhaps better off as a flag bit (until we can remove it) */
 #define rpc_flag_clear 0
 #define rpc_lock_value 1
-
-enum rpc_duplex_callpath {
-	RPC_DPLX_CLNT = 1,
-	RPC_DPLX_SVC
-};
 
 #define RPC_DPLX_FLAG_NONE          0x0000
 #define RPC_DPLX_FLAG_LOCKED        0x0001
