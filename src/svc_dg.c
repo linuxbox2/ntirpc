@@ -90,11 +90,14 @@ static int svc_dg_store_pktinfo(struct msghdr *, struct svc_req *);
  * The routines returns NULL if a problem occurred.
  */
 SVCXPRT *
-svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
+svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
+		const uint32_t flags)
 {
 	SVCXPRT *xprt;
 	struct svc_dg_data *su = NULL;
 	struct __rpc_sockinfo si;
+	u_int recvsize;
+	u_int sendsize;
 	uint32_t oflags;
 	int rc;
 
@@ -107,8 +110,8 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 	/*
 	 * Find the receive and the send size
 	 */
-	sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsize);
-	recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsize);
+	sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
+	recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
 	if ((sendsize == 0) || (recvsize == 0)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d transport does not support data transfer",
@@ -141,7 +144,7 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 		      XDR_DECODE);
 
 	su->su_cache = NULL;
-	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
+	xprt->xp_flags = (uint16_t)flags;
 	xprt->xp_refs = 1;
 	xprt->xp_fd = fd;
 	xprt->xp_p2 = su;
@@ -156,7 +159,9 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 	svc_rqst_init_xprt(xprt);
 
 	/* Conditional xprt_register */
-	if (!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
+	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
+	     && !(flags & SVC_CREATE_FLAG_XPRT_NOREG))
+	    || (flags & SVC_CREATE_FLAG_XPRT_DOREG))
 		xprt_register(xprt);
 
 #if defined(HAVE_BLKIN)
@@ -419,7 +424,7 @@ svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		" should actually destroy things @ %s:%d",
 		__func__, xprt, xprt->xp_refs, tag, line);
 
-	if (xprt->xp_fd != -1)
+	if ((xprt->xp_flags & SVC_XPRT_FLAG_CLOSE) && xprt->xp_fd != -1)
 		(void)close(xprt->xp_fd);
 
 	XDR_DESTROY(&(su->su_xdrs));

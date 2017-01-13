@@ -766,12 +766,23 @@ extern CLIENT *clnt_vc_ncreate_svc(const SVCXPRT *, const rpcprog_t,
  */
 extern SVCXPRT *svcunix_ncreate(int, u_int, u_int, char *);
 
-extern SVCXPRT *svc_dg_ncreate(const int, const u_int, const u_int);
+extern SVCXPRT *svc_dg_ncreatef(const int, const u_int, const u_int,
+				const uint32_t);
 /*
  * const int fd;                                -- open connection
  * const u_int sendsize;                        -- max send size
  * const u_int recvsize;                        -- max recv size
+ *      const int fd;                           -- open connection end point
+ *      const u_int sendsize;                   -- max send size
+ *      const u_int recvsize;                   -- max recv size
+ *      const uint32_t flags;                   -- flags
  */
+
+static inline SVCXPRT *
+svc_dg_ncreate(const int fd, const u_int sendsize, const u_int recvsize)
+{
+	return (svc_dg_ncreatef(fd, sendsize, recvsize, SVC_CREATE_FLAG_CLOSE));
+}
 
 /*
  * the routine takes any *open* connection
