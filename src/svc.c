@@ -417,7 +417,8 @@ svc_register(SVCXPRT *xprt, u_long prog, u_long vers,
  pmap_it:
 	/* now register the information with the local binder service */
 	if (protocol)
-		return (pmap_set(prog, vers, protocol, xprt->xp_port));
+		return (pmap_set(prog, vers, protocol,
+				 __rpc_address_port(&xprt->xp_local)));
 
 	return (true);
 }

@@ -285,7 +285,6 @@ typedef struct rpc_svcxprt {
 	int xp_type;		/* xprt type */
 
 	uint16_t xp_flags;	/* flags */
-	u_short xp_port;	/* associated port number */
 
 	/*
 	 * union of event processor types
