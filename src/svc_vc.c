@@ -82,8 +82,8 @@
 int generic_read_vc(XDR *, void *, void *, int);
 int generic_write_vc(XDR *, void *, void *, int);
 
-static void svc_vc_rendezvous_ops(SVCXPRT *, u_int);
-static void svc_vc_ops(SVCXPRT *, u_int);
+static void svc_vc_rendezvous_ops(SVCXPRT *);
+static void svc_vc_ops(SVCXPRT *);
 static void svc_vc_override_ops(SVCXPRT *, SVCXPRT *);
 
 bool __svc_clean_idle2(int, bool);
@@ -103,18 +103,21 @@ extern pthread_mutex_t svc_ctr_lock;
  * how big the send and receive buffers are via the second and third parms;
  * 0 => use the system default.
  *
- * Added svc_vc_ncreate2 with flags argument, has the behavior of the
- * original function if flags are SVC_VC_FLAG_NONE (0).
+ * Added svc_vc_ncreatef with flags argument, has the behavior of the
+ * original function with flags SVC_CREATE_FLAG_CLOSE.
  *
  */
 SVCXPRT *
-svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
+svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
+		const uint32_t flags)
 {
 	SVCXPRT *xprt = NULL;
 	struct __rpc_sockinfo si;
 	struct rpc_dplx_rec *rec = NULL;
 	struct x_vc_data *xd = NULL;
 	const char *netid;
+	u_int recvsize;
+	u_int sendsize;
 	uint32_t oflags;
 	int rc;
 
@@ -123,10 +126,6 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 
 	if (!__rpc_sockinfo2netid(&si, &netid))
 		return NULL;
-
-#ifdef RPC_VSOCK
-	flags |= (si.si_af == AF_VSOCK) ? SVC_VC_CREATE_VSOCK : 0;
-#endif /* VSOCK */
 
 	/* atomically find or create shared fd state */
 	rec = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_IFLAG_LOCKREC, &oflags);
@@ -145,11 +144,6 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 		opr_rbtree_init(&xd->cx.calls.t, call_xid_cmpf);
 		xd->cx.calls.xid = 0;	/* next call xid is 1 */
 		xd->refcnt = 1;
-
-		xd->shared.sendsz =
-		    __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsize);
-		xd->shared.recvsz =
-		    __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsize);
 
 		/* duplex streams are not used by the rendevous transport */
 		memset(&xd->shared.xdrs_in, 0, sizeof xd->shared.xdrs_in);
@@ -171,18 +165,39 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 			       RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
 	}
 
+	/*
+	 * Find the receive and the send size
+	 */
+	sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
+	recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
+	/*
+	 * Should be multiple of 4 for XDR.
+	 */
+	xd->shared.sendsz = ((sendsize + 3) / 4) * 4;
+	xd->shared.recvsz = ((recvsize + 3) / 4) * 4;
+	xd->sx.maxrec = __svc_maxrec;
+
 	xprt = mem_zalloc(sizeof(SVCXPRT));
-	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
+	xprt->xp_flags = (uint16_t)flags;
 	xprt->xp_refs = 1;
-	svc_vc_rendezvous_ops(xprt, flags);
 	xprt->xp_p1 = xd;
 	xprt->xp_p5 = rec;
 	xprt->xp_fd = fd;
 	mutex_init(&xprt->xp_lock, NULL);
 
+	svc_vc_rendezvous_ops(xprt);
+#ifdef RPC_VSOCK
+	if (si.si_af == AF_VSOCK)
+		 xprt->xp_type = XPRT_VSOCK_RENDEZVOUS;
+#endif /* VSOCK */
+
 	/* caller should know what it's doing */
-	if (flags & SVC_VC_CREATE_LISTEN)
+	if (flags & SVC_CREATE_FLAG_LISTEN) {
+		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+			"%s: fd %d listen",
+			 __func__, fd);
 		listen(fd, SOMAXCONN);
+	}
 
 	__rpc_address_setup(&xprt->xp_local);
 	rc = getsockname(fd, xprt->xp_local.nb.buf, &xprt->xp_local.nb.len);
@@ -205,8 +220,9 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	svc_rqst_init_xprt(xprt);
 
 	/* Conditional register */
-	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
-	    && (!(flags & SVC_VC_CREATE_XPRT_NOREG)))
+	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
+	     && !(flags & SVC_CREATE_FLAG_XPRT_NOREG))
+	    || (flags & SVC_CREATE_FLAG_XPRT_DOREG))
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
 
@@ -232,12 +248,6 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	}
 
 	return (NULL);
-}
-
-SVCXPRT *
-svc_vc_ncreate(int fd, u_int sendsize, u_int recvsize)
-{
-	return (svc_vc_ncreate2(fd, sendsize, recvsize, SVC_VC_CREATE_NONE));
 }
 
 /*
@@ -392,12 +402,11 @@ static SVCXPRT *
 	/* the SVCXPRT created in svc_vc_create accepts new connections
 	 * in its xp_recv op, the rendezvous_request method, but xprt is
 	 * a call channel */
-	u_int ops_flags =
+	svc_vc_ops(xprt);
 #ifdef RPC_VSOCK
-		(si.si_af == AF_VSOCK) ? SVC_VC_CREATE_VSOCK :
+	if (si->si_af == AF_VSOCK)
+		 xprt->xp_type = XPRT_VSOCK;
 #endif /* VSOCK */
-		0;
-	svc_vc_ops(xprt, ops_flags);
 
 	xd->sx.strm_stat = XPRT_IDLE;
 
@@ -566,7 +575,8 @@ svc_rdvs_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		" should actually destroy things @ %s:%d",
 		__func__, xprt, xprt->xp_refs, tag, line);
 
-	if (xprt->xp_fd != RPC_ANYFD)
+	if ((xprt->xp_flags & SVC_XPRT_FLAG_CLOSE)
+	    && xprt->xp_fd != RPC_ANYFD)
 		(void)close(xprt->xp_fd);
 
 	if (xprt->xp_ops->xp_free_user_data) {
@@ -941,7 +951,7 @@ svc_vc_unlock(SVCXPRT *xprt, uint32_t flags, const char *func, int line)
 }
 
 static void
-svc_vc_ops(SVCXPRT *xprt, u_int flags)
+svc_vc_ops(SVCXPRT *xprt)
 {
 	static struct xp_ops ops;
 
@@ -949,11 +959,6 @@ svc_vc_ops(SVCXPRT *xprt, u_int flags)
 	mutex_lock(&ops_lock);
 
 	xprt->xp_type = XPRT_TCP;
-	xprt->xp_type =
-#ifdef RPC_VSOCK
-		(flags & SVC_VC_CREATE_VSOCK) ? XPRT_VSOCK :
-#endif /* VSOCK */
-		XPRT_TCP;
 
 	if (ops.xp_recv == NULL) {
 		ops.xp_recv = svc_vc_recv;
@@ -994,18 +999,14 @@ svc_vc_override_ops(SVCXPRT *xprt, SVCXPRT *newxprt)
 }
 
 static void
-svc_vc_rendezvous_ops(SVCXPRT *xprt, u_int flags)
+svc_vc_rendezvous_ops(SVCXPRT *xprt)
 {
 	static struct xp_ops ops;
 	extern mutex_t ops_lock;
 
 	mutex_lock(&ops_lock);
 
-	xprt->xp_type =
-#ifdef RPC_VSOCK
-		(flags & SVC_VC_CREATE_VSOCK) ? XPRT_VSOCK_RENDEZVOUS :
-#endif /* VSOCK */
-		XPRT_TCP_RENDEZVOUS;
+	xprt->xp_type = XPRT_TCP_RENDEZVOUS;
 
 	if (ops.xp_recv == NULL) {
 		ops.xp_recv = rendezvous_request;

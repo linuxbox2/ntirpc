@@ -708,15 +708,8 @@ __END_DECLS
 
 __BEGIN_DECLS
 
-extern SVCXPRT *svc_vc_ncreate(const int, const u_int, const u_int);
-/*
- *      const int fd;                           -- open connection end point
- *      const u_int sendsize;                   -- max send size
- *      const u_int recvsize;                   -- max recv size
- */
-
-extern SVCXPRT *svc_vc_ncreate2(const int, const u_int, const u_int,
-				const u_int);
+extern SVCXPRT *svc_vc_ncreatef(const int, const u_int, const u_int,
+				const uint32_t);
 /*
  *      const int fd;                           -- open connection end point
  *      const u_int sendsize;                   -- max send size
@@ -724,13 +717,12 @@ extern SVCXPRT *svc_vc_ncreate2(const int, const u_int, const u_int,
  *      const u_int flags;                      -- flags
  */
 
-__END_DECLS
-#define SVC_VC_CREATE_NONE             0x0000
-#define SVC_VC_CREATE_XPRT_NOREG       0x0008
-#define SVC_VC_CREATE_LISTEN           0x0010
-#define SVC_VC_CREATE_VSOCK            0x0020
+static inline SVCXPRT *
+svc_vc_ncreate(const int fd, const u_int sendsize, const u_int recvsize)
+{
+	return (svc_vc_ncreatef(fd, sendsize, recvsize, SVC_CREATE_FLAG_CLOSE));
+}
 
-__BEGIN_DECLS
 /*
  * Create a client handle from an active service transport handle.
  * (Defined here because this file knows about clnt.h, but not vice versa.)

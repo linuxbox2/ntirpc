@@ -67,7 +67,6 @@
 #define svc_tp_create(a, b, c, d) svc_tp_ncreate(a, b, c, d)
 #define svc_tli_create(a, b, c, d, e) svc_tli_ncreate(a, b, c, d, e)
 #define svc_vc_create(a, b, c) svc_vc_ncreate(a, b, c)
-#define svc_vc_create2(a, b, c, d) svc_vc_ncreate2(a, b, c, d)
 #define svcunix_create(a, b, c, d) svcunix_ncreate(a, b, c, d)
 #define svc_dg_create(a, b, c) svc_dg_ncreate(a, b, c)
 #define svc_fd_create(a, b, c) svc_fd_ncreate(a, b, c)
