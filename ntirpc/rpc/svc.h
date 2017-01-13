@@ -152,12 +152,12 @@ typedef struct svc_init_params {
 /* uint16_t actually used */
 #define SVC_XPRT_FLAG_ADDED		0x0001
 #define SVC_XPRT_FLAG_BLOCKED		0x0002
+#define SVC_XPRT_FLAG_CLOSE		0x0010
 #define SVC_XPRT_FLAG_DESTROYED		0x0020	/* SVC_DESTROY() was called */
 #define SVC_XPRT_FLAG_DESTROYING	0x0040	/* (*xp_destroy) was called */
-#define SVC_XPRT_FLAG_VSOCK             0x0080
+#define SVC_XPRT_FLAG_INITIALIZED	0x0080
 
 /* uint32_t instructions */
-#define SVC_XPRT_FLAG_LOCK		SVC_XPRT_FLAG_NONE
 #define SVC_XPRT_FLAG_LOCKED		0x00010000
 #define SVC_XPRT_FLAG_UNLOCK		0x00020000
 
@@ -707,10 +707,22 @@ extern SVCXPRT *svc_tli_ncreate(const int, const struct netconfig *,
  *      const u_int sendsz;             -- max sendsize
  *      const u_int recvsz;             -- max recvsize
  */
+__END_DECLS
 
 /*
  * Connectionless and connectionful create routines
  */
+
+/* uint16_t actually used */
+#define SVC_CREATE_FLAG_NONE		SVC_XPRT_FLAG_NONE
+#define SVC_CREATE_FLAG_CLOSE		SVC_XPRT_FLAG_CLOSE
+
+/* uint32_t instructions */
+#define SVC_CREATE_FLAG_LISTEN		CLNT_CREATE_FLAG_LISTEN
+#define SVC_CREATE_FLAG_XPRT_DOREG	CLNT_CREATE_FLAG_XPRT_DOREG
+#define SVC_CREATE_FLAG_XPRT_NOREG	CLNT_CREATE_FLAG_XPRT_NOREG
+
+__BEGIN_DECLS
 
 extern SVCXPRT *svc_vc_ncreate(const int, const u_int, const u_int);
 /*
