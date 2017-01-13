@@ -26,6 +26,8 @@
 #ifndef TIRPC_SVC_INTERNAL_H
 #define TIRPC_SVC_INTERNAL_H
 
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <misc/os_epoll.h>
 #include <rpc/rpc_msg.h>
 
@@ -185,6 +187,38 @@ struct cl_cache {
 	rpcvers_t uc_vers;	/* saved version number */
 	rpcproc_t uc_proc;	/* saved procedure number */
 };
+
+/*
+ * The following union is defined just to use SVC_CMSG_SIZE macro for an array
+ * length. _GNU_SOURCE must be defined to get in6_pktinfo declaration!
+ */
+union pktinfo_u {
+	struct in_pktinfo x;
+	struct in6_pktinfo y;
+};
+#define SVC_CMSG_SIZE CMSG_SPACE(sizeof(union pktinfo_u))
+
+/**
+ * \struct svc_dg_xprt
+ * DG transport instance
+ *
+ * Replaces old struct svc_dg_data by locally wrapping struct rpc_dplx_rec,
+ * which wraps struct rpc_svcxprt indexed by fd.
+ */
+struct svc_dg_xprt {
+	struct rpc_dplx_rec su_dr;	/* SVCXPRT indexed by fd */
+
+	struct msghdr su_msghdr;	/* msghdr received from clnt */
+	XDR su_xdrs;			/* XDR handle */
+
+	struct cl_cache *su_cache;	/* cached data, NULL if none */
+	size_t su_iosz;			/* size of send.recv buffer */
+	u_int su_recvsz;
+	u_int su_sendsz;
+
+	unsigned char su_cmsg[SVC_CMSG_SIZE];	/* cmsghdr received from clnt */
+};
+#define DG_DR(p) (opr_containerof((p), struct svc_dg_xprt, su_dr))
 
 /* Epoll interface change */
 #ifndef EPOLL_CLOEXEC
