@@ -89,23 +89,19 @@ static int svc_dg_store_pktinfo(struct msghdr *, struct svc_req *);
  * system defaults are chosen.
  * The routines returns NULL if a problem occurred.
  */
-static const char svc_dg_str[] = "svc_dg_ncreate: %s";
-static const char svc_dg_err1[] = "could not get transport information";
-static const char svc_dg_err2[] = " transport does not support data transfer";
-static const char __no_mem_str[] = "out of memory";
-
 SVCXPRT *
 svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 {
 	SVCXPRT *xprt;
 	struct svc_dg_data *su = NULL;
 	struct __rpc_sockinfo si;
-	struct sockaddr_storage ss;
-	socklen_t slen;
 	uint32_t oflags;
+	int rc;
 
 	if (!__rpc_fd2sockinfo(fd, &si)) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_DG, svc_dg_str, svc_dg_err1);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d could not get transport information",
+			__func__, fd);
 		return (NULL);
 	}
 	/*
@@ -114,11 +110,23 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 	sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsize);
 	recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsize);
 	if ((sendsize == 0) || (recvsize == 0)) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_DG, svc_dg_str, svc_dg_err2);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d transport does not support data transfer",
+			__func__, fd);
 		return (NULL);
 	}
 
 	xprt = mem_zalloc(sizeof(SVCXPRT));
+
+	__rpc_address_setup(&xprt->xp_local);
+	rc = getsockname(fd, xprt->xp_local.nb.buf, &xprt->xp_local.nb.len);
+	if (rc < 0) {
+		mem_free(xprt, sizeof(SVCXPRT));
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d getsockname failed (%d)",
+			 __func__, fd, rc);
+		return (NULL);
+	}
 
 	/* Init SVCXPRT locks, etc */
 	mutex_init(&xprt->xp_lock, NULL);
@@ -139,28 +147,6 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 	xprt->xp_p2 = su;
 	svc_dg_ops(xprt);
 
-	slen = sizeof(ss);
-	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0)
-		goto freedata;
-
-	__rpc_set_address(&xprt->xp_local, &ss, slen);
-
-	switch (ss.ss_family) {
-	case AF_INET:
-		xprt->xp_port = ntohs(((struct sockaddr_in *)&ss)->sin_port);
-		break;
-#ifdef INET6
-	case AF_INET6:
-		xprt->xp_port = ntohs(((struct sockaddr_in6 *)&ss)->sin6_port);
-		break;
-#endif
-	case AF_LOCAL:
-		/* no port */
-		break;
-	default:
-		break;
-	}
-
 	/* Enable reception of IP*_PKTINFO control msgs */
 	svc_dg_enable_pktinfo(fd, &si);
 
@@ -178,13 +164,6 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 #endif
 
 	return (xprt);
-
- freedata:
-	__warnx(TIRPC_DEBUG_FLAG_SVC_DG, svc_dg_str, __no_mem_str);
-	mem_free(su, sizeof(*su));
-	xprt_unregister(xprt);
-	mem_free(xprt, sizeof(SVCXPRT));
-	return (NULL);
 }
 
  /*ARGSUSED*/
@@ -237,8 +216,7 @@ svc_dg_recv(struct svc_req *req)
 	struct svc_dg_data *su = su_data(xprt);
 	XDR *xdrs = &(su->su_xdrs);
 	char *reply;
-	struct sockaddr_storage ss;
-	struct sockaddr *sp = (struct sockaddr *)&ss;
+	struct sockaddr *sp = (struct sockaddr *)&xprt->xp_remote.ss;
 	struct msghdr *mesgp;
 	struct iovec iov;
 	size_t replylen;
@@ -246,8 +224,7 @@ svc_dg_recv(struct svc_req *req)
 
 	rpc_msg_init(&req->rq_msg);
 
-	/* Magic marker value to check we didn't get the header. */
-	memset(&ss, 0xff, sizeof(struct sockaddr_storage));
+	__rpc_address_setup(&xprt->xp_remote);
 
  again:
 	iov.iov_base = rpc_buffer(xprt);
@@ -256,7 +233,7 @@ svc_dg_recv(struct svc_req *req)
 	memset(mesgp, 0, sizeof(*mesgp));
 	mesgp->msg_iov = &iov;
 	mesgp->msg_iovlen = 1;
-	mesgp->msg_name = (struct sockaddr *)(void *)&ss;
+	mesgp->msg_name = sp;
 	sp->sa_family = (sa_family_t) 0xffff;
 	mesgp->msg_namelen = sizeof(struct sockaddr_storage);
 	mesgp->msg_control = su->su_cmsg;
@@ -272,7 +249,7 @@ svc_dg_recv(struct svc_req *req)
 	if (rlen == -1 || (rlen < (ssize_t) (4 * sizeof(u_int32_t))))
 		return (false);
 
-	__rpc_set_address(&xprt->xp_remote, &ss, mesgp->msg_namelen);
+	xprt->xp_remote.nb.len = mesgp->msg_namelen;
 
 	/* Check whether there's an IP_PKTINFO or IP6_PKTINFO control message.
 	 * If yes, preserve it for svc_dg_reply; otherwise just zap any cmsgs */

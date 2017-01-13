@@ -2,6 +2,8 @@ NTIRPC_${NTIRPC_VERSION} {
   global:
     # __*
     __ntirpc_pkg_params;
+    __rpc_address_port;
+    __rpc_address_set_length;
     __rpc_createerr;
     __rpc_dtbsize;
     __rpc_endconf;

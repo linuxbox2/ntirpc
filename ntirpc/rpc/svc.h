@@ -596,8 +596,16 @@ __END_DECLS
  * netbuf -- with no alloc/free needed.
  */
 __BEGIN_DECLS
-extern void __rpc_set_address(struct rpc_address *,
-			      const struct sockaddr_storage *, socklen_t);
+extern u_int __rpc_address_port(struct rpc_address *);
+extern void __rpc_address_set_length(struct rpc_address *, socklen_t);
+
+static inline void
+__rpc_address_setup(struct rpc_address *rpca)
+{
+	rpca->nb.buf = &rpca->ss;
+	rpca->nb.len =
+	rpca->nb.maxlen = sizeof(struct sockaddr_storage);
+}
 __END_DECLS
 /*
  * When the service routine is called, it must first check to see if it

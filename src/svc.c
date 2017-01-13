@@ -239,40 +239,53 @@ svc_init(svc_init_params *params)
  * apps can deal with, at the same time setting up a corresponding
  * netbuf -- with no alloc/free needed.
  */
-void
-__rpc_set_address(struct rpc_address *rpca, const struct sockaddr_storage *ss,
-		  socklen_t sl)
+u_int
+__rpc_address_port(struct rpc_address *rpca)
 {
-	socklen_t l;
-
-	switch (ss->ss_family) {
-	case AF_INET6:
-		l = sl ? sl : sizeof(struct sockaddr_in6);
-		memcpy(&rpca->ss, ss, l);
-		break;
+	switch (rpca->ss.ss_family) {
 	case AF_INET:
-		l = sl ? sl : sizeof(struct sockaddr_in);
-		memcpy(&rpca->ss, ss, l);
-		break;
+		return ntohs(((struct sockaddr_in *)rpca->nb.buf)->sin_port);
+#ifdef INET6
+	case AF_INET6:
+		return ntohs(((struct sockaddr_in6 *)rpca->nb.buf)->sin6_port);
+#endif
 	case AF_LOCAL:
-		l = sl ? sl : sizeof(struct sockaddr);
-		memcpy(&rpca->ss, ss, l);
+#ifdef RPC_VSOCK
+	case AF_VSOCK:
+#endif /* VSOCK */
+		/* no port */
+		return 0;
+	default:
+		break;
+	}
+	return -1;
+}
+
+void
+__rpc_address_set_length(struct rpc_address *rpca, socklen_t sl)
+{
+	switch (rpca->ss.ss_family) {
+	case AF_INET:
+		rpca->nb.len = sl ? sl : sizeof(struct sockaddr_in);
+		break;
+#ifdef INET6
+	case AF_INET6:
+		rpca->nb.len = sl ? sl : sizeof(struct sockaddr_in6);
+		break;
+#endif
+	case AF_LOCAL:
+		rpca->nb.len = sl ? sl : sizeof(struct sockaddr);
 		break;
 #ifdef RPC_VSOCK
 	case AF_VSOCK:
-		l = sl ? sl : sizeof(struct sockaddr_vm);
-		memcpy(&rpca->ss, ss, l);
+		rpca->nb.len = sl ? sl : sizeof(struct sockaddr_vm);
 		break;
 #endif /* VSOCK */
 	default:
-		memset(&rpca->ss, 0xfe, sizeof(struct sockaddr_storage));
-		l = sl ? sl : sizeof(struct sockaddr);
+		rpca->nb.len = sl ? sl : sizeof(struct sockaddr);
 		rpca->ss.ss_family = AF_UNSPEC;
 		break;
 	}
-	rpca->nb.buf = &rpca->ss;
-	rpca->nb.len = l;
-	rpca->nb.maxlen = sizeof(struct sockaddr_storage);
 }
 
 /*
