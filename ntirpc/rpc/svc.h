@@ -115,12 +115,6 @@
 #define RPC_SVC_FDSET_GET       4
 #define RPC_SVC_FDSET_SET       5
 
-/*
- * Flags for svc_fd_ncreate2
- */
-
-#define SVC_VCCR_NONE             0x0000
-
 /* Svc event strategy */
 enum svc_event_type {
 	SVC_EVENT_FDSET /* trad. using select and poll (currently unhooked) */ ,
@@ -774,14 +768,21 @@ extern SVCXPRT *svc_dg_ncreate(const int, const u_int, const u_int);
 
 /*
  * the routine takes any *open* connection
- * descriptor as its first input and is used for open connections.
  */
-extern SVCXPRT *svc_fd_ncreate(const int, const u_int, const u_int);
+extern SVCXPRT *svc_fd_ncreatef(const int, const u_int, const u_int,
+				const uint32_t);
 /*
  *      const int fd;                           -- open connection end point
  *      const u_int sendsize;                   -- max send size
  *      const u_int recvsize;                   -- max recv size
+ *      const uint32_t flags;                   -- flags
  */
+
+static inline SVCXPRT *
+svc_fd_ncreate(const int fd, const u_int sendsize, const u_int recvsize)
+{
+	return (svc_fd_ncreatef(fd, sendsize, recvsize, SVC_CREATE_FLAG_NONE));
+}
 
 /*
  * Added for compatibility to old rpc 4.0. Obsoleted by svc_fd_create().

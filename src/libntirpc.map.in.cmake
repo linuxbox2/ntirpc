@@ -147,8 +147,7 @@ NTIRPC_${NTIRPC_VERSION} {
     svc_auth_reg;
     svc_dg_ncreate;
     svc_exit;
-    svc_fd_ncreate;
-    svc_fd_ncreate2;
+    svc_fd_ncreatef;
     svc_init;
     svc_ncreate;
     svc_raw_ncreate;

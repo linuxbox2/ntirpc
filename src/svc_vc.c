@@ -258,55 +258,11 @@ svc_vc_ncreate(int fd, u_int sendsize, u_int recvsize)
 }
 
 /*
- * Like svtcp_ncreate(), except the routine takes any *open* UNIX file
- * descriptor as its first input.
- */
-SVCXPRT *
-svc_fd_ncreate(int fd, u_int sendsize, u_int recvsize)
-{
-	struct sockaddr_storage ss;
-	socklen_t slen;
-	SVCXPRT *xprt;
-	bool xprt_allocd;
-
-	assert(fd != -1);
-
-	xprt = makefd_xprt(fd, sendsize, recvsize, &xprt_allocd);
-	if ((!xprt) || (!xprt_allocd))	/* ref'd existing xprt handle */
-		goto done;
-
-	/* conditional xprt_register */
-	if (!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
-		xprt_register(xprt);
-
-	slen = sizeof(struct sockaddr_storage);
-	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_fd_create: could not retrieve local addr");
-		goto freedata;
-	}
-	__rpc_set_address(&xprt->xp_local, &ss, slen);
-
-	slen = sizeof(struct sockaddr_storage);
-	if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_fd_create: could not retrieve remote addr");
-		goto freedata;
-	}
-	__rpc_set_address(&xprt->xp_remote, &ss, slen);
-
- done:
-	return (xprt);
-
- freedata:
-	return (NULL);
-}
-
-/*
  * Like sv_fd_ncreate(), except export flags for additional control.
  */
 SVCXPRT *
-svc_fd_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
+svc_fd_ncreatef(const int fd, const u_int sendsize, const u_int recvsize,
+		const uint32_t flags)
 {
 	struct sockaddr_storage ss;
 	struct sockaddr *sa = (struct sockaddr *)(void *)&ss;
@@ -335,11 +291,17 @@ svc_fd_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 		return (NULL);
 	}
 	__rpc_set_address(&xprt->xp_remote, &ss, slen);
+	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
 
 	/* conditional xprt_register */
-	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
-	    && (!(flags & SVC_VC_CREATE_XPRT_NOREG)))
+	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
+	     && !(flags & SVC_CREATE_FLAG_XPRT_NOREG))
+	    || (flags & SVC_CREATE_FLAG_XPRT_DOREG))
 		xprt_register(xprt);
+
+#if defined(HAVE_BLKIN)
+	__rpc_set_blkin_endpoint(xprt, "svc_vc");
+#endif
 
 	return (xprt);
 }
