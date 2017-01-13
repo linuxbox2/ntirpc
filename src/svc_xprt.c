@@ -40,10 +40,6 @@
 #include <rpc/pmap_clnt.h>
 #endif				/* PORTMAP */
 #include "rpc_com.h"
-#include <rpc/svc.h>
-#include <misc/rbtree_x.h>
-#include <reentrant.h>
-#include "clnt_internal.h"
 #include "rpc_dplx_internal.h"
 #include "svc_xprt.h"
 
@@ -115,6 +111,61 @@ void svc_xprt_init()
 		} while (0); \
 	}
 
+/*
+ * On success, returns with RPC_DPLX_FLAG_LOCKED
+ */
+SVCXPRT *
+svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
+{
+	struct rpc_svcxprt sk;
+	struct rbtree_x_part *t;
+	struct opr_rbtree_node *nv;
+	SVCXPRT *xprt = NULL;
+
+	cond_init_svc_xprt();
+
+	sk.xp_fd = fd;
+	t = rbtx_partition_of_scalar(&svc_xprt_fd.xt, fd);
+
+	rwlock_rdlock(&t->lock);
+	nv = opr_rbtree_lookup(&t->t, &sk.xp_fd_node);
+	if (!nv) {
+		rwlock_unlock(&t->lock);
+		rwlock_wrlock(&t->lock);
+		nv = opr_rbtree_lookup(&t->t, &sk.xp_fd_node);
+		if (!nv) {
+			(*setup)(&xprt); /* zalloc, xp_refs = 1 */
+			xprt->xp_fd = fd;
+
+			rpc_dplx_rli(REC_XPRT(xprt));
+			if (opr_rbtree_insert(&t->t, &xprt->xp_fd_node)) {
+				/* cant happen */
+				rpc_dplx_rui(REC_XPRT(xprt));
+				__warnx(TIRPC_DEBUG_FLAG_LOCK,
+					"%s: collision inserting in locked rbtree partition",
+					__func__);
+				(*setup)(&xprt);	/* free, sets NULL */
+			}
+			rwlock_unlock(&t->lock);
+			return (xprt);
+		}
+		/* raced, fallthru */
+	}
+	xprt = opr_containerof(nv, struct rpc_svcxprt, xp_fd_node);
+
+	SVC_REF(xprt, SVC_REF_FLAG_NONE);
+	rpc_dplx_rli(REC_XPRT(xprt));
+	rwlock_unlock(&t->lock);
+
+	if (unlikely(xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
+		/* do not return destroyed xprts */
+		rpc_dplx_rui(REC_XPRT(xprt));
+		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+		return (NULL);
+	}
+	return (xprt);
+}
+
 SVCXPRT *
 svc_xprt_get(int fd)
 {
@@ -176,8 +227,8 @@ svc_xprt_set(SVCXPRT *xprt, uint32_t flags)
  * Clear an xprt
  *
  * @note Locking
- * - xprt is locked, unless SVC_XPRT_FLAG_LOCKED is passed
- * - xprt is unlocked if SVC_XPRT_FLAG_UNLOCK is passed, otherwise it is
+ * - xprt is locked, unless RPC_DPLX_FLAG_LOCKED is passed
+ * - xprt is unlocked if RPC_DPLX_FLAG_UNLOCK is passed, otherwise it is
  *   returned locked
  */
 void
@@ -187,8 +238,8 @@ svc_xprt_clear(SVCXPRT *xprt, uint32_t flags)
 
 	cond_init_svc_xprt();
 
-	if (!(flags & SVC_XPRT_FLAG_LOCKED))
-		mutex_lock(&xprt->xp_lock);
+	if (!(flags & RPC_DPLX_FLAG_LOCKED))
+		rpc_dplx_rli(REC_XPRT(xprt));
 
 	if (opr_rbtree_node_valid(&xprt->xp_fd_node)) {
 		t = rbtx_partition_of_scalar(&svc_xprt_fd.xt, xprt->xp_fd);
@@ -198,8 +249,8 @@ svc_xprt_clear(SVCXPRT *xprt, uint32_t flags)
 		rwlock_unlock(&t->lock);
 	}
 
-	if (flags & SVC_XPRT_FLAG_UNLOCK)
-		mutex_unlock(&xprt->xp_lock);
+	if (flags & RPC_DPLX_FLAG_UNLOCK)
+		rpc_dplx_rui(REC_XPRT(xprt));
 }
 
 int
@@ -324,9 +375,9 @@ svc_xprt_shutdown()
 			n = opr_rbtree_next(n);
 
 			/* prevent repeats, see svc_xprt_clear() */
-			mutex_lock(&xprt->xp_lock);
+			rpc_dplx_rli(REC_XPRT(xprt));
 			opr_rbtree_remove(&t->t, &xprt->xp_fd_node);
-			mutex_unlock(&xprt->xp_lock);
+			rpc_dplx_rui(REC_XPRT(xprt));
 
 			SVC_DESTROY(xprt);
 		}		/* curr partition */

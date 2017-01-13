@@ -222,12 +222,6 @@ typedef struct rpc_svcxprt {
 		/* catch-all function */
 		bool (*xp_control) (struct rpc_svcxprt *, const u_int, void *);
 
-		/* transport locking (may be duplex-aware, etc) */
-		void (*xp_lock) (struct rpc_svcxprt *, uint32_t,
-				 const char *, int);
-		void (*xp_unlock) (struct rpc_svcxprt *, uint32_t,
-				   const char *, int);
-
 		/* handle incoming requests (calls xp_recv) */
 		bool (*xp_getreq) (struct rpc_svcxprt *);
 
@@ -515,22 +509,6 @@ static inline void svc_destroy_it(struct rpc_svcxprt *xprt,
 
 #define SVC_CONTROL(xprt, rq, in)			\
 	(*(xprt)->xp_ops->xp_control)((xprt), (rq), (in))
-
-#define XP_LOCK_NONE    0x0000
-#define XP_LOCK_SEND    0x0001
-#define XP_LOCK_RECV    0x0002
-
-#define SVC_LOCK(xprt, flags, func, line) \
-	(*(xprt)->xp_ops->xp_lock)((xprt), (flags), (func), (line))
-
-#define svc_lock(xprt, flags, func, line) \
-	(*(xprt)->xp_ops->xp_lock)((xprt), (flags), (func), (line))
-
-#define SVC_UNLOCK(xprt, flags, func, line) \
-	(*(xprt)->xp_ops->xp_unlock)((xprt), (flags), (func), (line))
-
-#define svc_unlock(xprt, flags, func, line) \
-	(*(xprt)->xp_ops->xp_unlock)((xprt), (flags), (func), (line))
 
 /*
  * Service init (optional).

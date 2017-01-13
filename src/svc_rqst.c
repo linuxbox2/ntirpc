@@ -771,7 +771,7 @@ svc_rqst_xprt_unregister(SVCXPRT *xprt)
 	}
 
 	/* remove xprt from xprt table */
-	svc_xprt_clear(xprt, SVC_XPRT_FLAG_UNLOCK);
+	svc_xprt_clear(xprt, RPC_DPLX_FLAG_UNLOCK);
 }
 
 bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);

@@ -137,61 +137,71 @@ svc_vc_xprt_zalloc(void)
 	return (xd);
 }
 
+void
+svc_vc_xprt_setup(SVCXPRT **sxpp)
+{
+	if (unlikely(*sxpp)) {
+		svc_vc_xprt_free(VC_DR(REC_XPRT(*sxpp)));
+		*sxpp = NULL;
+	} else {
+		struct svc_vc_xprt *xd = svc_vc_xprt_zalloc();
+
+		*sxpp = &xd->sx_dr.xprt;
+	}
+}
+
 SVCXPRT *
 svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 		const uint32_t flags)
 {
-	SVCXPRT *xprt = NULL;
 	struct __rpc_sockinfo si;
-	struct rpc_dplx_rec *rec = NULL;
+	SVCXPRT *xprt;
+	struct rpc_dplx_rec *rec;
 	struct svc_vc_xprt *xd;
 	const char *netid;
 	u_int recvsize;
 	u_int sendsize;
-	uint32_t oflags;
+	u_int xp_flags;
 	int rc;
 
-	/* atomically find or create shared fd state */
-	rec = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_IFLAG_LOCKREC, &oflags);
-	if (!rec) {
+	/* atomically find or create shared fd state; ref+1; locked */
+	xprt = svc_xprt_lookup(fd, svc_vc_xprt_setup);
+	if (!xprt) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_vc: makefd_xprt: rpc_dplx_lookup_rec failed");
-		goto err;
+			"%s: fd %d svc_xprt_lookup failed",
+			__func__, fd);
+		return (NULL);
 	}
+	rec = REC_XPRT(xprt);
 
-	if (!(oflags & RPC_DPLX_LKP_OFLAG_ALLOC)) {
-		xprt = rec->hdl.xprt;
-		/* dont return destroyed xprts */
-		if (xprt) {
-			if (!(xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
-				/* inc xprt refcnt */
-				SVC_REF(xprt, SVC_REF_FLAG_NONE);
-			} else
-				xprt = NULL;
-		}
-		/* return extra ref */
-		rpc_dplx_unref(rec,
-			       RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
+	xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags, flags
+						| SVC_XPRT_FLAG_INITIALIZED);
+	if (xp_flags & SVC_XPRT_FLAG_INITIALIZED) {
+		rpc_dplx_rui(rec);
+		XPRT_TRACE(xprt, __func__, __func__, __LINE__);
 		return (xprt);
 	}
 
 	if (!__rpc_fd2sockinfo(fd, &si)) {
+		atomic_clear_uint16_t_bits(&xprt->xp_flags,
+					   SVC_XPRT_FLAG_INITIALIZED);
+		rpc_dplx_rui(rec);
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d could not get transport information",
 			__func__, fd);
-		goto err;
+		return (NULL);
 	}
 
 	if (!__rpc_sockinfo2netid(&si, &netid)) {
+		atomic_clear_uint16_t_bits(&xprt->xp_flags,
+					   SVC_XPRT_FLAG_INITIALIZED);
+		rpc_dplx_rui(rec);
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d could not get network information",
 			__func__, fd);
-		goto err;
+		return (NULL);
 	}
-
-	xd = svc_vc_xprt_zalloc();
-	xd->rec = rec;
-	xprt = &xd->sx_dr.xprt;
+	xd = VC_DR(rec);
 
 	opr_rbtree_init(&xd->cx.calls.t, call_xid_cmpf);
 /*	xd->cx.calls.xid = 0;	next call xid is 1 */
@@ -210,10 +220,6 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 
 	/* duplex streams are not used by the rendevous transport */
 
-	xprt->xp_flags = (uint16_t)flags;
-	xprt->xp_p5 = rec;
-	xprt->xp_fd = fd;
-
 	svc_vc_rendezvous_ops(xprt);
 #ifdef RPC_VSOCK
 	if (si.si_af == AF_VSOCK)
@@ -231,22 +237,20 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	__rpc_address_setup(&xprt->xp_local);
 	rc = getsockname(fd, xprt->xp_local.nb.buf, &xprt->xp_local.nb.len);
 	if (rc < 0) {
+		atomic_clear_uint16_t_bits(&xprt->xp_flags,
+					   SVC_XPRT_FLAG_INITIALIZED);
+		rpc_dplx_rui(rec);
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d getsockname failed (%d)",
 			 __func__, fd, rc);
-		goto err;
+		return (NULL);
 	}
 
 	xprt->xp_netid = mem_strdup(netid);
 
-	/* make reachable from rec */
-	rec->hdl.xprt = xprt;
-
 	/* release rec */
-	REC_UNLOCK(rec);
-
-	/* make reachable from xprt list */
-	svc_rqst_init_xprt(xprt);
+	rpc_dplx_rui(rec);
+	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
 
 	/* Conditional register */
 	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
@@ -260,19 +264,6 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 #endif
 
 	return (xprt);
-
- err:
-	if (xprt) {
-		svc_vc_xprt_free(xd);
-	}
-
-	if (rec) {
-		rec->hdl.xprt = NULL;
-		rpc_dplx_unref(rec,
-			       RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
-	}
-
-	return (NULL);
 }
 
 /*
@@ -340,7 +331,7 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 	const char *netid;
 	u_int recvsize;
 	u_int sendsize;
-	uint32_t oflags;
+	u_int xp_flags;
 
 	assert(fd != -1);
 
@@ -351,28 +342,21 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 		return (NULL);
 	}
 
-	/* atomically find or create shared fd state */
-	rec = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_IFLAG_LOCKREC, &oflags);
-	if (!rec) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: fd %d rpc_dplx_lookup failed",
+	/* atomically find or create shared fd state; ref+1; locked */
+	xprt = svc_xprt_lookup(fd, svc_vc_xprt_setup);
+	if (!xprt) {
+		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+			"%s: fd %d svc_xprt_lookup failed",
 			__func__, fd);
 		return (NULL);
 	}
+	rec = REC_XPRT(xprt);
 
-	if (!(oflags & RPC_DPLX_LKP_OFLAG_ALLOC)) {
-		xprt = rec->hdl.xprt;
-		/* dont return destroyed xprts */
-		if (xprt) {
-			if (!(xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
-				/* inc xprt refcnt */
-				SVC_REF(xprt, SVC_REF_FLAG_NONE);
-			} else
-				xprt = NULL;
-		}
-		/* return extra ref */
-		rpc_dplx_unref(rec,
-			       RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
+	xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags, *flags
+						| SVC_XPRT_FLAG_INITIALIZED);
+	if (xp_flags & SVC_XPRT_FLAG_INITIALIZED) {
+		rpc_dplx_rui(rec);
+		XPRT_TRACE(xprt, __func__, __func__, __LINE__);
 		return (xprt);
 	}
 
@@ -382,8 +366,9 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 	 * just discover it
 	 */
 	if (!__rpc_fd2sockinfo(fd, si)) {
-		rpc_dplx_unref(rec,
-			       RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
+		atomic_clear_uint16_t_bits(&xprt->xp_flags,
+					   SVC_XPRT_FLAG_INITIALIZED);
+		rpc_dplx_rui(rec);
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d could not get transport information",
 			__func__, fd);
@@ -391,17 +376,15 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 	}
 
 	if (!__rpc_sockinfo2netid(si, &netid)) {
-		rpc_dplx_unref(rec,
-			       RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
+		atomic_clear_uint16_t_bits(&xprt->xp_flags,
+					   SVC_XPRT_FLAG_INITIALIZED);
+		rpc_dplx_rui(rec);
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d could not get network information",
 			__func__, fd);
 		return (NULL);
 	}
-
-	xd = svc_vc_xprt_zalloc();
-	xd->rec = rec;
-	xprt = &xd->sx_dr.xprt;
+	xd = VC_DR(rec);
 
 	opr_rbtree_init(&xd->cx.calls.t, call_xid_cmpf);
 /*	xd->cx.calls.xid = 0;	next call xid is 1 */
@@ -423,9 +406,6 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 			 generic_read_vc);
 	xd->shared.xdrs_in.x_op = XDR_DECODE;
 
-	xprt->xp_p5 = rec;
-	xprt->xp_fd = fd;
-
 	/* the SVCXPRT created in svc_vc_create accepts new connections
 	 * in its xp_recv op, the rendezvous_request method, but xprt is
 	 * a call channel */
@@ -437,18 +417,11 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 
 	xprt->xp_netid = mem_strdup(netid);
 
-	xprt->xp_flags = (uint16_t)*flags;
 	*flags |= SVC_XPRT_FLAG_ADDED;
 
-	/* make reachable from rec */
-	rec->hdl.xprt = xprt;
-
 	/* release */
-	REC_UNLOCK(rec);
+	rpc_dplx_rui(rec);
 	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
-
-	/* Make reachable from xprt list.  Registration deferred. */
-	svc_rqst_init_xprt(xprt);
 
 	return (xprt);
 }
@@ -587,7 +560,6 @@ static void
 svc_vc_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
 	struct svc_vc_xprt *xd = VC_DR(REC_XPRT(xprt));
-	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)xprt->xp_p5;
 
 	/* clears xprt from the xprt table (eg, idle scans) */
 	svc_rqst_xprt_unregister(xprt);
@@ -606,15 +578,10 @@ svc_vc_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		xprt->xp_ops->xp_free_user_data(xprt);
 	}
 
-	REC_LOCK(rec);
-	rec->hdl.xprt = NULL;
-
 	if (xprt->xp_tp)
 		mem_free(xprt->xp_tp, 0);
 	if (xprt->xp_netid)
 		mem_free(xprt->xp_netid, 0);
-
-	(void)rpc_dplx_unref(rec, RPC_DPLX_FLAG_LOCKED | RPC_DPLX_FLAG_UNLOCK);
 
 	svc_vc_xprt_free(xd);
 }
@@ -773,21 +740,22 @@ svc_vc_stat(SVCXPRT *xprt)
 {
 	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
 	struct svc_vc_xprt *xd = VC_DR(rec);
+	enum xprt_stat result = XPRT_IDLE;
+	uint16_t xp_flags = atomic_postclear_uint16_t_bits(&xprt->xp_flags,
+							SVC_XPRT_FLAG_BLOCKED);
 
+	if (xp_flags & SVC_XPRT_FLAG_BLOCKED) {
+		if (xd->sx.strm_stat == XPRT_DIED)
+			result = XPRT_DIED;
+		else if (!xdr_inrec_eof(&(xd->shared.xdrs_in)))
+			result = XPRT_MOREREQS;
+		rpc_dplx_rui(rec);
+		rpc_dplx_rsi(rec);
+	}
 	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
 		return (XPRT_DESTROYED);
 
-	if (!xd)
-		return (XPRT_IDLE);
-
-	/* we hold the recv lock */
-	if (xd->sx.strm_stat == XPRT_DIED)
-		return (XPRT_DIED);
-
-	if (!xdr_inrec_eof(&(xd->shared.xdrs_in)))
-		return (XPRT_MOREREQS);
-
-	return (XPRT_IDLE);
+	return (result);
 }
 
 static bool
@@ -797,6 +765,19 @@ svc_vc_recv(struct svc_req *req)
 	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
 	struct svc_vc_xprt *xd = VC_DR(rec);
 	XDR *xdrs = &(xd->shared.xdrs_in);	/* recv queue */
+	uint16_t xp_flags;
+
+	/* SVC_RECV() locks dplx_rec, that is also unlocked and locked again
+	 * for rpc_ctx.  Need to ensure we're the only one with the lock now.
+	 */
+	rpc_dplx_rli(rec);
+	do {
+		xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags,
+							SVC_XPRT_FLAG_BLOCKED);
+		if (!(xp_flags & SVC_XPRT_FLAG_BLOCKED))
+			break;
+		rpc_dplx_rwi(rec);
+	} while (TRUE);
 
 	/* XXX assert(! cd->nonblock) */
 	if (xd->shared.nonblock) {
@@ -805,7 +786,6 @@ svc_vc_recv(struct svc_req *req)
 	}
 
 	xdrs->x_op = XDR_DECODE;
-
 	xdrs->x_lib[1] = (void *)xprt;	/* transiently thread xprt */
 
 	/* Consumes any remaining -fragment- bytes, and clears last_frag */
@@ -920,26 +900,6 @@ svc_vc_reply(struct svc_req *req)
 }
 
 static void
-svc_vc_lock(SVCXPRT *xprt, uint32_t flags, const char *func, int line)
-{
-	if (flags & XP_LOCK_RECV)
-		rpc_dplx_rlxi(xprt, func, line);
-
-	if (flags & XP_LOCK_SEND)
-		rpc_dplx_slxi(xprt, func, line);
-}
-
-static void
-svc_vc_unlock(SVCXPRT *xprt, uint32_t flags, const char *func, int line)
-{
-	if (flags & XP_LOCK_RECV)
-		rpc_dplx_rux(xprt);
-
-	if (flags & XP_LOCK_SEND)
-		rpc_dplx_sux(xprt);
-}
-
-static void
 svc_vc_ops(SVCXPRT *xprt)
 {
 	static struct xp_ops ops;
@@ -957,8 +917,6 @@ svc_vc_ops(SVCXPRT *xprt)
 		ops.xp_freeargs = svc_vc_freeargs;
 		ops.xp_destroy = svc_vc_destroy;
 		ops.xp_control = svc_vc_control;
-		ops.xp_lock = svc_vc_lock;
-		ops.xp_unlock = svc_vc_unlock;
 		ops.xp_getreq = svc_getreq_default;
 		ops.xp_dispatch = svc_dispatch_default;
 		ops.xp_recv_user_data = NULL;	/* no default */
@@ -1011,8 +969,6 @@ svc_vc_rendezvous_ops(SVCXPRT *xprt)
 				    void *))abort;
 		ops.xp_destroy = svc_vc_destroy_it;
 		ops.xp_control = svc_vc_rendezvous_control;
-		ops.xp_lock = svc_vc_lock;
-		ops.xp_unlock = svc_vc_unlock;
 		ops.xp_getreq = svc_getreq_default;
 		ops.xp_dispatch = svc_dispatch_default;
 		ops.xp_recv_user_data = NULL;	/* no default */

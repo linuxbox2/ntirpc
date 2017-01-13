@@ -277,33 +277,15 @@ clnt_rdma_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
 	struct cx_data *cx = CX_DATA(cl);
 	struct cm_data *cm = CM_DATA(cx);
 	XDR *xdrs;
-	sigset_t mask, newmask;
-	bool dummy = 0;
 
 	/* XXX guard against illegal invocation from libc (will fix) */
 	if (! xdr_res)
-		goto out;
+		return (0);
 
 	xdrs = &(cm->cm_xdrs);
-
-	/* Handle our own signal mask here, the signal section is
-	 * larger than the wait (not 100% clear why) */
-
-	/* barrier recv channel */
-	//	rpc_dplx_rwc(clnt, rpc_flag_clear);
-
-	sigfillset(&newmask);
-	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-
 	xdrs->x_op = XDR_FREE;
-	if (xdr_res)
-		dummy = (*xdr_res)(xdrs, res_ptr);
 
-	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
-	rpc_dplx_rsc(cl, RPC_DPLX_FLAG_NONE);
-
-out:
-	return (dummy);
+	return ((*xdr_res)(xdrs, res_ptr));
 }
 
 /*ARGSUSED*/
@@ -317,13 +299,14 @@ clnt_rdma_control(CLIENT *cl, u_int request, void *info)
 {
 	struct cx_data *cx = CX_DATA(cl);
 	struct cm_data *cm = CM_DATA(cx);
+	struct rpc_dplx_rec *rec = cx->cx_rec;
 	sigset_t mask;
 	bool result = TRUE;
 
 	thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
 	/* always take recv lock first if taking together */
-	rpc_dplx_rlc(cl); //receive lock clnt
-	rpc_dplx_slc(cl); //send lock clnt
+	rpc_dplx_rli(rec); //receive lock clnt
+	mutex_lock(&cl->cl_lock);
 
 	switch (request) {
 	case CLSET_FD_CLOSE:
@@ -406,8 +389,8 @@ clnt_rdma_control(CLIENT *cl, u_int request, void *info)
 	}
 
 unlock:
-	rpc_dplx_ruc(cl);
-	rpc_dplx_suc(cl);
+	rpc_dplx_rui(rec);
+	mutex_unlock(&cl->cl_lock);
 	return (result);
 }
 

@@ -31,7 +31,7 @@
 #include <misc/os_epoll.h>
 #include <rpc/rpc_msg.h>
 
-#include "clnt_internal.h"
+#include "rpc_dplx_internal.h"
 
 extern int __svc_maxiov;
 extern int __svc_maxrec;
@@ -228,7 +228,6 @@ struct svc_dg_xprt {
  */
 struct svc_vc_xprt {
 	struct rpc_dplx_rec sx_dr;	/* SVCXPRT indexed by fd */
-	struct rpc_dplx_rec *rec;	/* unified sync */
 	struct {
 		struct {
 			uint32_t xid;	/* current xid */

@@ -34,10 +34,6 @@
 #include "svc_internal.h"
 
 #define RPC_CTX_FLAG_NONE     0x0000
-#define RPC_CTX_FLAG_LOCKED   0x0001
-
-#define RPC_CTX_FLAG_WAITSYNC 0x0002
-#define RPC_CTX_FLAG_SYNCDONE 0x0004
 #define RPC_CTX_FLAG_ACKSYNC  0x0008
 
 /*
@@ -47,8 +43,6 @@
 typedef struct rpc_ctx_s {
 	struct opr_rbtree_node node_k;
 	struct wait_entry we;
-	uint32_t xid;
-	uint32_t flags;
 	struct rpc_err error;
 	union {
 		struct {
@@ -60,6 +54,10 @@ typedef struct rpc_ctx_s {
 		} svc;
 	} ctx_u;
 	struct rpc_msg cc_msg;
+
+	uint32_t xid;
+	uint32_t refcount;
+	uint16_t flags;
 } rpc_ctx_t;
 #define CTX_MSG(p) (opr_containerof((p), struct rpc_ctx_s, cc_msg))
 
@@ -69,10 +67,10 @@ void rpc_msg_init(struct rpc_msg *msg);
 
 rpc_ctx_t *rpc_ctx_alloc(CLIENT *, rpcproc_t, xdrproc_t, void *, xdrproc_t,
 			 void *, struct timeval);
-void rpc_ctx_next_xid(rpc_ctx_t *, uint32_t);
-int rpc_ctx_wait_reply(rpc_ctx_t *, uint32_t);
+bool rpc_ctx_next_xid(rpc_ctx_t *);
+int rpc_ctx_wait_reply(rpc_ctx_t *);
 bool rpc_ctx_xfer_replymsg(struct svc_vc_xprt *, struct rpc_msg *);
 void rpc_ctx_ack_xfer(rpc_ctx_t *);
-void rpc_ctx_free(rpc_ctx_t *, uint32_t);
+void rpc_ctx_release(rpc_ctx_t *);
 
 #endif				/* TIRPC_RPC_CTX_H */

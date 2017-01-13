@@ -290,17 +290,6 @@ svc_rdma_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 
 extern mutex_t ops_lock;
 
-static void
-svc_rdma_lock(SVCXPRT *xprt, uint32_t flags, const char *file, int line)
-{
-/* pretend we lock for now */
-}
-
-static void
-svc_rdma_unlock(SVCXPRT *xprt, uint32_t flags, const char *file, int line)
-{
-}
-
 static bool
 /*ARGSUSED*/
 svc_rdma_control(SVCXPRT *xprt, const u_int rq, void *in)
@@ -378,8 +367,6 @@ svc_rdma_ops(SVCXPRT *xprt)
 		ops.xp_freeargs = svc_rdma_freeargs;
 		ops.xp_destroy = svc_rdma_destroy,
 		ops.xp_control = svc_rdma_control;
-		ops.xp_lock = svc_rdma_lock;
-		ops.xp_unlock = svc_rdma_unlock;
 		ops.xp_getreq = svc_getreq_default;
 		ops.xp_dispatch = svc_dispatch_default;
 		ops.xp_recv_user_data = NULL;	/* no default */

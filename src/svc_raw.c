@@ -221,8 +221,6 @@ svc_raw_ops(SVCXPRT *xprt)
 		ops.xp_freeargs = svc_raw_freeargs;
 		ops.xp_destroy = svc_raw_destroy;
 		ops.xp_control = svc_raw_control;
-		ops.xp_lock = NULL;	/* no default */
-		ops.xp_unlock = NULL;	/* no default */
 		ops.xp_getreq = svc_getreq_default;
 		ops.xp_dispatch = svc_dispatch_default;
 		ops.xp_recv_user_data = NULL;	/* no default */

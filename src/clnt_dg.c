@@ -184,7 +184,6 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 
 	clnt = &cx->cx_c;
 	clnt->cl_ops = clnt_dg_ops();
-	clnt->cl_p2 = xprt->xp_p5;
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_DG,
 		"%s: fd %d completed",
@@ -221,16 +220,13 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	int xp_fd = xprt->xp_fd;
 	u_int32_t xid, inval, outval;
 	bool ok;
-	bool slocked = false;
+	bool slocked = true;
 	bool rlocked = false;
 	bool once = true;
 
-	rpc_dplx_slc(clnt);
-	slocked = true;
-
-	if (!xprt->xp_ev)
-		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
-				    SVC_RQST_FLAG_CHAN_AFFINITY);
+	/* Need lock for cu.
+	 */
+	mutex_lock(&clnt->cl_lock);
 
 	if (cu->cu_total.tv_usec == -1)
 		timeout = utimeout;	/* use supplied timeout */
@@ -260,12 +256,15 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	/* Clean up in case the last call ended in a longjmp(3) call. */
  call_again:
 	if (!slocked) {
-		rpc_dplx_slc(clnt);
 		slocked = true;
+		mutex_lock(&clnt->cl_lock);
 	}
 	xdrs = &(cu->cu_outxdrs);
-	if (cu->cu_async == true && xargs == NULL)
+	if (cu->cu_async == true && xargs == NULL) {
+		mutex_unlock(&clnt->cl_lock);
+		slocked = false;
 		goto get_reply;
+	}
 	xdrs->x_op = XDR_ENCODE;
 	XDR_SETPOS(xdrs, cu->cu_xdrpos);
 	/*
@@ -284,6 +283,8 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 		goto out;
 	}
 	outlen = (size_t) XDR_GETPOS(xdrs);
+	mutex_unlock(&clnt->cl_lock);
+	slocked = false;
 
  send_again:
 	nextsend_time = cu->cu_wait.tv_sec * 1000 + cu->cu_wait.tv_usec / 1000;
@@ -299,11 +300,12 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	 * some clock time to spare while the packets are in flight.
 	 * (We assume that this is actually only executed once.)
 	 */
-	rpc_dplx_suc(clnt);
-	slocked = false;
-
-	rpc_dplx_rlc(clnt);
+	rpc_dplx_rli(rec);
 	rlocked = true;
+
+	if (!xprt->xp_ev)
+		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+				    SVC_RQST_FLAG_CHAN_AFFINITY);
 
 	reply_msg.RPCM_ack.ar_verf = _null_auth;
 	reply_msg.RPCM_ack.ar_results.where = NULL;
@@ -318,7 +320,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 		switch (poll(&fd, 1, tv)) {
 		case 0:
 			total_time -= tv;
-			rpc_dplx_ruc(clnt);
+			rpc_dplx_rui(rec);
 			rlocked = false;
 			if (total_time <= 0) {
 				cu->cu_error.re_status = RPC_TIMEDOUT;
@@ -389,7 +391,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 
 	if (recvlen < sizeof(u_int32_t)) {
 		total_time -= tv;
-		rpc_dplx_ruc(clnt);
+		rpc_dplx_rui(rec);
 		rlocked = false;
 		goto send_again;
 	}
@@ -401,7 +403,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 		memcpy(&outval, cu->cu_outbuf, sizeof(u_int32_t));
 		if (inval != outval) {
 			total_time -= tv;
-			rpc_dplx_ruc(clnt);
+			rpc_dplx_rui(rec);
 			rlocked = false;
 			goto send_again;
 		}
@@ -444,7 +446,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 			/* maybe our credentials need to be refreshed ... */
 			if (nrefreshes > 0 && AUTH_REFRESH(auth, &reply_msg)) {
 				nrefreshes--;
-				rpc_dplx_ruc(clnt);
+				rpc_dplx_rui(rec);
 				rlocked = false;
 				goto call_again;
 			}
@@ -455,9 +457,9 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 
 out:
 	if (slocked)
-		rpc_dplx_suc(clnt);
+		mutex_unlock(&clnt->cl_lock);
 	if (rlocked)
-		rpc_dplx_ruc(clnt);
+		rpc_dplx_rui(rec);
 
 	return (cu->cu_error.re_status);
 }
@@ -476,34 +478,15 @@ clnt_dg_freeres(CLIENT *clnt, xdrproc_t xdr_res, void *res_ptr)
 	struct cx_data *cx = CX_DATA(clnt);
 	struct cu_data *cu = CU_DATA(cx);
 	XDR *xdrs;
-	sigset_t mask, newmask;
-	bool dummy = 0;
 
 	/* XXX guard against illegal invocation from libc (will fix) */
 	if (!xdr_res)
-		goto out;
+		return (0);
 
 	xdrs = &(cu->cu_outxdrs);	/* XXX outxdrs? */
-
-	/* Handle our own signal mask here, the signal section is
-	 * larger than the wait (not 100% clear why) */
-	sigfillset(&newmask);
-	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-
-	/* barrier recv channel */
-	rpc_dplx_rwc(clnt, rpc_flag_clear);
-
 	xdrs->x_op = XDR_FREE;
-	if (xdr_res)
-		dummy = (*xdr_res) (xdrs, res_ptr);
 
-	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
-
-	/* signal recv channel */
-	rpc_dplx_rsc(clnt, RPC_DPLX_FLAG_NONE);
-
- out:
-	return (dummy);
+	return ((*xdr_res)(xdrs, res_ptr));
 }
 
 static bool
@@ -533,8 +516,8 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 	bool rslt = true;
 
 	/* always take recv lock first, if taking both locks together */
-	rpc_dplx_rlc(clnt);
-	rpc_dplx_slc(clnt);
+	rpc_dplx_rli(rec);
+	mutex_lock(&clnt->cl_lock);
 
 	/*
 	 * By default, SVC_XPRT_FLAG_CLOSE starts false.  It is user
@@ -663,8 +646,8 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 	}
 
  unlock:
-	rpc_dplx_ruc(clnt);
-	rpc_dplx_suc(clnt);
+	rpc_dplx_rui(rec);
+	mutex_unlock(&clnt->cl_lock);
 
 	return (rslt);
 }
@@ -672,32 +655,15 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 static void
 clnt_dg_destroy(CLIENT *clnt)
 {
-	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)clnt->cl_p2;
 	struct cx_data *cx = CX_DATA(clnt);
 	struct cu_data *cu = CU_DATA(cx);
-	sigset_t mask, newmask;
-
-	/* Handle our own signal mask here, the signal section is
-	 * larger than the wait (not 100% clear why) */
-	sigfillset(&newmask);
-	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-
-	/* barrier both channels */
-	rpc_dplx_swc(clnt, rpc_flag_clear);
-	rpc_dplx_rwc(clnt, rpc_flag_clear);
+	struct rpc_dplx_rec *rec = cx->cx_rec;
 
 	XDR_DESTROY(&cu->cu_outxdrs);
 
-	/* signal both channels */
-	rpc_dplx_ssc(clnt, RPC_DPLX_FLAG_NONE);
-	rpc_dplx_rsc(clnt, RPC_DPLX_FLAG_NONE);
-
 	/* release */
-	rpc_dplx_unref(rec, RPC_DPLX_FLAG_NONE);
+	SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
 	free_cx_data(cx);
-	SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
-
-	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
 }
 
 static struct clnt_ops *

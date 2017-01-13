@@ -34,6 +34,12 @@
  ** Maintains a tree of all extant transports by fd
  **/
 
+typedef void (*svc_xprt_setup_t) (SVCXPRT **);
+
+/*
+ * returns with lock taken
+ */
+SVCXPRT *svc_xprt_lookup(int, svc_xprt_setup_t);
 SVCXPRT *svc_xprt_get(int);
 SVCXPRT *svc_xprt_set(SVCXPRT *, uint32_t);
 void svc_xprt_clear(SVCXPRT *, uint32_t);
