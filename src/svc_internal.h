@@ -127,8 +127,6 @@ struct __svc_ops {
 
 extern struct __svc_ops *svc_ops;
 
-#define	su_data(xprt)	((struct svc_dg_data *)(xprt->xp_p2))
-
 /*  The CACHING COMPONENT */
 
 /*
@@ -219,6 +217,7 @@ struct svc_dg_xprt {
 	unsigned char su_cmsg[SVC_CMSG_SIZE];	/* cmsghdr received from clnt */
 };
 #define DG_DR(p) (opr_containerof((p), struct svc_dg_xprt, su_dr))
+#define su_data(xprt) (DG_DR(REC_XPRT(xprt)))
 
 /**
  * \struct svc_vc_xprt
