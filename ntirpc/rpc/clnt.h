@@ -485,9 +485,9 @@ extern CLIENT *clntunix_ncreate(struct sockaddr_un *, u_long, u_long, int *,
 /*
  * Low level clnt create routine for connectionless transports, e.g. udp.
  */
-extern CLIENT *clnt_dg_ncreate(const int, const struct netbuf *,
-			       const rpcprog_t, const rpcvers_t, const u_int,
-			       const u_int);
+extern CLIENT *clnt_dg_ncreatef(const int, const struct netbuf *,
+				const rpcprog_t, const rpcvers_t,
+				const u_int, const u_int, const uint32_t);
 /*
  * const int fd;    -- open file descriptor
  * const struct netbuf *svcaddr;  -- servers address
@@ -496,6 +496,15 @@ extern CLIENT *clnt_dg_ncreate(const int, const struct netbuf *,
  * const u_int sendsz;   -- buffer recv size
  * const u_int recvsz;   -- buffer send size
  */
+
+static inline CLIENT *
+clnt_dg_ncreate(const int fd, const struct netbuf *raddr,
+		const rpcprog_t prog, const rpcvers_t vers,
+		const u_int sendsz, const u_int recvsz)
+{
+	return (clnt_dg_ncreatef(fd, raddr, prog, vers, sendsz, recvsz,
+				 CLNT_CREATE_FLAG_NONE));
+}
 
 /*
  * Memory based rpc (for speed check and testing)

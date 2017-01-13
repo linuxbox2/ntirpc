@@ -45,8 +45,6 @@
 
 struct cu_data {
 	XDR cu_outxdrs;
-	int cu_fd;		/* connections fd */
-	bool cu_closeit;	/* opened by library */
 	struct sockaddr_storage cu_raddr;	/* remote address */
 	int cu_rlen;
 	struct timeval cu_wait;	/* retransmit interval */

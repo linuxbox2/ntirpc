@@ -60,7 +60,7 @@ NTIRPC_${NTIRPC_VERSION} {
     clnt_ncreate_timed;
     clnt_ncreate_vers;
     clnt_ncreate_vers_timed;
-    clnt_dg_ncreate;
+    clnt_dg_ncreatef;
     clnt_pcreateerror;
     clnt_perrno;
     clnt_perror;
