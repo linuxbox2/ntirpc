@@ -220,6 +220,38 @@ struct svc_dg_xprt {
 };
 #define DG_DR(p) (opr_containerof((p), struct svc_dg_xprt, su_dr))
 
+/**
+ * \struct svc_vc_xprt
+ * VC transport instance
+ *
+ * Replaces old struct x_vc_data by locally wrapping struct rpc_dplx_rec,
+ * which wraps struct rpc_svcxprt indexed by fd.
+ */
+struct svc_vc_xprt {
+	struct rpc_dplx_rec sx_dr;	/* SVCXPRT indexed by fd */
+	struct rpc_dplx_rec *rec;	/* unified sync */
+	struct {
+		struct {
+			uint32_t xid;	/* current xid */
+			struct opr_rbtree t;
+		} calls;
+		struct timeval cx_wait;	/* wait interval in milliseconds */
+		bool cx_waitset;	/* wait set by clnt_control? */
+	} cx;
+	struct {
+		enum xprt_stat strm_stat;
+		struct timespec last_recv;	/* XXX move to shared? */
+		int32_t maxrec;
+	} sx;
+	struct {
+		XDR xdrs_in;	/* recv queue */
+		u_int sendsz;
+		u_int recvsz;
+		bool nonblock;
+	} shared;
+};
+#define VC_DR(p) (opr_containerof((p), struct svc_vc_xprt, sx_dr))
+
 /* Epoll interface change */
 #ifndef EPOLL_CLOEXEC
 #define EPOLL_CLOEXEC 02000000
