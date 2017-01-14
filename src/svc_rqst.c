@@ -133,10 +133,6 @@ static inline int rqst_thrd_cmpf(const struct opr_rbtree_node *lhs,
 	return (1);
 }
 
-/* forward declaration in lieu of moving code {WAS} */
-
-static void svc_rqst_unreg(SVCXPRT *xprt, struct svc_rqst_rec *sr_rec);
-
 static inline void
 SetNonBlock(int fd)
 {
@@ -183,14 +179,6 @@ svc_rqst_init_failure(void)
 	if (initialized)
 		return (false);
 	return (svc_rqst_init() != 0);
-}
-
-void
-svc_rqst_init_xprt(SVCXPRT *xprt)
-{
-	/* reachable */
-	svc_xprt_set(xprt, SVC_XPRT_FLAG_UNLOCK);
-	/* !!! not checking for duplicate xp_fd ??? */
 }
 
 /**
@@ -382,81 +370,6 @@ svc_rqst_release(struct svc_rqst_rec *sr_rec /* LOCKED => UNLOCKED */)
 		mutex_destroy(&sr_rec->mtx);
 		mem_free(sr_rec, sizeof(struct svc_rqst_rec));
 	}
-}
-
-static int
-svc_rqst_delete_evchan(uint32_t chan_id)
-{
-	struct svc_rqst_rec *sr_rec;
-	struct rbtree_x_part *t;
-	SVCXPRT *next;
-	SVCXPRT *xprt;
-	int code = 0;
-
-	sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_XPRT_FLAG_NONE);
-	if (!sr_rec) {
-		mutex_unlock(&t->mtx);
-		return (ENOENT);
-	}
-
-	/* traverse sr_req->xprt_q inorder */
-	/* sr_rec LOCKED */
-	xprt = TAILQ_FIRST(&sr_rec->xprt_q);
-
-	while (xprt) {
-		next = TAILQ_NEXT(xprt, xp_evq);
-
-		svc_rqst_unreg(xprt, sr_rec);
-
-		/* wake up */
-		ev_sig(sr_rec->sv[0], 0);
-		switch (sr_rec->ev_type) {
-#if defined(TIRPC_EPOLL)
-		case SVC_EVENT_EPOLL:
-			code =
-			    epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
-				      EPOLL_CTL_DEL, sr_rec->sv[1],
-				      &sr_rec->ev_u.epoll.ctrl_ev);
-			if (code == -1)
-				__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-					"%s: epoll del control socket failed (%d)",
-					__func__, errno);
-			break;
-#endif
-		default:
-			break;
-		}
-
-		xprt = next;
-	}
-
-	/* now remove sr_rec */
-	rbtree_x_cached_remove(&svc_rqst_set.xt, t, &sr_rec->node_k,
-			       sr_rec->id_k);
-	mutex_unlock(&t->mtx);
-
-	switch (sr_rec->ev_type) {
-#if defined(TIRPC_EPOLL)
-	case SVC_EVENT_EPOLL:
-		close(sr_rec->ev_u.epoll.epoll_fd);
-		mem_free(sr_rec->ev_u.epoll.events,
-			 sr_rec->ev_u.epoll.max_events *
-			 sizeof(struct epoll_event));
-		break;
-#endif
-	default:
-		/* XXX */
-		break;
-	}
-	sr_rec->states = SVC_RQST_STATE_DESTROYED;
-	/*	ref count here should be 2:
-	 *	1	initial create/rbt ref we just deleted
-	 *	+1	lookup (top of this routine through here)
-	 * so, DROP one ref here so the final release will go to 0.
-	 */
-	--(sr_rec->refcnt);	/* DROP one extra ref - initial create */
-	svc_rqst_release(sr_rec);
-	return (code);
 }
 
 static inline int
@@ -949,6 +862,81 @@ svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags)
 
 	svc_rqst_release(sr_rec);
 	return (0);
+}
+
+static int
+svc_rqst_delete_evchan(uint32_t chan_id)
+{
+	struct svc_rqst_rec *sr_rec;
+	struct rbtree_x_part *t;
+	SVCXPRT *next;
+	SVCXPRT *xprt;
+	int code = 0;
+
+	sr_rec = svc_rqst_lookup_chan(chan_id, &t, SVC_XPRT_FLAG_NONE);
+	if (!sr_rec) {
+		mutex_unlock(&t->mtx);
+		return (ENOENT);
+	}
+
+	/* traverse sr_req->xprt_q inorder */
+	/* sr_rec LOCKED */
+	xprt = TAILQ_FIRST(&sr_rec->xprt_q);
+
+	while (xprt) {
+		next = TAILQ_NEXT(xprt, xp_evq);
+
+		svc_rqst_unreg(xprt, sr_rec);
+
+		/* wake up */
+		ev_sig(sr_rec->sv[0], 0);
+		switch (sr_rec->ev_type) {
+#if defined(TIRPC_EPOLL)
+		case SVC_EVENT_EPOLL:
+			code =
+			    epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
+				      EPOLL_CTL_DEL, sr_rec->sv[1],
+				      &sr_rec->ev_u.epoll.ctrl_ev);
+			if (code == -1)
+				__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+					"%s: epoll del control socket failed (%d)",
+					__func__, errno);
+			break;
+#endif
+		default:
+			break;
+		}
+
+		xprt = next;
+	}
+
+	/* now remove sr_rec */
+	rbtree_x_cached_remove(&svc_rqst_set.xt, t, &sr_rec->node_k,
+			       sr_rec->id_k);
+	mutex_unlock(&t->mtx);
+
+	switch (sr_rec->ev_type) {
+#if defined(TIRPC_EPOLL)
+	case SVC_EVENT_EPOLL:
+		close(sr_rec->ev_u.epoll.epoll_fd);
+		mem_free(sr_rec->ev_u.epoll.events,
+			 sr_rec->ev_u.epoll.max_events *
+			 sizeof(struct epoll_event));
+		break;
+#endif
+	default:
+		/* XXX */
+		break;
+	}
+	sr_rec->states = SVC_RQST_STATE_DESTROYED;
+	/*	ref count here should be 2:
+	 *	1	initial create/rbt ref we just deleted
+	 *	+1	lookup (top of this routine through here)
+	 * so, DROP one ref here so the final release will go to 0.
+	 */
+	--(sr_rec->refcnt);	/* DROP one extra ref - initial create */
+	svc_rqst_release(sr_rec);
+	return (code);
 }
 
 void

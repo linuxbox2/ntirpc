@@ -50,7 +50,6 @@
  * exported interface:
  *
  *  svc_rqst_init -- init module (optional)
- *  svc_rqst_init_xprt -- init svc_rqst part of xprt handle
  *  svc_rqst_new_evchan -- create event channel
  *  svc_rqst_evchan_reg -- set {xprt, dispatcher} mapping
  *  svc_rqst_foreach_xprt -- scan registered xprts at id (or 0 for all)
@@ -66,7 +65,6 @@
  *  other adaptation
  */
 int svc_rqst_init(void);
-void svc_rqst_init_xprt(SVCXPRT *xprt);
 int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */ , void *u_data,
 			uint32_t flags);
 int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);

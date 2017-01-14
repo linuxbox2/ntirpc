@@ -34,6 +34,8 @@
  ** Maintains a tree of all extant transports by fd
  **/
 
+int svc_xprt_init(void);
+
 typedef void (*svc_xprt_setup_t) (SVCXPRT **);
 
 /*
@@ -41,7 +43,6 @@ typedef void (*svc_xprt_setup_t) (SVCXPRT **);
  */
 SVCXPRT *svc_xprt_lookup(int, svc_xprt_setup_t);
 SVCXPRT *svc_xprt_get(int);
-SVCXPRT *svc_xprt_set(SVCXPRT *, uint32_t);
 void svc_xprt_clear(SVCXPRT *, uint32_t);
 
 /* iterator callback prototype */
