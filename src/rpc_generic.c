@@ -59,6 +59,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <rpc/nettype.h>
+#include <assert.h>
 
 #include "rpc_com.h"
 
@@ -77,34 +78,45 @@ tirpc_free(void *p, size_t unused)
 static void *
 tirpc_malloc(size_t size, const char *file, int line, const char *function)
 {
-	return malloc(size);
+	void *r = malloc(size);
+
+	assert(r != NULL);
+	return r;
 }
 
 static void *
 tirpc_aligned(size_t alignment, size_t size, const char *file, int line,
 	      const char *function)
 {
+	void *r;
+
 #if defined(_ISOC11_SOURCE)
-	return aligned_alloc(alignment, size);
+	r = aligned_alloc(alignment, size);
 #else
-	void *ptr;
-	(void) posix_memalign(&ptr, alignment, size);
-	return ptr;
+	(void) posix_memalign(&r, alignment, size);
 #endif
+	assert(r != NULL);
+	return r;
 }
 
 static void *
 tirpc_calloc(size_t count, size_t size, const char *file, int line,
 	     const char *function)
 {
-	return calloc(count, size);
+	void *r = calloc(count, size);
+
+	assert(r != NULL);
+	return r;
 }
 
 static void *
 tirpc_realloc(void *p, size_t size, const char *file, int line,
 	      const char *function)
 {
-	return realloc(p, size);
+	void *r = realloc(p, size);
+
+	assert(r != NULL);
+	return r;
 }
 
 tirpc_pkg_params __ntirpc_pkg_params = {
