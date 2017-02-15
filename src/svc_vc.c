@@ -151,12 +151,6 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	/* attach shared state */
 	if ((oflags & RPC_DPLX_LKP_OFLAG_ALLOC) || (!rec->hdl.xd)) {
 		xd = rec->hdl.xd = alloc_x_vc_data();
-		if (xd == NULL) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-				"svc_vc: makefd_xprt: out of memory");
-			goto err;
-		}
-
 		xd->rec = rec;
 
 		/* XXX tracks outstanding calls */
@@ -393,17 +387,6 @@ static SVCXPRT *
 	if ((oflags & RPC_DPLX_LKP_OFLAG_ALLOC) || (!rec->hdl.xd)) {
 		newxd = true;
 		xd = rec->hdl.xd = alloc_x_vc_data();
-		if (xd == NULL) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-				"svc_vc: makefd_xprt: out of memory");
-			/* return extra ref */
-			rpc_dplx_unref(rec,
-				       RPC_DPLX_FLAG_LOCKED |
-				       RPC_DPLX_FLAG_UNLOCK);
-			mem_free(xprt, sizeof(SVCXPRT));
-			goto done;
-		}
-
 		xd->rec = rec;
 
 		/* XXX tracks outstanding calls */

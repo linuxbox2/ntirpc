@@ -70,8 +70,12 @@ static struct authgss_hash_st authgss_hash_st = {
 static inline uint64_t
 gss_ctx_hash(gss_union_ctx_id_desc *gss_ctx)
 {
-	return ((uint64_t) gss_ctx->mech_type +
-		(uint64_t) gss_ctx->internal_ctx_id);
+	/* Mash together two pointers, can overflow top bit.
+	 * Our only concern here is that it be unique
+	 * (or have a very rare collision rate).
+	 */
+	return ((uint64_t)(uintptr_t)gss_ctx->mech_type +
+		(uint64_t)(uintptr_t)gss_ctx->internal_ctx_id);
 }
 
 static int

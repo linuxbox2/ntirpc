@@ -71,12 +71,6 @@ alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
 	mutex_init(&ctx->we.mtx, NULL);
 	cond_init(&ctx->we.cv, 0, NULL);
 
-	/* rec->calls and rbtree protected by (adaptive) mtx */
-	REC_LOCK(rec);
-
-	/* XXX we hold the client-fd lock */
-	ctx->xid = ++(xd->cx.calls.xid);
-
 	/* some of this looks like overkill;  it's here to support future,
 	 * fully async calls */
 	ctx->ctx_u.clnt.clnt = clnt;
@@ -85,46 +79,44 @@ alloc_rpc_call_ctx(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args,
 	timespec_addms(&ctx->ctx_u.clnt.timeout, tv_to_ms(&timeout));
 	ctx->flags = 0;
 
-	/* stash it */
+	/* this lock protects both xid and rbtree */
+	REC_LOCK(rec);
+	ctx->xid = ++(xd->cx.calls.xid);
+
 	if (opr_rbtree_insert(&xd->cx.calls.t, &ctx->node_k)) {
-		__warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
+		REC_UNLOCK(rec);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: call ctx insert failed (xid %d client %p)",
 			__func__, ctx->xid, clnt);
-		REC_UNLOCK(rec);
 		mutex_destroy(&ctx->we.mtx);
 		cond_destroy(&ctx->we.cv);
 		mem_free(ctx, sizeof(*ctx));
-		ctx = NULL;
-		goto out;
+		return (NULL);
 	}
-
 	REC_UNLOCK(rec);
-
- out:
 	return (ctx);
 }
 
 void
 rpc_ctx_next_xid(rpc_ctx_t *ctx, uint32_t flags)
 {
-	struct x_vc_data *xd = (struct x_vc_data *)ctx->ctx_u.clnt.clnt->cl_p1;
+	CLIENT *clnt = ctx->ctx_u.clnt.clnt;
+	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;
 
-	assert(flags & RPC_CTX_FLAG_LOCKED);
-
+	/* this lock protects both xid and rbtree */
 	REC_LOCK(rec);
 	opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
 	ctx->xid = ++(xd->cx.calls.xid);
+
 	if (opr_rbtree_insert(&xd->cx.calls.t, &ctx->node_k)) {
 		REC_UNLOCK(rec);
-		__warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: call ctx insert failed (xid %d client %p)",
-			__func__, ctx->xid, ctx->ctx_u.clnt.clnt);
-		goto out;
+			__func__, ctx->xid, clnt);
+		return;
 	}
 	REC_UNLOCK(rec);
- out:
-	return;
 }
 
 bool
@@ -167,6 +159,7 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)ctx->ctx_u.clnt.clnt->cl_p1;
 	struct rpc_dplx_rec *rec = xd->rec;
+	SVCXPRT *xprt = rec->hdl.xprt;
 	rpc_dplx_lock_t *lk = &rec->recv.lock;
 	struct timespec ts;
 	int code = 0;
@@ -180,19 +173,12 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx, uint32_t flags)
 		/* if we timed out, check for xprt destroyed (no more
 		 * receives) */
 		if (code == ETIMEDOUT) {
-			SVCXPRT *xprt = rec->hdl.xprt;
-			uint32_t xp_flags;
-
 			/* dequeue the call */
 			REC_LOCK(rec);
 			opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
 			REC_UNLOCK(rec);
 
-			mutex_lock(&xprt->xp_lock);
-			xp_flags = xprt->xp_flags;
-			mutex_unlock(&xprt->xp_lock);
-
-			if (xp_flags & SVC_XPRT_FLAG_DESTROYED) {
+			if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
 				/* XXX should also set error.re_why, but the
 				 * facility is not well developed. */
 				ctx->error.re_status = RPC_TIMEDOUT;

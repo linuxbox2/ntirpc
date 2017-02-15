@@ -323,12 +323,6 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	return (NULL);
 }
 
-#define vc_call_return(r)			\
-	do {					\
-		result = (r);			\
-		goto out;			\
-	} while (0)
-
 #define vc_call_return_slocked(r)		\
 	do {					\
 		result = (r);			\
@@ -362,6 +356,11 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	bool bidi = (rec->hdl.xprt != NULL);
 	bool shipnow;
 	bool gss = false;
+	bool slocked = true;
+
+	/* Need lock for ct_wait, ct_mcallc, and sequential xid.
+	 */
+	rpc_dplx_slc(clnt);
 
 	/* Create a call context.  A lot of TI-RPC decisions need to be
 	 * looked at, including:
@@ -396,6 +395,11 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 		   && timeout.tv_usec == 0) ? false : true;
 
  call_again:
+	if (!slocked) {
+		slocked = true;
+		rpc_dplx_slc(clnt);
+	}
+
 	if (bidi) {
 		/* XXX Until gss_get_mic and gss_wrap can be replaced with
 		 * iov equivalents, replies with RPCSEC_GSS security must be
@@ -411,7 +415,6 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 				      ? UIO_FLAG_REALLOC | UIO_FLAG_FREE
 				      : UIO_FLAG_FREE);
 	} else {
-		rpc_dplx_slc(clnt);
 		xdrs = &(xd->shared.xdrs_out);
 		xdrs->x_lib[0] = (void *)RPC_DPLX_CLNT;
 		xdrs->x_lib[1] = (void *)ctx;	/* thread call ctx */
@@ -427,11 +430,9 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 		if (ctx->error.re_status == RPC_SUCCESS)
 			ctx->error.re_status = RPC_CANTENCODEARGS;
 		/* error case */
-		if (!bidi) {
+		if (!bidi)
 			(void)xdrrec_endofrecord(xdrs, true);
-			vc_call_return_slocked(ctx->error.re_status);
-		} else
-			vc_call_return(ctx->error.re_status);
+		vc_call_return_slocked(ctx->error.re_status);
 	}
 
 	if (bidi) {
@@ -449,9 +450,9 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 		if (timeout.tv_sec == 0 && timeout.tv_usec == 0)
 			vc_call_return_slocked(ctx->error.re_status =
 					       RPC_TIMEDOUT);
-
-		rpc_dplx_suc(clnt);
 	}
+	rpc_dplx_suc(clnt);
+	slocked = false;
 
 	/* reply */
 	rpc_dplx_rlc(clnt);
