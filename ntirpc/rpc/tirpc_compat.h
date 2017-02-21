@@ -48,8 +48,7 @@
 #define clnt_tli_create(a, b, c, d, e, f, g) \
 	clnt_tli_ncreate(a, b, c, d, e, f, g)
 #define clnt_vc_create(a, b, c, d, e, f) clnt_vc_ncreate(a, b, c, d, e, f)
-#define clnt_vc_create2(a, b, c, d, e, f, g) \
-	clnt_vc_ncreate2(a, b, c, d, e, f, g)
+#define clnt_vc_create_svc(a, b, c, d) clnt_vc_ncreate_svc(a, b, c, d)
 #define clntunix_create(a, b, c, d, e) clntunix_ncreate(a, b, c, d, e)
 #define clnt_dg_create(a, b, c, d, e, f) clnt_dg_ncreate(a, b, c, d, e, f)
 #define clnt_raw_create(a, b) clnt_raw_ncreate(a, b)
@@ -69,8 +68,6 @@
 #define svc_tli_create(a, b, c, d, e) svc_tli_ncreate(a, b, c, d, e)
 #define svc_vc_create(a, b, c) svc_vc_ncreate(a, b, c)
 #define svc_vc_create2(a, b, c, d) svc_vc_ncreate2(a, b, c, d)
-#define clnt_vc_create_svc(a, b, c, d) clnt_vc_ncreate_svc(a, b, c, d)
-#define svc_vc_create_clnt(a, b, c, d) svc_vc_ncreate_clnt(a, b, c, d)
 #define svcunix_create(a, b, c, d) svcunix_ncreate(a, b, c, d)
 #define svc_dg_create(a, b, c) svc_dg_ncreate(a, b, c)
 #define svc_fd_create(a, b, c) svc_fd_ncreate(a, b, c)

@@ -29,7 +29,8 @@
 #include <rpc/svc.h>
 #include <rpc/xdr_ioq.h>
 
-void svc_ioq_append(SVCXPRT *, struct xdr_ioq *);
 void svc_ioq_init(void);
+void svc_ioq_write_now(SVCXPRT *, struct xdr_ioq *);
+void svc_ioq_write_submit(SVCXPRT *, struct xdr_ioq *);
 
 #endif				/* SVC_IOQ_H */

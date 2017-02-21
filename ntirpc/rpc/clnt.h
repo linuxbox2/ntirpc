@@ -67,6 +67,13 @@
 				 ((s) == RPC_PROGVERSMISMATCH) ||       \
 				 ((s) == RPC_CANTDECODEARGS))
 
+enum CX_TYPE
+{
+	CX_DG_DATA,
+	CX_VC_DATA,
+	CX_MSK_DATA,
+};
+
 /*
  * Error info.
  */
@@ -129,15 +136,16 @@ typedef struct rpc_client {
 		 bool(*cl_control) (struct rpc_client *, u_int, void *);
 	} *cl_ops;
 
-	mutex_t cl_lock;	/* serialize private data */
-	uint32_t cl_refcnt;	/* handle refcnt */
-	uint32_t cl_flags;	/* state flags */
-
 	void *cl_p1;		/* private data */
 	void *cl_p2;
 	void *cl_p3;
 	char *cl_netid;		/* network token */
 	char *cl_tp;		/* device name */
+
+	mutex_t cl_lock;	/* serialize private data */
+	uint32_t cl_refcnt;	/* handle refcnt */
+	uint32_t cl_flags;	/* state flags */
+	enum CX_TYPE cl_type;
 
 } CLIENT;
 
@@ -437,16 +445,25 @@ extern CLIENT *clnt_tli_ncreate(const int, const struct netconfig *,
  * Low level clnt create routines for connectionful transports, e.g. tcp.
  */
 
-#define CLNT_CREATE_FLAG_NONE           0x0000
-#define CLNT_CREATE_FLAG_CONNECT        0x0001
-#define CLNT_CREATE_FLAG_SVCXPRT        0x0002
+#define CLNT_CREATE_FLAG_NONE		0x00000000
+#define CLNT_CREATE_FLAG_CONNECT	0x10000000
+#define CLNT_CREATE_FLAG_LISTEN		0x20000000
+#define CLNT_CREATE_FLAG_SVCXPRT	0x40000000
+#define CLNT_CREATE_FLAG_XPRT_DOREG	0x80000000
+#define CLNT_CREATE_FLAG_XPRT_NOREG	0x08000000
 
-extern CLIENT *clnt_vc_ncreate(const int, const struct netbuf *,
-			       const rpcprog_t, const rpcvers_t, u_int, u_int);
+extern CLIENT *clnt_vc_ncreatef(const int, const struct netbuf *,
+				const rpcprog_t, const rpcvers_t,
+				const u_int, const u_int, const uint32_t);
 
-extern CLIENT *clnt_vc_ncreate2(const int, const struct netbuf *,
-				const rpcprog_t, const rpcvers_t, u_int, u_int,
-				u_int);
+static inline CLIENT *
+clnt_vc_ncreate(const int fd, const struct netbuf *raddr,
+		const rpcprog_t prog, const rpcvers_t vers,
+		const u_int sendsz, const u_int recvsz)
+{
+	return (clnt_vc_ncreatef(fd, raddr, prog, vers, sendsz, recvsz,
+				 CLNT_CREATE_FLAG_CONNECT));
+}
 
 #if !defined(_WIN32)
 /*

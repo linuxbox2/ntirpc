@@ -26,9 +26,58 @@
 #ifndef RPC_DPLX_INTERNAL_H
 #define RPC_DPLX_INTERNAL_H
 
+#include <sys/time.h>
+#include <misc/opr.h>
+#include <misc/rbtree_x.h>
+#include <misc/wait_queue.h>
 #include <rpc/rpc_dplx.h>
+#include <rpc/svc.h>
 
-struct rpc_dplx_rec; /* in clnt_internal.h (avoids circular dependency) */
+struct x_vc_data; /* in clnt_internal.h (avoids circular dependency) */
+
+typedef struct rpc_dplx_lock {
+	struct wait_entry we;
+	int32_t lock_flag_value;	/* XXX killme */
+	struct {
+		const char *func;
+		int line;
+	} locktrace;
+} rpc_dplx_lock_t;
+
+/* new unified state */
+struct rpc_dplx_rec {
+	int fd_k;
+#if 0
+	mutex_t mtx;
+#else
+	struct {
+		mutex_t mtx;
+		const char *func;
+		int line;
+	} locktrace;
+#endif
+	struct opr_rbtree_node node_k;
+	uint32_t refcnt;
+	struct {
+		rpc_dplx_lock_t lock;
+	} send;
+	struct {
+		rpc_dplx_lock_t lock;
+	} recv;
+	struct {
+		struct x_vc_data *xd;
+		SVCXPRT *xprt;
+	} hdl;
+};
+
+#define REC_LOCK(rec) \
+	do { \
+		mutex_lock(&((rec)->locktrace.mtx)); \
+		(rec)->locktrace.func = __func__; \
+		(rec)->locktrace.line = __LINE__; \
+	} while (0)
+
+#define REC_UNLOCK(rec) mutex_unlock(&((rec)->locktrace.mtx))
 
 struct rpc_dplx_rec_set {
 	mutex_t clnt_fd_lock;	/* XXX check dplx correctness */
@@ -78,6 +127,20 @@ rpc_dplx_lock_destroy(struct rpc_dplx_lock *lock)
 {
 	mutex_destroy(&lock->we.mtx);
 	cond_destroy(&lock->we.cv);
+}
+
+static inline void
+rpc_dplx_rec_init(struct rpc_dplx_rec *rec)
+{
+	rpc_dplx_lock_init(&rec->send.lock);
+	rpc_dplx_lock_init(&rec->recv.lock);
+}
+
+static inline void
+rpc_dplx_rec_destroy(struct rpc_dplx_rec *rec)
+{
+	rpc_dplx_lock_destroy(&rec->send.lock);
+	rpc_dplx_lock_destroy(&rec->recv.lock);
 }
 
 static inline int32_t

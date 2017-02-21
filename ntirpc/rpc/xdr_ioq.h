@@ -31,6 +31,7 @@
 #include <misc/opr.h>
 #include <misc/queue.h>
 #include <rpc/pool_queue.h>
+#include <rpc/work_pool.h>
 #include <rpc/xdr.h>
 
 struct xdr_ioq_uv
@@ -78,6 +79,7 @@ struct xdr_ioq_uv_head {
 
 struct xdr_ioq {
 	XDR xdrs[1];
+	struct work_pool_entry ioq_wpe;
 	struct poolq_entry ioq_s;	/* segment of stream */
 	pthread_cond_t ioq_cond;
 

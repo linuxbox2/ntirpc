@@ -134,32 +134,20 @@ static const char __no_mem_str[] = "out of memory";
  * fd should be an open socket
  */
 CLIENT *
-clnt_vc_ncreate(int fd,	/* open file descriptor */
-		const struct netbuf *raddr,	/* servers address */
-		const rpcprog_t prog,	/* program number */
-		const rpcvers_t vers,	/* version number */
-		u_int sendsz,	/* buffer recv size */
-		u_int recvsz /* buffer send size */)
-{
-	return (clnt_vc_ncreate2
-		(fd, raddr, prog, vers, sendsz, recvsz,
-		 CLNT_CREATE_FLAG_CONNECT));
-}
-
-CLIENT *
-clnt_vc_ncreate2(int fd,	/* open file descriptor */
+clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 		 const struct netbuf *raddr,	/* servers address */
 		 const rpcprog_t prog,	/* program number */
 		 const rpcvers_t vers,	/* version number */
-		 u_int sendsz,	/* buffer send size */
-		 u_int recvsz,	/* buffer recv size */
-		 u_int flags)
+		 const u_int sendsz,	/* buffer send size */
+		 const u_int recvsz,	/* buffer recv size */
+		 const uint32_t flags)
 {
 	CLIENT *clnt = NULL;
 	struct rpc_dplx_rec *rec = NULL;
 	struct x_vc_data *xd = NULL;
+	struct cx_data *cx = NULL;
 	struct ct_data *ct = NULL;
-	struct ct_serialized *cs = NULL;
+	struct ct_data *cs;
 	struct rpc_msg call_msg;
 	sigset_t mask, newmask;
 	struct __rpc_sockinfo si;
@@ -186,6 +174,9 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 				rpc_createerr.cf_error.re_errno = errno;
 				goto err;
 			}
+			__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+				"%s: fd %d connected",
+				__func__, fd);
 		}
 	}
 	/* connect */
@@ -234,27 +225,29 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 		++(xd->refcnt);
 	}
 
-	clnt = (CLIENT *) mem_alloc(sizeof(CLIENT));
-
-	mutex_init(&clnt->cl_lock, NULL);
-	clnt->cl_flags = CLNT_FLAG_NONE;
-	clnt->cl_refcnt = 1;
+	/* buffer sizes should match svc side */
+	cx = alloc_cx_data(CX_VC_DATA, xd->shared.sendsz, xd->shared.recvsz);
 
 	/* private data struct */
 	xd->cx.data.ct_fd = fd;
-	cs = mem_alloc(sizeof(struct ct_serialized));
+	cs = CT_DATA(cx);
 
 	ct = &xd->cx.data;
 	ct->ct_closeit = false;
 	ct->ct_wait.tv_usec = 0;
 	ct->ct_waitset = false;
-	ct->ct_addr.buf = mem_alloc(raddr->maxlen);
 
-	memcpy(ct->ct_addr.buf, raddr->buf, raddr->len);
-	ct->ct_addr.len = raddr->len;
-	ct->ct_addr.maxlen = raddr->maxlen;
-	clnt->cl_netid = NULL;
-	clnt->cl_tp = NULL;
+	if (sizeof(struct sockaddr_storage) < raddr->len) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d called with invalid address length"
+			" (max %z < %u len)",
+			__func__, fd,
+			sizeof(struct sockaddr_storage),
+			raddr->len);
+		goto err;
+	}
+	memcpy(&cs->ct_raddr, raddr->buf, raddr->len);
+	cs->ct_rlen = raddr->len;
 
 	/*
 	 * initialize call message
@@ -281,26 +274,23 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	 * Create a client handle which uses xdrrec for serialization
 	 * and authnone for authentication.
 	 */
+	clnt = &cx->cx_c;
 	clnt->cl_ops = clnt_vc_ops();
 	clnt->cl_p1 = xd;
 	clnt->cl_p2 = rec;
-	clnt->cl_p3 = cs;
 
 	/* release rec */
 	REC_UNLOCK(rec);
 
+	__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+		"%s: fd %d completed",
+		__func__, fd);
 	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 	return (clnt);
 
  err:
-	/* XXX fix */
-	if (cs) {
-		mem_free(cs, sizeof(struct ct_serialized));
-	}
-
-	if (clnt) {
-		mutex_destroy(&clnt->cl_lock);
-		mem_free(clnt, sizeof(CLIENT));
+	if (cx) {
+		free_cx_data(cx);
 	}
 
 	if (rec) {
@@ -309,9 +299,6 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 	}
 
 	if (xd) {
-		if (ct->ct_addr.len)
-			mem_free(ct->ct_addr.buf, ct->ct_addr.len);
-
 		if (xd->refcnt == 0) {
 			XDR_DESTROY(&xd->shared.xdrs_in);
 			XDR_DESTROY(&xd->shared.xdrs_out);
@@ -321,6 +308,21 @@ clnt_vc_ncreate2(int fd,	/* open file descriptor */
 
 	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 	return (NULL);
+}
+
+/*
+ * Create an RPC client handle from an active service transport
+ * handle, i.e., to issue calls on the channel.
+ */
+CLIENT *
+clnt_vc_ncreate_svc(const SVCXPRT *xprt, const rpcprog_t prog,
+		    const rpcvers_t vers, const uint32_t flags)
+{
+	struct x_vc_data *xd = (struct x_vc_data *)xprt->xp_p1;
+
+	return clnt_vc_ncreatef(xprt->xp_fd, &xprt->xp_remote.nb, prog, vers,
+				xd->shared.sendsz, xd->shared.recvsz,
+				flags | CLNT_CREATE_FLAG_SVCXPRT);
 }
 
 #define vc_call_return_slocked(r)		\
@@ -346,9 +348,11 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 {
 	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
 	struct ct_data *ct = &(xd->cx.data);
-	struct ct_serialized *cs = (struct ct_serialized *)clnt->cl_p3;
+	struct cx_data *cx = CX_DATA(clnt);
+	struct ct_data *cs = CT_DATA(cx);
 	struct rpc_dplx_rec *rec = xd->rec;
 	enum clnt_stat result = RPC_SUCCESS;
+	SVCXPRT *xprt = rec->hdl.xprt;
 	rpc_ctx_t *ctx = NULL;
 	XDR *xdrs;
 	int code, refreshes = 2;
@@ -382,8 +386,8 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	 * call contexts.  We'll keep the call parameters, control transfer
 	 * machinery, etc, in an rpc_ctx_t, to permit this.
 	 */
-	ctx = alloc_rpc_call_ctx(clnt, proc, xdr_args, args_ptr, xdr_results,
-				 results_ptr, timeout);	/*add total timeout? */
+	ctx = rpc_ctx_alloc(clnt, proc, xdr_args, args_ptr, xdr_results,
+			    results_ptr, timeout);	/*add total timeout? */
 
 	if (!ct->ct_waitset) {
 		/* If time is not within limits, we ignore it. */
@@ -436,7 +440,8 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	}
 
 	if (bidi) {
-		svc_ioq_append(rec->hdl.xprt, XIOQ(xdrs));
+		xdrs->x_lib[1] = (void *)xprt;
+		svc_ioq_write_submit(xprt, XIOQ(xdrs));
 	} else {
 		if (!xdrrec_endofrecord(xdrs, shipnow))
 			vc_call_return_slocked(ctx->error.re_status =
@@ -558,7 +563,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	vc_call_return_rlocked(ctx->error.re_status);
 
  out:
-	free_rpc_call_ctx(ctx, RPC_CTX_FLAG_NONE);
+	rpc_ctx_free(ctx, RPC_CTX_FLAG_NONE);
 
 	return (result);
 }
@@ -619,8 +624,10 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 {
 	struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
 	struct ct_data *ct = &(xd->cx.data);
-	struct ct_serialized *cs = (struct ct_serialized *)clnt->cl_p3;
+	struct cx_data *cx = CX_DATA(clnt);
+	struct ct_data *cs = CT_DATA(cx);
 	void *infop = info;
+	struct netbuf *addr;
 	bool rslt = true;
 
 	/* always take recv lock first if taking together */
@@ -658,14 +665,18 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 		*(struct timeval *)infop = ct->ct_wait;
 		break;
 	case CLGET_SERVER_ADDR:
-		(void)memcpy(info, ct->ct_addr.buf, (size_t) ct->ct_addr.len);
+		/* Now obsolete. Only for backward compatibility */
+		(void)memcpy(info, &cs->ct_raddr, (size_t) cs->ct_rlen);
 		break;
 	case CLGET_FD:
 		*(int *)info = ct->ct_fd;
 		break;
 	case CLGET_SVC_ADDR:
 		/* The caller should not free this memory area */
-		*(struct netbuf *)info = ct->ct_addr;
+		addr = (struct netbuf *)info;
+		addr->buf = &cs->ct_raddr;
+		addr->len = cs->ct_rlen;
+		addr->maxlen = sizeof(cs->ct_raddr);
 		break;
 	case CLSET_SVC_ADDR:	/* set to new address */
 		rslt = false;
@@ -778,22 +789,15 @@ clnt_vc_release(CLIENT *clnt, u_int flags)
 
 	/* conditional destroy */
 	if ((clnt->cl_flags & CLNT_FLAG_DESTROYED) && (cl_refcnt == 0)) {
-
+		struct cx_data *cx = CX_DATA(clnt);
 		struct x_vc_data *xd = (struct x_vc_data *)clnt->cl_p1;
 		struct rpc_dplx_rec *rec = xd->rec;
-		struct ct_serialized *cs = (struct ct_serialized *)clnt->cl_p3;
 		uint32_t xd_refcnt;
 
 		mutex_unlock(&clnt->cl_lock);
 
 		/* client handles are now freed directly */
-		mem_free(cs, sizeof(struct ct_serialized));
-		if (clnt->cl_netid && clnt->cl_netid[0])
-			mem_free(clnt->cl_netid, strlen(clnt->cl_netid) + 1);
-		if (clnt->cl_tp && clnt->cl_tp[0])
-			mem_free(clnt->cl_tp, strlen(clnt->cl_tp) + 1);
-		mutex_destroy(&clnt->cl_lock);
-		mem_free(clnt, sizeof(CLIENT));
+		free_cx_data(cx);
 
 		REC_LOCK(rec);
 		xd_refcnt = --(xd->refcnt);
@@ -845,17 +849,10 @@ clnt_vc_destroy(CLIENT *clnt)
 
 	/* conditional destroy */
 	if (cl_refcnt == 0) {
-
-		struct ct_serialized *cs = (struct ct_serialized *)clnt->cl_p3;
+		struct cx_data *cx = CX_DATA(clnt);
 
 		/* client handles are now freed directly */
-		mem_free(cs, sizeof(struct ct_serialized));
-		if (clnt->cl_netid && clnt->cl_netid[0])
-			mem_free(clnt->cl_netid, strlen(clnt->cl_netid) + 1);
-		if (clnt->cl_tp && clnt->cl_tp[0])
-			mem_free(clnt->cl_tp, strlen(clnt->cl_tp) + 1);
-		mutex_destroy(&clnt->cl_lock);
-		mem_free(clnt, sizeof(CLIENT));
+		free_cx_data(cx);
 
 		if (xd_refcnt == 0) {
 			__warnx(TIRPC_DEBUG_FLAG_REFCNT,

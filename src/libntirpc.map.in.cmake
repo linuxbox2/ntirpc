@@ -69,8 +69,7 @@ NTIRPC_${NTIRPC_VERSION} {
     clnt_tli_create;
     clnt_tp_ncreate;
     clnt_tp_ncreate_timed;
-    clnt_vc_ncreate;
-    clnt_vc_ncreate2;
+    clnt_vc_ncreatef;
     clnt_vc_ncreate_svc;
     clntraw_ncreate;
     clnttcp_ncreate;

@@ -214,15 +214,13 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 	}
 }
 
-static inline void
-svc_ioq_loop(SVCXPRT *xprt, struct xdr_ioq *xioq, struct poolq_head *ifph)
+static void
+svc_ioq_write(SVCXPRT *xprt, struct xdr_ioq *xioq, struct poolq_head *ifph)
 {
 	struct poolq_entry *have;
 
 	for (;;) {
 		/* do i/o unlocked */
-		mutex_unlock(&ifph->qmutex);
-
 		if (svc_work_pool.params.thrd_max
 		 && !(xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
 			/* all systems are go! */
@@ -237,13 +235,26 @@ svc_ioq_loop(SVCXPRT *xprt, struct xdr_ioq *xioq, struct poolq_head *ifph)
 
 		have = TAILQ_FIRST(&ifph->qh);
 		TAILQ_REMOVE(&ifph->qh, have, q);
+		mutex_unlock(&ifph->qmutex);
+
 		xioq = _IOQ(have);
 		xprt = (SVCXPRT *)xioq->xdrs[0].x_lib[1];
 	}
+	mutex_unlock(&ifph->qmutex);
+}
+
+static void
+svc_ioq_write_callback(struct work_pool_entry *wpe)
+{
+	struct xdr_ioq *xioq = opr_containerof(wpe, struct xdr_ioq, ioq_wpe);
+	SVCXPRT *xprt = (SVCXPRT *)xioq->xdrs[0].x_lib[1];
+	struct poolq_head *ifph = &ioq_ifqh[xprt->xp_ifindex & IOQ_IF_MASK];
+
+	svc_ioq_write(xprt, xioq, ifph);
 }
 
 void
-svc_ioq_append(SVCXPRT *xprt, struct xdr_ioq *xioq)
+svc_ioq_write_now(SVCXPRT *xprt, struct xdr_ioq *xioq)
 {
 	struct poolq_head *ifph = &ioq_ifqh[xprt->xp_ifindex & IOQ_IF_MASK];
 
@@ -252,14 +263,43 @@ svc_ioq_append(SVCXPRT *xprt, struct xdr_ioq *xioq)
 
 	if ((ifph->qcount)++ > 0) {
 		/* queue additional output requests without task switch */
-		xioq->xdrs[0].x_lib[1] = (void *)xprt;
 		TAILQ_INSERT_TAIL(&ifph->qh, &(xioq->ioq_s), q);
-	} else {
-		/* handle this output request without queuing,
-		 * and any additional output requests without task switch
-		 */
-		svc_ioq_loop(xprt, xioq, ifph);
+		mutex_unlock(&ifph->qmutex);
+		return;
 	}
-
 	mutex_unlock(&ifph->qmutex);
+
+	/* handle this output request without queuing, then any additional
+	 * output requests without a task switch (using this thread).
+	 */
+	svc_ioq_write(xprt, xioq, ifph);
+}
+
+/*
+ * Handle rare case of first output followed by heavy traffic that prevents the
+ * original thread from continuing for too long.
+ *
+ * In the more common case, server traffic will already have begun and this
+ * will rapidly queue the output and return.
+ */
+void
+svc_ioq_write_submit(SVCXPRT *xprt, struct xdr_ioq *xioq)
+{
+	struct poolq_head *ifph = &ioq_ifqh[xprt->xp_ifindex & IOQ_IF_MASK];
+
+	SVC_REF(xprt, SVC_REF_FLAG_NONE);
+	mutex_lock(&ifph->qmutex);
+
+	if ((ifph->qcount)++ > 0) {
+		/* queue additional output requests, they will be handled by
+		 * existing thread without another task switch.
+		 */
+		TAILQ_INSERT_TAIL(&ifph->qh, &(xioq->ioq_s), q);
+		mutex_unlock(&ifph->qmutex);
+		return;
+	}
+	mutex_unlock(&ifph->qmutex);
+
+	xioq->ioq_wpe.fun = svc_ioq_write_callback;
+	work_pool_submit(&svc_work_pool, &xioq->ioq_wpe);
 }
