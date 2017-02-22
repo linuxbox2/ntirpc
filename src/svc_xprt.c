@@ -343,24 +343,12 @@ svc_xprt_shutdown()
 void
 svc_xprt_trace(SVCXPRT *xprt, const char *func, const char *tag, const int line)
 {
-	struct sockaddr_storage *ss = (struct sockaddr_storage *)
-	    &(xprt->xp_remote.ss);
-	int port;
-
-	switch (ss->ss_family) {
-	case AF_INET6:
-		port = ntohs(((struct sockaddr_in6 *)ss)->sin6_port);
-		break;
-	case AF_INET:
-		port = ntohs(((struct sockaddr_in *)ss)->sin_port);
-		break;
-	default:
-		port = -1;
-		break;
-	}
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 		"%s() %p xp_refs %" PRId32
-		" fd %d port %d @ %s:%d",
+		" fd %d af %u port %u @ %s:%d",
 		func, xprt, xprt->xp_refs,
-		xprt->xp_fd, port, tag, line);
+		xprt->xp_fd,
+		xprt->xp_remote.ss.ss_family,
+		__rpc_address_port(&xprt->xp_remote),
+		tag, line);
 }

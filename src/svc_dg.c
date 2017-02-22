@@ -46,7 +46,6 @@
 #include <rpc/types.h>
 #include <misc/portable.h>
 #include <rpc/rpc.h>
-#include <rpc/svc_dg.h>
 #include <rpc/svc_auth.h>
 #include <errno.h>
 #include <unistd.h>
@@ -64,9 +63,6 @@
 #include <misc/city.h>
 #include <rpc/rpc_cksum.h>
 
-extern struct svc_params __svc_params[1];
-
-#define su_data(xprt) ((struct svc_dg_data *)(xprt->xp_p2))	/* XXX */
 #define rpc_buffer(xprt) ((xprt)->xp_p1)
 
 #ifndef MAX
@@ -89,88 +85,121 @@ static int svc_dg_store_pktinfo(struct msghdr *, struct svc_req *);
  * system defaults are chosen.
  * The routines returns NULL if a problem occurred.
  */
-static const char svc_dg_str[] = "svc_dg_ncreate: %s";
-static const char svc_dg_err1[] = "could not get transport information";
-static const char svc_dg_err2[] = " transport does not support data transfer";
-static const char __no_mem_str[] = "out of memory";
+static void
+svc_dg_xprt_free(struct svc_dg_xprt *su)
+{
+	rpc_dplx_rec_destroy(&su->su_dr);
+	mutex_destroy(&su->su_dr.xprt.xp_lock);
+	mutex_destroy(&su->su_dr.xprt.xp_auth_lock);
+
+#if defined(HAVE_BLKIN)
+	if (su->su_dr.xprt.blkin.svc_name)
+		mem_free(su->su_dr.xprt.blkin.svc_name, 2*INET6_ADDRSTRLEN);
+#endif
+	mem_free(su, sizeof(struct svc_dg_xprt));
+}
+
+static struct svc_dg_xprt *
+svc_dg_xprt_zalloc(void)
+{
+	struct svc_dg_xprt *su = mem_zalloc(sizeof(struct svc_dg_xprt));
+
+	/* Init SVCXPRT locks, etc */
+	mutex_init(&su->su_dr.xprt.xp_lock, NULL);
+	mutex_init(&su->su_dr.xprt.xp_auth_lock, NULL);
+/*	TAILQ_INIT_ENTRY(&su->su_dr.xprt, xp_evq); sets NULL */
+	rpc_dplx_rec_init(&su->su_dr);
+
+	su->su_dr.xprt.xp_refs = 1;
+	return (su);
+}
 
 SVCXPRT *
-svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
+svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
+		const uint32_t flags)
 {
 	SVCXPRT *xprt;
-	struct svc_dg_data *su = NULL;
+	struct rpc_dplx_rec *rec;
+	struct svc_dg_xprt *su;
 	struct __rpc_sockinfo si;
-	struct sockaddr_storage ss;
-	socklen_t slen;
+	u_int recvsize;
+	u_int sendsize;
 	uint32_t oflags;
+	int rc;
+
+	/* atomically find or create shared fd state; ref+1 */
+	rec = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_IFLAG_LOCKREC, &oflags);
+	if (!rec) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d rpc_dplx_lookup failed",
+			__func__, fd);
+		return (NULL);
+	}
+
+	if (!(oflags & RPC_DPLX_LKP_OFLAG_ALLOC)) {
+		REC_UNLOCK(rec);
+		XPRT_TRACE(rec->hdl.xprt, __func__, __func__, __LINE__);
+		return (rec->hdl.xprt);
+	}
 
 	if (!__rpc_fd2sockinfo(fd, &si)) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_DG, svc_dg_str, svc_dg_err1);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d could not get transport information",
+			__func__, fd);
 		return (NULL);
 	}
 	/*
 	 * Find the receive and the send size
 	 */
-	sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsize);
-	recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsize);
+	sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
+	recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
 	if ((sendsize == 0) || (recvsize == 0)) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_DG, svc_dg_str, svc_dg_err2);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d transport does not support data transfer",
+			__func__, fd);
+		return (NULL);
+	}
+	su = svc_dg_xprt_zalloc();
+	xprt = &su->su_dr.xprt;
+
+	__rpc_address_setup(&xprt->xp_local);
+	rc = getsockname(fd, xprt->xp_local.nb.buf, &xprt->xp_local.nb.len);
+	if (rc < 0) {
+		svc_dg_xprt_free(su);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d getsockname failed (%d)",
+			 __func__, fd, rc);
 		return (NULL);
 	}
 
-	xprt = mem_zalloc(sizeof(SVCXPRT));
-
-	/* Init SVCXPRT locks, etc */
-	mutex_init(&xprt->xp_lock, NULL);
-	mutex_init(&xprt->xp_auth_lock, NULL);
-
-	su = mem_alloc(sizeof(*su));
-
+	/*
+	 * Should be multiple of 4 for XDR.
+	 */
+	su->su_sendsz = ((sendsize + 3) / 4) * 4;
+	su->su_recvsz = ((recvsize + 3) / 4) * 4;
 	su->su_iosz = ((MAX(sendsize, recvsize) + 3) / 4) * 4;
 	rpc_buffer(xprt) = mem_alloc(su->su_iosz);
 
 	xdrmem_create(&(su->su_xdrs), rpc_buffer(xprt), su->su_iosz,
 		      XDR_DECODE);
 
-	su->su_cache = NULL;
-	xprt->xp_flags = SVC_XPRT_FLAG_NONE;
-	xprt->xp_refs = 1;
+	xprt->xp_flags = (uint16_t)flags;
 	xprt->xp_fd = fd;
-	xprt->xp_p2 = su;
 	svc_dg_ops(xprt);
-
-	slen = sizeof(ss);
-	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0)
-		goto freedata;
-
-	__rpc_set_address(&xprt->xp_local, &ss, slen);
-
-	switch (ss.ss_family) {
-	case AF_INET:
-		xprt->xp_port = ntohs(((struct sockaddr_in *)&ss)->sin_port);
-		break;
-#ifdef INET6
-	case AF_INET6:
-		xprt->xp_port = ntohs(((struct sockaddr_in6 *)&ss)->sin6_port);
-		break;
-#endif
-	case AF_LOCAL:
-		/* no port */
-		break;
-	default:
-		break;
-	}
 
 	/* Enable reception of IP*_PKTINFO control msgs */
 	svc_dg_enable_pktinfo(fd, &si);
 
 	/* Make reachable */
-	xprt->xp_p5 = rpc_dplx_lookup_rec(
-		xprt->xp_fd, RPC_DPLX_FLAG_NONE, &oflags); /* ref+1 */
+	xprt->xp_p5 = rec;
+	rec->hdl.xprt = xprt;
+	REC_UNLOCK(rec);
 	svc_rqst_init_xprt(xprt);
 
 	/* Conditional xprt_register */
-	if (!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
+	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
+	     && !(flags & SVC_CREATE_FLAG_XPRT_NOREG))
+	    || (flags & SVC_CREATE_FLAG_XPRT_DOREG))
 		xprt_register(xprt);
 
 #if defined(HAVE_BLKIN)
@@ -178,13 +207,6 @@ svc_dg_ncreate(int fd, u_int sendsize, u_int recvsize)
 #endif
 
 	return (xprt);
-
- freedata:
-	__warnx(TIRPC_DEBUG_FLAG_SVC_DG, svc_dg_str, __no_mem_str);
-	mem_free(su, sizeof(*su));
-	xprt_unregister(xprt);
-	mem_free(xprt, sizeof(SVCXPRT));
-	return (NULL);
 }
 
  /*ARGSUSED*/
@@ -234,11 +256,10 @@ static bool
 svc_dg_recv(struct svc_req *req)
 {
 	SVCXPRT *xprt = req->rq_xprt;
-	struct svc_dg_data *su = su_data(xprt);
+	struct svc_dg_xprt *su = su_data(xprt);
 	XDR *xdrs = &(su->su_xdrs);
 	char *reply;
-	struct sockaddr_storage ss;
-	struct sockaddr *sp = (struct sockaddr *)&ss;
+	struct sockaddr *sp = (struct sockaddr *)&xprt->xp_remote.ss;
 	struct msghdr *mesgp;
 	struct iovec iov;
 	size_t replylen;
@@ -246,8 +267,7 @@ svc_dg_recv(struct svc_req *req)
 
 	rpc_msg_init(&req->rq_msg);
 
-	/* Magic marker value to check we didn't get the header. */
-	memset(&ss, 0xff, sizeof(struct sockaddr_storage));
+	__rpc_address_setup(&xprt->xp_remote);
 
  again:
 	iov.iov_base = rpc_buffer(xprt);
@@ -256,7 +276,7 @@ svc_dg_recv(struct svc_req *req)
 	memset(mesgp, 0, sizeof(*mesgp));
 	mesgp->msg_iov = &iov;
 	mesgp->msg_iovlen = 1;
-	mesgp->msg_name = (struct sockaddr *)(void *)&ss;
+	mesgp->msg_name = sp;
 	sp->sa_family = (sa_family_t) 0xffff;
 	mesgp->msg_namelen = sizeof(struct sockaddr_storage);
 	mesgp->msg_control = su->su_cmsg;
@@ -272,7 +292,7 @@ svc_dg_recv(struct svc_req *req)
 	if (rlen == -1 || (rlen < (ssize_t) (4 * sizeof(u_int32_t))))
 		return (false);
 
-	__rpc_set_address(&xprt->xp_remote, &ss, mesgp->msg_namelen);
+	xprt->xp_remote.nb.len = mesgp->msg_namelen;
 
 	/* Check whether there's an IP_PKTINFO or IP6_PKTINFO control message.
 	 * If yes, preserve it for svc_dg_reply; otherwise just zap any cmsgs */
@@ -329,7 +349,7 @@ static bool
 svc_dg_reply(struct svc_req *req)
 {
 	SVCXPRT *xprt = req->rq_xprt;
-	struct svc_dg_data *su = su_data(xprt);
+	struct svc_dg_xprt *su = su_data(xprt);
 	XDR *xdrs = &(su->su_xdrs);
 	bool stat = false;
 	size_t slen;
@@ -398,7 +418,7 @@ static bool
 svc_dg_getargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr,
 	       void *u_data)
 {
-	struct svc_dg_data *su = su_data(req->rq_xprt);
+	struct svc_dg_xprt *su = su_data(req->rq_xprt);
 	XDR *xdrs = &(su->su_xdrs);
 	bool rslt;
 
@@ -432,7 +452,7 @@ svc_dg_unlock(SVCXPRT *xprt, uint32_t flags, const char *file,
 static void
 svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
-	struct svc_dg_data *su = su_data(xprt);
+	struct svc_dg_xprt *su = su_data(xprt);
 
 	/* clears xprt from the xprt table (eg, idle scans) */
 	xprt_unregister(xprt);
@@ -442,15 +462,16 @@ svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		" should actually destroy things @ %s:%d",
 		__func__, xprt, xprt->xp_refs, tag, line);
 
-	if (xprt->xp_fd != -1)
+	if ((xprt->xp_flags & SVC_XPRT_FLAG_CLOSE) && xprt->xp_fd != -1)
 		(void)close(xprt->xp_fd);
 
 	XDR_DESTROY(&(su->su_xdrs));
 	mem_free(rpc_buffer(xprt), su->su_iosz);
-	mem_free(su, sizeof(*su));
 
 	if (xprt->xp_tp)
 		mem_free(xprt->xp_tp, 0);
+	if (xprt->xp_netid)
+		mem_free(xprt->xp_netid, 0);
 
 	rpc_dplx_unref((struct rpc_dplx_rec *)xprt->xp_p5, RPC_DPLX_FLAG_NONE);
 
@@ -458,11 +479,7 @@ svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		/* call free hook */
 		xprt->xp_ops->xp_free_user_data(xprt);
 	}
-#if defined(HAVE_BLKIN)
-	if (xprt->blkin.svc_name)
-		mem_free(xprt->blkin.svc_name, 2*INET6_ADDRSTRLEN);
-#endif
-	mem_free(xprt, sizeof(SVCXPRT));
+	svc_dg_xprt_free(su);
 }
 
 extern mutex_t ops_lock;
@@ -564,7 +581,7 @@ static const char enable_err[] = "cache already enabled";
 int
 svc_dg_enablecache(SVCXPRT *transp, u_int size)
 {
-	struct svc_dg_data *su = su_data(transp);
+	struct svc_dg_xprt *su = su_data(transp);
 	struct cl_cache *uc;
 
 	mutex_lock(&dupreq_lock);
@@ -574,13 +591,12 @@ svc_dg_enablecache(SVCXPRT *transp, u_int size)
 		mutex_unlock(&dupreq_lock);
 		return (0);
 	}
+	su->su_cache =
 	uc = mem_alloc(sizeof(*uc));
 	uc->uc_size = size;
 	uc->uc_nextvictim = 0;
 	uc->uc_entries = mem_calloc(size * SPARSENESS, sizeof(cache_ptr));
-
 	uc->uc_fifo = mem_calloc(size, sizeof(cache_ptr));
-	su->su_cache = (char *)(void *)uc;
 
 	mutex_unlock(&dupreq_lock);
 	return (1);
@@ -602,8 +618,8 @@ svc_dg_cache_set(SVCXPRT *xprt, size_t replylen, u_int32_t xid)
 {
 	cache_ptr victim;
 	cache_ptr *vicp;
-	struct svc_dg_data *su = su_data(xprt);
-	struct cl_cache *uc = (struct cl_cache *)su->su_cache;
+	struct svc_dg_xprt *su = su_data(xprt);
+	struct cl_cache *uc = su->su_cache;
 	u_int loc;
 	char *newbuf;
 	struct netconfig *nconf;
@@ -681,8 +697,8 @@ svc_dg_cache_get(SVCXPRT *xprt, struct rpc_msg *msg, char **replyp,
 {
 	u_int loc;
 	cache_ptr ent;
-	struct svc_dg_data *su = su_data(xprt);
-	struct cl_cache *uc = (struct cl_cache *)su->su_cache;
+	struct svc_dg_xprt *su = su_data(xprt);
+	struct cl_cache *uc = su->su_cache;
 	struct netconfig *nconf;
 	char *uaddr;
 

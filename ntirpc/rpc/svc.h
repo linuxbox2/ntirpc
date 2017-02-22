@@ -115,12 +115,6 @@
 #define RPC_SVC_FDSET_GET       4
 #define RPC_SVC_FDSET_SET       5
 
-/*
- * Flags for svc_fd_ncreate2
- */
-
-#define SVC_VCCR_NONE             0x0000
-
 /* Svc event strategy */
 enum svc_event_type {
 	SVC_EVENT_FDSET /* trad. using select and poll (currently unhooked) */ ,
@@ -152,12 +146,12 @@ typedef struct svc_init_params {
 /* uint16_t actually used */
 #define SVC_XPRT_FLAG_ADDED		0x0001
 #define SVC_XPRT_FLAG_BLOCKED		0x0002
+#define SVC_XPRT_FLAG_CLOSE		0x0010
 #define SVC_XPRT_FLAG_DESTROYED		0x0020	/* SVC_DESTROY() was called */
 #define SVC_XPRT_FLAG_DESTROYING	0x0040	/* (*xp_destroy) was called */
-#define SVC_XPRT_FLAG_VSOCK             0x0080
+#define SVC_XPRT_FLAG_INITIALIZED	0x0080
 
 /* uint32_t instructions */
-#define SVC_XPRT_FLAG_LOCK		SVC_XPRT_FLAG_NONE
 #define SVC_XPRT_FLAG_LOCKED		0x00010000
 #define SVC_XPRT_FLAG_UNLOCK		0x00020000
 
@@ -291,7 +285,6 @@ typedef struct rpc_svcxprt {
 	int xp_type;		/* xprt type */
 
 	uint16_t xp_flags;	/* flags */
-	u_short xp_port;	/* associated port number */
 
 	/*
 	 * union of event processor types
@@ -602,8 +595,16 @@ __END_DECLS
  * netbuf -- with no alloc/free needed.
  */
 __BEGIN_DECLS
-extern void __rpc_set_address(struct rpc_address *,
-			      const struct sockaddr_storage *, socklen_t);
+extern u_int __rpc_address_port(struct rpc_address *);
+extern void __rpc_address_set_length(struct rpc_address *, socklen_t);
+
+static inline void
+__rpc_address_setup(struct rpc_address *rpca)
+{
+	rpca->nb.buf = &rpca->ss;
+	rpca->nb.len =
+	rpca->nb.maxlen = sizeof(struct sockaddr_storage);
+}
 __END_DECLS
 /*
  * When the service routine is called, it must first check to see if it
@@ -707,10 +708,22 @@ extern SVCXPRT *svc_tli_ncreate(const int, const struct netconfig *,
  *      const u_int sendsz;             -- max sendsize
  *      const u_int recvsz;             -- max recvsize
  */
+__END_DECLS
 
 /*
  * Connectionless and connectionful create routines
  */
+
+/* uint16_t actually used */
+#define SVC_CREATE_FLAG_NONE		SVC_XPRT_FLAG_NONE
+#define SVC_CREATE_FLAG_CLOSE		SVC_XPRT_FLAG_CLOSE
+
+/* uint32_t instructions */
+#define SVC_CREATE_FLAG_LISTEN		CLNT_CREATE_FLAG_LISTEN
+#define SVC_CREATE_FLAG_XPRT_DOREG	CLNT_CREATE_FLAG_XPRT_DOREG
+#define SVC_CREATE_FLAG_XPRT_NOREG	CLNT_CREATE_FLAG_XPRT_NOREG
+
+__BEGIN_DECLS
 
 extern SVCXPRT *svc_vc_ncreate(const int, const u_int, const u_int);
 /*
@@ -753,23 +766,41 @@ extern CLIENT *clnt_vc_ncreate_svc(const SVCXPRT *, const rpcprog_t,
  */
 extern SVCXPRT *svcunix_ncreate(int, u_int, u_int, char *);
 
-extern SVCXPRT *svc_dg_ncreate(const int, const u_int, const u_int);
+extern SVCXPRT *svc_dg_ncreatef(const int, const u_int, const u_int,
+				const uint32_t);
 /*
  * const int fd;                                -- open connection
  * const u_int sendsize;                        -- max send size
  * const u_int recvsize;                        -- max recv size
+ *      const int fd;                           -- open connection end point
+ *      const u_int sendsize;                   -- max send size
+ *      const u_int recvsize;                   -- max recv size
+ *      const uint32_t flags;                   -- flags
  */
+
+static inline SVCXPRT *
+svc_dg_ncreate(const int fd, const u_int sendsize, const u_int recvsize)
+{
+	return (svc_dg_ncreatef(fd, sendsize, recvsize, SVC_CREATE_FLAG_CLOSE));
+}
 
 /*
  * the routine takes any *open* connection
- * descriptor as its first input and is used for open connections.
  */
-extern SVCXPRT *svc_fd_ncreate(const int, const u_int, const u_int);
+extern SVCXPRT *svc_fd_ncreatef(const int, const u_int, const u_int,
+				const uint32_t);
 /*
  *      const int fd;                           -- open connection end point
  *      const u_int sendsize;                   -- max send size
  *      const u_int recvsize;                   -- max recv size
+ *      const uint32_t flags;                   -- flags
  */
+
+static inline SVCXPRT *
+svc_fd_ncreate(const int fd, const u_int sendsize, const u_int recvsize)
+{
+	return (svc_fd_ncreatef(fd, sendsize, recvsize, SVC_CREATE_FLAG_NONE));
+}
 
 /*
  * Added for compatibility to old rpc 4.0. Obsoleted by svc_fd_create().

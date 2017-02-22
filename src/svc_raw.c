@@ -81,7 +81,6 @@ svc_raw_ncreate(void)
 		svc_raw_private = srp;
 	}
 	srp->server.xp_fd = FD_SETSIZE;
-	srp->server.xp_port = 0;
 	srp->server.xp_p3 = NULL;
 	svc_raw_ops(&srp->server);
 /* XXX check and or fixme */

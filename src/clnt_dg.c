@@ -64,11 +64,11 @@
 #include <misc/portable.h>
 #include <reentrant.h>
 #include <rpc/rpc.h>
+#include <rpc/svc_rqst.h>
 #include "rpc_com.h"
 #include "clnt_internal.h"
-#include "rpc_dplx_internal.h"
+#include "svc_internal.h"
 #include "rpc_ctx.h"
-#include <rpc/svc_rqst.h>
 
 #define MAX_DEFAULT_FDS                 20000
 
@@ -97,20 +97,21 @@ static void clnt_dg_destroy(CLIENT *);
  * If svcaddr is NULL, returns NULL.
  */
 CLIENT *
-clnt_dg_ncreate(int fd,	/* open file descriptor */
-		const struct netbuf *svcaddr,	/* servers address */
-		rpcprog_t program,	/* program number */
-		rpcvers_t version,	/* version number */
-		u_int sendsz,	/* buffer recv size */
-		u_int recvsz /* buffer send size */)
+clnt_dg_ncreatef(const int fd,	/* open file descriptor */
+		 const struct netbuf *svcaddr,	/* servers address */
+		 const rpcprog_t program,	/* program number */
+		 const rpcvers_t version,	/* version number */
+		 const u_int sendsz,	/* buffer recv size */
+		 const u_int recvsz,	/* buffer send size */
+		 const uint32_t flags)
 {
 	CLIENT *clnt;		/* client handle */
 	struct cx_data *cx;
 	struct cu_data *cu;
+	SVCXPRT *xprt;
+	struct svc_dg_xprt *su;
 	struct timespec now;
 	struct rpc_msg call_msg;
-	struct __rpc_sockinfo si;
-	uint32_t oflags;
 	int one = 1;
 
 	if (svcaddr == NULL) {
@@ -118,32 +119,26 @@ clnt_dg_ncreate(int fd,	/* open file descriptor */
 		return (NULL);
 	}
 
-	if (!__rpc_fd2sockinfo(fd, &si)) {
-		rpc_createerr.cf_stat = RPC_TLIERROR;
-		rpc_createerr.cf_error.re_errno = 0;
-		return (NULL);
-	}
-	/*
-	 * Find the receive and the send size
-	 */
-	sendsz = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
-	recvsz = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
-	if ((sendsz == 0) || (recvsz == 0)) {
+	/* find or create shared fd state; ref+1 */
+	xprt = svc_dg_ncreatef(fd, sendsz, recvsz, flags);
+	if (!xprt) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d svc_dg_ncreatef failed",
+			__func__, fd);
 		rpc_createerr.cf_stat = RPC_TLIERROR;	/* XXX */
 		rpc_createerr.cf_error.re_errno = 0;
 		return (NULL);
 	}
-	/*
-	 * Should be multiple of 4 for XDR.
-	 */
-	sendsz = ((sendsz + 3) / 4) * 4;
-	recvsz = ((recvsz + 3) / 4) * 4;
+	su = su_data(xprt);
 
-	cx = alloc_cx_data(CX_DG_DATA, sendsz, recvsz);
+	/* buffer sizes should match svc side */
+	cx = alloc_cx_data(CX_DG_DATA, su->su_sendsz, su->su_recvsz);
+	cx->cx_rec = &su->su_dr;
 	cu = CU_DATA(cx);
 
 	(void)memcpy(&cu->cu_raddr, svcaddr->buf, (size_t) svcaddr->len);
 	cu->cu_rlen = svcaddr->len;
+
 	/* Other values can also be set through clnt_control() */
 	cu->cu_wait.tv_sec = 15;	/* heuristically chosen */
 	cu->cu_wait.tv_usec = 0;
@@ -152,14 +147,24 @@ clnt_dg_ncreate(int fd,	/* open file descriptor */
 	cu->cu_async = false;
 	cu->cu_connect = false;
 	cu->cu_connected = false;
+
+	/*
+	 * initialize call message
+	 */
 	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &now);
 	call_msg.rm_xid = __RPC_GETXID(&now);	/* XXX? */
 	call_msg.cb_prog = program;
 	call_msg.cb_vers = version;
-	xdrmem_create(&(cu->cu_outxdrs), cu->cu_outbuf, sendsz, XDR_ENCODE);
+
+	xdrmem_create(&(cu->cu_outxdrs), cu->cu_outbuf, su->su_sendsz,
+		      XDR_ENCODE);
 	if (!xdr_callhdr(&(cu->cu_outxdrs), &call_msg)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d xdr_callhdr failed",
+			__func__, fd);
 		rpc_createerr.cf_stat = RPC_CANTENCODEARGS;	/* XXX */
 		rpc_createerr.cf_error.re_errno = 0;
+		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 		free_cx_data(cx);
 		return (NULL);
 	}
@@ -176,18 +181,14 @@ clnt_dg_ncreate(int fd,	/* open file descriptor */
 	}
 #endif
 	ioctl(fd, FIONBIO, (char *)(void *)&one);
-	/*
-	 * By default, closeit is always false. It is users responsibility
-	 * to do a close on it, else the user may use clnt_control
-	 * to let clnt_destroy do it for him/her.
-	 */
-	cu->cu_closeit = false;
-	cu->cu_fd = fd;
 
 	clnt = &cx->cx_c;
 	clnt->cl_ops = clnt_dg_ops();
-	clnt->cl_p2 = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_FLAG_NONE,
-					  &oflags); /* ref+1 */
+	clnt->cl_p2 = xprt->xp_p5;
+
+	__warnx(TIRPC_DEBUG_FLAG_CLNT_DG,
+		"%s: fd %d completed",
+		__func__, fd);
 	return (clnt);
 }
 
@@ -204,26 +205,32 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 {
 	struct cx_data *cx = CX_DATA(clnt);
 	struct cu_data *cu = CU_DATA(cx);
+	struct rpc_dplx_rec *rec = cx->cx_rec;
+	SVCXPRT *xprt = &rec->xprt;
 	XDR *xdrs;
-	size_t outlen = 0;
+	struct sockaddr *sa;
 	struct rpc_msg reply_msg;
 	XDR reply_xdrs;
-	bool ok;
-	int nrefreshes = 2;	/* number of times to refresh cred */
 	struct timeval timeout;
 	struct pollfd fd;
 	int total_time, nextsend_time, tv = 0;
-	struct sockaddr *sa;
 	socklen_t __attribute__ ((unused)) inlen, salen;
+	size_t outlen = 0;
 	ssize_t recvlen = 0;
+	int nrefreshes = 2;	/* number of times to refresh cred */
+	int xp_fd = xprt->xp_fd;
 	u_int32_t xid, inval, outval;
+	bool ok;
 	bool slocked = false;
 	bool rlocked = false;
 	bool once = true;
 
-	outlen = 0;
 	rpc_dplx_slc(clnt);
 	slocked = true;
+
+	if (!xprt->xp_ev)
+		xprt_register(xprt);
+
 	if (cu->cu_total.tv_usec == -1)
 		timeout = utimeout;	/* use supplied timeout */
 	else
@@ -233,7 +240,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 
 	if (cu->cu_connect && !cu->cu_connected) {
 		if (connect
-		    (cu->cu_fd, (struct sockaddr *)&cu->cu_raddr,
+		    (xp_fd, (struct sockaddr *)&cu->cu_raddr,
 		     cu->cu_rlen) < 0) {
 			cu->cu_error.re_errno = errno;
 			cu->cu_error.re_status = RPC_CANTSEND;
@@ -279,7 +286,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 
  send_again:
 	nextsend_time = cu->cu_wait.tv_sec * 1000 + cu->cu_wait.tv_usec / 1000;
-	if (sendto(cu->cu_fd, cu->cu_outbuf, outlen, 0, sa, salen) != outlen) {
+	if (sendto(xp_fd, cu->cu_outbuf, outlen, 0, sa, salen) != outlen) {
 		cu->cu_error.re_errno = errno;
 		cu->cu_error.re_status = RPC_CANTSEND;
 		goto out;
@@ -301,7 +308,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	reply_msg.RPCM_ack.ar_results.where = NULL;
 	reply_msg.RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
 
-	fd.fd = cu->cu_fd;
+	fd.fd = xp_fd;
 	fd.events = POLLIN;
 	fd.revents = 0;
 	while ((total_time > 0) || once) {
@@ -346,7 +353,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 		msg.msg_flags = 0;
 		msg.msg_control = cbuf;
 		msg.msg_controllen = 256;
-		ret = recvmsg(cu->cu_fd, &msg, MSG_ERRQUEUE);
+		ret = recvmsg(xp_fd, &msg, MSG_ERRQUEUE);
 		if (ret >= 0 && memcmp(cbuf + 256, cu->cu_outbuf, ret) == 0
 		    && (msg.msg_flags & MSG_ERRQUEUE)
 		    && ((msg.msg_namelen == 0 && ret >= 12)
@@ -370,7 +377,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	/* We have some data now */
 	do {
 		recvlen =
-		    recvfrom(cu->cu_fd, cu->cu_inbuf, cu->cu_recvsz, 0, NULL,
+		    recvfrom(xp_fd, cu->cu_inbuf, cu->cu_recvsz, 0, NULL,
 			     NULL);
 	} while (recvlen < 0 && errno == EINTR);
 	if (recvlen < 0 && errno != EWOULDBLOCK) {
@@ -520,6 +527,7 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 {
 	struct cx_data *cx = CX_DATA(clnt);
 	struct cu_data *cu = CU_DATA(cx);
+	struct rpc_dplx_rec *rec = cx->cx_rec;
 	struct netbuf *addr;
 	bool rslt = true;
 
@@ -527,13 +535,19 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 	rpc_dplx_rlc(clnt);
 	rpc_dplx_slc(clnt);
 
+	/*
+	 * By default, SVC_XPRT_FLAG_CLOSE starts false.  It is user
+	 * responsibility to do a close on the fd, or set by cl_control.
+	 */
 	switch (request) {
 	case CLSET_FD_CLOSE:
-		cu->cu_closeit = true;
+		(void)atomic_set_uint16_t_bits(&rec->xprt.xp_flags,
+						SVC_XPRT_FLAG_CLOSE);
 		rslt = true;
 		goto unlock;
 	case CLSET_FD_NCLOSE:
-		cu->cu_closeit = false;
+		(void)atomic_clear_uint16_t_bits(&rec->xprt.xp_flags,
+						SVC_XPRT_FLAG_CLOSE);
 		rslt = true;
 		goto unlock;
 	}
@@ -569,7 +583,7 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 		*(struct timeval *)info = cu->cu_wait;
 		break;
 	case CLGET_FD:
-		*(int *)info = cu->cu_fd;
+		*(int *)info = rec->xprt.xp_fd;
 		break;
 	case CLGET_SVC_ADDR:
 		addr = (struct netbuf *)info;
@@ -671,8 +685,6 @@ clnt_dg_destroy(CLIENT *clnt)
 	rpc_dplx_swc(clnt, rpc_flag_clear);
 	rpc_dplx_rwc(clnt, rpc_flag_clear);
 
-	if (cu->cu_closeit)
-		(void)close(cu->cu_fd);
 	XDR_DESTROY(&cu->cu_outxdrs);
 
 	/* signal both channels */
@@ -682,6 +694,7 @@ clnt_dg_destroy(CLIENT *clnt)
 	/* release */
 	rpc_dplx_unref(rec, RPC_DPLX_FLAG_NONE);
 	free_cx_data(cx);
+	SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
 
 	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
 }

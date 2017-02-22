@@ -46,6 +46,8 @@ typedef struct rpc_dplx_lock {
 
 /* new unified state */
 struct rpc_dplx_rec {
+	struct rpc_svcxprt xprt;	/**< Transport Independent handle */
+
 	int fd_k;
 #if 0
 	mutex_t mtx;
@@ -69,6 +71,7 @@ struct rpc_dplx_rec {
 		SVCXPRT *xprt;
 	} hdl;
 };
+#define REC_XPRT(p) (opr_containerof((p), struct rpc_dplx_rec, xprt))
 
 #define REC_LOCK(rec) \
 	do { \

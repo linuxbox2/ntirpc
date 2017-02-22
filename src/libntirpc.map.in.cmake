@@ -2,6 +2,8 @@ NTIRPC_${NTIRPC_VERSION} {
   global:
     # __*
     __ntirpc_pkg_params;
+    __rpc_address_port;
+    __rpc_address_set_length;
     __rpc_createerr;
     __rpc_dtbsize;
     __rpc_endconf;
@@ -58,7 +60,7 @@ NTIRPC_${NTIRPC_VERSION} {
     clnt_ncreate_timed;
     clnt_ncreate_vers;
     clnt_ncreate_vers_timed;
-    clnt_dg_ncreate;
+    clnt_dg_ncreatef;
     clnt_pcreateerror;
     clnt_perrno;
     clnt_perror;
@@ -145,10 +147,9 @@ NTIRPC_${NTIRPC_VERSION} {
     setrpcent;
     svc_auth_authenticate;
     svc_auth_reg;
-    svc_dg_ncreate;
+    svc_dg_ncreatef;
     svc_exit;
-    svc_fd_ncreate;
-    svc_fd_ncreate2;
+    svc_fd_ncreatef;
     svc_init;
     svc_ncreate;
     svc_raw_ncreate;

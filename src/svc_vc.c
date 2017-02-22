@@ -114,15 +114,11 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 {
 	SVCXPRT *xprt = NULL;
 	struct __rpc_sockinfo si;
-	struct sockaddr_storage sslocal;
-	struct sockaddr *salocal;
-	struct sockaddr_in *salocal_in;
-	struct sockaddr_in6 *salocal_in6;
 	struct rpc_dplx_rec *rec = NULL;
 	struct x_vc_data *xd = NULL;
 	const char *netid;
 	uint32_t oflags;
-	socklen_t slen;
+	int rc;
 
 	if (!__rpc_fd2sockinfo(fd, &si))
 		return NULL;
@@ -190,26 +186,14 @@ svc_vc_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	if (flags & SVC_VC_CREATE_LISTEN)
 		listen(fd, SOMAXCONN);
 
-	slen = sizeof(struct sockaddr_storage);
-	if (getsockname(fd, (struct sockaddr *)(void *)&sslocal, &slen) < 0) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_vc_create: could not retrieve local addr");
+	__rpc_address_setup(&xprt->xp_local);
+	rc = getsockname(fd, xprt->xp_local.nb.buf, &xprt->xp_local.nb.len);
+	if (rc < 0) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d getsockname failed (%d)",
+			 __func__, fd, rc);
 		goto err;
 	}
-
-	/* XXX following breaks strict aliasing? */
-	salocal = (struct sockaddr *)&sslocal;
-	switch (salocal->sa_family) {
-	case AF_INET:
-		salocal_in = (struct sockaddr_in *)salocal;
-		xprt->xp_port = ntohs(salocal_in->sin_port);
-		break;
-	case AF_INET6:
-		salocal_in6 = (struct sockaddr_in6 *)salocal;
-		xprt->xp_port = ntohs(salocal_in6->sin6_port);
-		break;
-	}
-	__rpc_set_address(&xprt->xp_local, &sslocal, slen);
 
 	xprt->xp_netid = mem_strdup(netid);
 
@@ -258,60 +242,14 @@ svc_vc_ncreate(int fd, u_int sendsize, u_int recvsize)
 }
 
 /*
- * Like svtcp_ncreate(), except the routine takes any *open* UNIX file
- * descriptor as its first input.
- */
-SVCXPRT *
-svc_fd_ncreate(int fd, u_int sendsize, u_int recvsize)
-{
-	struct sockaddr_storage ss;
-	socklen_t slen;
-	SVCXPRT *xprt;
-	bool xprt_allocd;
-
-	assert(fd != -1);
-
-	xprt = makefd_xprt(fd, sendsize, recvsize, &xprt_allocd);
-	if ((!xprt) || (!xprt_allocd))	/* ref'd existing xprt handle */
-		goto done;
-
-	/* conditional xprt_register */
-	if (!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
-		xprt_register(xprt);
-
-	slen = sizeof(struct sockaddr_storage);
-	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_fd_create: could not retrieve local addr");
-		goto freedata;
-	}
-	__rpc_set_address(&xprt->xp_local, &ss, slen);
-
-	slen = sizeof(struct sockaddr_storage);
-	if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_fd_create: could not retrieve remote addr");
-		goto freedata;
-	}
-	__rpc_set_address(&xprt->xp_remote, &ss, slen);
-
- done:
-	return (xprt);
-
- freedata:
-	return (NULL);
-}
-
-/*
  * Like sv_fd_ncreate(), except export flags for additional control.
  */
 SVCXPRT *
-svc_fd_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
+svc_fd_ncreatef(const int fd, const u_int sendsize, const u_int recvsize,
+		const uint32_t flags)
 {
-	struct sockaddr_storage ss;
-	struct sockaddr *sa = (struct sockaddr *)(void *)&ss;
-	socklen_t slen;
 	SVCXPRT *xprt;
+	int rc;
 	bool xprt_allocd;
 
 	assert(fd != -1);
@@ -320,26 +258,38 @@ svc_fd_ncreate2(int fd, u_int sendsize, u_int recvsize, u_int flags)
 	if ((!xprt) || (!xprt_allocd))	/* ref'd existing xprt handle */
 		return (xprt);
 
-	slen = sizeof(struct sockaddr_storage);
-	if (getsockname(fd, sa, &slen) < 0) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_fd_ncreate: could not retrieve local addr");
+	__rpc_address_setup(&xprt->xp_local);
+	rc = getsockname(fd, xprt->xp_local.nb.buf, &xprt->xp_local.nb.len);
+	if (rc < 0) {
+		xprt->xp_local.nb.len = sizeof(struct sockaddr_storage);
+		memset(xprt->xp_local.nb.buf, 0xfe, xprt->xp_local.nb.len);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d getsockname failed (%d)",
+			 __func__, fd, rc);
 		return (NULL);
 	}
-	__rpc_set_address(&xprt->xp_local, &ss, slen);
 
-	slen = sizeof(struct sockaddr_storage);
-	if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_fd_ncreate: could not retrieve remote addr");
+	__rpc_address_setup(&xprt->xp_remote);
+	rc = getpeername(fd, xprt->xp_remote.nb.buf, &xprt->xp_remote.nb.len);
+	if (rc < 0) {
+		xprt->xp_remote.nb.len = sizeof(struct sockaddr_storage);
+		memset(xprt->xp_remote.nb.buf, 0xfe, xprt->xp_remote.nb.len);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d getpeername failed (%d)",
+			 __func__, fd, rc);
 		return (NULL);
 	}
-	__rpc_set_address(&xprt->xp_remote, &ss, slen);
+	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
 
 	/* conditional xprt_register */
-	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS))
-	    && (!(flags & SVC_VC_CREATE_XPRT_NOREG)))
+	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
+	     && !(flags & SVC_CREATE_FLAG_XPRT_NOREG))
+	    || (flags & SVC_CREATE_FLAG_XPRT_DOREG))
 		xprt_register(xprt);
+
+#if defined(HAVE_BLKIN)
+	__rpc_set_blkin_endpoint(xprt, "svc_vc");
+#endif
 
 	return (xprt);
 }
@@ -359,18 +309,19 @@ static SVCXPRT *
 	assert(fd != -1);
 
 	if (!svc_vc_new_conn_ok()) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"%s: makefd_xprt: max_connections exceeded\n",
-			__func__);
-		goto done;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d max_connections exceeded\n",
+			__func__, fd);
+		return (NULL);
 	}
 
 	/* atomically find or create shared fd state */
 	rec = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_IFLAG_LOCKREC, &oflags);
 	if (!rec) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"svc_vc: makefd_xprt: rpc_dplx_lookup_rec failed");
-		goto done;
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d rpc_dplx_lookup failed",
+			__func__, fd);
+		return (NULL);
 	}
 
 	/* attach shared state */
@@ -464,7 +415,6 @@ static SVCXPRT *
 	svc_rqst_init_xprt(xprt);
 
 done_xprt:
-done:
 	return (xprt);
 }
 
@@ -479,8 +429,8 @@ rendezvous_request(struct svc_req *req)
 	struct sockaddr_storage addr;
 	struct __rpc_sockinfo si;
 	int fd;
+	int rc;
 	socklen_t len;
-	socklen_t slen;
 	bool xprt_allocd;
 	static int n = 1;
 
@@ -527,7 +477,9 @@ rendezvous_request(struct svc_req *req)
 	/* move xprt_register() out of makefd_xprt */
 	(void)svc_rqst_xprt_register(xprt, newxprt);
 
-	__rpc_set_address(&newxprt->xp_remote, &addr, len);
+	__rpc_address_setup(&newxprt->xp_remote);
+	memcpy(newxprt->xp_remote.nb.buf, &addr, len);
+	newxprt->xp_remote.nb.len = len;
 	XPRT_TRACE(newxprt, __func__, __func__, __LINE__);
 
 	/* XXX fvdl - is this useful? (Yes.  Matt) */
@@ -537,12 +489,16 @@ rendezvous_request(struct svc_req *req)
 				  sizeof(len));
 	}
 
-	slen = sizeof(struct sockaddr_storage);
-	if (getsockname(fd, (struct sockaddr *)(void *)&addr, &slen) < 0) {
+	__rpc_address_setup(&newxprt->xp_local);
+	rc = getsockname(fd, newxprt->xp_local.nb.buf,
+			 &newxprt->xp_local.nb.len);
+	if (rc < 0) {
+		newxprt->xp_local.nb.len = sizeof(struct sockaddr_storage);
+		memset(newxprt->xp_local.nb.buf, 0xfe,
+		       newxprt->xp_local.nb.len);
 		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"%s: could not retrieve local addr", __func__);
-	} else {
-		__rpc_set_address(&newxprt->xp_local, &addr, slen);
+			"%s: fd %d getsockname failed (%d)",
+			 __func__, fd, rc);
 	}
 
 #if defined(HAVE_BLKIN)
@@ -882,7 +838,8 @@ svc_vc_recv(struct svc_req *req)
 		return (FALSE);
 	}
 	__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-		"%s: xdr_dplx_msg_decode failed (will set dead)", __func__);
+		"%s: fd %d failed (will set xprt %p dead)",
+		__func__, xprt->xp_fd, xprt);
 	return (FALSE);
 }
 

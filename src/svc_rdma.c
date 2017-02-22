@@ -108,10 +108,12 @@ svc_rdma_ncreate(void *arg, const u_int sendsize, const u_int recvsize,
 	xprt->xprt.xp_fd = -1;
 
 	ss = (struct sockaddr_storage *)rdma_get_local_addr(xprt->cm_id);
-	__rpc_set_address(&xprt->xprt.xp_local, ss, 0);
+	__rpc_address_setup(&xprt->xprt.xp_local);
+	memcpy(&xprt->xprt.xp_local.nb.buf, ss, xprt->xprt.xp_local.nb.len);
 
 	ss = (struct sockaddr_storage *)rdma_get_peer_addr(xprt->cm_id);
-	__rpc_set_address(&xprt->xprt.xp_remote, ss, 0);
+	__rpc_address_setup(&xprt->xprt.xp_remote);
+	memcpy(&xprt->xprt.xp_remote.nb.buf, ss, xprt->xprt.xp_remote.nb.len);
 
 	svc_rdma_ops(&xprt->xprt);
 
