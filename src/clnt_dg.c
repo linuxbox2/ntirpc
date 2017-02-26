@@ -239,8 +239,8 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 		if (connect
 		    (xp_fd, (struct sockaddr *)&cu->cu_raddr,
 		     cu->cu_rlen) < 0) {
-			cu->cu_error.re_errno = errno;
-			cu->cu_error.re_status = RPC_CANTSEND;
+			cx->cx_error.re_errno = errno;
+			cx->cx_error.re_status = RPC_CANTSEND;
 			goto out;
 		}
 		cu->cu_connected = 1;
@@ -279,7 +279,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	if ((!XDR_PUTINT32(xdrs, (int32_t *) &proc))
 	    || (!AUTH_MARSHALL(auth, xdrs))
 	    || (!AUTH_WRAP(auth, xdrs, xargs, argsp))) {
-		cu->cu_error.re_status = RPC_CANTENCODEARGS;
+		cx->cx_error.re_status = RPC_CANTENCODEARGS;
 		goto out;
 	}
 	outlen = (size_t) XDR_GETPOS(xdrs);
@@ -289,8 +289,8 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
  send_again:
 	nextsend_time = cu->cu_wait.tv_sec * 1000 + cu->cu_wait.tv_usec / 1000;
 	if (sendto(xp_fd, cu->cu_outbuf, outlen, 0, sa, salen) != outlen) {
-		cu->cu_error.re_errno = errno;
-		cu->cu_error.re_status = RPC_CANTSEND;
+		cx->cx_error.re_errno = errno;
+		cx->cx_error.re_status = RPC_CANTSEND;
 		goto out;
 	}
 
@@ -323,15 +323,15 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 			rpc_dplx_rui(rec);
 			rlocked = false;
 			if (total_time <= 0) {
-				cu->cu_error.re_status = RPC_TIMEDOUT;
+				cx->cx_error.re_status = RPC_TIMEDOUT;
 				goto out;
 			}
 			goto send_again;
 		case -1:
 			if (errno == EINTR)
 				continue;
-			cu->cu_error.re_status = RPC_CANTRECV;
-			cu->cu_error.re_errno = errno;
+			cx->cx_error.re_status = RPC_CANTRECV;
+			cx->cx_error.re_errno = errno;
 			goto out;
 		}
 		break;
@@ -371,8 +371,8 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 				    && (cmsg->cmsg_type == IP_RECVERR)) {
 					e = (struct sock_extended_err *)
 					    CMSG_DATA(cmsg);
-					cu->cu_error.re_errno = e->ee_errno;
-					cu->cu_error.re_status = RPC_CANTRECV;
+					cx->cx_error.re_errno = e->ee_errno;
+					cx->cx_error.re_status = RPC_CANTRECV;
 				}
 	}
 #endif
@@ -384,8 +384,8 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 			     NULL);
 	} while (recvlen < 0 && errno == EINTR);
 	if (recvlen < 0 && errno != EWOULDBLOCK) {
-		cu->cu_error.re_errno = errno;
-		cu->cu_error.re_status = RPC_CANTRECV;
+		cx->cx_error.re_errno = errno;
+		cx->cx_error.re_status = RPC_CANTRECV;
 		goto out;
 	}
 
@@ -420,20 +420,20 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	if (ok) {
 		if ((reply_msg.rm_reply.rp_stat == MSG_ACCEPTED)
 		    && (reply_msg.RPCM_ack.ar_stat == SUCCESS))
-			cu->cu_error.re_status = RPC_SUCCESS;
+			cx->cx_error.re_status = RPC_SUCCESS;
 		else
-			_seterr_reply(&reply_msg, &(cu->cu_error));
+			_seterr_reply(&reply_msg, &(cx->cx_error));
 
-		if (cu->cu_error.re_status == RPC_SUCCESS) {
+		if (cx->cx_error.re_status == RPC_SUCCESS) {
 			if (!AUTH_VALIDATE
 			    (auth, &reply_msg.RPCM_ack.ar_verf)) {
-				cu->cu_error.re_status = RPC_AUTHERROR;
-				cu->cu_error.re_why = AUTH_INVALIDRESP;
+				cx->cx_error.re_status = RPC_AUTHERROR;
+				cx->cx_error.re_why = AUTH_INVALIDRESP;
 			} else
 			    if (!AUTH_UNWRAP
 				(auth, &reply_xdrs, xresults, resultsp)) {
-				if (cu->cu_error.re_status == RPC_SUCCESS)
-					cu->cu_error.re_status =
+				if (cx->cx_error.re_status == RPC_SUCCESS)
+					cx->cx_error.re_status =
 					    RPC_CANTDECODERES;
 			}
 		}
@@ -442,7 +442,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 		 * If unsuccesful AND error is an authentication error
 		 * then refresh credentials and try again, else break
 		 */
-		else if (cu->cu_error.re_status == RPC_AUTHERROR)
+		else if (cx->cx_error.re_status == RPC_AUTHERROR)
 			/* maybe our credentials need to be refreshed ... */
 			if (nrefreshes > 0 && AUTH_REFRESH(auth, &reply_msg)) {
 				nrefreshes--;
@@ -453,7 +453,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 		/* end of unsuccessful completion */
 	} /* end of valid reply message */
 	else
-		cu->cu_error.re_status = RPC_CANTDECODERES;
+		cx->cx_error.re_status = RPC_CANTDECODERES;
 
 out:
 	if (slocked)
@@ -461,15 +461,15 @@ out:
 	if (rlocked)
 		rpc_dplx_rui(rec);
 
-	return (cu->cu_error.re_status);
+	return (cx->cx_error.re_status);
 }
 
 static void
 clnt_dg_geterr(CLIENT *clnt, struct rpc_err *errp)
 {
-	struct cu_data *cu = CU_DATA(CX_DATA(clnt));
+	struct cx_data *cx = CX_DATA(clnt);
 
-	*errp = cu->cu_error;
+	*errp = cx->cx_error;
 }
 
 static bool

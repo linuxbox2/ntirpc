@@ -462,10 +462,8 @@ clnt_vc_geterr(CLIENT *clnt, struct rpc_err *errp)
 		rpc_ctx_t *ctx = (rpc_ctx_t *) xdrs->x_lib[0];
 		*errp = ctx->error;
 	} else {
-		/* XXX we don't want (overhead of) an unsafe last-error value */
-		struct rpc_err err;
-		memset(&err, 0, sizeof(struct rpc_err));
-		*errp = err;
+		/* always zero */
+		*errp = CX_DATA(clnt)->cx_error;
 	}
 }
 

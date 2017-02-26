@@ -49,7 +49,6 @@ struct cu_data {
 	int cu_rlen;
 	struct timeval cu_wait;	/* retransmit interval */
 	struct timeval cu_total;	/* total time for the call */
-	struct rpc_err cu_error;
 	u_int cu_xdrpos;
 	u_int cu_sendsz;	/* send size */
 	u_int cu_recvsz;	/* recv size */
@@ -77,7 +76,6 @@ struct cm_data {
 	char *buffers;
 	struct timeval cm_wait; /* wait interval in milliseconds */
 	struct timeval cm_total; /* total time for the call */
-	struct rpc_err cm_error;
 	struct rpc_msg call_msg;
 	//add a lastreceive?
 	u_int cm_xdrpos;
@@ -88,6 +86,7 @@ struct cm_data {
 struct cx_data {
 	struct rpc_client cx_c;		/**< Transport Independent handle */
 	struct rpc_dplx_rec *cx_rec;	/* unified sync */
+	struct rpc_err cx_error;
 
 	union {
 		struct cu_data cu;
