@@ -26,18 +26,11 @@
 #ifndef RPC_DPLX_INTERNAL_H
 #define RPC_DPLX_INTERNAL_H
 
-#include <sys/time.h>
-#include <misc/opr.h>
-#include <misc/rbtree_x.h>
 #include <misc/wait_queue.h>
-#include <rpc/rpc_dplx.h>
 #include <rpc/svc.h>
-
-struct x_vc_data; /* in clnt_internal.h (avoids circular dependency) */
 
 typedef struct rpc_dplx_lock {
 	struct wait_entry we;
-	int32_t lock_flag_value;	/* XXX killme */
 	struct {
 		const char *func;
 		int line;
@@ -48,60 +41,15 @@ typedef struct rpc_dplx_lock {
 struct rpc_dplx_rec {
 	struct rpc_svcxprt xprt;	/**< Transport Independent handle */
 
-	int fd_k;
-#if 0
-	mutex_t mtx;
-#else
-	struct {
-		mutex_t mtx;
-		const char *func;
-		int line;
-	} locktrace;
-#endif
-	struct opr_rbtree_node node_k;
-	uint32_t refcnt;
-	struct {
-		rpc_dplx_lock_t lock;
-	} send;
 	struct {
 		rpc_dplx_lock_t lock;
 	} recv;
-	struct {
-		struct x_vc_data *xd;
-		SVCXPRT *xprt;
-	} hdl;
 };
 #define REC_XPRT(p) (opr_containerof((p), struct rpc_dplx_rec, xprt))
 
-#define REC_LOCK(rec) \
-	do { \
-		mutex_lock(&((rec)->locktrace.mtx)); \
-		(rec)->locktrace.func = __func__; \
-		(rec)->locktrace.line = __LINE__; \
-	} while (0)
-
-#define REC_UNLOCK(rec) mutex_unlock(&((rec)->locktrace.mtx))
-
-struct rpc_dplx_rec_set {
-	mutex_t clnt_fd_lock;	/* XXX check dplx correctness */
-	struct rbtree_x xt;
-};
-
-/* XXX perhaps better off as a flag bit (until we can remove it) */
-#define rpc_flag_clear 0
-#define rpc_lock_value 1
-
-enum rpc_duplex_callpath {
-	RPC_DPLX_CLNT = 1,
-	RPC_DPLX_SVC
-};
-
 #define RPC_DPLX_FLAG_NONE          0x0000
 #define RPC_DPLX_FLAG_LOCKED        0x0001
-#define RPC_DPLX_FLAG_LOCK          0x0002
-#define RPC_DPLX_FLAG_LOCKREC       0x0004
-#define RPC_DPLX_FLAG_RECLOCKED     0x0008
-#define RPC_DPLX_FLAG_UNLOCK        0x0010
+#define RPC_DPLX_FLAG_UNLOCK        0x0002
 
 #ifndef HAVE_STRLCAT
 extern size_t strlcat(char *, const char *, size_t);
@@ -111,16 +59,9 @@ extern size_t strlcat(char *, const char *, size_t);
 extern size_t strlcpy(char *, const char *src, size_t);
 #endif
 
-#define RPC_DPLX_LKP_FLAG_NONE        0x0000
-#define RPC_DPLX_LKP_IFLAG_LOCKREC    0x0001
-#define RPC_DPLX_LKP_OFLAG_ALLOC      0x0002
-
-struct rpc_dplx_rec *rpc_dplx_lookup_rec(int, uint32_t, uint32_t *);
-
 static inline void
 rpc_dplx_lock_init(struct rpc_dplx_lock *lock)
 {
-	lock->lock_flag_value = 0;
 	mutex_init(&lock->we.mtx, NULL);
 	cond_init(&lock->we.cv, 0, NULL);
 }
@@ -135,152 +76,90 @@ rpc_dplx_lock_destroy(struct rpc_dplx_lock *lock)
 static inline void
 rpc_dplx_rec_init(struct rpc_dplx_rec *rec)
 {
-	rpc_dplx_lock_init(&rec->send.lock);
 	rpc_dplx_lock_init(&rec->recv.lock);
 }
 
 static inline void
 rpc_dplx_rec_destroy(struct rpc_dplx_rec *rec)
 {
-	rpc_dplx_lock_destroy(&rec->send.lock);
 	rpc_dplx_lock_destroy(&rec->recv.lock);
 }
 
-static inline int32_t
-rpc_dplx_ref(struct rpc_dplx_rec *rec, u_int flags)
+/* rlt: recv lock trace */
+static inline void
+rpc_dplx_rlt(struct rpc_dplx_rec *rec, const char *func, int line)
 {
-	int32_t refcnt;
+	rpc_dplx_lock_t *lk = &rec->recv.lock;
 
-	if (!(flags & RPC_DPLX_FLAG_LOCKED))
-		REC_LOCK(rec);
-
-	refcnt = ++(rec->refcnt);
-
-	/* release rec lock only if a) we took it and b) caller doesn't
-	 * want it returned locked */
-	if ((!(flags & RPC_DPLX_FLAG_LOCKED))
-	    && (!(flags & RPC_DPLX_FLAG_LOCK)))
-		REC_UNLOCK(rec);
-
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: rec %p rec->refcnt %u", __func__,
-		rec, refcnt);
-
-	return (refcnt);
+	if (__debug_flag(TIRPC_DEBUG_FLAG_LOCK)) {
+		if (lk->locktrace.line) {
+			__warnx(TIRPC_DEBUG_FLAG_LOCK,
+				"%s:%d locking @%s:%d",
+				func, line,
+				lk->locktrace.func,
+				lk->locktrace.line);
+		} else {
+			__warnx(TIRPC_DEBUG_FLAG_LOCK,
+				"%s:%d locking",
+				func, line);
+		}
+	}
+	mutex_lock(&lk->we.mtx);
+	lk->locktrace.func = (char *)func;
+	lk->locktrace.line = line;
 }
 
-int32_t
-rpc_dplx_unref(struct rpc_dplx_rec *rec, u_int flags);
+/* rli: recv lock impl */
+#define rpc_dplx_rli(rec) \
+	rpc_dplx_rlt(rec, __func__, __LINE__)
 
-/* swi:  send wait impl */
+/* rui: recv unlock trace */
 static inline void
-rpc_dplx_swi(struct rpc_dplx_rec *rec, uint32_t wait_for)
+rpc_dplx_rut(struct rpc_dplx_rec *rec, const char *func, int line)
 {
-	rpc_dplx_lock_t *lk = &rec->send.lock;
+	rpc_dplx_lock_t *lk = &rec->recv.lock;
 
-	mutex_lock(&lk->we.mtx);
-	while (lk->lock_flag_value != rpc_flag_clear)
-		cond_wait(&lk->we.cv, &lk->we.mtx);
+	__warnx(TIRPC_DEBUG_FLAG_LOCK,
+		"%s:%d unlocking @%s:%d",
+		func, line,
+		lk->locktrace.func,
+		lk->locktrace.line);
+	lk->locktrace.line = 0;
 	mutex_unlock(&lk->we.mtx);
 }
 
-/* swc: send wait clnt */
+/* rli: recv lock impl */
+#define rpc_dplx_rui(rec) \
+	rpc_dplx_rut(rec, __func__, __LINE__)
+
+/* rwi:  recv wait trace */
 static inline void
-rpc_dplx_swc(CLIENT *clnt, uint32_t wait_for)
+rpc_dplx_rwt(struct rpc_dplx_rec *rec, const char *func, int line)
 {
-	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)clnt->cl_p2;
-	rpc_dplx_swi(rec, wait_for);
+	rpc_dplx_lock_t *lk = &rec->recv.lock;
+
+	__warnx(TIRPC_DEBUG_FLAG_LOCK,
+		"%s:%d waiting @%s:%d",
+		func, line,
+		lk->locktrace.func,
+		lk->locktrace.line);
+	lk->locktrace.line = 0;
+	cond_wait(&lk->we.cv, &lk->we.mtx);
+	lk->locktrace.func = (char *)func;
+	lk->locktrace.line = line;
 }
 
 /* rwi:  recv wait impl */
-static inline void
-rpc_dplx_rwi(struct rpc_dplx_rec *rec, uint32_t wait_for)
-{
-	rpc_dplx_lock_t *lk = &rec->recv.lock;
-
-	mutex_lock(&lk->we.mtx);
-	while (lk->lock_flag_value != rpc_flag_clear)
-		cond_wait(&lk->we.cv, &lk->we.mtx);
-	mutex_unlock(&lk->we.mtx);
-}
-
-/* rwc: recv wait clnt */
-static inline void
-rpc_dplx_rwc(CLIENT *clnt, uint32_t wait_for)
-{
-	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)clnt->cl_p2;
-	rpc_dplx_rwi(rec, wait_for);
-}
-
-/* ssi: send signal impl */
-static inline void
-rpc_dplx_ssi(struct rpc_dplx_rec *rec, uint32_t flags)
-{
-	rpc_dplx_lock_t *lk = &rec->send.lock;
-
-	if (flags & RPC_DPLX_FLAG_LOCK)
-		mutex_lock(&lk->we.mtx);
-	cond_signal(&lk->we.cv);
-	if (flags & RPC_DPLX_FLAG_LOCK)
-		mutex_unlock(&lk->we.mtx);
-}
-
-/* ssc: send signal clnt */
-static inline void
-rpc_dplx_ssc(CLIENT *clnt, uint32_t flags)
-{
-	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)clnt->cl_p2;
-	rpc_dplx_ssi(rec, flags);
-}
-
-/* swf: send wait fd */
-#define rpc_dplx_swf(fd, wait_for) \
-	do { \
-		struct vc_fd_rec *rec = rpc_dplx_lookup_rec(fd); \
-		rpc_dplx_swi(rec, wait_for); \
-	} while (0)
+#define rpc_dplx_rwi(rec) \
+	rpc_dplx_rwt(rec, __func__, __LINE__)
 
 /* rsi: recv signal impl */
 static inline void
-rpc_dplx_rsi(struct rpc_dplx_rec *rec, uint32_t flags)
+rpc_dplx_rsi(struct rpc_dplx_rec *rec)
 {
 	rpc_dplx_lock_t *lk = &rec->recv.lock;
 
-	if (flags & RPC_DPLX_FLAG_LOCK)
-		mutex_lock(&lk->we.mtx);
 	cond_signal(&lk->we.cv);
-	if (flags & RPC_DPLX_FLAG_LOCK)
-		mutex_unlock(&lk->we.mtx);
 }
-
-/* rsc: recv signal clnt */
-static inline void
-rpc_dplx_rsc(CLIENT *clnt, uint32_t flags)
-{
-	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *)clnt->cl_p2;
-	rpc_dplx_rsi(rec, flags);
-}
-
-/* rwf: recv wait fd */
-#define rpc_dplx_rwf(fd, wait_for) \
-	do {  \
-		struct vc_fd_rec *rec = rpc_dplx_lookup_rec(fd); \
-		rpc_dplx_rwi(rec, wait_for); \
-	} while (0)
-
-/* ssf: send signal fd */
-#define rpc_dplx_ssf(fd, flags) \
-	do { \
-		struct vc_fd_rec *rec = rpc_dplx_lookup_rec(fd); \
-		rpc_dplx_ssi(rec, flags); \
-	} while (0)
-
-/* rsf: send signal fd */
-#define rpc_dplx_rsf(fd, flags)	\
-	do { \
-		struct vc_fd_rec *rec = rpc_dplx_lookup_rec(fd); \
-		rpc_dplx_rsi(rec, flags); \
-	} while (0)
-
-void rpc_dplx_shutdown(void);
 
 #endif				/* RPC_DPLX_INTERNAL_H */

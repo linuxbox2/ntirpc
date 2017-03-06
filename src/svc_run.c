@@ -45,15 +45,9 @@
 #include <rpc/rpc.h>
 #include "rpc_com.h"
 
-#include "clnt_internal.h"
 #include "svc_internal.h"
 #include "svc_xprt.h"
-#include "rpc_dplx_internal.h"
 #include <rpc/svc_rqst.h>
-
-extern struct svc_params __svc_params[1];
-
-bool __svc_clean_idle2(int timeout, bool cleanblock);
 
 #if defined(TIRPC_EPOLL)
 void svc_getreqset_epoll(struct epoll_event *events, int nfds);

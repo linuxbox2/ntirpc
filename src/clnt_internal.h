@@ -49,7 +49,6 @@ struct cu_data {
 	int cu_rlen;
 	struct timeval cu_wait;	/* retransmit interval */
 	struct timeval cu_total;	/* total time for the call */
-	struct rpc_err cu_error;
 	u_int cu_xdrpos;
 	u_int cu_sendsz;	/* send size */
 	u_int cu_recvsz;	/* recv size */
@@ -62,17 +61,12 @@ struct cu_data {
 };
 
 struct ct_data {
+	struct sockaddr_storage ct_raddr;	/* remote addr */
 	union {
 		char ct_mcallc[MCALL_MSG_SIZE];	/* marshalled callmsg */
 		u_int32_t ct_mcalli;
 	} ct_u;
 	u_int ct_mpos;		/* pos after marshal */
-	int ct_fd;
-	bool ct_closeit;	/* close it on destroy */
-	struct timeval ct_wait;	/* wait interval in milliseconds */
-	bool ct_waitset;	/* wait set by clnt_control? */
-	struct sockaddr_storage ct_raddr;	/* remote addr */
-	struct wait_entry ct_sync;	/* wait for completion */
 	int ct_rlen;
 };
 
@@ -82,7 +76,6 @@ struct cm_data {
 	char *buffers;
 	struct timeval cm_wait; /* wait interval in milliseconds */
 	struct timeval cm_total; /* total time for the call */
-	struct rpc_err cm_error;
 	struct rpc_msg call_msg;
 	//add a lastreceive?
 	u_int cm_xdrpos;
@@ -90,12 +83,10 @@ struct cm_data {
 };
 #endif
 
-#define X_VC_DATA_FLAG_NONE             0x0000
-#define X_VC_DATA_FLAG_SVC_DESTROYED    0x0001
-
 struct cx_data {
 	struct rpc_client cx_c;		/**< Transport Independent handle */
 	struct rpc_dplx_rec *cx_rec;	/* unified sync */
+	struct rpc_err cx_error;
 
 	union {
 		struct cu_data cu;
@@ -106,51 +97,11 @@ struct cx_data {
 	} c_u;
 };
 #define CX_DATA(p) (opr_containerof((p), struct cx_data, cx_c))
-
-struct x_vc_data {
-	struct rpc_dplx_rec *rec;	/* unified sync */
-	uint32_t flags;
-	uint32_t refcnt;
-	struct {
-		struct ct_data data;
-		struct {
-			uint32_t xid;	/* current xid */
-			struct opr_rbtree t;
-		} calls;
-	} cx;
-	struct {
-		enum xprt_stat strm_stat;
-		struct timespec last_recv;	/* XXX move to shared? */
-		int32_t maxrec;
-	} sx;
-	struct {
-		bool nonblock;
-		u_int sendsz;
-		u_int recvsz;
-		XDR xdrs_in;	/* send queue */
-		XDR xdrs_out;	/* recv queue */
-	} shared;
-};
-
 #define CU_DATA(cx) (&(cx)->c_u.cu)
 #define CT_DATA(cx) (&(cx)->c_u.ct)
 #define CM_DATA(cx) (&(cx)->c_u.cm)
 
 /* compartmentalize a bit */
-static inline struct x_vc_data *
-alloc_x_vc_data(void)
-{
-	struct x_vc_data *xd = mem_zalloc(sizeof(struct x_vc_data));
-
-	return (xd);
-}
-
-static inline void
-free_x_vc_data(struct x_vc_data *xd)
-{
-	mem_free(xd, sizeof(struct x_vc_data));
-}
-
 static inline struct cx_data *
 alloc_cx_data(enum CX_TYPE type, uint32_t sendsz, uint32_t recvsz)
 {
@@ -206,7 +157,5 @@ free_cx_data(struct cx_data *cx)
 	};
 	mem_free(cx, sizeof(struct cx_data));
 }
-
-void vc_shared_destroy(struct x_vc_data *xd);
 
 #endif				/* _CLNT_INTERNAL_H */

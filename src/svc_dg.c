@@ -79,11 +79,10 @@ static int svc_dg_store_pktinfo(struct msghdr *, struct svc_req *);
 /*
  * Usage:
  * xprt = svc_dg_ncreate(sock, sendsize, recvsize);
- * Does other connectionless specific initializations.
- * Once *xprt is initialized, it is registered.
- * see (svc.h, xprt_register). If recvsize or sendsize are 0 suitable
+ *
+ * If recvsize or sendsize are 0 suitable,
  * system defaults are chosen.
- * The routines returns NULL if a problem occurred.
+ * If a problem occurred, this routine returns NULL.
  */
 static void
 svc_dg_xprt_free(struct svc_dg_xprt *su)
@@ -114,6 +113,19 @@ svc_dg_xprt_zalloc(void)
 	return (su);
 }
 
+static void
+svc_dg_xprt_setup(SVCXPRT **sxpp)
+{
+	if (unlikely(*sxpp)) {
+		svc_dg_xprt_free(su_data(*sxpp));
+		*sxpp = NULL;
+	} else {
+		struct svc_dg_xprt *su = svc_dg_xprt_zalloc();
+
+		*sxpp = &su->su_dr.xprt;
+	}
+}
+
 SVCXPRT *
 svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 		const uint32_t flags)
@@ -124,25 +136,31 @@ svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	struct __rpc_sockinfo si;
 	u_int recvsize;
 	u_int sendsize;
-	uint32_t oflags;
+	u_int xp_flags;
 	int rc;
 
-	/* atomically find or create shared fd state; ref+1 */
-	rec = rpc_dplx_lookup_rec(fd, RPC_DPLX_LKP_IFLAG_LOCKREC, &oflags);
-	if (!rec) {
+	/* atomically find or create shared fd state; ref+1; locked */
+	xprt = svc_xprt_lookup(fd, svc_dg_xprt_setup);
+	if (!xprt) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: fd %d rpc_dplx_lookup failed",
+			"%s: fd %d svc_xprt_lookup failed",
 			__func__, fd);
 		return (NULL);
 	}
+	rec = REC_XPRT(xprt);
 
-	if (!(oflags & RPC_DPLX_LKP_OFLAG_ALLOC)) {
-		REC_UNLOCK(rec);
-		XPRT_TRACE(rec->hdl.xprt, __func__, __func__, __LINE__);
-		return (rec->hdl.xprt);
+	xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags, flags
+						| SVC_XPRT_FLAG_INITIALIZED);
+	if ((xp_flags & SVC_XPRT_FLAG_INITIALIZED)) {
+		rpc_dplx_rui(rec);
+		XPRT_TRACE(xprt, __func__, __func__, __LINE__);
+		return (xprt);
 	}
 
 	if (!__rpc_fd2sockinfo(fd, &si)) {
+		atomic_clear_uint16_t_bits(&xprt->xp_flags,
+					   SVC_XPRT_FLAG_INITIALIZED);
+		rpc_dplx_rui(rec);
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d could not get transport information",
 			__func__, fd);
@@ -154,18 +172,21 @@ svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsz);
 	recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsz);
 	if ((sendsize == 0) || (recvsize == 0)) {
+		atomic_clear_uint16_t_bits(&xprt->xp_flags,
+					   SVC_XPRT_FLAG_INITIALIZED);
+		rpc_dplx_rui(rec);
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d transport does not support data transfer",
 			__func__, fd);
 		return (NULL);
 	}
-	su = svc_dg_xprt_zalloc();
-	xprt = &su->su_dr.xprt;
 
 	__rpc_address_setup(&xprt->xp_local);
 	rc = getsockname(fd, xprt->xp_local.nb.buf, &xprt->xp_local.nb.len);
 	if (rc < 0) {
-		svc_dg_xprt_free(su);
+		atomic_clear_uint16_t_bits(&xprt->xp_flags,
+					   SVC_XPRT_FLAG_INITIALIZED);
+		rpc_dplx_rui(rec);
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d getsockname failed (%d)",
 			 __func__, fd, rc);
@@ -175,6 +196,7 @@ svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	/*
 	 * Should be multiple of 4 for XDR.
 	 */
+	su = DG_DR(rec);
 	su->su_sendsz = ((sendsize + 3) / 4) * 4;
 	su->su_recvsz = ((recvsize + 3) / 4) * 4;
 	su->su_iosz = ((MAX(sendsize, recvsize) + 3) / 4) * 4;
@@ -183,24 +205,21 @@ svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	xdrmem_create(&(su->su_xdrs), rpc_buffer(xprt), su->su_iosz,
 		      XDR_DECODE);
 
-	xprt->xp_flags = (uint16_t)flags;
-	xprt->xp_fd = fd;
 	svc_dg_ops(xprt);
 
 	/* Enable reception of IP*_PKTINFO control msgs */
 	svc_dg_enable_pktinfo(fd, &si);
 
-	/* Make reachable */
-	xprt->xp_p5 = rec;
-	rec->hdl.xprt = xprt;
-	REC_UNLOCK(rec);
-	svc_rqst_init_xprt(xprt);
+	/* release */
+	rpc_dplx_rui(rec);
+	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
 
-	/* Conditional xprt_register */
+	/* Conditional register */
 	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
 	     && !(flags & SVC_CREATE_FLAG_XPRT_NOREG))
 	    || (flags & SVC_CREATE_FLAG_XPRT_DOREG))
-		xprt_register(xprt);
+		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+				    SVC_RQST_FLAG_CHAN_AFFINITY);
 
 #if defined(HAVE_BLKIN)
 	__rpc_set_blkin_endpoint(xprt, "svc_dg");
@@ -213,6 +232,17 @@ svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 static enum xprt_stat
 svc_dg_stat(SVCXPRT *xprt)
 {
+	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
+	uint16_t xp_flags = atomic_postclear_uint16_t_bits(&xprt->xp_flags,
+							SVC_XPRT_FLAG_BLOCKED);
+
+	if (xp_flags & SVC_XPRT_FLAG_BLOCKED) {
+		rpc_dplx_rui(rec);
+		rpc_dplx_rsi(rec);
+	}
+	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
+		return (XPRT_DESTROYED);
+
 	return (XPRT_IDLE);
 }
 
@@ -256,7 +286,8 @@ static bool
 svc_dg_recv(struct svc_req *req)
 {
 	SVCXPRT *xprt = req->rq_xprt;
-	struct svc_dg_xprt *su = su_data(xprt);
+	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
+	struct svc_dg_xprt *su = DG_DR(rec);
 	XDR *xdrs = &(su->su_xdrs);
 	char *reply;
 	struct sockaddr *sp = (struct sockaddr *)&xprt->xp_remote.ss;
@@ -264,10 +295,21 @@ svc_dg_recv(struct svc_req *req)
 	struct iovec iov;
 	size_t replylen;
 	ssize_t rlen;
+	uint16_t xp_flags;
 
 	rpc_msg_init(&req->rq_msg);
 
 	__rpc_address_setup(&xprt->xp_remote);
+
+	/* XXX same XDR used in both directions */
+	rpc_dplx_rli(rec);
+	do {
+		xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags,
+							SVC_XPRT_FLAG_BLOCKED);
+		if (!(xp_flags & SVC_XPRT_FLAG_BLOCKED))
+			break;
+		rpc_dplx_rwi(rec);
+	} while (TRUE);
 
  again:
 	iov.iov_base = rpc_buffer(xprt);
@@ -349,7 +391,8 @@ static bool
 svc_dg_reply(struct svc_req *req)
 {
 	SVCXPRT *xprt = req->rq_xprt;
-	struct svc_dg_xprt *su = su_data(xprt);
+	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
+	struct svc_dg_xprt *su = DG_DR(rec);
 	XDR *xdrs = &(su->su_xdrs);
 	bool stat = false;
 	size_t slen;
@@ -371,6 +414,8 @@ svc_dg_reply(struct svc_req *req)
 		has_args = false;
 	}
 
+	/* XXX same XDR used in both directions */
+	rpc_dplx_rli(rec);
 	xdrs->x_op = XDR_ENCODE;
 	XDR_SETPOS(xdrs, 0);
 
@@ -405,6 +450,7 @@ svc_dg_reply(struct svc_req *req)
 						 req->rq_msg.rm_xid);
 		}
 	}
+	rpc_dplx_rui(rec);
 	return (stat);
 }
 
@@ -434,28 +480,12 @@ svc_dg_getargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr,
 }
 
 static void
-svc_dg_lock(SVCXPRT *xprt, uint32_t flags, const char *file,
-	    int line)
-{
-	rpc_dplx_rlxi(xprt, file, line);
-	rpc_dplx_slxi(xprt, file, line);
-}
-
-static void
-svc_dg_unlock(SVCXPRT *xprt, uint32_t flags, const char *file,
-	      int line)
-{
-	rpc_dplx_rux(xprt);
-	rpc_dplx_sux(xprt);
-}
-
-static void
 svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
 	struct svc_dg_xprt *su = su_data(xprt);
 
 	/* clears xprt from the xprt table (eg, idle scans) */
-	xprt_unregister(xprt);
+	svc_rqst_xprt_unregister(xprt);
 
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 		"%s() %p xp_refs %" PRIu32
@@ -472,8 +502,6 @@ svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		mem_free(xprt->xp_tp, 0);
 	if (xprt->xp_netid)
 		mem_free(xprt->xp_netid, 0);
-
-	rpc_dplx_unref((struct rpc_dplx_rec *)xprt->xp_p5, RPC_DPLX_FLAG_NONE);
 
 	if (xprt->xp_ops->xp_free_user_data) {
 		/* call free hook */
@@ -560,8 +588,6 @@ svc_dg_ops(SVCXPRT *xprt)
 		ops.xp_freeargs = svc_dg_freeargs;
 		ops.xp_destroy = svc_dg_destroy;
 		ops.xp_control = svc_dg_control;
-		ops.xp_lock = svc_dg_lock;
-		ops.xp_unlock = svc_dg_unlock;
 		ops.xp_getreq = svc_getreq_default;
 		ops.xp_dispatch = svc_dispatch_default;
 		ops.xp_recv_user_data = NULL;	/* no default */
@@ -634,7 +660,7 @@ svc_dg_cache_set(SVCXPRT *xprt, size_t replylen, u_int32_t xid)
 	if (victim != NULL) {
 		loc = CACHE_LOC(xprt, victim->cache_xid);
 		for (vicp = &uc->uc_entries[loc];
-		     *vicp != NULL && *vicp != victim; 
+		     *vicp != NULL && *vicp != victim;
 		     vicp = &(*vicp)->cache_next);
 		if (*vicp == NULL) {
 			__warnx(TIRPC_DEBUG_FLAG_SVC_DG, cache_set_str,

@@ -34,6 +34,7 @@
 
 #define SVC_RQST_FLAG_NONE		SVC_XPRT_FLAG_NONE
 /* uint16_t actually used */
+#define SVC_RQST_FLAG_XPRT_UREG		SVC_XPRT_FLAG_UREG
 #define SVC_RQST_FLAG_CHAN_AFFINITY	0x1000 /* bind conn to parent chan */
 #define SVC_RQST_FLAG_MASK (SVC_RQST_FLAG_CHAN_AFFINITY)
 
@@ -45,16 +46,10 @@
 #define SVC_RQST_FLAG_PART_LOCKED	0x00100000
 #define SVC_RQST_FLAG_PART_UNLOCK	0x00200000
 
-#define SVC_RQST_FLAG_SREC_LOCKED	0x01000000
-#define SVC_RQST_FLAG_SREC_UNLOCK	0x02000000
-#define SVC_RQST_FLAG_XPRT_UREG		0x04000000
-#define SR_REQ_RELEASE_KEEP_LOCKED	0x08000000
-
 /*
  * exported interface:
  *
  *  svc_rqst_init -- init module (optional)
- *  svc_rqst_init_xprt -- init svc_rqst part of xprt handle
  *  svc_rqst_new_evchan -- create event channel
  *  svc_rqst_evchan_reg -- set {xprt, dispatcher} mapping
  *  svc_rqst_foreach_xprt -- scan registered xprts at id (or 0 for all)
@@ -69,14 +64,14 @@
  *  can be used by the application to chose a correct request handler, or do
  *  other adaptation
  */
-void svc_rqst_init();
-void svc_rqst_init_xprt(SVCXPRT *xprt);
+int svc_rqst_init(void);
 int svc_rqst_new_evchan(uint32_t *chan_id /* OUT */ , void *u_data,
 			uint32_t flags);
 int svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags);
 int svc_rqst_rearm_events(SVCXPRT *xprt, uint32_t flags);
 
 int svc_rqst_xprt_register(SVCXPRT *xprt, SVCXPRT *newxprt);
+void svc_rqst_xprt_unregister(SVCXPRT *xprt);
 int svc_rqst_thrd_run(uint32_t chan_id, uint32_t flags);
 int svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags);
 

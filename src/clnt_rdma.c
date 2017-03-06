@@ -189,13 +189,13 @@ call_again:
 	if ((! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
 	    (! AUTH_MARSHALL(auth, xdrs)) ||
 	    (! AUTH_WRAP(auth, xdrs, xargs, argsp))) {
-		cm->cm_error.re_status = RPC_CANTENCODEARGS;
+		cx->cx_error.re_status = RPC_CANTENCODEARGS;
 		goto out;
 	}
 
 	if (! xdr_rdma_clnt_flushout(&cm->cm_xdrs)) {
-		cm->cm_error.re_errno = errno;
-		cm->cm_error.re_status = RPC_CANTSEND;
+		cx->cx_error.re_errno = errno;
+		cx->cx_error.re_status = RPC_CANTSEND;
 		goto out;
 	}
 
@@ -212,7 +212,7 @@ get_reply:
 
 	if (! xdr_rdma_clnt_reply(&cm->cm_xdrs, cm->call_msg.rm_xid)) {
 		//FIXME add timeout
-		cm->cm_error.re_status = RPC_TIMEDOUT;
+		cx->cx_error.re_status = RPC_TIMEDOUT;
 		goto out;
 	}
 
@@ -224,26 +224,26 @@ get_reply:
 	if (ok) {
 		if ((reply_msg.rm_reply.rp_stat == MSG_ACCEPTED) &&
 			(reply_msg.RPCM_ack.ar_stat == SUCCESS))
-			cm->cm_error.re_status = RPC_SUCCESS;
+			cx->cx_error.re_status = RPC_SUCCESS;
 		else
-			_seterr_reply(&reply_msg, &(cm->cm_error));
+			_seterr_reply(&reply_msg, &(cx->cx_error));
 
-		if (cm->cm_error.re_status == RPC_SUCCESS) {
+		if (cx->cx_error.re_status == RPC_SUCCESS) {
 			if (! AUTH_VALIDATE(auth,
 					    &(reply_msg.RPCM_ack.ar_verf))) {
-				cm->cm_error.re_status = RPC_AUTHERROR;
-				cm->cm_error.re_why = AUTH_INVALIDRESP;
+				cx->cx_error.re_status = RPC_AUTHERROR;
+				cx->cx_error.re_why = AUTH_INVALIDRESP;
 			} else if (! AUTH_UNWRAP(auth, &cm->cm_xdrs,
 						 xresults, resultsp)) {
-				if (cm->cm_error.re_status == RPC_SUCCESS)
-				     cm->cm_error.re_status = RPC_CANTDECODERES;
+				if (cx->cx_error.re_status == RPC_SUCCESS)
+				     cx->cx_error.re_status = RPC_CANTDECODERES;
 			}
 		}	/* end successful completion */
 		/*
 		 * If unsuccesful AND error is an authentication error
 		 * then refresh credentials and try again, else break
 		 */
-		else if (cm->cm_error.re_status == RPC_AUTHERROR)
+		else if (cx->cx_error.re_status == RPC_AUTHERROR)
 			/* maybe our credentials need to be refreshed ... */
 			if (nrefreshes > 0 &&
 			    AUTH_REFRESH(auth, &reply_msg)) {
@@ -253,22 +253,22 @@ get_reply:
 		/* end of unsuccessful completion */
 	}	/* end of valid reply message */
 	else {
-		cm->cm_error.re_status = RPC_CANTDECODERES;
+		cx->cx_error.re_status = RPC_CANTDECODERES;
 
 	}
 out:
 	cm->call_msg.rm_xid++;
 
 //	vc_fd_unlock_c(cl, &mask);
-	return (cm->cm_error.re_status);
+	return (cx->cx_error.re_status);
 }
 
 static void
 clnt_rdma_geterr(CLIENT *cl, struct rpc_err *errp)
 {
-	struct cm_data *cm = CM_DATA(CX_DATA(cl));
+	struct cx_data *cx = CX_DATA(cl);
 
-	*errp = cm->cm_error;
+	*errp = cx->cx_error;
 }
 
 static bool
@@ -277,33 +277,15 @@ clnt_rdma_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
 	struct cx_data *cx = CX_DATA(cl);
 	struct cm_data *cm = CM_DATA(cx);
 	XDR *xdrs;
-	sigset_t mask, newmask;
-	bool dummy = 0;
 
 	/* XXX guard against illegal invocation from libc (will fix) */
 	if (! xdr_res)
-		goto out;
+		return (0);
 
 	xdrs = &(cm->cm_xdrs);
-
-	/* Handle our own signal mask here, the signal section is
-	 * larger than the wait (not 100% clear why) */
-
-	/* barrier recv channel */
-	//	rpc_dplx_rwc(clnt, rpc_flag_clear);
-
-	sigfillset(&newmask);
-	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
-
 	xdrs->x_op = XDR_FREE;
-	if (xdr_res)
-		dummy = (*xdr_res)(xdrs, res_ptr);
 
-	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
-	rpc_dplx_rsc(cl, RPC_DPLX_FLAG_NONE);
-
-out:
-	return (dummy);
+	return ((*xdr_res)(xdrs, res_ptr));
 }
 
 /*ARGSUSED*/
@@ -317,13 +299,14 @@ clnt_rdma_control(CLIENT *cl, u_int request, void *info)
 {
 	struct cx_data *cx = CX_DATA(cl);
 	struct cm_data *cm = CM_DATA(cx);
+	struct rpc_dplx_rec *rec = cx->cx_rec;
 	sigset_t mask;
 	bool result = TRUE;
 
 	thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
 	/* always take recv lock first if taking together */
-	rpc_dplx_rlc(cl); //receive lock clnt
-	rpc_dplx_slc(cl); //send lock clnt
+	rpc_dplx_rli(rec); //receive lock clnt
+	mutex_lock(&cl->cl_lock);
 
 	switch (request) {
 	case CLSET_FD_CLOSE:
@@ -406,8 +389,8 @@ clnt_rdma_control(CLIENT *cl, u_int request, void *info)
 	}
 
 unlock:
-	rpc_dplx_ruc(cl);
-	rpc_dplx_suc(cl);
+	rpc_dplx_rui(rec);
+	mutex_unlock(&cl->cl_lock);
 	return (result);
 }
 

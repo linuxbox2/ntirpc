@@ -38,7 +38,6 @@ SET(ntirpc_common_SRCS
   pmap_rmt.c
   rbtree.c
   rbtree_x.c
-  rpc_dplx.c
   rpc_prot.c
   rpc_callmsg.c
   rpc_commondata.c

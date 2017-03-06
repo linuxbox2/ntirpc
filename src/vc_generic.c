@@ -55,17 +55,17 @@
 static inline int
 clnt_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
-	struct x_vc_data *xd = (struct x_vc_data *)ctp;
-	struct ct_data *ct = &xd->cx.data;
-	rpc_ctx_t *ctx = (rpc_ctx_t *) xdrs->x_lib[1];
+	struct svc_vc_xprt *xd = (struct svc_vc_xprt *)ctp;
+	rpc_ctx_t *ctx = (rpc_ctx_t *) xdrs->x_lib[0];
 	struct pollfd fd;
-	int milliseconds =
-	    (int)((ct->ct_wait.tv_sec * 1000) + (ct->ct_wait.tv_usec / 1000));
+	int xp_fd = xd->sx_dr.xprt.xp_fd;
+	int milliseconds = (int)((xd->cx.cx_wait.tv_sec * 1000)
+				+ (xd->cx.cx_wait.tv_usec / 1000));
 
 	if (len == 0)
 		return (0);
 
-	fd.fd = xd->cx.data.ct_fd;
+	fd.fd = xp_fd;
 	fd.events = POLLIN;
 	for (;;) {
 		switch (poll(&fd, 1, milliseconds)) {
@@ -83,7 +83,7 @@ clnt_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
 		break;
 	}
 
-	len = read(xd->cx.data.ct_fd, buf, (size_t) len);
+	len = read(xp_fd, buf, (size_t) len);
 
 	switch (len) {
 	case 0:
@@ -101,6 +101,7 @@ clnt_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
 	return (len);
 }
 
+#if 0
 static inline int
 clnt_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
@@ -119,9 +120,10 @@ clnt_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
 	}
 	return (len);
 }
+#endif
 
 static inline void
-cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
+cfconn_set_dead(SVCXPRT *xprt, struct svc_vc_xprt *xd)
 {
 	mutex_lock(&xprt->xp_lock);
 	xd->sx.strm_stat = XPRT_DIED;
@@ -140,13 +142,10 @@ cfconn_set_dead(SVCXPRT *xprt, struct x_vc_data *xd)
 static inline int
 svc_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
-	SVCXPRT *xprt;
+	struct svc_vc_xprt *xd = (struct svc_vc_xprt *)ctp;
+	SVCXPRT *xprt = &xd->sx_dr.xprt;
 	int milliseconds = 35 * 1000;	/* XXX configurable? */
 	struct pollfd pollfd;
-	struct x_vc_data *xd;
-
-	xd = (struct x_vc_data *)ctp;
-	xprt = xd->rec->hdl.xprt;
 
 	if (xd->shared.nonblock) {
 		len = read(xprt->xp_fd, buf, (size_t) len);
@@ -191,6 +190,7 @@ svc_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
 	return (-1);
 }
 
+#if 0
 /*
  * writes data to the tcp connection.
  * Any error is fatal and the connection is closed.
@@ -241,24 +241,18 @@ svc_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
 
 	return (len);
 }
+#endif
 
 /* generic read and write callbacks */
 int
 generic_read_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
-	switch ((enum rpc_duplex_callpath)xdrs->x_lib[0]) {
-	case RPC_DPLX_CLNT:
-		return (clnt_read_vc(xdrs, ctp, buf, len));
-		break;
-	case RPC_DPLX_SVC:
+	if (xdrs->x_lib[1] != NULL)
 		return (svc_read_vc(xdrs, ctp, buf, len));
-		break;
-	default:
-		/* better not */
-		abort();
-	}
+	return (clnt_read_vc(xdrs, ctp, buf, len));
 }
 
+#if 0
 int
 generic_write_vc(XDR *xdrs, void *ctp, void *buf, int len)
 {
@@ -339,3 +333,4 @@ vc_shared_destroy(struct x_vc_data *xd)
 	/* free xd itself */
 	mem_free(xd, sizeof(struct x_vc_data));
 }
+#endif

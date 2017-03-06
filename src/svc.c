@@ -1005,9 +1005,6 @@ svc_shutdown(u_long flags)
 	/* dispose all xprts and support */
 	svc_xprt_shutdown();
 
-	/* release fd lock records */
-	rpc_dplx_shutdown();
-
 	/* release request event channels */
 	svc_rqst_shutdown();
 

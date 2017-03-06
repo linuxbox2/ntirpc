@@ -171,8 +171,7 @@ NTIRPC_${NTIRPC_VERSION} {
     svc_unreg;
     svc_unregister;
     svc_validate_xprt_list;
-    svc_vc_ncreate;
-    svc_vc_ncreate2;
+    svc_vc_ncreatef;
     svc_xprt_trace;
     svcauth_gss_acquire_cred;
     svcauth_gss_destroy;
@@ -295,8 +294,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdrrec_eof;
     xdrrec_skiprecord;
     xdrstdio_create;
-    xprt_register;
-    xprt_unregister;
 
   local:
     *;

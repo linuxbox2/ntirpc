@@ -59,8 +59,7 @@
  *
  * 1) An arbitrary number of transport connections upon which rpc requests
  * are received.  The two most notable transports are TCP and UDP;  they are
- * created and registered by routines in svc_tcp.c and svc_udp.c, respectively;
- * they in turn call xprt_register and xprt_unregister.
+ * created and registered by routines in svc_vc.c and svc_dg.c, respectively.
  *
  * 2) An arbitrary number of locally registered services.  Services are
  * described by the following four data: program number, version number,
@@ -146,10 +145,12 @@ typedef struct svc_init_params {
 /* uint16_t actually used */
 #define SVC_XPRT_FLAG_ADDED		0x0001
 #define SVC_XPRT_FLAG_BLOCKED		0x0002
+#define SVC_XPRT_FLAG_UREG		0x0008
 #define SVC_XPRT_FLAG_CLOSE		0x0010
 #define SVC_XPRT_FLAG_DESTROYED		0x0020	/* SVC_DESTROY() was called */
 #define SVC_XPRT_FLAG_DESTROYING	0x0040	/* (*xp_destroy) was called */
 #define SVC_XPRT_FLAG_INITIALIZED	0x0080
+#define SVC_XPRT_FLAG_MASK		0xffff
 
 /* uint32_t instructions */
 #define SVC_XPRT_FLAG_LOCKED		0x00010000
@@ -220,12 +221,6 @@ typedef struct rpc_svcxprt {
 
 		/* catch-all function */
 		bool (*xp_control) (struct rpc_svcxprt *, const u_int, void *);
-
-		/* transport locking (may be duplex-aware, etc) */
-		void (*xp_lock) (struct rpc_svcxprt *, uint32_t,
-				 const char *, int);
-		void (*xp_unlock) (struct rpc_svcxprt *, uint32_t,
-				   const char *, int);
 
 		/* handle incoming requests (calls xp_recv) */
 		bool (*xp_getreq) (struct rpc_svcxprt *);
@@ -515,22 +510,6 @@ static inline void svc_destroy_it(struct rpc_svcxprt *xprt,
 #define SVC_CONTROL(xprt, rq, in)			\
 	(*(xprt)->xp_ops->xp_control)((xprt), (rq), (in))
 
-#define XP_LOCK_NONE    0x0000
-#define XP_LOCK_SEND    0x0001
-#define XP_LOCK_RECV    0x0002
-
-#define SVC_LOCK(xprt, flags, func, line) \
-	(*(xprt)->xp_ops->xp_lock)((xprt), (flags), (func), (line))
-
-#define svc_lock(xprt, flags, func, line) \
-	(*(xprt)->xp_ops->xp_lock)((xprt), (flags), (func), (line))
-
-#define SVC_UNLOCK(xprt, flags, func, line) \
-	(*(xprt)->xp_ops->xp_unlock)((xprt), (flags), (func), (line))
-
-#define svc_unlock(xprt, flags, func, line) \
-	(*(xprt)->xp_ops->xp_unlock)((xprt), (flags), (func), (line))
-
 /*
  * Service init (optional).
  */
@@ -570,24 +549,6 @@ __END_DECLS
  */
 __BEGIN_DECLS
 extern void svc_unreg(const rpcprog_t, const rpcvers_t);
-__END_DECLS
-/*
- * Transport registration.
- *
- * xprt_register(xprt)
- * SVCXPRT *xprt;
- */
-__BEGIN_DECLS
-extern void xprt_register(SVCXPRT *);
-__END_DECLS
-/*
- * Transport un-register
- *
- * xprt_unregister(xprt)
- * SVCXPRT *xprt;
- */
-__BEGIN_DECLS
-extern void xprt_unregister(SVCXPRT *);
 __END_DECLS
 /*
  * This is used to set local and remote addresses in a way legacy
@@ -725,15 +686,8 @@ __END_DECLS
 
 __BEGIN_DECLS
 
-extern SVCXPRT *svc_vc_ncreate(const int, const u_int, const u_int);
-/*
- *      const int fd;                           -- open connection end point
- *      const u_int sendsize;                   -- max send size
- *      const u_int recvsize;                   -- max recv size
- */
-
-extern SVCXPRT *svc_vc_ncreate2(const int, const u_int, const u_int,
-				const u_int);
+extern SVCXPRT *svc_vc_ncreatef(const int, const u_int, const u_int,
+				const uint32_t);
 /*
  *      const int fd;                           -- open connection end point
  *      const u_int sendsize;                   -- max send size
@@ -741,13 +695,12 @@ extern SVCXPRT *svc_vc_ncreate2(const int, const u_int, const u_int,
  *      const u_int flags;                      -- flags
  */
 
-__END_DECLS
-#define SVC_VC_CREATE_NONE             0x0000
-#define SVC_VC_CREATE_XPRT_NOREG       0x0008
-#define SVC_VC_CREATE_LISTEN           0x0010
-#define SVC_VC_CREATE_VSOCK            0x0020
+static inline SVCXPRT *
+svc_vc_ncreate(const int fd, const u_int sendsize, const u_int recvsize)
+{
+	return (svc_vc_ncreatef(fd, sendsize, recvsize, SVC_CREATE_FLAG_CLOSE));
+}
 
-__BEGIN_DECLS
 /*
  * Create a client handle from an active service transport handle.
  * (Defined here because this file knows about clnt.h, but not vice versa.)
