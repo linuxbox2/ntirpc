@@ -140,6 +140,7 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 		if (!nv) {
 			(*setup)(&xprt); /* zalloc, xp_refs = 1 */
 			xprt->xp_fd = fd;
+			xprt->xp_flags = SVC_XPRT_FLAG_INITIAL;
 
 			rpc_dplx_rli(REC_XPRT(xprt));
 			if (opr_rbtree_insert(&t->t, &xprt->xp_fd_node)) {
@@ -167,6 +168,8 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 		return (NULL);
 	}
+
+	atomic_clear_uint16_t_bits(&xprt->xp_flags, SVC_XPRT_FLAG_INITIAL);
 	return (xprt);
 }
 

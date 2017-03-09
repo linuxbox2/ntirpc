@@ -612,8 +612,8 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 		mutex_unlock(&xp_ev->mtx);
 	}
 
-	if (flags & SVC_XPRT_FLAG_MASK)
-		atomic_set_uint16_t_bits(&xprt->xp_flags, flags);
+	if (flags & SVC_XPRT_FLAG_UREG)
+		atomic_set_uint16_t_bits(&xprt->xp_flags, SVC_XPRT_FLAG_UREG);
 
 	TAILQ_INSERT_TAIL(&sr_rec->xprt_q, xprt, xp_evq);
 

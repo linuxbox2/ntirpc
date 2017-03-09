@@ -145,12 +145,12 @@ typedef struct svc_init_params {
 /* uint16_t actually used */
 #define SVC_XPRT_FLAG_ADDED		0x0001
 #define SVC_XPRT_FLAG_BLOCKED		0x0002
-#define SVC_XPRT_FLAG_UREG		0x0008
+#define SVC_XPRT_FLAG_INITIAL		0x0004
+#define SVC_XPRT_FLAG_INITIALIZED	0x0008
 #define SVC_XPRT_FLAG_CLOSE		0x0010
 #define SVC_XPRT_FLAG_DESTROYED		0x0020	/* SVC_DESTROY() was called */
 #define SVC_XPRT_FLAG_DESTROYING	0x0040	/* (*xp_destroy) was called */
-#define SVC_XPRT_FLAG_INITIALIZED	0x0080
-#define SVC_XPRT_FLAG_MASK		0xffff
+#define SVC_XPRT_FLAG_UREG		0x0080
 
 /* uint32_t instructions */
 #define SVC_XPRT_FLAG_LOCKED		0x00010000
@@ -244,8 +244,6 @@ typedef struct rpc_svcxprt {
 	void *xp_p1;		/* private: for use by svc ops */
 	void *xp_p2;		/* private: for use by svc ops */
 	void *xp_p3;		/* private: for use by svc lib */
-	void *xp_p4;		/* private: for use by svc lib */
-	void *xp_p5;		/* private: for use by svc lib */
 	void *xp_u1;		/* client user data */
 	void *xp_u2;		/* client user data */
 
