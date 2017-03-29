@@ -99,10 +99,9 @@ zeroes the
 global variable.
 If RPC server activity is to be resumed,
 services must be reregistered with the RPC library
-either through one of the
+through one of the
 .Xr rpc_svc_create 3
-functions, or using
-.Fn xprt_register .
+functions.
 The
 .Fn svc_exit
 function
