@@ -127,65 +127,6 @@ struct __svc_ops {
 
 extern struct __svc_ops *svc_ops;
 
-/*  The CACHING COMPONENT */
-
-/*
- * Could have been a separate file, but some part of it depends upon the
- * private structure of the client handle.
- *
- * Fifo cache for cl server
- * Copies pointers to reply buffers into fifo cache
- * Buffers are sent again if retransmissions are detected.
- */
-
-#define	SPARSENESS 4		/* 75% sparse */
-
-/*
- * An entry in the cache
- */
-typedef struct cache_node *cache_ptr;
-struct cache_node {
-	/*
-	 * Next node on the list, if there is a collision
-	 */
-	cache_ptr cache_next;
-	/*
-	 * The cached reply and length
-	 */
-	char *cache_reply;
-	size_t cache_replylen;
-	/*
-	 * Index into cache is xid, prog, vers, proc and address
-	 */
-	u_int32_t cache_xid;
-	rpcprog_t cache_prog;
-	rpcvers_t cache_vers;
-	rpcproc_t cache_proc;
-	struct rpc_address cache_addr;
-};
-
-/*
- * the hashing function
- */
-#define	CACHE_LOC(transp, xid)	\
-	(xid % (SPARSENESS * ((struct cl_cache *) \
-		su_data(transp)->su_cache)->uc_size))
-
-extern mutex_t dupreq_lock;
-
-/*
- * The entire cache
- */
-struct cl_cache {
-	cache_ptr *uc_entries;	/* hash table of entries in cache */
-	cache_ptr *uc_fifo;	/* fifo list of entries in cache */
-	u_int uc_size;		/* size of cache */
-	u_int uc_nextvictim;	/* points to next victim in fifo list */
-	rpcprog_t uc_prog;	/* saved program number */
-	rpcvers_t uc_vers;	/* saved version number */
-	rpcproc_t uc_proc;	/* saved procedure number */
-};
-
 /*
  * The following union is defined just to use SVC_CMSG_SIZE macro for an array
  * length. _GNU_SOURCE must be defined to get in6_pktinfo declaration!
@@ -209,7 +150,6 @@ struct svc_dg_xprt {
 	struct msghdr su_msghdr;	/* msghdr received from clnt */
 	XDR su_xdrs;			/* XDR handle */
 
-	struct cl_cache *su_cache;	/* cached data, NULL if none */
 	size_t su_iosz;			/* size of send.recv buffer */
 	u_int su_recvsz;
 	u_int su_sendsz;

@@ -41,9 +41,6 @@ pthread_mutex_t clntraw_lock = MUTEX_INITIALIZER;
 /* domainname and domain_fd (getdname.c) and default_domain (rpcdname.c) */
 pthread_mutex_t dname_lock = MUTEX_INITIALIZER;
 
-/* dupreq variables (svc_dg.c) */
-pthread_mutex_t dupreq_lock = MUTEX_INITIALIZER;
-
 /* protects first_time and hostname (key_call.c) */
 pthread_mutex_t keyserv_lock = MUTEX_INITIALIZER;
 

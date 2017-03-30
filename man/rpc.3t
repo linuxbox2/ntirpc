@@ -402,8 +402,6 @@ pages on which they are described:
 .Xr rpc_svc_create 3
 .It Fn svc_dg_create
 .Xr rpc_svc_create 3
-.It Fn svc_dg_enablecache
-.Xr rpc_svc_calls 3
 .It Fn svc_fd_create
 .Xr rpc_svc_create 3
 .It Fn svc_fds

@@ -8,7 +8,6 @@
 .Dt RPC_SVC_CALLS 3
 .Os
 .Sh NAME
-.Nm svc_dg_enablecache ,
 .Nm svc_exit ,
 .Nm svc_fdset ,
 .Nm svc_freeargs ,
@@ -25,8 +24,6 @@
 .Lb libc
 .Sh SYNOPSIS
 .In rpc/rpc.h
-.Ft int
-.Fn svc_dg_enablecache "SVCXPRT *xprt" "const unsigned cache_size"
 .Ft void
 .Fn svc_exit "void"
 .Ft bool_t
@@ -76,16 +73,6 @@ for the definition of the
 .Vt SVCXPRT
 data structure.
 .Bl -tag -width __svc_getcallercreds()
-.It Fn svc_dg_enablecache
-This function allocates a duplicate request cache for the
-service endpoint
-.Fa xprt ,
-large enough to hold
-.Fa cache_size
-entries.
-Once enabled, there is no way to disable caching.
-This routine returns 0 if space necessary for a cache of the given size
-was successfully allocated, and 1 otherwise.
 .It Fn svc_exit
 This function, when called by any of the RPC server procedure or
 otherwise, causes

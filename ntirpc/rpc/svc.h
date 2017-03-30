@@ -807,11 +807,6 @@ extern void svc_dispatch_default(SVCXPRT *, struct rpc_msg **);
  */
 extern bool svc_validate_xprt_list(SVCXPRT *);
 
-/*
- * svc_dg_enable_cache() enables the cache on dg transports.
- */
-int svc_dg_enablecache(SVCXPRT *, const u_int);
-
 int __rpc_get_local_uid(SVCXPRT *, uid_t *);
 
 __END_DECLS
