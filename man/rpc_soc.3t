@@ -68,9 +68,7 @@
 .Nm xdr_pmap ,
 .Nm xdr_pmaplist ,
 .Nm xdr_rejected_reply ,
-.Nm xdr_replymsg ,
-.Nm xprt_register ,
-.Nm xprt_unregister
+.Nm xdr_replymsg
 .Nd "library routines for remote procedure calls"
 .Sh LIBRARY
 .Lb libc
@@ -1214,7 +1212,7 @@ If
 is non-zero, then a mapping of the triple
 .Pq Fa prognum , versnum , protocol
 to
-.Fa xprt\->xp_port
+.Fa xprt\->xp_remote
 is established with the local
 .Xr rpcbind 8
 service (generally
@@ -1417,8 +1415,8 @@ port, then this routine binds it to an arbitrary port.
 Upon completion,
 .Fa xprt\->xp_fd
 is the transport's socket descriptor, and
-.Fa xprt\->xp_port
-is the transport's port number.
+.Fa xprt\->xp_remote
+is the transport's remote address, length, and port.
 This routine returns
 .Dv NULL
 if it fails.
@@ -1533,8 +1531,8 @@ Upon
 completion,
 .Fa xprt\->xp_fd
 is the transport's socket descriptor, and
-.Fa xprt\->xp_port
-is the transport's port number.
+.Fa xprt\->xp_local
+is the transport's local address, length, and port.
 This routine returns
 .Dv NULL
 if it fails.
@@ -1672,40 +1670,6 @@ This routine is useful for users who wish to generate
 style messages without using the
 .Tn RPC
 package.
-.Pp
-.It Xo
-.Ft void
-.Xc
-.It Xo
-.Fn xprt_register "SVCXPRT *xprt"
-.Xc
-.Pp
-After
-.Tn RPC
-service transport handles are created,
-they should register themselves with the
-.Tn RPC
-service package.
-This routine modifies the global variable
-.Va svc_fds .
-Service implementors usually do not need this routine.
-.Pp
-.It Xo
-.Ft void
-.Xc
-.It Xo
-.Fn xprt_unregister "SVCXPRT *xprt"
-.Xc
-.Pp
-Before an
-.Tn RPC
-service transport handle is destroyed,
-it should unregister itself with the
-.Tn RPC
-service package.
-This routine modifies the global variable
-.Va svc_fds .
-Service implementors usually do not need this routine.
 .El
 .Sh SEE ALSO
 .Xr rpc_secure 3 ,

@@ -88,7 +88,7 @@ static void svc_vc_override_ops(SVCXPRT *, SVCXPRT *);
 bool __svc_clean_idle2(int, bool);
 
 static SVCXPRT *makefd_xprt(const int, const u_int, const u_int,
-			    struct __rpc_sockinfo *, uint32_t *);
+			    struct __rpc_sockinfo *, u_int);
 
 extern pthread_mutex_t svc_ctr_lock;
 
@@ -174,7 +174,8 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	}
 	rec = REC_XPRT(xprt);
 
-	xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags, flags
+	xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags,
+						(flags & SVC_XPRT_FLAG_CLOSE)
 						| SVC_XPRT_FLAG_INITIALIZED);
 	if (xp_flags & SVC_XPRT_FLAG_INITIALIZED) {
 		rpc_dplx_rui(rec);
@@ -276,12 +277,12 @@ svc_fd_ncreatef(const int fd, const u_int sendsize, const u_int recvsize,
 	SVCXPRT *xprt;
 	struct __rpc_sockinfo si;
 	int rc;
-	uint32_t make_flags = flags;
 
 	assert(fd != -1);
 
-	xprt = makefd_xprt(fd, sendsize, recvsize, &si, &make_flags);
-	if ((!xprt) || (!(make_flags & SVC_XPRT_FLAG_ADDED)))
+	xprt = makefd_xprt(fd, sendsize, recvsize, &si,
+			   flags & SVC_XPRT_FLAG_CLOSE);
+	if ((!xprt) || (!(xprt->xp_flags & SVC_XPRT_FLAG_INITIAL)))
 		return (xprt);
 
 	__rpc_address_setup(&xprt->xp_local);
@@ -323,7 +324,7 @@ svc_fd_ncreatef(const int fd, const u_int sendsize, const u_int recvsize,
 
 static SVCXPRT *
 makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
-	    struct __rpc_sockinfo *si, u_int *flags)
+	    struct __rpc_sockinfo *si, u_int flags)
 {
 	SVCXPRT *xprt;
 	struct svc_vc_xprt *xd;
@@ -352,7 +353,7 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 	}
 	rec = REC_XPRT(xprt);
 
-	xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags, *flags
+	xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags, flags
 						| SVC_XPRT_FLAG_INITIALIZED);
 	if (xp_flags & SVC_XPRT_FLAG_INITIALIZED) {
 		rpc_dplx_rui(rec);
@@ -417,8 +418,6 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 
 	xprt->xp_netid = mem_strdup(netid);
 
-	*flags |= SVC_XPRT_FLAG_ADDED;
-
 	/* release */
 	rpc_dplx_rui(rec);
 	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
@@ -439,7 +438,6 @@ rendezvous_request(struct svc_req *req)
 	int fd;
 	int rc;
 	socklen_t len;
-	u_int make_flags;
 	static int n = 1;
 
  again:
@@ -472,10 +470,9 @@ rendezvous_request(struct svc_req *req)
 	/*
 	 * make a new transport (re-uses xprt)
 	 */
-	make_flags = SVC_XPRT_FLAG_CLOSE;
 	newxprt = makefd_xprt(fd, req_xd->shared.sendsz, req_xd->shared.recvsz,
-			      &si, &make_flags);
-	if ((!newxprt) || (!(make_flags & SVC_XPRT_FLAG_ADDED)))
+			      &si, SVC_XPRT_FLAG_CLOSE);
+	if ((!newxprt) || (!(newxprt->xp_flags & SVC_XPRT_FLAG_INITIAL)))
 		return (FALSE);
 
 	/*

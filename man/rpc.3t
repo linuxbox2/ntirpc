@@ -189,8 +189,6 @@ enum xprt_stat {
  * Server side transport handle
  */
 typedef struct {
-    int    xp_fd;    /* file descriptor for the server handle */
-    u_short    xp_port;    /* obsolete */
     const struct xp_ops {
         bool_t    (*xp_recv)();    /* receive incoming requests */
         enum xprt_stat    (*xp_stat)();    /* get transport status */
@@ -198,32 +196,26 @@ typedef struct {
         bool_t    (*xp_reply)();      /* send reply */
         bool_t    (*xp_freeargs)(); /* free mem allocated for args */
         void    (*xp_destroy)();    /* destroy this struct */
-    } *xp_ops;
-    int    xp_addrlen;    /* length of remote addr.  Obsolete */
-    struct sockaddr_in    xp_raddr; /* Obsolete */
-    const struct xp_ops2 {
         bool_t    (*xp_control)();    /* catch-all function */
-    } *xp_ops2;
+    } *xp_ops;
     char    *xp_tp;    /* transport provider device name */
     char    *xp_netid;    /* network identifier */
-    struct netbuf    xp_ltaddr;    /* local transport address */
-    struct netbuf    xp_rtaddr;    /* remote transport address */
-    struct opaque_auth    xp_verf;    /* raw response verifier */
     caddr_t    xp_p1;    /* private: for use by svc ops */
     caddr_t    xp_p2;    /* private: for use by svc ops */
     caddr_t    xp_p3;    /* private: for use by svc lib */
+    caddr_t    xp_u1;    /* public: user data */
+    caddr_t    xp_u2;    /* public: user data */
+    struct rpc_address xp_local;	/* local address, length, port */
+    struct rpc_address xp_remote;	/* remote address, length, port */
+    int    xp_fd;    /* file descriptor for the server handle */
     int    xp_type    /* transport type */
 } SVCXPRT;
 .Ed
-.Sh "The svc_reg structure"
+.Sh "The svc_req structure"
 .Bd -literal
 struct svc_req {
-    rpcprog_t    rq_prog;    /* service program number */
-    rpcvers_t    rq_vers;    /* service protocol version */
-    rpcproc_t    rq_proc;    /* the desired procedure */
-    struct opaque_auth    rq_cred;    /* raw creds from the wire */
-    caddr_t    rq_clntcred;    /* read only cooked cred */
     SVCXPRT    *rq_xprt;    /* associated transport */
+    struct rpc_msg rq_msg;
 };
 .Ed
 .Sh  "The XDR structure"
@@ -410,8 +402,6 @@ pages on which they are described:
 .Xr rpc_svc_create 3
 .It Fn svc_dg_create
 .Xr rpc_svc_create 3
-.It Fn svc_dg_enablecache
-.Xr rpc_svc_calls 3
 .It Fn svc_fd_create
 .Xr rpc_svc_create 3
 .It Fn svc_fds
@@ -490,10 +480,6 @@ pages on which they are described:
 .Xr rpc_xdr 3
 .It Fn xdr_replymsg
 .Xr rpc_xdr 3
-.It Fn xprt_register
-.Xr rpc_svc_calls 3
-.It Fn xprt_unregister
-.Xr rpc_svc_calls 3
 .El
 .Sh FILES
 .Bl -tag -width /etc/netconfig

@@ -147,7 +147,7 @@ typedef int32_t rpc_inline_t;
 #define TIRPC_DEBUG_FLAG_XDRREC         0x0400000
 #define TIRPC_DEBUG_FLAG_XDR            0x0800000
 #define TIRPC_DEBUG_FLAG_RPC_CTX        0x1000000
-#define TIRPC_DEBUG_FLAG_RPC_CACHE      0x2000000
+
 #define TIRPC_DEBUG_FLAG_RPC_MSG        0x4000000
 #define TIRPC_DEBUG_FLAG_RPC_RDMA       0x8000000
 

@@ -71,8 +71,6 @@
 
 static void svc_dg_ops(SVCXPRT *);
 
-static int svc_dg_cache_get(SVCXPRT *, struct rpc_msg *, char **, size_t *);
-static void svc_dg_cache_set(SVCXPRT *, size_t, u_int32_t);
 static void svc_dg_enable_pktinfo(int, const struct __rpc_sockinfo *);
 static int svc_dg_store_pktinfo(struct msghdr *, struct svc_req *);
 
@@ -289,11 +287,9 @@ svc_dg_recv(struct svc_req *req)
 	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
 	struct svc_dg_xprt *su = DG_DR(rec);
 	XDR *xdrs = &(su->su_xdrs);
-	char *reply;
 	struct sockaddr *sp = (struct sockaddr *)&xprt->xp_remote.ss;
 	struct msghdr *mesgp;
 	struct iovec iov;
-	size_t replylen;
 	ssize_t rlen;
 	uint16_t xp_flags;
 
@@ -360,30 +356,6 @@ svc_dg_recv(struct svc_req *req)
 #else
 	    calculate_crc32c(0, iov.iov_base, MIN(256, iov.iov_len));
 #endif
-
-	if (su->su_cache != NULL) {
-		if (svc_dg_cache_get(xprt, &req->rq_msg, &reply, &replylen)) {
-			iov.iov_base = reply;
-			iov.iov_len = replylen;
-
-			/* Set source IP address of the reply message in
-			 * PKTINFO
-			 */
-			if (req->rq_daddr_len != 0) {
-				struct cmsghdr *cmsg;
-
-				cmsg = (struct cmsghdr *)mesgp->msg_control;
-				svc_dg_set_pktinfo(cmsg, req);
-#ifndef CMSG_ALIGN
-#define CMSG_ALIGN(len) (len)
-#endif
-				mesgp->msg_controllen =
-					CMSG_ALIGN(cmsg->cmsg_len);
-			}
-			(void)sendmsg(xprt->xp_fd, mesgp, 0);
-			return (false);
-		}
-	}
 	return (true);
 }
 
@@ -445,9 +417,6 @@ svc_dg_reply(struct svc_req *req)
 
 		if (sendmsg(xprt->xp_fd, msg, 0) == (ssize_t) slen) {
 			stat = true;
-			if (su->su_cache)
-				svc_dg_cache_set(xprt, slen,
-						 req->rq_msg.rm_xid);
 		}
 	}
 	rpc_dplx_rui(rec);
@@ -595,184 +564,6 @@ svc_dg_ops(SVCXPRT *xprt)
 	}
 	xprt->xp_ops = &ops;
 	mutex_unlock(&ops_lock);
-}
-
-/*
- * Enable use of the cache. Returns 1 on success, 0 on failure.
- * Note: there is no disable.
- */
-static const char cache_enable_str[] = "svc_enablecache: %s %s";
-static const char enable_err[] = "cache already enabled";
-
-int
-svc_dg_enablecache(SVCXPRT *transp, u_int size)
-{
-	struct svc_dg_xprt *su = su_data(transp);
-	struct cl_cache *uc;
-
-	mutex_lock(&dupreq_lock);
-	if (su->su_cache != NULL) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC_DG, cache_enable_str, enable_err,
-			" ");
-		mutex_unlock(&dupreq_lock);
-		return (0);
-	}
-	su->su_cache =
-	uc = mem_alloc(sizeof(*uc));
-	uc->uc_size = size;
-	uc->uc_nextvictim = 0;
-	uc->uc_entries = mem_calloc(size * SPARSENESS, sizeof(cache_ptr));
-	uc->uc_fifo = mem_calloc(size, sizeof(cache_ptr));
-
-	mutex_unlock(&dupreq_lock);
-	return (1);
-}
-
-/*
- * Set an entry in the cache.  It assumes that the uc entry is set from
- * the earlier call to svc_dg_cache_get() for the same procedure.  This will
- * always happen because svc_dg_cache_get() is calle by svc_dg_recv and
- * svc_dg_cache_set() is called by svc_dg_reply().  All this hoopla because
- * the right RPC parameters are not available at svc_dg_reply time.
- */
-
-static const char cache_set_str[] = "cache_set: %s";
-static const char cache_set_err1[] = "victim not found";
-
-static void
-svc_dg_cache_set(SVCXPRT *xprt, size_t replylen, u_int32_t xid)
-{
-	cache_ptr victim;
-	cache_ptr *vicp;
-	struct svc_dg_xprt *su = su_data(xprt);
-	struct cl_cache *uc = su->su_cache;
-	u_int loc;
-	char *newbuf;
-	struct netconfig *nconf;
-	char *uaddr;
-
-	mutex_lock(&dupreq_lock);
-	/*
-	 * Find space for the new entry, either by
-	 * reusing an old entry, or by mallocing a new one
-	 */
-	victim = uc->uc_fifo[uc->uc_nextvictim];
-	if (victim != NULL) {
-		loc = CACHE_LOC(xprt, victim->cache_xid);
-		for (vicp = &uc->uc_entries[loc];
-		     *vicp != NULL && *vicp != victim;
-		     vicp = &(*vicp)->cache_next);
-		if (*vicp == NULL) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC_DG, cache_set_str,
-				cache_set_err1);
-			mutex_unlock(&dupreq_lock);
-			return;
-		}
-		*vicp = victim->cache_next;	/* remove from cache */
-		newbuf = victim->cache_reply;
-	} else {
-		victim = mem_alloc(sizeof(struct cache_node));
-		newbuf = mem_alloc(su->su_iosz);
-	}
-
-	/*
-	 * Store it away
-	 */
-	if (__debug_flag(TIRPC_DEBUG_FLAG_RPC_CACHE)) {
-		nconf = getnetconfigent(xprt->xp_netid);
-		if (nconf) {
-			uaddr = taddr2uaddr(nconf, &xprt->xp_remote.nb);
-			freenetconfigent(nconf);
-			__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
-				"cache set for xid= %" PRIu32
-				" prog=%" PRIu32
-				" vers=%" PRIu32
-				" proc=%" PRIu32
-				" for rmtaddr=%s\n",
-				xid, uc->uc_prog,
-				uc->uc_vers, uc->uc_proc, uaddr);
-			mem_free(uaddr, 0);	/* XXX */
-		}
-	}			/* DEBUG_RPC_CACHE */
-	victim->cache_replylen = replylen;
-	victim->cache_reply = rpc_buffer(xprt);
-	rpc_buffer(xprt) = newbuf;
-	xdrmem_create(&(su->su_xdrs), rpc_buffer(xprt), su->su_iosz,
-		      XDR_ENCODE);
-	victim->cache_xid = xid;
-	victim->cache_proc = uc->uc_proc;
-	victim->cache_vers = uc->uc_vers;
-	victim->cache_prog = uc->uc_prog;
-	victim->cache_addr = xprt->xp_remote;
-	victim->cache_addr.nb.buf = &victim->cache_addr.ss;
-	loc = CACHE_LOC(xprt, victim->cache_xid);
-	victim->cache_next = uc->uc_entries[loc];
-	uc->uc_entries[loc] = victim;
-	uc->uc_fifo[uc->uc_nextvictim++] = victim;
-	uc->uc_nextvictim %= uc->uc_size;
-	mutex_unlock(&dupreq_lock);
-}
-
-/*
- * Try to get an entry from the cache
- * return 1 if found, 0 if not found and set the stage for svc_dg_cache_set()
- */
-static int
-svc_dg_cache_get(SVCXPRT *xprt, struct rpc_msg *msg, char **replyp,
-		 size_t *replylenp)
-{
-	u_int loc;
-	cache_ptr ent;
-	struct svc_dg_xprt *su = su_data(xprt);
-	struct cl_cache *uc = su->su_cache;
-	struct netconfig *nconf;
-	char *uaddr;
-
-	mutex_lock(&dupreq_lock);
-	loc = CACHE_LOC(xprt, msg->rm_xid);
-	for (ent = uc->uc_entries[loc]; ent != NULL; ent = ent->cache_next) {
-		if (ent->cache_xid == msg->rm_xid
-		    && ent->cache_proc == msg->cb_proc
-		    && ent->cache_vers == msg->cb_vers
-		    && ent->cache_prog == msg->cb_prog
-		    && ent->cache_addr.nb.len == xprt->xp_remote.nb.len
-		    && (memcmp(ent->cache_addr.nb.buf, xprt->xp_remote.nb.buf,
-				xprt->xp_remote.nb.len) == 0)) {
-			if (__debug_flag(TIRPC_DEBUG_FLAG_RPC_CACHE)) {
-				nconf = getnetconfigent(xprt->xp_netid);
-				if (nconf) {
-					uaddr =
-					    taddr2uaddr(nconf,
-							&xprt->xp_remote.nb);
-					freenetconfigent(nconf);
-					__warnx(TIRPC_DEBUG_FLAG_SVC_DG,
-						"cache entry found for xid=%" PRIu32
-						" prog=%" PRIu32
-						" vers=%" PRIu32
-						" proc=%" PRIu32
-						" for rmtaddr=%s\n",
-						msg->rm_xid,
-						msg->cb_prog,
-						msg->cb_vers,
-						msg->cb_proc, uaddr);
-					mem_free(uaddr, 0);
-				}
-			}	/* RPC_CACHE_DEBUG */
-			*replyp = ent->cache_reply;
-			*replylenp = ent->cache_replylen;
-			mutex_unlock(&dupreq_lock);
-			return (1);
-		}
-	}
-	/*
-	 * Failed to find entry
-	 * Remember a few things so we can do a set later
-	 */
-	uc->uc_proc = msg->cb_proc;
-	uc->uc_vers = msg->cb_vers;
-	uc->uc_prog = msg->cb_prog;
-	mutex_unlock(&dupreq_lock);
-	return (0);
 }
 
 /*
