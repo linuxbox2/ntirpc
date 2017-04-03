@@ -1097,8 +1097,10 @@ __svc_clean_idle2(int timeout, bool cleanblock)
 
 	++active;
 
+#ifdef _HAVE_GSSAPI
 	/* trim gss context cache */
 	authgss_ctx_gc_idle();
+#endif /* _HAVE_GSSAPI */
 
 	/* trim xprts (not sorted, not aggressive [but self limiting]) */
 	memset(&acc, 0, sizeof(struct svc_clean_idle_arg));
