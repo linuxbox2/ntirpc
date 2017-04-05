@@ -150,7 +150,6 @@ find_library(LIBNSL nsl) # sockets
 set(SYSTEM_LIBRARIES
   ${LIBTIRPC_LIBRARIES}
   ${KRB5_LIBRARIES}
-  gssapi_krb5
   ${SYSTEM_LIBRARIES}
   ${LIBRT}
   ${LIBNSL}
