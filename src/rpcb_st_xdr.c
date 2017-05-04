@@ -39,6 +39,8 @@
 #include <sys/cdefs.h>
 
 #include <rpc/rpc.h>
+#include <rpc/xdr.h>
+#include <rpc/xdr_inline.h>
 
 /* Link list of all the stats about getport and getaddr */
 
@@ -53,7 +55,7 @@ xdr_rpcbs_addrlist(XDR *xdrs, rpcbs_addrlist *objp)
 		return (false);
 	if (!xdr_int(xdrs, &objp->failure))
 		return (false);
-	if (!xdr_string(xdrs, &objp->netid, (u_int) ~0))
+	if (!xdr_string(xdrs, &objp->netid, RPC_MAXDATASIZE))
 		return (false);
 	if (!xdr_pointer
 	    (xdrs, (char **)&objp->next, sizeof(rpcbs_addrlist),
@@ -93,7 +95,7 @@ xdr_rpcbs_rmtcalllist(XDR *xdrs, rpcbs_rmtcalllist *objp)
 			IXDR_PUT_INT32(buf, objp->failure);
 			IXDR_PUT_INT32(buf, objp->indirect);
 		}
-		if (!xdr_string(xdrs, &objp->netid, (u_int) ~0))
+		if (!xdr_string(xdrs, &objp->netid, RPC_MAXDATASIZE))
 			return (false);
 		if (!xdr_pointer
 		    (xdrs, (char **)&objp->next, sizeof(rpcbs_rmtcalllist),
@@ -123,7 +125,7 @@ xdr_rpcbs_rmtcalllist(XDR *xdrs, rpcbs_rmtcalllist *objp)
 			objp->failure = (int)IXDR_GET_INT32(buf);
 			objp->indirect = (int)IXDR_GET_INT32(buf);
 		}
-		if (!xdr_string(xdrs, &objp->netid, (u_int) ~0))
+		if (!xdr_string(xdrs, &objp->netid, RPC_MAXDATASIZE))
 			return (false);
 		if (!xdr_pointer
 		    (xdrs, (char **)&objp->next, sizeof(rpcbs_rmtcalllist),
@@ -143,7 +145,7 @@ xdr_rpcbs_rmtcalllist(XDR *xdrs, rpcbs_rmtcalllist *objp)
 		return (false);
 	if (!xdr_int(xdrs, &objp->indirect))
 		return (false);
-	if (!xdr_string(xdrs, &objp->netid, (u_int) ~0))
+	if (!xdr_string(xdrs, &objp->netid, RPC_MAXDATASIZE))
 		return (false);
 	if (!xdr_pointer
 	    (xdrs, (char **)&objp->next, sizeof(rpcbs_rmtcalllist),

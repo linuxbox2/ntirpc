@@ -56,7 +56,7 @@ typedef u_quad_t u_longlong_t;	/* ANSI unsigned long long type */
  */
 #define XDR_FALSE ((long) 0)
 #define XDR_TRUE ((long) 1)
-#define LASTUNSIGNED ((u_int) 0-1)
+#define RPC_MAXDATASIZE 9000
 
 /*
  * for unit alignment
@@ -504,6 +504,7 @@ xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 {
 	char *sp = *cpp;	/* sp is the actual string pointer */
 	u_int nodesize;
+	bool ret, allocated = false;
 
 	/*
 	 * first deal with the length since xdr bytes are counted
@@ -523,12 +524,21 @@ xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 	case XDR_DECODE:
 		if (nodesize == 0)
 			return (true);
-		if (sp == NULL)
+		if (sp == NULL) {
 			*cpp = sp = mem_alloc(nodesize);
+			allocated = true;
+		}
 		/* FALLTHROUGH */
 
 	case XDR_ENCODE:
-		return (xdr_opaque(xdrs, sp, nodesize));
+		ret = xdr_opaque(xdrs, sp, nodesize);
+		if ((xdrs->x_op == XDR_DECODE) && (ret == false)) {
+			if (allocated) {
+				free(sp);
+				*cpp = NULL;
+			}
+		}
+		return (ret);
 
 	case XDR_FREE:
 		if (sp != NULL) {
@@ -611,6 +621,7 @@ xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 	char *sp = *cpp;	/* sp is the actual string pointer */
 	u_int size = 0;
 	u_int nodesize;
+	bool ret, allocated = false;
 
 	/*
 	 * first deal with the length since xdr strings are counted-strings
@@ -647,13 +658,22 @@ xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 	switch (xdrs->x_op) {
 
 	case XDR_DECODE:
-		if (sp == NULL)
+		if (sp == NULL) {
 			*cpp = sp = mem_alloc(nodesize);
+			allocated = true;
+		}
 		sp[size] = 0;
 		/* FALLTHROUGH */
 
 	case XDR_ENCODE:
-		return (xdr_opaque(xdrs, sp, size));
+		ret = xdr_opaque(xdrs, sp, size);
+		if ((xdrs->x_op == XDR_DECODE) && (ret == false)) {
+			if (allocated) {
+				free(sp);
+				*cpp = NULL;
+			}
+		}
+		return (ret);
 
 	case XDR_FREE:
 		mem_free(sp, nodesize);
@@ -671,7 +691,7 @@ xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 bool
 xdr_wrapstring(XDR *xdrs, char **cpp)
 {
-	return xdr_string(xdrs, cpp, LASTUNSIGNED);
+	return xdr_string(xdrs, cpp, RPC_MAXDATASIZE);
 }
 
 /*

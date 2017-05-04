@@ -56,7 +56,7 @@
  */
 #define XDR_FALSE ((long) 0)
 #define XDR_TRUE ((long) 1)
-#define LASTUNSIGNED ((u_int) 0-1)
+#define RPC_MAXDATASIZE 9000
 
 /*
  * Free a data structure using XDR
@@ -583,6 +583,7 @@ inline_xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep,
 {
 	char *sp = *cpp;	/* sp is the actual string pointer */
 	u_int nodesize;
+	bool ret;
 
 	/*
 	 * first deal with the length since xdr bytes are counted
@@ -603,7 +604,12 @@ inline_xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep,
 			return (true);
 		if (sp == NULL)
 			*cpp = sp = (char *)mem_alloc(nodesize);
-		return (inline_xdr_getopaque(xdrs, sp, nodesize));
+		ret = inline_xdr_getopaque(xdrs, sp, nodesize);
+		if (! ret) {
+			free(sp);
+			*cpp = NULL;
+		}
+		return (ret);
 
 	case XDR_ENCODE:
 		return (inline_xdr_putopaque(xdrs, sp, nodesize));
@@ -681,6 +687,7 @@ inline_xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 	char *sp = *cpp;	/* sp is the actual string pointer */
 	u_int size = 0;		/* XXX remove warning */
 	u_int nodesize;
+	bool ret;
 
 	/*
 	 * first deal with the length since xdr strings are counted-strings
@@ -719,8 +726,13 @@ inline_xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 	case XDR_DECODE:
 		if (sp == NULL)
 			*cpp = sp = (char *)mem_alloc(nodesize);
-		sp[size] = 0;
-		return (inline_xdr_getopaque(xdrs, sp, size));
+		ret = inline_xdr_getopaque(xdrs, sp, size);
+		if (! ret) {
+			free(sp);
+			*cpp = NULL;
+		} else
+			sp[size] = 0;
+		return (ret);
 
 	case XDR_ENCODE:
 		return (inline_xdr_putopaque(xdrs, sp, size));
@@ -741,7 +753,7 @@ inline_xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 static inline bool
 inline_xdr_wrapstring(XDR *xdrs, char **cpp)
 {
-	return inline_xdr_string(xdrs, cpp, LASTUNSIGNED);
+	return inline_xdr_string(xdrs, cpp, RPC_MAXDATASIZE);
 }
 
 /*
