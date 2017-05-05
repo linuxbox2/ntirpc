@@ -322,13 +322,17 @@ svc_dg_recv(struct svc_req *req)
 
 	rlen = recvmsg(xprt->xp_fd, mesgp, 0);
 
-	if (sp->sa_family == (sa_family_t) 0xffff)
+	if (sp->sa_family == (sa_family_t) 0xffff) {
+		rpc_dplx_rui(rec);
 		return false;
+	}
 
 	if (rlen == -1 && errno == EINTR)
 		goto again;
-	if (rlen == -1 || (rlen < (ssize_t) (4 * sizeof(u_int32_t))))
+	if (rlen == -1 || (rlen < (ssize_t) (4 * sizeof(u_int32_t)))) {
+		rpc_dplx_rui(rec);
 		return (false);
+	}
 
 	xprt->xp_remote.nb.len = mesgp->msg_namelen;
 
@@ -342,8 +346,10 @@ svc_dg_recv(struct svc_req *req)
 
 	xdrs->x_op = XDR_DECODE;
 	XDR_SETPOS(xdrs, 0);
-	if (!xdr_callmsg(xdrs, &req->rq_msg))
+	if (!xdr_callmsg(xdrs, &req->rq_msg)) {
+		rpc_dplx_rui(rec);
 		return (false);
+	}
 
 	/* save remote address */
 	req->rq_raddr_len = xprt->xp_remote.nb.len;
@@ -356,6 +362,7 @@ svc_dg_recv(struct svc_req *req)
 #else
 	    calculate_crc32c(0, iov.iov_base, MIN(256, iov.iov_len));
 #endif
+	rpc_dplx_rui(rec);
 	return (true);
 }
 
