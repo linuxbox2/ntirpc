@@ -425,8 +425,9 @@ getnetconfigent(const char *netid)
 	if (ni.head != NULL) {
 		for (list = ni.head; list; list = list->next) {
 			if (strcmp(list->ncp->nc_netid, netid) == 0) {
+				ncp = dup_ncp(list->ncp);
 				mutex_unlock(&nc_mtx);
-				return (dup_ncp(list->ncp));
+				return ncp;
 			}
 		}
 		if (ni.eof == 1) {	/* that's all the entries */
