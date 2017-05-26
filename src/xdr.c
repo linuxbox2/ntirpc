@@ -534,7 +534,7 @@ xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 		ret = xdr_opaque(xdrs, sp, nodesize);
 		if ((xdrs->x_op == XDR_DECODE) && (ret == false)) {
 			if (allocated) {
-				free(sp);
+				mem_free(sp, nodesize);
 				*cpp = NULL;
 			}
 		}
@@ -669,7 +669,7 @@ xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 		ret = xdr_opaque(xdrs, sp, size);
 		if ((xdrs->x_op == XDR_DECODE) && (ret == false)) {
 			if (allocated) {
-				free(sp);
+				mem_free(sp, nodesize);
 				*cpp = NULL;
 			}
 		}

@@ -606,7 +606,7 @@ inline_xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep,
 			*cpp = sp = (char *)mem_alloc(nodesize);
 		ret = inline_xdr_getopaque(xdrs, sp, nodesize);
 		if (! ret) {
-			free(sp);
+			mem_free(sp, -1);
 			*cpp = NULL;
 		}
 		return (ret);
@@ -728,7 +728,7 @@ inline_xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 			*cpp = sp = (char *)mem_alloc(nodesize);
 		ret = inline_xdr_getopaque(xdrs, sp, size);
 		if (! ret) {
-			free(sp);
+			mem_free(sp, -1);
 			*cpp = NULL;
 		} else
 			sp[size] = 0;
