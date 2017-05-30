@@ -15,7 +15,7 @@ project(NTIRPC C)
 # version numbers
 set(NTIRPC_MAJOR_VERSION 1)
 set(NTIRPC_MINOR_VERSION 5)
-set(NTIRPC_PATCH_LEVEL 1)
+set(NTIRPC_PATCH_LEVEL 2)
 set(VERSION_COMMENT
   "Full-duplex and bi-directional ONC RPC on TCP."
 )
