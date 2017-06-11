@@ -28,6 +28,7 @@
 
 #include <misc/wait_queue.h>
 #include <rpc/svc.h>
+#include <rpc/xdr_ioq.h>
 
 typedef struct rpc_dplx_lock {
 	struct wait_entry we;
@@ -40,10 +41,13 @@ typedef struct rpc_dplx_lock {
 /* new unified state */
 struct rpc_dplx_rec {
 	struct rpc_svcxprt xprt;	/**< Transport Independent handle */
+	struct xdr_ioq ioq;
 
 	struct {
 		rpc_dplx_lock_t lock;
 	} recv;
+
+	uint32_t ev_count;		/**< atomic count of waiting events */
 };
 #define REC_XPRT(p) (opr_containerof((p), struct rpc_dplx_rec, xprt))
 
@@ -160,6 +164,19 @@ rpc_dplx_rsi(struct rpc_dplx_rec *rec)
 	rpc_dplx_lock_t *lk = &rec->recv.lock;
 
 	cond_signal(&lk->we.cv);
+}
+
+static inline void
+rpc_dplx_ioq_submit(struct rpc_dplx_rec *rec, struct work_pool_thread *wpt)
+{
+	if (wpt == rec->ioq.ioq_wpe.wpt && rec->ev_count > 1) {
+		/* Unlikely spawn prior to lengthy queueing or system call;
+		 * xprt should pass through this test one-at-a-time
+		 * preceded by prior locking/unlocking barrier.
+		 */
+		rec->ioq.ioq_wpe.wpt = NULL;
+		work_pool_submit(&svc_work_pool, &rec->ioq.ioq_wpe);
+	}
 }
 
 #endif				/* RPC_DPLX_INTERNAL_H */
