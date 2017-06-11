@@ -237,13 +237,9 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_reference;
     xdr_rmtcall_args;
     xdr_rmtcallres;
-    xdr_rpc_gss_buf;
     xdr_rpc_gss_cred;
-    xdr_rpc_gss_data;
     xdr_rpc_gss_init_args;
     xdr_rpc_gss_init_res;
-    xdr_rpc_gss_unwrap_data;
-    xdr_rpc_gss_wrap_data;
     xdr_rpcb;
     xdr_rpcb_entry;
     xdr_rpcb_entry_list_ptr;

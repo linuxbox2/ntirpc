@@ -259,8 +259,9 @@ universal(struct svc_req *req)
 			 * for the arguments; if not then the program
 			 * may bomb. BEWARE!
 			 */
-			if (!SVCAUTH_CHECKSUM(req->rq_auth, req, req->rq_xdrs,
-					      pl->p_inproc, xdrbuf)) {
+			req->rq_msg.rm_xdr.where = xdrbuf;
+			req->rq_msg.rm_xdr.proc = pl->p_inproc;
+			if (!SVCAUTH_CHECKSUM(req)) {
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"rpc: SVCAUTH_CHECKSUM failed prog %u vers %u",
 					(unsigned)prog, (unsigned)vers);

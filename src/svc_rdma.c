@@ -222,9 +222,7 @@ svc_rdma_reply(struct svc_req *req)
 	if (req->rq_msg.rm_reply.rp_stat == MSG_ACCEPTED
 	 && req->rq_msg.rm_reply.rp_acpt.ar_stat == SUCCESS
 	 && req->rq_auth
-	 && !SVCAUTH_WRAP(req->rq_auth, req, xdrs,
-			  req->rq_msg.RPCM_ack.ar_results.proc,
-			  req->rq_msg.RPCM_ack.ar_results.where)) {
+	 && !SVCAUTH_WRAP(req, xdrs)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: SVCAUTH_WRAP failed (will set dead)",
 			__func__);

@@ -160,7 +160,8 @@ struct rpc_msg {
 #define rm_call  ru.RM_cmb
 #define rm_reply ru.RM_rmb
 
-	int32_t *rm_ibuf;
+	/* New with TI-RPC */
+	struct xdrpair rm_xdr;
 	uint32_t rm_flags;
 
 	/* Moved in N TI-RPC; used by auth, logging, replies */

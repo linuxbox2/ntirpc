@@ -39,27 +39,31 @@
 #include <rpc/rpc.h>
 #include <rpc/svc_auth.h>
 
-/* aka, unwrap */
 static bool
-svcauth_none_wrap(SVCAUTH * __attribute__ ((unused)) auth,
-		  struct svc_req * __attribute__ ((unused)) req, XDR *xdrs,
-		  xdrproc_t xdr_func, caddr_t xdr_ptr)
+svcauth_none_wrap(struct svc_req *req, XDR *xdrs)
 {
-	return ((*xdr_func) (xdrs, xdr_ptr));
+	return ((*req->rq_msg.RPCM_ack.ar_results.proc)
+		(xdrs, req->rq_msg.RPCM_ack.ar_results.where));
 }
 
 static bool
-svcauth_none_checksum(SVCAUTH * __attribute__ ((unused)) auth,
-		      struct svc_req * __attribute__ ((unused)) req, XDR *xdrs,
-		      xdrproc_t xdr_func, caddr_t xdr_ptr)
+svcauth_none_unwrap(struct svc_req *req)
 {
-	SVC_CHECKSUM(req);
-	return ((*xdr_func) (xdrs, xdr_ptr));
+	return ((*req->rq_msg.rm_xdr.proc)
+		(req->rq_xdrs, req->rq_msg.rm_xdr.where));
 }
 
 static bool
-svcauth_none_release(SVCAUTH * __attribute__ ((unused)) auth,
-		     struct svc_req * __attribute__ ((unused)) req)
+svcauth_none_checksum(struct svc_req *req)
+{
+	XDR *xdrs = req->rq_xdrs;
+
+	SVC_CHECKSUM(req, xdrs->x_data, xdr_size_inline(xdrs));
+	return ((*req->rq_msg.rm_xdr.proc) (xdrs, req->rq_msg.rm_xdr.where));
+}
+
+static bool
+svcauth_none_release(struct svc_req * __attribute__ ((unused)) req)
 {
 	return (true);
 }
@@ -72,7 +76,7 @@ svcauth_none_destroy(SVCAUTH *auth)
 
 static struct svc_auth_ops svc_auth_none_ops = {
 	svcauth_none_wrap,
-	svcauth_none_wrap,
+	svcauth_none_unwrap,
 	svcauth_none_checksum,
 	svcauth_none_release,
 	svcauth_none_destroy

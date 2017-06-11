@@ -210,7 +210,7 @@ struct svc_xprt {
 		svc_req_fun_t xp_reply;
 
 		/* optional checksum (after authentication/decryption) */
-		svc_req_fun_t xp_checksum;
+		void (*xp_checksum) (struct svc_req *, void *, size_t);
 
 		/* actually destroy after xp_destroy_it and xp_release_it */
 		void (*xp_destroy) (SVCXPRT *, u_int, const char *, const int);
@@ -360,9 +360,9 @@ __END_DECLS
 #define SVC_REPLY(req) \
 	(*((req)->rq_xprt)->xp_ops->xp_reply)(req)
 
-#define SVC_CHECKSUM(req) \
+#define SVC_CHECKSUM(req, what, length) \
 	if (((req)->rq_xprt)->xp_ops->xp_checksum) \
-		(*((req)->rq_xprt)->xp_ops->xp_checksum)(req)
+		(*((req)->rq_xprt)->xp_ops->xp_checksum)(req, what, length)
 
 /* Protect a SVCXPRT with a SVC_REF for each call or request.
  */
