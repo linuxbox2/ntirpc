@@ -47,6 +47,7 @@
 
 #include <rpc/auth.h>
 #include <rpc/clnt.h>
+#include <rpc/xdr.h>
 #include <misc/queue.h>
 
 /*
@@ -178,6 +179,15 @@ struct rpc_msg {
 #define RPCM_rej ru.RM_rmb.ru.RP_dr
 
 __BEGIN_DECLS
+static inline void
+rpc_msg_init(struct rpc_msg *msg)
+{
+	/* required for REPLY decodes */
+	msg->RPCM_ack.ar_verf = _null_auth;
+	msg->RPCM_ack.ar_results.where = NULL;
+	msg->RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
+}
+
 /*
  * XDR routine to handle a rpc message.
  * xdr_ncallmsg(xdrs, cmsg)

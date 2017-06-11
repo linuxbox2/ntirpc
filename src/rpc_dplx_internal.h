@@ -26,6 +26,8 @@
 #ifndef RPC_DPLX_INTERNAL_H
 #define RPC_DPLX_INTERNAL_H
 
+#include <misc/queue.h>
+#include <misc/rbtree.h>
 #include <misc/wait_queue.h>
 #include <rpc/svc.h>
 #include <rpc/xdr_ioq.h>
@@ -42,11 +44,13 @@ typedef struct rpc_dplx_lock {
 struct rpc_dplx_rec {
 	struct rpc_svcxprt xprt;	/**< Transport Independent handle */
 	struct xdr_ioq ioq;
+	struct opr_rbtree call_replies;
 
 	struct {
 		rpc_dplx_lock_t lock;
 	} recv;
 
+	uint32_t call_xid;		/**< current call xid */
 	uint32_t ev_count;		/**< atomic count of waiting events */
 };
 #define REC_XPRT(p) (opr_containerof((p), struct rpc_dplx_rec, xprt))

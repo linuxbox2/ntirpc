@@ -204,8 +204,7 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	}
 	xd = VC_DR(rec);
 
-	opr_rbtree_init(&xd->cx.calls.t, call_xid_cmpf);
-/*	xd->cx.calls.xid = 0;	next call xid is 1 */
+	opr_rbtree_init(&rec->call_replies, call_xid_cmpf);
 
 	/*
 	 * Find the receive and the send size
@@ -387,8 +386,7 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 	}
 	xd = VC_DR(rec);
 
-	opr_rbtree_init(&xd->cx.calls.t, call_xid_cmpf);
-/*	xd->cx.calls.xid = 0;	next call xid is 1 */
+	opr_rbtree_init(&rec->call_replies, call_xid_cmpf);
 
 	/*
 	 * Find the receive and the send size
@@ -403,9 +401,8 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 	xd->sx.maxrec = __svc_maxrec;
 
 	/* duplex streams */
-	xdr_inrec_create(&(xd->shared.xdrs_in), xd->shared.recvsz, xd,
+	xdr_inrec_create(rec->ioq.xdrs, xd->shared.recvsz, xd,
 			 generic_read_vc);
-	xd->shared.xdrs_in.x_op = XDR_DECODE;
 
 	/* the SVCXPRT created in svc_vc_create accepts new connections
 	 * in its xp_recv op, the rendezvous_request method, but xprt is
@@ -590,7 +587,7 @@ svc_vc_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	svc_vc_dec_nconns();
 
 	/* destroy shared XDR record streams (once) */
-	XDR_DESTROY(&(VC_DR(REC_XPRT(xprt))->shared.xdrs_in));
+	XDR_DESTROY(REC_XPRT(xprt)->ioq.xdrs);
 
 	svc_vc_destroy_it(xprt, flags, tag, line);
 }
@@ -744,7 +741,7 @@ svc_vc_stat(SVCXPRT *xprt)
 	if (xp_flags & SVC_XPRT_FLAG_BLOCKED) {
 		if (xd->sx.strm_stat == XPRT_DIED)
 			result = XPRT_DIED;
-		else if (!xdr_inrec_eof(&(xd->shared.xdrs_in)))
+		else if (!xdr_inrec_eof(rec->ioq.xdrs))
 			result = XPRT_MOREREQS;
 		rpc_dplx_rui(rec);
 		rpc_dplx_rsi(rec);
@@ -761,8 +758,9 @@ svc_vc_recv(struct svc_req *req)
 	SVCXPRT *xprt = req->rq_xprt;
 	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
 	struct svc_vc_xprt *xd = VC_DR(rec);
-	XDR *xdrs = &(xd->shared.xdrs_in);	/* recv queue */
+	XDR *xdrs = rec->ioq.xdrs;	/* recv queue */
 	uint16_t xp_flags;
+	bool result = FALSE;
 
 	/* SVC_RECV() locks dplx_rec, that is also unlocked and locked again
 	 * for rpc_ctx.  Need to ensure we're the only one with the lock now.
@@ -788,33 +786,42 @@ svc_vc_recv(struct svc_req *req)
 	/* Consumes any remaining -fragment- bytes, and clears last_frag */
 	(void)xdr_inrec_skiprecord(xdrs);
 
-	rpc_msg_init(&req->rq_msg);
-
 	/* Advances to next record, will read up to 1024 bytes
 	 * into the stream. */
 	(void)xdr_inrec_readahead(xdrs, 1024);
 
-	if (xdr_dplx_decode(xdrs, &req->rq_msg)) {
-		switch (req->rq_msg.rm_direction) {
-		case CALL:
-			/* an ordinary call header */
-			return (TRUE);
-			break;
-		case REPLY:
-			/* reply header (xprt OK) */
-			rpc_ctx_xfer_replymsg(xd, &req->rq_msg);
-			break;
-		default:
-			/* not good (but xprt OK) */
-			break;
-		}
-		/* XXX skiprecord? */
+	/* No need, already positioned to beginning ...
+	xdrs->x_op = XDR_DECODE;
+	XDR_SETPOS(xdrs, 0);
+	 */
+	rpc_msg_init(&req->rq_msg);
+
+	if (!xdr_dplx_decode(xdrs, &req->rq_msg)) {
+		/* stream is unsynchronized beyond recovery */
+		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+			"%s: fd %d failed (will set xprt %p dead)",
+			__func__, xprt->xp_fd, xprt);
 		return (FALSE);
 	}
-	__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-		"%s: fd %d failed (will set xprt %p dead)",
-		__func__, xprt->xp_fd, xprt);
-	return (FALSE);
+
+	switch (req->rq_msg.rm_direction) {
+	case CALL:
+		/* an ordinary call header */
+		result = TRUE;
+		break;
+	case REPLY:
+		/* reply header (xprt OK) */
+		rpc_ctx_xfer_replymsg(xd, &req->rq_msg);
+		break;
+	default:
+		/* not good (but xprt OK) */
+		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+			"%s: fd %d failed %p direction %" PRIu32,
+			__func__, xprt->xp_fd, xprt,
+			req->rq_msg.rm_direction);
+		break;
+	}
+	return (result);
 }
 
 static bool
@@ -827,8 +834,7 @@ static bool
 svc_vc_getargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr,
 	       void *u_data)
 {
-	struct svc_vc_xprt *xd = VC_DR(REC_XPRT(req->rq_xprt));
-	XDR *xdrs = &xd->shared.xdrs_in;	/* recv queue */
+	XDR *xdrs = REC_XPRT(req->rq_xprt)->ioq.xdrs;	/* recv queue */
 	bool rslt;
 
 	/* threads u_data for advanced decoders */

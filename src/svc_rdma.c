@@ -159,19 +159,19 @@ svc_rdma_recv(struct svc_req *req)
 		"%s() xprt %p req %p cbc %p incoming xdr %p\n",
 		__func__, req->rq_xprt, req, cbc, xdrs);
 
-	rpc_msg_init(&req->rq_msg);
-
 	if (!xdr_rdma_svc_recv(cbc, 0)){
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RDMA,
 			"%s: xdr_rdma_svc_recv failed",
 			__func__);
 		return (FALSE);
 	}
-	xdrs->x_op = XDR_DECODE;
 
+	xdrs->x_op = XDR_DECODE;
 	/* No need, already positioned to beginning ...
 	XDR_SETPOS(xdrs, 0);
 	 */
+	rpc_msg_init(&req->rq_msg);
+
 	if (!xdr_dplx_decode(xdrs, &req->rq_msg)) {
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RDMA,
 			"%s: xdr_dplx_decode failed",

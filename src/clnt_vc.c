@@ -279,22 +279,16 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	 * 1. the client has a serialized call.  This looks harmless, so long
 	 * as the xid is adjusted.
 	 *
-	 * 2. the last xid used is now saved in handle shared private data, it
-	 * will be incremented by rpc_call_create (successive calls).  There's
-	 * no more reason to use the old time-dependent xid logic.  It should be
-	 * preferable to count atomically from 1.
+	 * 2. the last xid used is now saved in handle shared private
+	 * data.  There's no more reason to use the old time-dependent
+	 * xid logic.  It should be preferable to count atomically from 1.
 	 *
-	 * 3. the client has an XDR structure, which contains the initialied
-	 * xdrrec stream.  Since there is only one physical byte stream, it
-	 * would potentially be worse to do anything else?  The main issue which
-	 * will arise is the need to transition the stream between calls--which
-	 * may require adjustment to xdrrec code.  But on review it seems to
-	 * follow that one xdrrec stream would be parameterized by different
-	 * call contexts.  We'll keep the call parameters, control transfer
-	 * machinery, etc, in an rpc_ctx_t, to permit this.
+	 * 3. the server has the XDR structure.  There is only one
+	 * physical byte stream.  The main issue that will arise is the
+	 * need to transition the stream between calls.  We'll keep the
+	 * call parameters, control transfer machinery, etc, in rpc_ctx_t.
 	 */
-	ctx = rpc_ctx_alloc(clnt, proc, xdr_args, args_ptr, xdr_results,
-			    results_ptr, timeout);	/*add total timeout? */
+	ctx = rpc_ctx_alloc(clnt, timeout);
 	if (!ctx)
 		return (RPC_TLIERROR);
 
@@ -356,7 +350,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	/* if the channel is bi-directional, then the the shared conn is in a
 	 * svc event loop, and recv processing decodes reply headers */
 
-	xdrs = &(xd->shared.xdrs_in);
+	xdrs = rec->ioq.xdrs;
 	if (xdrs->x_lib[1] != NULL) {
 		code = rpc_ctx_wait_reply(ctx);
 		if (code == ETIMEDOUT) {
@@ -371,6 +365,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 		}
 	} else {
 		xdrs->x_lib[0] = (void *)ctx; /* transiently thread ctx */
+		xdrs->x_op = XDR_DECODE;
 		/*
 		 * Keep receiving until we get a valid transaction id.
 		 */
@@ -448,6 +443,9 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	result = ctx->error.re_status;
 	rpc_ctx_release(ctx);
 	rpc_dplx_rui(rec);
+	__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+		"%s: fd %d result=%d",
+		__func__, xprt->xp_fd, result);
 	return (result);
 }
 
@@ -455,8 +453,7 @@ static void
 clnt_vc_geterr(CLIENT *clnt, struct rpc_err *errp)
 {
 	struct cx_data *cx = CX_DATA(clnt);
-	struct svc_vc_xprt *xd = VC_DR(cx->cx_rec);
-	XDR *xdrs = &xd->shared.xdrs_in;
+	XDR *xdrs = cx->cx_rec->ioq.xdrs;
 
 	if (xdrs->x_lib[0]) {
 		rpc_ctx_t *ctx = (rpc_ctx_t *) xdrs->x_lib[0];

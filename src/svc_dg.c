@@ -200,7 +200,7 @@ svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	su->su_iosz = ((MAX(sendsize, recvsize) + 3) / 4) * 4;
 	rpc_buffer(xprt) = mem_alloc(su->su_iosz);
 
-	xdrmem_create(&(su->su_xdrs), rpc_buffer(xprt), su->su_iosz,
+	xdrmem_create(su->su_dr.ioq.xdrs,  rpc_buffer(xprt), su->su_iosz,
 		      XDR_DECODE);
 
 	svc_dg_ops(xprt);
@@ -286,14 +286,12 @@ svc_dg_recv(struct svc_req *req)
 	SVCXPRT *xprt = req->rq_xprt;
 	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
 	struct svc_dg_xprt *su = DG_DR(rec);
-	XDR *xdrs = &(su->su_xdrs);
+	XDR *xdrs = rec->ioq.xdrs;
 	struct sockaddr *sp = (struct sockaddr *)&xprt->xp_remote.ss;
 	struct msghdr *mesgp;
 	struct iovec iov;
 	ssize_t rlen;
 	uint16_t xp_flags;
-
-	rpc_msg_init(&req->rq_msg);
 
 	__rpc_address_setup(&xprt->xp_remote);
 
@@ -342,6 +340,8 @@ svc_dg_recv(struct svc_req *req)
 
 	xdrs->x_op = XDR_DECODE;
 	XDR_SETPOS(xdrs, 0);
+	rpc_msg_init(&req->rq_msg);
+
 	if (!xdr_callmsg(xdrs, &req->rq_msg))
 		return (false);
 
@@ -365,7 +365,7 @@ svc_dg_reply(struct svc_req *req)
 	SVCXPRT *xprt = req->rq_xprt;
 	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
 	struct svc_dg_xprt *su = DG_DR(rec);
-	XDR *xdrs = &(su->su_xdrs);
+	XDR *xdrs = rec->ioq.xdrs;
 	bool stat = false;
 	size_t slen;
 
@@ -433,8 +433,7 @@ static bool
 svc_dg_getargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr,
 	       void *u_data)
 {
-	struct svc_dg_xprt *su = su_data(req->rq_xprt);
-	XDR *xdrs = &(su->su_xdrs);
+	XDR *xdrs = REC_XPRT(req->rq_xprt)->ioq.xdrs;
 	bool rslt;
 
 	/* threads u_data for advanced decoders */
@@ -464,7 +463,7 @@ svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	if ((xprt->xp_flags & SVC_XPRT_FLAG_CLOSE) && xprt->xp_fd != -1)
 		(void)close(xprt->xp_fd);
 
-	XDR_DESTROY(&(su->su_xdrs));
+	XDR_DESTROY(REC_XPRT(xprt)->ioq.xdrs);
 	mem_free(rpc_buffer(xprt), su->su_iosz);
 
 	if (xprt->xp_tp)
