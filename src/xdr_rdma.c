@@ -49,6 +49,7 @@
 #include <rpc/rpc.h>
 #include "un-namespace.h"
 
+#include "svc_internal.h"
 #include "rpc_rdma.h"
 
 /* NOTA BENE: as in xdr_ioq.c, although indications of failure are returned,
@@ -335,7 +336,7 @@ xdr_rdma_warn_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 static int
 xdr_rdma_wrap_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 {
-	return (int)xprt->xa->request_cb(cbc, &xprt->xprt);
+	return (int)xprt->xa->request_cb(cbc, &xprt->sm_dr.xprt);
 }
 
 /***********************************/
@@ -900,7 +901,8 @@ xdr_rdma_callq(RDMAXPRT *xprt)
 	/* input positions */
 	IOQ_(have)->v.vio_head = IOQ_(have)->v.vio_base;
 	IOQ_(have)->v.vio_tail = IOQ_(have)->v.vio_wrap;
-	IOQ_(have)->v.vio_wrap = (char *)IOQ_(have)->v.vio_base + xprt->recvsize;
+	IOQ_(have)->v.vio_wrap = (char *)IOQ_(have)->v.vio_base
+			       + xprt->sm_dr.recvsz;
 
 	cbc->workq.xdrs[0].x_lib[1] =
 	cbc->holdq.xdrs[0].x_lib[1] = xprt;
@@ -956,11 +958,9 @@ xdr_rdma_destroy(XDR *xdrs)
  * credits is the number of buffers used
  */
 int
-xdr_rdma_create(XDR *xdrs, RDMAXPRT *xprt, const u_int sendsize,
-		const u_int recvsize, const u_int flags)
+xdr_rdma_create(XDR *xdrs, RDMAXPRT *xprt)
 {
 	uint8_t *b;
-	long ps = sysconf(_SC_PAGESIZE);
 
 	if (!xprt->pd || !xprt->pd->pd) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -970,22 +970,17 @@ xdr_rdma_create(XDR *xdrs, RDMAXPRT *xprt, const u_int sendsize,
 		return ENODEV;
 	}
 
-	/* buffer sizes MUST be page sized */
-	xprt->sendsize = sendsize & ~(ps - 1);
-	xprt->sendsize = xprt->sendsize >= ps ? xprt->sendsize : ps;
-	xprt->recvsize = recvsize & ~(ps - 1);
-	xprt->recvsize = xprt->recvsize >= ps ? xprt->recvsize : ps;
-
 	/* pre-allocated buffer_total:
 	 * the number of credits is irrelevant here.
 	 * instead, allocate buffers to match the read/write contexts.
 	 * more than one buffer can be chained to one ioq_uv head,
 	 * but never need more ioq_uv heads than buffers.
 	 */
-	xprt->buffer_total = recvsize * xprt->xa->rq_depth
-			   + sendsize * xprt->xa->sq_depth;
+	xprt->buffer_total = xprt->sm_dr.recvsz * xprt->xa->rq_depth
+			   + xprt->sm_dr.sendsz * xprt->xa->sq_depth;
 
-	xprt->buffer_aligned = mem_aligned(ps, xprt->buffer_total);
+	xprt->buffer_aligned =
+		mem_aligned(xprt->sm_dr.pagesz, xprt->buffer_total);
 
 	__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
 		"%s() buffer_aligned at %p",
@@ -999,12 +994,12 @@ xdr_rdma_create(XDR *xdrs, RDMAXPRT *xprt, const u_int sendsize,
 				IBV_ACCESS_REMOTE_READ);
 
 	poolq_head_setup(&xprt->inbufs.uvqh);
-	xprt->inbufs.min_bsize = ps;
-	xprt->inbufs.max_bsize = xprt->recvsize;
+	xprt->inbufs.min_bsize = xprt->sm_dr.pagesz;
+	xprt->inbufs.max_bsize = xprt->sm_dr.recvsz;
 
 	poolq_head_setup(&xprt->outbufs.uvqh);
-	xprt->outbufs.min_bsize = ps;
-	xprt->outbufs.max_bsize = xprt->sendsize;
+	xprt->outbufs.min_bsize = xprt->sm_dr.pagesz;
+	xprt->outbufs.max_bsize = xprt->sm_dr.sendsz;
 
 	/* Each pre-allocated buffer has a corresponding xdr_ioq_uv,
 	 * stored on the pool queues.
@@ -1019,12 +1014,12 @@ xdr_rdma_create(XDR *xdrs, RDMAXPRT *xprt, const u_int sendsize,
 		data->v.vio_base =
 		data->v.vio_head =
 		data->v.vio_tail = b;
-		data->v.vio_wrap = (char *)b + xprt->recvsize;
+		data->v.vio_wrap = (char *)b + xprt->sm_dr.recvsz;
 		data->u.uio_p1 = &xprt->inbufs.uvqh;
 		data->u.uio_p2 = xprt->mr;
 		TAILQ_INSERT_TAIL(&xprt->inbufs.uvqh.qh, &data->uvq, q);
 
-		b += xprt->recvsize;
+		b += xprt->sm_dr.recvsz;
 	}
 
 	for (xprt->outbufs.uvqh.qcount = 0;
@@ -1035,12 +1030,12 @@ xdr_rdma_create(XDR *xdrs, RDMAXPRT *xprt, const u_int sendsize,
 		data->v.vio_base =
 		data->v.vio_head =
 		data->v.vio_tail = b;
-		data->v.vio_wrap = (char *)b + xprt->sendsize;
+		data->v.vio_wrap = (char *)b + xprt->sm_dr.sendsz;
 		data->u.uio_p1 = &xprt->outbufs.uvqh;
 		data->u.uio_p2 = xprt->mr;
 		TAILQ_INSERT_TAIL(&xprt->outbufs.uvqh.qh, &data->uvq, q);
 
-		b += xprt->sendsize;
+		b += xprt->sm_dr.sendsz;
 	}
 
 	xdr_ioq_setup(&xprt->waitq);
@@ -1234,7 +1229,8 @@ xdr_rdma_svc_recv(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 	    && rl(cbc->read_chunk)->position == 0) {
 		l = ntohl(rl(cbc->read_chunk)->target.length);
 		k = xdr_rdma_chunk_fetch(&cbc->workq, &xprt->inbufs.uvqh,
-					 "call chunk", l, xprt->recvsize,
+					 "call chunk", l,
+					 xprt->sm_dr.recvsz,
 					 xprt->xa->max_recv_sge,
 					 xdr_rdma_chunk_in);
 
@@ -1321,7 +1317,8 @@ xdr_rdma_svc_reply(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 		for (i = 0; i < n; i++) {
 			l = ntohl(reply_array->entry[i].target.length);
 			xdr_rdma_chunk_fetch(&cbc->holdq, &xprt->outbufs.uvqh,
-					     "sreply chunk", l, xprt->sendsize,
+					     "sreply chunk", l,
+					     xprt->sm_dr.sendsz,
 					     xprt->xa->max_send_sge,
 					     xdr_rdma_chunk_out);
 		}
@@ -1495,7 +1492,7 @@ xdr_rdma_svc_flushout(struct rpc_rdma_cbc *cbc)
 	/* entry was already added directly to the queue */
 	head_uv->v.vio_head = head_uv->v.vio_base;
 	/* tail adjusted below */
-	head_uv->v.vio_wrap = (char *)head_uv->v.vio_base + xprt->sendsize;
+	head_uv->v.vio_wrap = (char *)head_uv->v.vio_base + xprt->sm_dr.sendsz;
 
 	/* build the header that goes with the data */
 	rmsg = m_(head_uv->v.vio_head);
@@ -1535,20 +1532,21 @@ xdr_rdma_svc_flushout(struct rpc_rdma_cbc *cbc)
 			struct xdr_rdma_segment *w_seg =
 				&w_array->entry[i++].target;
 			uint32_t length = ntohl(c_seg->length);
-			uint32_t k = length / xprt->sendsize;
-			uint32_t m = length % xprt->sendsize;
-		
+			uint32_t k = length / xprt->sm_dr.sendsz;
+			uint32_t m = length % xprt->sm_dr.sendsz;
+
 			if (m) {
 				/* need fractional buffer */
 				k++;
 			}
-		
+
 			/* ensure never asking for more buffers than allowed */
 			if (k > xprt->xa->max_send_sge) {
 				__warnx(TIRPC_DEBUG_FLAG_XDR,
 					"%s() requested chunk %" PRIu32
 					" is too long (%" PRIu32 ">%" PRIu32 ")",
-					__func__, length, k, xprt->xa->max_send_sge);
+					__func__, length, k,
+					xprt->xa->max_send_sge);
 				k = xprt->xa->max_send_sge;
 			}
 

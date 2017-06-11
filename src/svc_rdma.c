@@ -88,10 +88,10 @@ svc_rdma_ncreate(void *arg, const u_int sendsize, const u_int recvsize,
 	struct svc_rdma_xdr *sm;
 	struct sockaddr_storage *ss;
 	RDMAXPRT *l_xprt = arg;
-	RDMAXPRT *xprt = rpc_rdma_accept_wait(l_xprt,
+	RDMAXPRT *r_xprt = rpc_rdma_accept_wait(l_xprt,
 						__svc_params->idle_timeout);
 
-	if (!xprt) {
+	if (!r_xprt) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR (return)",
 			__func__, __LINE__);
@@ -100,37 +100,39 @@ svc_rdma_ncreate(void *arg, const u_int sendsize, const u_int recvsize,
 
 	sm = mem_zalloc(sizeof (*sm));
 
-	sm->sm_xdrs.x_lib[1] = xprt;
-	xprt->xprt.xp_p2 = sm;
+	sm->sm_xdrs.x_lib[1] = r_xprt;
+	r_xprt->sm_dr.xprt.xp_p2 = sm;
 
-	xprt->xprt.xp_flags = flags;
+	r_xprt->sm_dr.xprt.xp_flags = flags;
 	/* fixme: put something here, but make it not work on fd operations. */
-	xprt->xprt.xp_fd = -1;
+	r_xprt->sm_dr.xprt.xp_fd = -1;
 
-	ss = (struct sockaddr_storage *)rdma_get_local_addr(xprt->cm_id);
-	__rpc_address_setup(&xprt->xprt.xp_local);
-	memcpy(&xprt->xprt.xp_local.nb.buf, ss, xprt->xprt.xp_local.nb.len);
+	ss = (struct sockaddr_storage *)rdma_get_local_addr(r_xprt->cm_id);
+	__rpc_address_setup(&r_xprt->sm_dr.xprt.xp_local);
+	memcpy(&r_xprt->sm_dr.xprt.xp_local.nb.buf, ss,
+		r_xprt->sm_dr.xprt.xp_local.nb.len);
 
-	ss = (struct sockaddr_storage *)rdma_get_peer_addr(xprt->cm_id);
-	__rpc_address_setup(&xprt->xprt.xp_remote);
-	memcpy(&xprt->xprt.xp_remote.nb.buf, ss, xprt->xprt.xp_remote.nb.len);
+	ss = (struct sockaddr_storage *)rdma_get_peer_addr(r_xprt->cm_id);
+	__rpc_address_setup(&r_xprt->sm_dr.xprt.xp_remote);
+	memcpy(&r_xprt->sm_dr.xprt.xp_remote.nb.buf, ss,
+		r_xprt->sm_dr.xprt.xp_remote.nb.len);
 
-	svc_rdma_ops(&xprt->xprt);
+	svc_rdma_ops(&r_xprt->sm_dr.xprt);
 
-	if (xdr_rdma_create(&sm->sm_xdrs, xprt, sendsize, recvsize, flags)) {
+	if (xdr_rdma_create(&sm->sm_xdrs, r_xprt)) {
 		goto freedata;
 	}
 
-	if (rpc_rdma_accept_finalize(xprt)) {
+	if (rpc_rdma_accept_finalize(r_xprt)) {
 		goto freedata;
 	}
 
-	return (&xprt->xprt);
+	return (&r_xprt->sm_dr.xprt);
 
 freedata:
 	mem_free(sm, sizeof (*sm));
-	xprt->xprt.xp_p2 = NULL;
-	svc_rqst_xprt_unregister(&xprt->xprt);
+	r_xprt->sm_dr.xprt.xp_p2 = NULL;
+	svc_rqst_xprt_unregister(&r_xprt->sm_dr.xprt);
 	return (NULL);
 }
 

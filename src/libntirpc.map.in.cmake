@@ -129,7 +129,7 @@ NTIRPC_${NTIRPC_VERSION} {
     rpc_control;
     rpc_createerr;
     rpc_nullproc;
-    rpc_rdma_create;
+    rpc_rdma_ncreatef;
     rpc_reg;
     rpcb_find_mapped_addr;
     rpcb_getaddr;

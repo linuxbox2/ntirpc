@@ -121,7 +121,7 @@ clnt_rdma_create(RDMAXPRT *xprt,		/* init but NOT connect()ed descriptor */
 
 	rpc_rdma_connect(xprt);
 
-	xdr_rdma_create(&cm->cm_xdrs, xprt, sendsz, recvsz, flags);
+	xdr_rdma_create(&cm->cm_xdrs, xprt);
 
 	rpc_rdma_connect_finalize(xprt);
 
