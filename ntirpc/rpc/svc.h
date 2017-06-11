@@ -541,13 +541,6 @@ __END_DECLS
 __BEGIN_DECLS
 extern void rpctest_service(void);
 __END_DECLS
-__BEGIN_DECLS
-extern void svc_getreq(int);
-extern void svc_getreqset(fd_set *);
-extern void svc_getreq_common(int);
-struct pollfd;
-extern void svc_getreq_poll(struct pollfd *, int);
-__END_DECLS
 /*
  * Socket to use on svcxxx_ncreate call to get default socket
  */
@@ -731,16 +724,6 @@ svc_rdma_ncreate(const struct rpc_rdma_attr *xa, const u_int sendsize,
 {
 	return rpc_rdma_ncreatef(xa, sendsize, recvsize, SVC_CREATE_FLAG_CLOSE);
 }
-
-/*
- * Getreq plug-out prototype
- */
-extern bool svc_getreq_default(SVCXPRT *);
-
-/*
- * Dispatch plug-out prototype
- */
-extern void svc_dispatch_default(SVCXPRT *, struct rpc_msg **);
 
 /*
  * Convenience functions for implementing these
