@@ -523,17 +523,17 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 
 		*no_dispatch = true;
 
-		call_stat =
-		    svc_sendreply(req,
-				  (xdrproc_t) xdr_rpc_gss_init_res,
-				  (caddr_t) &gr);
+		req->rq_msg.RPCM_ack.ar_results.where = (caddr_t) &gr;
+		req->rq_msg.RPCM_ack.ar_results.proc =
+					(xdrproc_t) xdr_rpc_gss_init_res;
+		call_stat = svc_sendreply(req);
 
 		/* XXX */
 		gss_release_buffer(&min_stat, &gr.gr_token);
 		gss_release_buffer(&min_stat, &gd->checksum);
 		mem_free(gr.gr_ctx.value, 0);
 
-		if (!call_stat)
+		if (call_stat >= XPRT_DIED)
 			svcauth_gss_return(AUTH_FAILED);
 
 		if (gr.gr_major == GSS_S_COMPLETE) {
@@ -609,10 +609,13 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 		mutex_unlock(&gd->lock);
 		gd_locked = false;
 
-		call_stat =
-		    svc_sendreply(req,
-				  (xdrproc_t) xdr_void,
-				  (caddr_t) NULL);
+		req->rq_msg.RPCM_ack.ar_results.where = NULL;
+		req->rq_msg.RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
+		if (svc_sendreply(req) >= XPRT_DIED) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() svc_sendreply failed",
+				__func__);
+		}
 
 		/* We acquired a reference on gd with authgss_ctx_hash_get
 		 * call.  Time to release the reference as we don't need

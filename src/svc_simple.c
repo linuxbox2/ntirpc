@@ -236,8 +236,9 @@ universal(struct svc_req *req)
 	 * enforce "procnum 0 is echo" convention
 	 */
 	if (req->rq_msg.cb_proc == NULLPROC) {
-		if (svc_sendreply(req, (xdrproc_t) xdr_void, NULL) ==
-		    false) {
+		req->rq_msg.RPCM_ack.ar_results.where = NULL;
+		req->rq_msg.RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
+		if (svc_sendreply(req) >= XPRT_DIED) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR, "svc_sendreply failed");
 		}
 		return;
@@ -279,7 +280,10 @@ universal(struct svc_req *req)
 				mutex_unlock(&proglst_lock);
 				return;
 			}
-			if (!svc_sendreply(req, pl->p_outproc, outdata)) {
+
+			req->rq_msg.RPCM_ack.ar_results.where = outdata;
+			req->rq_msg.RPCM_ack.ar_results.proc = pl->p_outproc;
+			if (svc_sendreply(req) >= XPRT_DIED) {
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"rpc: svc_sendreply failed prog %u vers %u",
 					(unsigned)prog, (unsigned)vers);

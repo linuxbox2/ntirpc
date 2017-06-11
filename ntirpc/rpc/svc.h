@@ -523,14 +523,14 @@ __END_DECLS
  * deadlock the caller and server processes!
  */
 __BEGIN_DECLS
-extern bool svc_sendreply(struct svc_req *, xdrproc_t, void *);
-extern void svcerr_decode(struct svc_req *);
-extern void svcerr_weakauth(struct svc_req *);
-extern void svcerr_noproc(struct svc_req *);
-extern void svcerr_progvers(struct svc_req *, rpcvers_t, rpcvers_t);
-extern void svcerr_auth(struct svc_req *, enum auth_stat);
-extern void svcerr_noprog(struct svc_req *);
-extern void svcerr_systemerr(struct svc_req *);
+extern enum xprt_stat svc_sendreply(struct svc_req *);
+extern enum xprt_stat svcerr_decode(struct svc_req *);
+extern enum xprt_stat svcerr_weakauth(struct svc_req *);
+extern enum xprt_stat svcerr_noproc(struct svc_req *);
+extern enum xprt_stat svcerr_progvers(struct svc_req *, rpcvers_t, rpcvers_t);
+extern enum xprt_stat svcerr_auth(struct svc_req *, enum auth_stat);
+extern enum xprt_stat svcerr_noprog(struct svc_req *);
+extern enum xprt_stat svcerr_systemerr(struct svc_req *);
 extern int rpc_reg(rpcprog_t, rpcvers_t, rpcproc_t, char *(*)(char *),
 		   xdrproc_t, xdrproc_t, char *);
 __END_DECLS
