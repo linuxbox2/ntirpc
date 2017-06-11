@@ -193,7 +193,9 @@ work_pool_thread(void *arg)
 			__warnx(TIRPC_DEBUG_FLAG_EVENT,
 				"%s() %s task %p",
 				__func__, pool->name, wpt->work);
+			wpt->work->wpt = wpt;
 			wpt->work->fun(wpt->work);
+			wpt->work->wpt = NULL;
 			wpt->work = NULL;
 		}
 
@@ -258,7 +260,7 @@ work_pool_spawn(struct work_pool *pool)
 
 	wpt->pool = pool;
 
-	rc = pthread_create(&wpt->id, &pool->attr, work_pool_thread, wpt);
+	rc = pthread_create(&wpt->pt, &pool->attr, work_pool_thread, wpt);
 	if (rc) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s() pthread_create failed (%d)\n",
