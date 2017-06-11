@@ -32,6 +32,12 @@
 #include <rpc/svc.h>
 #include <rpc/xdr_ioq.h>
 
+/* Svc event strategy */
+enum svc_event_type {
+	SVC_EVENT_FDSET /* trad. using select and poll (currently unhooked) */ ,
+	SVC_EVENT_EPOLL		/* Linux epoll interface */
+};
+
 typedef struct rpc_dplx_lock {
 	struct wait_entry we;
 	struct {
@@ -42,13 +48,28 @@ typedef struct rpc_dplx_lock {
 
 /* new unified state */
 struct rpc_dplx_rec {
-	struct rpc_svcxprt xprt;	/**< Transport Independent handle */
+	struct svc_xprt xprt;		/**< Transport Independent handle */
 	struct xdr_ioq ioq;
 	struct opr_rbtree call_replies;
-
+	struct opr_rbtree_node fd_node;
 	struct {
 		rpc_dplx_lock_t lock;
 	} recv;
+
+	/*
+	 * union of event processor types
+	 */
+	union {
+#if defined(TIRPC_EPOLL)
+		struct {
+			struct epoll_event event;
+		} epoll;
+#endif
+	} ev_u;
+
+	/* event vector list */
+	TAILQ_ENTRY(rpc_dplx_rec) ev_q;
+	void *ev_p;			/* struct svc_rqst_rec (internal) */
 
 	size_t maxrec;
 	long pagesz;
@@ -89,6 +110,7 @@ static inline void
 rpc_dplx_rec_init(struct rpc_dplx_rec *rec)
 {
 	rpc_dplx_lock_init(&rec->recv.lock);
+/*	TAILQ_INIT_ENTRY(rec, ev_q); sets NULL */
 }
 
 static inline void

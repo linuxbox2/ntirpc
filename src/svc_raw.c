@@ -105,31 +105,39 @@ svc_raw_stat(SVCXPRT *xprt)
 }
 
  /*ARGSUSED*/
-static bool
-svc_raw_recv(struct svc_req *req)
+static enum xprt_stat
+svc_raw_recv(SVCXPRT *xprt)
 {
 	struct svc_raw_private *srp;
-	XDR *xdrs;
 
 	mutex_lock(&svcraw_lock);
 	srp = svc_raw_private;
 	if (srp == NULL) {
 		mutex_unlock(&svcraw_lock);
-		return (false);
+		return (XPRT_DIED);
 	}
 	mutex_unlock(&svcraw_lock);
 
-	xdrs = &srp->xdr_stream;
+	return (__svc_params->request_cb(xprt, &srp->xdr_stream));
+}
+
+static enum xprt_stat
+svc_raw_decode(struct svc_req *req)
+{
+	XDR *xdrs = req->rq_xdrs;
+
 	xdrs->x_op = XDR_DECODE;
 	(void)XDR_SETPOS(xdrs, 0);
-	if (!xdr_callmsg(xdrs, &req->rq_msg))
-		return (false);
+	rpc_msg_init(&req->rq_msg);
 
-	return (true);
+	if (!xdr_callmsg(xdrs, &req->rq_msg))
+		return (XPRT_DIED);
+
+	return (req->rq_xprt->xp_dispatch.process_cb(req));
 }
 
  /*ARGSUSED*/
-static bool
+static enum xprt_stat
 svc_raw_reply(struct svc_req *req)
 {
 	struct svc_raw_private *srp;
@@ -139,7 +147,7 @@ svc_raw_reply(struct svc_req *req)
 	srp = svc_raw_private;
 	if (srp == NULL) {
 		mutex_unlock(&svcraw_lock);
-		return (false);
+		return (XPRT_DIED);
 	}
 	mutex_unlock(&svcraw_lock);
 
@@ -147,48 +155,10 @@ svc_raw_reply(struct svc_req *req)
 	xdrs->x_op = XDR_ENCODE;
 	(void)XDR_SETPOS(xdrs, 0);
 	if (!xdr_replymsg(xdrs, &req->rq_msg))
-		return (false);
+		return (XPRT_DIED);
 	(void)XDR_GETPOS(xdrs);	/* called just for overhead */
 
-	return (true);
-}
-
- /*ARGSUSED*/
-static bool
-svc_raw_freeargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr)
-{
-	struct svc_raw_private *srp;
-	XDR *xdrs;
-
-	mutex_lock(&svcraw_lock);
-	srp = svc_raw_private;
-	if (srp == NULL) {
-		mutex_unlock(&svcraw_lock);
-		return (false);
-	}
-	mutex_unlock(&svcraw_lock);
-
-	xdrs = &srp->xdr_stream;
-	xdrs->x_op = XDR_FREE;
-
-	return (*xdr_args) (xdrs, args_ptr);
-}
-
- /*ARGSUSED*/
-static bool
-svc_raw_getargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr,
-		void *u_data)
-{
-	struct svc_raw_private *srp;
-
-	mutex_lock(&svcraw_lock);
-	srp = svc_raw_private;
-	if (srp == NULL) {
-		mutex_unlock(&svcraw_lock);
-		return (false);
-	}
-	mutex_unlock(&svcraw_lock);
-	return (*xdr_args) (&srp->xdr_stream, args_ptr);
+	return (XPRT_IDLE);
 }
 
  /*ARGSUSED*/
@@ -216,14 +186,11 @@ svc_raw_ops(SVCXPRT *xprt)
 	if (ops.xp_recv == NULL) {
 		ops.xp_recv = svc_raw_recv;
 		ops.xp_stat = svc_raw_stat;
-		ops.xp_getargs = svc_raw_getargs;
+		ops.xp_decode = svc_raw_decode;
 		ops.xp_reply = svc_raw_reply;
-		ops.xp_freeargs = svc_raw_freeargs;
+		ops.xp_checksum = NULL;		/* optional */
 		ops.xp_destroy = svc_raw_destroy;
 		ops.xp_control = svc_raw_control;
-		ops.xp_getreq = svc_getreq_default;
-		ops.xp_dispatch = svc_dispatch_default;
-		ops.xp_recv_user_data = NULL;	/* no default */
 		ops.xp_free_user_data = NULL;	/* no default */
 	}
 	xprt->xp_ops = &ops;

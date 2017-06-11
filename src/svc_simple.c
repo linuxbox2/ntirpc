@@ -48,6 +48,7 @@
 #include <sys/types.h>
 #include <rpc/rpc.h>
 #include <rpc/nettype.h>
+#include <rpc/svc_auth.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -98,7 +99,7 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 	extern mutex_t proglst_lock;
 
 	if (procnum == NULLPROC) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC,
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s can't reassign procedure number %u", rpc_reg_msg,
 			NULLPROC);
 		return (-1);
@@ -108,7 +109,7 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 		nettype = "netpath";	/* The default behavior */
 	handle = __rpc_setconf(nettype);
 	if (!handle) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC, rpc_reg_err, rpc_reg_msg,
+		__warnx(TIRPC_DEBUG_FLAG_ERROR, rpc_reg_err, rpc_reg_msg,
 			__reg_err1);
 		return (-1);
 	}
@@ -143,14 +144,14 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 			if (svcxprt == NULL)
 				continue;
 			if (!__rpc_fd2sockinfo(svcxprt->xp_fd, &si)) {
-				__warnx(TIRPC_DEBUG_FLAG_SVC, rpc_reg_err,
+				__warnx(TIRPC_DEBUG_FLAG_ERROR, rpc_reg_err,
 					rpc_reg_msg, __reg_err2);
 				SVC_DESTROY(svcxprt);
 				continue;
 			}
 			recvsz = __rpc_get_t_size(si.si_af, si.si_proto, 0);
 			if (recvsz == 0) {
-				__warnx(TIRPC_DEBUG_FLAG_SVC, rpc_reg_err,
+				__warnx(TIRPC_DEBUG_FLAG_ERROR, rpc_reg_err,
 					rpc_reg_msg, __reg_err3);
 				SVC_DESTROY(svcxprt);
 				continue;
@@ -176,7 +177,7 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 		}
 
 		if (!svc_reg(svcxprt, prognum, versnum, universal, nconf)) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC,
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s couldn't register prog %u vers %u for %s",
 				rpc_reg_msg, (unsigned)prognum,
 				(unsigned)versnum, netid);
@@ -207,7 +208,7 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 	mutex_unlock(&proglst_lock);
 
 	if (done == false) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC,
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s cant find suitable transport for %s", rpc_reg_msg,
 			nettype);
 		return (-1);
@@ -237,7 +238,7 @@ universal(struct svc_req *req)
 	if (req->rq_msg.cb_proc == NULLPROC) {
 		if (svc_sendreply(req, (xdrproc_t) xdr_void, NULL) ==
 		    false) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC, "svc_sendreply failed");
+			__warnx(TIRPC_DEBUG_FLAG_ERROR, "svc_sendreply failed");
 		}
 		return;
 	}
@@ -258,35 +259,38 @@ universal(struct svc_req *req)
 			 * for the arguments; if not then the program
 			 * may bomb. BEWARE!
 			 */
-			if (!svc_getargs
-			    (req, pl->p_inproc, xdrbuf, NULL)) {
+			if (!SVCAUTH_CHECKSUM(req->rq_auth, req, req->rq_xdrs,
+					      pl->p_inproc, xdrbuf)) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"rpc: SVCAUTH_CHECKSUM failed prog %u vers %u",
+					(unsigned)prog, (unsigned)vers);
+				xdr_free(pl->p_inproc, xdrbuf);
 				svcerr_decode(req);
 				mutex_unlock(&proglst_lock);
 				return;
 			}
+
 			outdata = (*(pl->p_progname)) (xdrbuf);
 			if (outdata == NULL
 			    && pl->p_outproc != (xdrproc_t) xdr_void) {
 				/* there was an error */
+				xdr_free(pl->p_inproc, xdrbuf);
 				mutex_unlock(&proglst_lock);
 				return;
 			}
-			if (!svc_sendreply(req, pl->p_outproc,
-					   outdata)) {
-				__warnx(TIRPC_DEBUG_FLAG_SVC,
-					"rpc: rpc_reg trouble replying to prog %u vers %u",
+			if (!svc_sendreply(req, pl->p_outproc, outdata)) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"rpc: svc_sendreply failed prog %u vers %u",
 					(unsigned)prog, (unsigned)vers);
-				mutex_unlock(&proglst_lock);
-				return;
 			}
 			/* free the decoded arguments */
-			(void)svc_freeargs(req, pl->p_inproc, xdrbuf);
+			xdr_free(pl->p_inproc, xdrbuf);
 			mutex_unlock(&proglst_lock);
 			return;
 		}
 	mutex_unlock(&proglst_lock);
 	/* This should never happen */
-	__warnx(TIRPC_DEBUG_FLAG_SVC,
+	__warnx(TIRPC_DEBUG_FLAG_ERROR,
 		"rpc: rpc_reg: never registered prog %u vers %u",
 		(unsigned)prog, (unsigned)vers);
 	return;

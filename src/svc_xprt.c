@@ -1,5 +1,7 @@
 /*
  * Copyright (c) 2012 Linux Box Corporation.
+ * Copyright (c) 2013-2015 CohortFS, LLC.
+ * Copyright (c) 2017 Red Hat, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,7 +45,25 @@
 #include "rpc_dplx_internal.h"
 #include "svc_xprt.h"
 
-#define SVC_XPRT_PARTITIONS 7
+/**
+ * @file svc_xprt.c
+ * @contributeur William Allen Simpson <bill@cohortfs.com>
+ * @brief Service transports package
+ *
+ * @section DESCRIPTION
+ *
+ * Maintains a tree of all extant transports by fd.
+ *
+ * Each SVCXPRT has its own instance, however, so operations to
+ * close and delete (for example) given an existing xprt handle
+ * are O(1) without any ordered or hashed representation.
+ *
+ * @note currently static sizes
+ *	partitions should be largish prime, relative to connections.
+ *	no cache slots, as rpc_dplx_rec has fd_node for direct access.
+ */
+
+#define SVC_XPRT_PARTITIONS 193
 
 static bool initialized;
 
@@ -55,7 +75,7 @@ struct svc_xprt_fd {
 static struct svc_xprt_fd svc_xprt_fd = {
 	MUTEX_INITIALIZER /* svc_xprt_lock */ ,
 	{
-	 0,			/* npart */
+	 SVC_XPRT_PARTITIONS,	/* npart */
 	 RBT_X_FLAG_NONE,	/* flags */
 	 0,			/* cachesz */
 	 NULL			/* tree */
@@ -66,15 +86,15 @@ static inline int
 svc_xprt_fd_cmpf(const struct opr_rbtree_node *lhs,
 		 const struct opr_rbtree_node *rhs)
 {
-	SVCXPRT *lk, *rk;
+	struct rpc_dplx_rec *lk, *rk;
 
-	lk = opr_containerof(lhs, struct rpc_svcxprt, xp_fd_node);
-	rk = opr_containerof(rhs, struct rpc_svcxprt, xp_fd_node);
+	lk = opr_containerof(lhs, struct rpc_dplx_rec, fd_node);
+	rk = opr_containerof(rhs, struct rpc_dplx_rec, fd_node);
 
-	if (lk->xp_fd < rk->xp_fd)
+	if (lk->xprt.xp_fd < rk->xprt.xp_fd)
 		return (-1);
 
-	if (lk->xp_fd == rk->xp_fd)
+	if (lk->xprt.xp_fd == rk->xprt.xp_fd)
 		return (0);
 
 	return (1);
@@ -120,7 +140,8 @@ svc_xprt_init_failure(void)
 SVCXPRT *
 svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 {
-	struct rpc_svcxprt sk;
+	struct rpc_dplx_rec sk;
+	struct rpc_dplx_rec *rec;
 	struct rbtree_x_part *t;
 	struct opr_rbtree_node *nv;
 	SVCXPRT *xprt = NULL;
@@ -128,24 +149,28 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 	if (svc_xprt_init_failure())
 		return (NULL);
 
-	sk.xp_fd = fd;
+	sk.xprt.xp_fd = fd;
 	t = rbtx_partition_of_scalar(&svc_xprt_fd.xt, fd);
 
 	rwlock_rdlock(&t->lock);
-	nv = opr_rbtree_lookup(&t->t, &sk.xp_fd_node);
+	nv = opr_rbtree_lookup(&t->t, &sk.fd_node);
 	if (!nv) {
 		rwlock_unlock(&t->lock);
+		if (!setup)
+			return (NULL);
+
 		rwlock_wrlock(&t->lock);
-		nv = opr_rbtree_lookup(&t->t, &sk.xp_fd_node);
+		nv = opr_rbtree_lookup(&t->t, &sk.fd_node);
 		if (!nv) {
 			(*setup)(&xprt); /* zalloc, xp_refs = 1 */
 			xprt->xp_fd = fd;
 			xprt->xp_flags = SVC_XPRT_FLAG_INITIAL;
 
-			rpc_dplx_rli(REC_XPRT(xprt));
-			if (opr_rbtree_insert(&t->t, &xprt->xp_fd_node)) {
+			rec = REC_XPRT(xprt);
+			rpc_dplx_rli(rec);
+			if (opr_rbtree_insert(&t->t, &rec->fd_node)) {
 				/* cant happen */
-				rpc_dplx_rui(REC_XPRT(xprt));
+				rpc_dplx_rui(rec);
 				__warnx(TIRPC_DEBUG_FLAG_LOCK,
 					"%s: collision inserting in locked rbtree partition",
 					__func__);
@@ -156,15 +181,16 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 		}
 		/* raced, fallthru */
 	}
-	xprt = opr_containerof(nv, struct rpc_svcxprt, xp_fd_node);
+	rec = opr_containerof(nv, struct rpc_dplx_rec, fd_node);
+	xprt = &rec->xprt;
 
 	SVC_REF(xprt, SVC_REF_FLAG_NONE);
-	rpc_dplx_rli(REC_XPRT(xprt));
+	rpc_dplx_rli(rec);
 	rwlock_unlock(&t->lock);
 
 	if (unlikely(xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
 		/* do not return destroyed xprts */
-		rpc_dplx_rui(REC_XPRT(xprt));
+		rpc_dplx_rui(rec);
 		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 		return (NULL);
 	}
@@ -173,69 +199,44 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 	return (xprt);
 }
 
-SVCXPRT *
-svc_xprt_get(int fd)
-{
-	struct rpc_svcxprt sk;
-	struct rbtree_x_part *t;
-	struct opr_rbtree_node *nv;
-	SVCXPRT *srec = NULL;
-
-	if (svc_xprt_init_failure())
-		return (NULL);
-
-	sk.xp_fd = fd;
-	t = rbtx_partition_of_scalar(&svc_xprt_fd.xt, fd);
-
-	rwlock_rdlock(&t->lock);
-	nv = opr_rbtree_lookup(&t->t, &sk.xp_fd_node);
-	rwlock_unlock(&t->lock);
-
-	/* XXX safe, even if tree is reorganizing */
-	if (nv)
-		srec = opr_containerof(nv, struct rpc_svcxprt, xp_fd_node);
-
-	return (srec);
-}
-
 /**
  * Clear an xprt
  *
  * @note Locking
- * - xprt is locked, unless RPC_DPLX_FLAG_LOCKED is passed
- * - xprt is unlocked if RPC_DPLX_FLAG_UNLOCK is passed, otherwise it is
- *   returned locked
+ * - xprt is locked, unless SVC_XPRT_FLAG_BLOCKED
+ * - xprt is unlocked, unless SVC_XPRT_FLAG_BLOCKED
+ *   otherwise it is returned locked
  */
 void
-svc_xprt_clear(SVCXPRT *xprt, uint32_t flags)
+svc_xprt_clear(SVCXPRT *xprt)
 {
 	struct rbtree_x_part *t;
 
 	if (svc_xprt_init_failure())
 		return;
 
-	if (!(flags & RPC_DPLX_FLAG_LOCKED))
+	if (!(xprt->xp_flags & SVC_XPRT_FLAG_BLOCKED))
 		rpc_dplx_rli(REC_XPRT(xprt));
 
-	if (opr_rbtree_node_valid(&xprt->xp_fd_node)) {
+	if (opr_rbtree_node_valid(&REC_XPRT(xprt)->fd_node)) {
 		t = rbtx_partition_of_scalar(&svc_xprt_fd.xt, xprt->xp_fd);
 
 		rwlock_wrlock(&t->lock);
-		opr_rbtree_remove(&t->t, &xprt->xp_fd_node);
+		opr_rbtree_remove(&t->t, &REC_XPRT(xprt)->fd_node);
 		rwlock_unlock(&t->lock);
 	}
 
-	if (flags & RPC_DPLX_FLAG_UNLOCK)
+	if (!(xprt->xp_flags & SVC_XPRT_FLAG_BLOCKED))
 		rpc_dplx_rui(REC_XPRT(xprt));
 }
 
 int
 svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 {
-	struct rpc_svcxprt sk;
+	struct rpc_dplx_rec sk;
+	struct rpc_dplx_rec *rec;
 	struct rbtree_x_part *t;
 	struct opr_rbtree_node *n;
-	SVCXPRT *xprt;
 	uint64_t tgen;
 	uint32_t rflag;
 	int p_ix;
@@ -266,14 +267,14 @@ svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 		while (n != NULL) {
 			++x_ix;	/* diagnostic, index into logical srec
 				 * sequence */
-			xprt = opr_containerof(n, struct rpc_svcxprt, xp_fd_node);
-			sk.xp_fd = xprt->xp_fd;
+			rec = opr_containerof(n, struct rpc_dplx_rec, fd_node);
+			sk.xprt.xp_fd = rec->xprt.xp_fd;
 
 			/* call each_func with t !LOCKED */
 			rwlock_unlock(&t->lock);
 
 			/* restart if each_f disposed xprt */
-			rflag = each_f(xprt, arg);
+			rflag = each_f(&rec->xprt, arg);
 			if (rflag == SVC_XPRT_FOREACH_CLEAR)
 				goto restart;
 
@@ -281,7 +282,7 @@ svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 			rwlock_rdlock(&t->lock);
 
 			if (tgen != t->t.gen) {
-				n = opr_rbtree_lookup(&t->t, &sk.xp_fd_node);
+				n = opr_rbtree_lookup(&t->t, &sk.fd_node);
 				if (!n) {
 					/* invalidated, try harder */
 					rwlock_unlock(&t->lock);
@@ -303,7 +304,7 @@ svc_xprt_dump_xprts(const char *tag)
 {
 	struct rbtree_x_part *t = NULL;
 	struct opr_rbtree_node *n;
-	SVCXPRT *xprt;
+	struct rpc_dplx_rec *rec;
 	int p_ix;
 
 	if (!initialized)
@@ -317,10 +318,10 @@ svc_xprt_dump_xprts(const char *tag)
 			"xprts at %s: tree %d size %d", tag, p_ix, t->t.size);
 		n = opr_rbtree_first(&t->t);
 		while (n != NULL) {
-			xprt = opr_containerof(n, struct rpc_svcxprt, xp_fd_node);
+			rec = opr_containerof(n, struct rpc_dplx_rec, fd_node);
 			__warnx(TIRPC_DEBUG_FLAG_SVC_XPRT,
 				"xprts at %s: %p xp_fd %d",
-				tag, xprt, xprt->xp_fd);
+				tag, &rec->xprt, rec->xprt.xp_fd);
 			n = opr_rbtree_next(n);
 		}		/* curr partition */
 		rwlock_unlock(&t->lock);	/* t !LOCKED */
@@ -335,7 +336,7 @@ svc_xprt_shutdown()
 {
 	struct rbtree_x_part *t;
 	struct opr_rbtree_node *n;
-	SVCXPRT *xprt;
+	struct rpc_dplx_rec *rec;
 	int p_ix;
 
 	if (!initialized)
@@ -348,15 +349,15 @@ svc_xprt_shutdown()
 		rwlock_wrlock(&t->lock);	/* t WLOCKED */
 		n = opr_rbtree_first(&t->t);
 		while (n != NULL) {
-			xprt = opr_containerof(n, struct rpc_svcxprt, xp_fd_node);
+			rec = opr_containerof(n, struct rpc_dplx_rec, fd_node);
 			n = opr_rbtree_next(n);
 
 			/* prevent repeats, see svc_xprt_clear() */
-			rpc_dplx_rli(REC_XPRT(xprt));
-			opr_rbtree_remove(&t->t, &xprt->xp_fd_node);
-			rpc_dplx_rui(REC_XPRT(xprt));
+			rpc_dplx_rli(rec);
+			opr_rbtree_remove(&t->t, &rec->fd_node);
+			rpc_dplx_rui(rec);
 
-			SVC_DESTROY(xprt);
+			SVC_DESTROY(&rec->xprt);
 		}		/* curr partition */
 		rwlock_unlock(&t->lock);	/* t !LOCKED */
 		rwlock_destroy(&t->lock);
@@ -372,10 +373,9 @@ void
 svc_xprt_trace(SVCXPRT *xprt, const char *func, const char *tag, const int line)
 {
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-		"%s() %p xp_refs %" PRId32
-		" fd %d af %u port %u @ %s:%d",
-		func, xprt, xprt->xp_refs,
-		xprt->xp_fd,
+		"%s() %p fd %d xp_refs %" PRId32
+		" af %u port %u @ %s:%d",
+		func, xprt, xprt->xp_fd, xprt->xp_refs,
 		xprt->xp_remote.ss.ss_family,
 		__rpc_address_port(&xprt->xp_remote),
 		tag, line);

@@ -89,12 +89,13 @@ int __svc_maxiov = IOV_MAX;
 #else
 int __svc_maxiov = 1024; /* UIO_MAXIOV value from sys/uio.h */
 #endif
-int __svc_maxrec = 0;
+int __svc_maxrec = RPC_MAXDATA_LEGACY;
 
 struct svc_params __svc_params[1] = {
 	{
-	 false /* !initialized */ ,
-	 MUTEX_INITIALIZER}
+		MUTEX_INITIALIZER,
+		false /* !initialized */ ,
+	}
 };
 
 /*
@@ -140,12 +141,15 @@ svc_init(svc_init_params *params)
 {
 	mutex_lock(&__svc_params->mtx);
 	if (__svc_params->initialized) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC,
+		__warnx(TIRPC_DEBUG_FLAG_WARN,
 			"%s: multiple initialization attempt (nothing happens)",
 			__func__);
 		mutex_unlock(&__svc_params->mtx);
 		return true;
 	}
+	__svc_params->disconnect_cb = params->disconnect_cb;
+	__svc_params->request_cb = params->request_cb;
+
 	__svc_params->max_connections =
 	    (params->max_connections) ? params->max_connections : FD_SETSIZE;
 
@@ -153,13 +157,11 @@ svc_init(svc_init_params *params)
 	__svc_params->xprt_u.vc.nconns = 0;
 	mutex_init(&__svc_params->xprt_u.vc.mtx, NULL);
 
-	svc_ioq_init();
-
 #if defined(HAVE_BLKIN)
 	if (params->flags & SVC_INIT_BLKIN) {
 		int r = blkin_init();
 		if (r < 0) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC,
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s: blkn_init failed\n",
 				__func__);
 		}
@@ -177,21 +179,32 @@ svc_init(svc_init_params *params)
 #endif
 	__svc_params->idle_timeout = params->idle_timeout;
 
-	/* XXX defaults to the legacy max sendsz */
-	__svc_params->svc_ioq_maxbuf =
-	    (params->svc_ioq_maxbuf) ? (params->svc_ioq_maxbuf) : 262144;
-
 	/* allow consumers to manage all xprt registration */
 	if (params->flags & SVC_INIT_NOREG_XPRTS)
 		__svc_params->flags |= SVC_FLAG_NOREG_XPRTS;
+
+	if (params->ioq_send_max)
+		__svc_params->ioq.send_max = params->ioq_send_max;
+	else
+		__svc_params->ioq.send_max = RPC_MAXDATA_DEFAULT;
 
 	if (params->ioq_thrd_max)
 		__svc_params->ioq.thrd_max = params->ioq_thrd_max;
 	else
 		__svc_params->ioq.thrd_max = 200;
 
+	svc_ioq_init();
+
 	/* uses ioq.thrd_max */
 	if (svc_work_pool_init()) {
+		mutex_unlock(&__svc_params->mtx);
+		return false;
+	}
+
+	/* uses svc_work_pool */
+	svc_rqst_init(params->channels ? params->channels : 8);
+
+	if (svc_xprt_init()) {
 		mutex_unlock(&__svc_params->mtx);
 		return false;
 	}
@@ -547,7 +560,7 @@ svc_sendreply(struct svc_req *req, xdrproc_t xdr_results, void *xdr_location)
 	req->rq_msg.RPCM_ack.ar_stat = SUCCESS;
 	req->rq_msg.RPCM_ack.ar_results.where = xdr_location;
 	req->rq_msg.RPCM_ack.ar_results.proc = xdr_results;
-	return (SVC_REPLY(req));
+	return (XPRT_DIED > SVC_REPLY(req));
 }
 
 /*
@@ -690,7 +703,7 @@ svcerr_progvers(struct svc_req *req, rpcvers_t low_vers, rpcvers_t high_vers)
  * Get server side input from some transport.
  */
 
-#if !defined(_WIN32)		/* XXX */
+#if 0
 void
 svc_getreq(int rdfds)
 {
@@ -751,7 +764,7 @@ svc_getreq_poll(struct pollfd *pfdp, int pollretval)
 }
 #endif				/* _WIN32 */
 
-#if defined(TIRPC_EPOLL)
+#if 0
 void
 svc_getreqset_epoll(struct epoll_event *events, int nfds)
 {
@@ -768,6 +781,7 @@ svc_getreqset_epoll(struct epoll_event *events, int nfds)
 }
 #endif				/* TIRPC_EPOLL */
 
+#if 0
 void
 svc_getreq_common(int fd)
 {
@@ -783,6 +797,7 @@ svc_getreq_common(int fd)
 
 	return;
 }
+#endif
 
 /* Allow internal or external getreq routines to validate xprt
  * has not been recursively disconnected.  (I don't completely buy the
@@ -792,11 +807,14 @@ svc_validate_xprt_list(SVCXPRT *xprt)
 {
 	bool code;
 
-	code = (xprt == svc_xprt_get(xprt->xp_fd));
+	code = (xprt == svc_xprt_lookup(xprt->xp_fd, NULL));
+	if (code)
+		rpc_dplx_rui(REC_XPRT(xprt));
 
 	return (code);
 }
 
+#if 0
 void
 svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg)
 {
@@ -922,6 +940,7 @@ svc_getreq_default(SVCXPRT *xprt)
 
 	return (stat);
 }
+#endif
 
 bool
 rpc_control(int what, void *arg)
@@ -988,6 +1007,15 @@ void __rpc_set_blkin_endpoint(SVCXPRT *xprt, const char *tag)
 			xprt->blkin.svc_name);
 }
 #endif
+
+enum xprt_stat
+svc_rendezvous_stat(SVCXPRT *xprt)
+{
+	if (xprt && (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED))
+		return (XPRT_DESTROYED);
+
+	return (XPRT_IDLE);
+}
 
 int
 svc_shutdown(u_long flags)

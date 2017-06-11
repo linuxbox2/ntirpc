@@ -140,9 +140,6 @@ struct rpc_rdma_xprt {
 	u_int8_t *buffer_aligned;
 	size_t buffer_total;
 
-	/* waiting contexts posted */
-	struct xdr_ioq waitq;
-
 	struct xdr_ioq_uv_head inbufs;	/* recvsize */
 	struct xdr_ioq_uv_head outbufs;	/* sendsz */
 

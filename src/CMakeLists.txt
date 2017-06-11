@@ -62,15 +62,12 @@ SET(ntirpc_common_SRCS
   svc_simple.c
   svc_vc.c
   svc_xprt.c
-  vc_generic.c
   xdr.c
   xdr_array.c
   xdr_float.c
   xdr_mem.c
-  xdr_rec.c
   xdr_reference.c
   xdr_stdio.c
-  xdr_inrec.c
   xdr_ioq.c
   svc_ioq.c
   work_pool.c

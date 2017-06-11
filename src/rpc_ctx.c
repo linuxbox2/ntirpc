@@ -83,6 +83,7 @@ rpc_ctx_alloc(CLIENT *clnt, struct timeval timeout)
 	cond_init(&ctx->we.cv, 0, NULL);
 	ctx->flags = RPC_CTX_FLAG_NONE;
 	ctx->refcount = 1;
+	ctx->refreshes = 2;
 
 	/* some of this looks like overkill;  it's here to support future,
 	 * fully async calls */
@@ -97,8 +98,8 @@ rpc_ctx_alloc(CLIENT *clnt, struct timeval timeout)
 
 	if (opr_rbtree_insert(&rec->call_replies, &ctx->node_k)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: call ctx insert failed (xid %d client %p)",
-			__func__, ctx->xid, clnt);
+			"%s: %p fd %d call ctx insert failed xid %" PRIu32,
+			__func__, &rec->xprt, rec->xprt.xp_fd, ctx->xid);
 		rpc_ctx_release(ctx);
 		rpc_dplx_rui(rec);
 		return (NULL);
@@ -106,61 +107,65 @@ rpc_ctx_alloc(CLIENT *clnt, struct timeval timeout)
 	return (ctx);
 }
 
-/* RPC_CTX_FLAG_LOCKED, RPC_DPLX_FLAG_LOCKED
- */
-bool
-rpc_ctx_next_xid(rpc_ctx_t *ctx)
-{
-	CLIENT *clnt = ctx->ctx_u.clnt.clnt;
-	struct cx_data *cx = CX_DATA(clnt);
-	struct rpc_dplx_rec *rec = cx->cx_rec;
-
-	/* the lock protects both xid and rbtree */
-	opr_rbtree_remove(&rec->call_replies, &ctx->node_k);
-	ctx->xid = ++(rec->call_xid);
-	ctx->flags = RPC_CTX_FLAG_NONE;
-
-	if (opr_rbtree_insert(&rec->call_replies, &ctx->node_k)) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: call ctx insert failed (xid %d client %p)",
-			__func__, ctx->xid, clnt);
-		rpc_ctx_release(ctx);
-		rpc_dplx_rui(rec);
-		return (false);
-	}
-	return (true);
-}
-
 /* RPC_DPLX_FLAG_LOCKED
  */
-bool
-rpc_ctx_xfer_replymsg(struct svc_vc_xprt *xd, struct rpc_msg *msg)
+enum xprt_stat
+rpc_ctx_xfer_replymsg(struct svc_req *req)
 {
+	XDR *xdrs = req->rq_xdrs;
+	SVCXPRT *xprt = req->rq_xprt;
+	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
 	rpc_ctx_t ctx_k, *ctx;
 	struct opr_rbtree_node *nv;
-	struct rpc_dplx_rec *rec = &xd->sx_dr;
-	rpc_dplx_lock_t *lk = &rec->recv.lock;
 
-	ctx_k.xid = msg->rm_xid;
+	ctx_k.xid = req->rq_msg.rm_xid;
 	nv = opr_rbtree_lookup(&rec->call_replies, &ctx_k.node_k);
-	if (nv) {
-		ctx = opr_containerof(nv, rpc_ctx_t, node_k);
-		atomic_set_uint16_t_bits(&ctx->flags, RPC_CTX_FLAG_ACKSYNC);
-		atomic_inc_uint32_t(&ctx->refcount);
-		ctx->cc_msg = *msg;	/* and stash reply header */
-
-		/* signal the specific ctx  */
-		cond_signal(&ctx->we.cv);
-
-		/* now, we must ourselves wait for the other side to run */
-		while (atomic_fetch_uint16_t(&ctx->flags)
-						& RPC_CTX_FLAG_ACKSYNC)
-			cond_wait(&lk->we.cv, &lk->we.mtx);
-
-		rpc_ctx_release(ctx);
-		return (true);
+	if (!nv) {
+		/* release internal locks */
+		return SVC_STAT(xprt);
 	}
-	return (false);
+
+	ctx = opr_containerof(nv, rpc_ctx_t, node_k);
+
+	_seterr_reply(&req->rq_msg, &(ctx->error));
+	if (ctx->error.re_status == RPC_SUCCESS) {
+		if (!AUTH_VALIDATE(ctx->cc_auth,
+				   &(ctx->cc_msg.RPCM_ack.ar_verf))) {
+			ctx->error.re_status = RPC_AUTHERROR;
+			ctx->error.re_why = AUTH_INVALIDRESP;
+		} else if (ctx->cc_xdr.proc
+			   && !AUTH_UNWRAP(ctx->cc_auth, xdrs,
+					   ctx->cc_xdr.proc,
+					   ctx->cc_xdr.where)) {
+			if (ctx->error.re_status == RPC_SUCCESS)
+				ctx->error.re_status = RPC_CANTDECODERES;
+		}
+		ctx->refreshes = 0;
+	} else if (ctx->refreshes-- > 0
+		   && AUTH_REFRESH(ctx->cc_auth, &(ctx->cc_msg))) {
+		/* maybe our credentials need to be refreshed ... */
+		opr_rbtree_remove(&rec->call_replies, &ctx->node_k);
+		ctx->xid = ++(rec->call_xid);
+
+		if (opr_rbtree_insert(&rec->call_replies, &ctx->node_k)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: %p fd %d call ctx insert failed xid %" PRIu32,
+				__func__, xprt, xprt->xp_fd, ctx->xid);
+			ctx->error.re_status = RPC_TLIERROR;
+			ctx->refreshes = 0;
+		}
+	}
+	atomic_set_uint16_t_bits(&ctx->flags, RPC_CTX_FLAG_ACKSYNC);
+
+	/* signal the specific ctx  */
+	cond_signal(&ctx->we.cv);
+
+	__warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
+		"%s: %p fd %d call ctx acknowledged xid %" PRIu32,
+		__func__, xprt, xprt->xp_fd, ctx->xid);
+
+	/* release internal locks */
+	return SVC_STAT(xprt);
 }
 
 /* RPC_CTX_FLAG_LOCKED, RPC_DPLX_FLAG_LOCKED
@@ -178,16 +183,16 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx)
 	rpc_dplx_rui(rec);
 
 	__warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
-		"%s: call ctx %p (xid %" PRIu32 " client %p)",
-		__func__, ctx, ctx->xid, clnt);
+		"%s: %p fd %d call ctx xid %" PRIu32,
+		__func__, &rec->xprt, rec->xprt.xp_fd, ctx->xid);
 
 	(void)clock_gettime(CLOCK_REALTIME_FAST, &ts);
 	timespecadd(&ts, &ctx->ctx_u.clnt.timeout);
 	code = cond_timedwait(&ctx->we.cv, &ctx->we.mtx, &ts);
 
 	__warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
-		"%s: call ctx %p replied (xid %" PRIu32 " client %p)",
-		__func__, ctx, ctx->xid, clnt);
+		"%s: %p fd %d call ctx replied xid %" PRIu32,
+		__func__, &rec->xprt, rec->xprt.xp_fd, ctx->xid);
 
 	rpc_dplx_rli(rec);
 
@@ -201,39 +206,9 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx)
 			 * facility is not well developed. */
 			ctx->error.re_status = RPC_TIMEDOUT;
 		}
-		return (code);
-	}
-
-	/* switch on direction */
-	switch (ctx->cc_msg.rm_direction) {
-	case REPLY:
-		if (ctx->cc_msg.rm_xid == ctx->xid)
-			return (RPC_SUCCESS);
-		break;
-	case CALL:
-		/* XXX cond transfer control to svc */
-		/* */
-		break;
-	default:
-		break;
 	}
 
 	return (code);
-}
-
-/* RPC_CTX_FLAG_LOCKED, RPC_DPLX_FLAG_LOCKED
- */
-void
-rpc_ctx_ack_xfer(rpc_ctx_t *ctx)
-{
-	CLIENT *clnt = ctx->ctx_u.clnt.clnt;
-	struct cx_data *cx = CX_DATA(clnt);
-	struct rpc_dplx_rec *rec = cx->cx_rec;
-	uint16_t flags = atomic_postclear_uint16_t_bits(&ctx->flags,
-							RPC_CTX_FLAG_ACKSYNC);
-
-	if (flags & RPC_CTX_FLAG_ACKSYNC)
-		rpc_dplx_rsi(rec);
 }
 
 /* RPC_CTX_FLAG_LOCKED, RPC_DPLX_FLAG_LOCKED

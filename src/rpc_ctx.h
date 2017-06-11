@@ -29,9 +29,7 @@
 #include <misc/rbtree_x.h>
 #include <misc/wait_queue.h>
 #include <rpc/clnt.h>
-#include <rpc/rpc_msg.h>
-
-#include "svc_internal.h"
+#include <rpc/svc.h>
 
 #define RPC_CTX_FLAG_NONE     0x0000
 #define RPC_CTX_FLAG_ACKSYNC  0x0008
@@ -54,7 +52,10 @@ typedef struct rpc_ctx_s {
 		} svc;
 	} ctx_u;
 	struct rpc_msg cc_msg;
+	struct xdrpair cc_xdr;
 
+	AUTH *cc_auth;
+	int refreshes;
 	uint32_t xid;
 	uint32_t refcount;
 	uint16_t flags;
@@ -65,10 +66,8 @@ int call_xid_cmpf(const struct opr_rbtree_node *lhs,
 		  const struct opr_rbtree_node *rhs);
 
 rpc_ctx_t *rpc_ctx_alloc(CLIENT *, struct timeval);
-bool rpc_ctx_next_xid(rpc_ctx_t *);
 int rpc_ctx_wait_reply(rpc_ctx_t *);
-bool rpc_ctx_xfer_replymsg(struct svc_vc_xprt *, struct rpc_msg *);
-void rpc_ctx_ack_xfer(rpc_ctx_t *);
+enum xprt_stat rpc_ctx_xfer_replymsg(struct svc_req *);
 void rpc_ctx_release(rpc_ctx_t *);
 
 #endif				/* TIRPC_RPC_CTX_H */

@@ -66,7 +66,7 @@ static uint64_t next_id;
 #define free_buffer(addr,size) mem_free((addr), size)
 
 struct xdr_ioq_uv *
-xdr_ioq_uv_create(u_int size, u_int uio_flags)
+xdr_ioq_uv_create(size_t size, u_int uio_flags)
 {
 	struct xdr_ioq_uv *uv = mem_zalloc(sizeof(struct xdr_ioq_uv));
 
@@ -213,6 +213,28 @@ xdr_ioq_uv_release(struct xdr_ioq_uv *uv)
 }
 
 /*
+ * Set current read/insert or fill position.
+ */
+static inline void
+xdr_ioq_uv_reset(struct xdr_ioq *xioq, struct xdr_ioq_uv *uv)
+{
+	xioq->xdrs[0].x_data = uv->v.vio_head;
+	xioq->xdrs[0].x_base = &uv->v;
+	xioq->xdrs[0].x_v = uv->v;
+}
+
+/*
+ * Update read/insert or fill position.
+ */
+static inline void
+xdr_ioq_uv_update(struct xdr_ioq *xioq, struct xdr_ioq_uv *uv)
+{
+	xdr_ioq_uv_reset(xioq, uv);
+	(xioq->ioq_uv.pcount)++;
+	/* xioq->ioq_uv.plength is calculated in xdr_ioq_uv_advance() */
+}
+
+/*
  * Set initial read/insert or fill position.
  *
  * Note: must be done before any XDR_[GET|SET]POS()
@@ -232,9 +254,7 @@ xdr_ioq_reset(struct xdr_ioq *xioq, u_int wh_pos)
 	} else {
 		uv->v.vio_head = uv->v.vio_base + wh_pos;
 	}
-	xioq->xdrs[0].x_v = uv->v;
-	xioq->xdrs[0].x_base = &uv->v;
-	xioq->xdrs[0].x_data = uv->v.vio_head;
+	xdr_ioq_uv_reset(xioq, uv);
 
 	__warnx(TIRPC_DEBUG_FLAG_XDR,
 		"%s() xioq %p head %p wh_pos %d",
@@ -250,7 +270,7 @@ xdr_ioq_setup(struct xdr_ioq *xioq)
 	assert((void *)xdrs == (void *)xioq);
 
 	TAILQ_INIT_ENTRY(&xioq->ioq_s, q);
-	xioq->ioq_s.qflags = IOQ_FLAG_NONE;
+	xioq->ioq_s.qflags = IOQ_FLAG_SEGMENT;
 
 	poolq_head_setup(&xioq->ioq_uv.uvqh);
 	pthread_cond_init(&xioq->ioq_cond, NULL);
@@ -266,12 +286,13 @@ xdr_ioq_setup(struct xdr_ioq *xioq)
 	xioq->id = atomic_inc_uint64_t(&next_id);
 }
 
-XDR *
-xdr_ioq_create(u_int min_bsize, u_int max_bsize, u_int uio_flags)
+struct xdr_ioq *
+xdr_ioq_create(size_t min_bsize, size_t max_bsize, u_int uio_flags)
 {
 	struct xdr_ioq *xioq = mem_zalloc(sizeof(struct xdr_ioq));
 
 	xdr_ioq_setup(xioq);
+	xioq->xdrs[0].x_flags |= XDR_FLAG_FREE;
 	xioq->ioq_uv.min_bsize = min_bsize;
 	xioq->ioq_uv.max_bsize = max_bsize;
 
@@ -282,7 +303,7 @@ xdr_ioq_create(u_int min_bsize, u_int max_bsize, u_int uio_flags)
 		xdr_ioq_reset(xioq, 0);
 	}
 
-	return (xioq->xdrs);
+	return (xioq);
 }
 
 /*
@@ -294,7 +315,7 @@ xdr_ioq_create(u_int min_bsize, u_int max_bsize, u_int uio_flags)
  * reducing computations in the get/put/inline routines.
  */
 static inline struct xdr_ioq_uv *
-xdr_ioq_uv_next(struct xdr_ioq *xioq, u_int ioq_flags)
+xdr_ioq_uv_advance(struct xdr_ioq *xioq)
 {
 	struct xdr_ioq_uv *uv = IOQV(xioq->xdrs[0].x_base);
 	size_t len;
@@ -306,74 +327,66 @@ xdr_ioq_uv_next(struct xdr_ioq *xioq, u_int ioq_flags)
 	xioq->ioq_uv.plength += len;
 
 	/* next buffer, if any */
-	uv = IOQ_(TAILQ_NEXT(&uv->uvq, q));
+	return IOQ_(TAILQ_NEXT(&uv->uvq, q));
+}
 
-	/* append new segments, iif requested */
-	if ((!uv) && likely(ioq_flags & IOQ_FLAG_XTENDQ)) {
-		uv = IOQV(xioq->xdrs[0].x_base);
+/*
+ * Append at read/insert or fill position.
+ */
+static struct xdr_ioq_uv *
+xdr_ioq_uv_append(struct xdr_ioq *xioq, u_int ioq_flags)
+{
+	struct xdr_ioq_uv *uv = IOQV(xioq->xdrs[0].x_base);
 
-		if (xioq->ioq_uv.uvq_fetch) {
-			/* more of the same kind */
-			struct poolq_entry *have =
-				xioq->ioq_uv.uvq_fetch(xioq, uv->u.uio_p1,
-							"next buffer", 1,
-							IOQ_FLAG_NONE);
+	if (xioq->ioq_uv.uvq_fetch) {
+		/* more of the same kind */
+		struct poolq_entry *have =
+			xioq->ioq_uv.uvq_fetch(xioq, uv->u.uio_p1,
+						"next buffer", 1,
+						IOQ_FLAG_NONE);
 
-			/* poolq_entry is the top element of xdr_ioq_uv */
-			uv = IOQ_(have);
-			assert((void *)uv == (void *)have);
-		} else if (ioq_flags & IOQ_FLAG_BALLOC) {
-			/* XXX workaround for lack of segmented buffer
-			 * interfaces in some callers (e.g, GSS_WRAP) */
-			if (uv->u.uio_flags & UIO_FLAG_REALLOC) {
-				void *base;
-				size_t size = ioquv_size(uv);
-				size_t delta = xdr_tail_inline(xioq->xdrs);
+		/* poolq_entry is the top element of xdr_ioq_uv */
+		uv = IOQ_(have);
+		assert((void *)uv == (void *)have);
+	} else if (ioq_flags & IOQ_FLAG_BALLOC) {
+		/* XXX workaround for lack of segmented buffer
+		 * interfaces in some callers (e.g, GSS_WRAP) */
+		if (uv->u.uio_flags & UIO_FLAG_REALLOC) {
+			void *base;
+			size_t size = ioquv_size(uv);
+			size_t delta = xdr_tail_inline(xioq->xdrs);
+			size_t len = ioquv_length(uv);
 
-				/* bail if we have reached max bufsz */
-				if (size >= xioq->ioq_uv.max_bsize)
-					return (NULL);
+			/* bail if we have reached max bufsz */
+			if (size >= xioq->ioq_uv.max_bsize)
+				return (NULL);
 
-				/* backtrack */
-				xioq->ioq_uv.plength -= len;
-				assert(uv->u.uio_flags & UIO_FLAG_FREE);
+			/* backtrack */
+			xioq->ioq_uv.plength -= len;
+			assert(uv->u.uio_flags & UIO_FLAG_FREE);
 
-				base = mem_alloc(xioq->ioq_uv.max_bsize);
-				memcpy(base, uv->v.vio_head, len);
-				mem_free(uv->v.vio_base, size);
-				uv->v.vio_base =
-				uv->v.vio_head = base + 0;
-				uv->v.vio_tail = base + len;
-				uv->v.vio_wrap = base
-						+ xioq->ioq_uv.max_bsize;
-				xioq->xdrs[0].x_v = uv->v;
-				xioq->xdrs[0].x_data = uv->v.vio_tail
-							- delta;
-				return (uv);
-			}
-			uv = xdr_ioq_uv_create(xioq->ioq_uv.min_bsize,
-						   UIO_FLAG_FREE);
-		} else {
-			/* XXX empty buffer slot (not supported for now) */
-			uv = xdr_ioq_uv_create(0, UIO_FLAG_NONE);
+			base = mem_alloc(xioq->ioq_uv.max_bsize);
+			memcpy(base, uv->v.vio_head, len);
+			mem_free(uv->v.vio_base, size);
+			uv->v.vio_base =
+			uv->v.vio_head = base + 0;
+			uv->v.vio_tail = base + len;
+			uv->v.vio_wrap = base + xioq->ioq_uv.max_bsize;
+			xioq->xdrs[0].x_v = uv->v;
+			xioq->xdrs[0].x_data = uv->v.vio_tail - delta;
+			return (uv);
 		}
+		uv = xdr_ioq_uv_create(xioq->ioq_uv.min_bsize, UIO_FLAG_FREE);
+		(xioq->ioq_uv.uvqh.qcount)++;
+		TAILQ_INSERT_TAIL(&xioq->ioq_uv.uvqh.qh, &uv->uvq, q);
+	} else {
+		/* XXX empty buffer slot (not supported for now) */
+		uv = xdr_ioq_uv_create(0, UIO_FLAG_NONE);
+		(xioq->ioq_uv.uvqh.qcount)++;
+		TAILQ_INSERT_TAIL(&xioq->ioq_uv.uvqh.qh, &uv->uvq, q);
 	}
 
-	if (uv) {
-		if (!xioq->ioq_uv.uvq_fetch) {
-			/* new xdr_ioq_uv */
-			(xioq->ioq_uv.uvqh.qcount)++;
-			TAILQ_INSERT_TAIL(&xioq->ioq_uv.uvqh.qh, &uv->uvq, q);
-		}
-
-		/* advance iterator */
-		xioq->xdrs[0].x_data = uv->v.vio_head;
-		xioq->xdrs[0].x_base = &uv->v;
-		xioq->xdrs[0].x_v = uv->v;
-		(xioq->ioq_uv.pcount)++;
-		/* xioq->ioq_uv.plength is unchanged (calculated above) */
-	}
-
+	xdr_ioq_uv_update(xioq, uv);
 	return (uv);
 }
 
@@ -391,10 +404,12 @@ xdr_ioq_getlong(XDR *xdrs, long *lp)
 				__func__);
 			return (false);
 		}
-		uv = xdr_ioq_uv_next(XIOQ(xdrs), IOQ_FLAG_NONE);
+
+		uv = xdr_ioq_uv_advance(XIOQ(xdrs));
 		if (!uv) {
 			return (false);
 		}
+		xdr_ioq_uv_update(XIOQ(xdrs), uv);
 		/* fill pointer has changed */
 		future = xdrs->x_data + sizeof(uint32_t);
 	}
@@ -412,10 +427,11 @@ xdr_ioq_putlong(XDR *xdrs, const long *lp)
 
 	while (future > xdrs->x_v.vio_wrap) {
 		/* advance fill pointer, skipping unaligned */
-		uv = xdr_ioq_uv_next(XIOQ(xdrs),
-				IOQ_FLAG_XTENDQ | IOQ_FLAG_BALLOC);
+		uv = xdr_ioq_uv_advance(XIOQ(xdrs));
 		if (!uv) {
-			return (false);
+			uv = xdr_ioq_uv_append(XIOQ(xdrs), IOQ_FLAG_BALLOC);
+		} else {
+			xdr_ioq_uv_update(XIOQ(xdrs), uv);
 		}
 		/* fill pointer has changed */
 		future = xdrs->x_data + sizeof(uint32_t);
@@ -446,10 +462,11 @@ xdr_ioq_getbytes(XDR *xdrs, char *addr, u_int len)
 			delta = len;
 		} else if (unlikely(!delta)) {
 			/* advance fill pointer */
-			uv = xdr_ioq_uv_next(XIOQ(xdrs), IOQ_FLAG_NONE);
+			uv = xdr_ioq_uv_advance(XIOQ(xdrs));
 			if (!uv) {
 				return (false);
 			}
+			xdr_ioq_uv_update(XIOQ(xdrs), uv);
 			continue;
 		}
 		memcpy(addr, xdrs->x_data, delta);
@@ -476,10 +493,12 @@ xdr_ioq_putbytes(XDR *xdrs, const char *addr, u_int len)
 			delta = len;
 		} else if (!delta) {
 			/* advance fill pointer */
-			uv = xdr_ioq_uv_next(XIOQ(xdrs),
-					IOQ_FLAG_XTENDQ | IOQ_FLAG_BALLOC);
+			uv = xdr_ioq_uv_advance(XIOQ(xdrs));
 			if (!uv) {
-				return (false);
+				uv = xdr_ioq_uv_append(XIOQ(xdrs),
+							IOQ_FLAG_BALLOC);
+			} else {
+				xdr_ioq_uv_update(XIOQ(xdrs), uv);
 			}
 			continue;
 		}
@@ -525,9 +544,11 @@ xdr_ioq_getbufs(XDR *xdrs, xdr_uio *uio, u_int flags)
 		if (unlikely(delta > len)) {
 			delta = len;
 		} else if (unlikely(!delta)) {
-			uv = xdr_ioq_uv_next(XIOQ(xdrs), IOQ_FLAG_NONE);
+			uv = xdr_ioq_uv_advance(XIOQ(xdrs));
 			if (!uv)
 				return (false);
+
+			xdr_ioq_uv_update(XIOQ(xdrs), uv);
 			continue;
 		}
 		(uio->xbs_buf[ix]).xb_p1 = uv;
@@ -554,11 +575,11 @@ xdr_ioq_putbufs(XDR *xdrs, xdr_uio *uio, u_int flags)
 
 	for (ix = 0; ix < uio->uio_count; ++ix) {
 		/* advance fill pointer, do not allocate buffers, refs =1 */
-		if (!(flags & IOQ_FLAG_XTENDQ))
-			return (FALSE);
-		uv = xdr_ioq_uv_next(XIOQ(xdrs), flags);
+		uv = xdr_ioq_uv_advance(XIOQ(xdrs));
 		if (!uv)
-			return (FALSE);
+			uv = xdr_ioq_uv_append(XIOQ(xdrs), flags);
+		else
+			xdr_ioq_uv_update(XIOQ(xdrs), uv);
 
 		v = &(uio->uio_vio[ix]);
 		uv->u.uio_flags = UIO_FLAG_NONE; /* !RECLAIM */
@@ -577,9 +598,13 @@ Saved for later golden buttery results -- Matt
 	} else {
 		for (ix = 0; ix < uio->xbs_cnt; ++ix) {
 			/* advance fill pointer, do not allocate buffers */
-			*uv = xdr_ioq_uv_next(XIOQ(xdrs), IOQ_FLAG_XTENDQ);
+			*uv = xdr_ioq_uv_advance(XIOQ(xdrs));
 			if (!uv)
-				return (false);
+				uv = xdr_ioq_uv_append(XIOQ(xdrs),
+							IOQ_FLAG_NONE);
+			else
+				xdr_ioq_uv_update(XIOQ(xdrs), uv);
+
 			xbuf = &(uio->xbs_buf[ix]);
 			XIOQ(xdrs)->ioq_uv.plength += xbuf->xb_len;
 			uv->u.uio_flags = UIO_FLAG_NONE;	/* !RECLAIM */
@@ -607,8 +632,6 @@ Saved for later golden buttery results -- Matt
  *
  * Update the logical and physical offsets and lengths,
  * based upon the most recent position information.
- * All such updates are consolidated here and xdr_ioq_uv_next,
- * reducing computations in the get/put/inline routines.
  */
 static u_int
 xdr_ioq_getpos(XDR *xdrs)
@@ -626,8 +649,6 @@ xdr_ioq_getpos(XDR *xdrs)
  *
  * Update the logical and physical offsets and lengths,
  * based upon the most recent position information.
- * All such updates are consolidated here and xdr_ioq_uv_next,
- * reducing computations in the get/put/inline routines.
  */
 static bool
 xdr_ioq_setpos(XDR *xdrs, u_int pos)
@@ -711,7 +732,11 @@ xdr_ioq_release(struct poolq_head *ioqh)
 		TAILQ_REMOVE(&ioqh->qh, have, q);
 		(ioqh->qcount)--;
 
-		xdr_ioq_uv_release(IOQ_(have));
+		if (have->qflags & IOQ_FLAG_SEGMENT) {
+			xdr_ioq_destroy(_IOQ(have), have->qsize);
+		} else {
+			xdr_ioq_uv_release(IOQ_(have));
+		}
 		have = next;
 	}
 	assert(ioqh->qcount == 0);
@@ -720,12 +745,19 @@ xdr_ioq_release(struct poolq_head *ioqh)
 void
 xdr_ioq_destroy(struct xdr_ioq *xioq, size_t qsize)
 {
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s() xioq %p",
+		__func__, xioq);
+
 	xdr_ioq_release(&xioq->ioq_uv.uvqh);
 
 	if (xioq->ioq_pool) {
 		xdr_ioq_uv_recycle(xioq->ioq_pool, &xioq->ioq_s);
-	} else {
-		poolq_head_destroy(&xioq->ioq_uv.uvqh);
+		return;
+	}
+	poolq_head_destroy(&xioq->ioq_uv.uvqh);
+
+	if (xioq->xdrs[0].x_flags & XDR_FLAG_FREE) {
 		mem_free(xioq, qsize);
 	}
 }

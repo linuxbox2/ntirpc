@@ -39,28 +39,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <rpc/rpc.h>
-#include <rpc/svc.h>
 #include <rpc/svc_auth.h>
-#include "rpc_com.h"
 #include <rpc/gss_internal.h>
 #include <misc/portable.h>
 
-static bool svcauth_gss_wrap(SVCAUTH *, struct svc_req *, XDR *, xdrproc_t,
-			     caddr_t);
-
-static bool svcauth_gss_unwrap(SVCAUTH *, struct svc_req *, XDR *, xdrproc_t,
-			       caddr_t);
-
-static bool svcauth_gss_release(SVCAUTH *, struct svc_req *);
-
-bool svcauth_gss_destroy(SVCAUTH *);
-
-struct svc_auth_ops svc_auth_gss_ops = {
-	svcauth_gss_wrap,
-	svcauth_gss_unwrap,
-	svcauth_gss_release,
-	svcauth_gss_destroy
-};
+static struct svc_auth_ops svc_auth_gss_ops;
 
 #define SVCAUTH_PRIVATE(auth) \
 	((struct svc_rpc_gss_data *)(auth)->svc_ah_private)
@@ -214,9 +197,12 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 	/* Deserialize arguments. */
 	memset(&recv_tok, 0, sizeof(recv_tok));
 
-	if (!svc_getargs(req, (xdrproc_t) xdr_rpc_gss_init_args,
-			 (caddr_t) &recv_tok, NULL /* u_data */))
+	if (!SVCAUTH_UNWRAP(req->rq_auth, req, req->rq_xdrs,
+			    (xdrproc_t)xdr_rpc_gss_init_args,
+			    (caddr_t)&recv_tok)) {
+		xdr_free((xdrproc_t)xdr_rpc_gss_init_args, (caddr_t)&recv_tok);
 		return (false);
+	}
 
 	gr->gr_major =
 	    gss_accept_sec_context(&gr->gr_minor, &gd->ctx, svcauth_gss_creds,
@@ -224,8 +210,7 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 				   &gd->client_name, &mech, &gr->gr_token,
 				   &ret_flags, &time_rec, NULL);
 
-	svc_freeargs(req, (xdrproc_t) xdr_rpc_gss_init_args,
-		     (caddr_t) &recv_tok);
+	xdr_free((xdrproc_t)xdr_rpc_gss_init_args, (caddr_t)&recv_tok);
 
 	if ((gr->gr_major != GSS_S_COMPLETE)
 	    && (gr->gr_major != GSS_S_CONTINUE_NEEDED)) {
@@ -684,7 +669,7 @@ svcauth_gss_destroy(SVCAUTH *auth)
 	return (true);
 }
 
-bool
+static bool
 svcauth_gss_wrap(SVCAUTH *auth, struct svc_req *req, XDR *xdrs,
 		 xdrproc_t xdr_func, caddr_t xdr_ptr)
 {
@@ -704,7 +689,7 @@ svcauth_gss_wrap(SVCAUTH *auth, struct svc_req *req, XDR *xdrs,
 	return (result);
 }
 
-bool
+static bool
 svcauth_gss_unwrap(SVCAUTH *auth, struct svc_req *req, XDR *xdrs,
 		   xdrproc_t xdr_func, caddr_t xdr_ptr)
 {
@@ -721,6 +706,36 @@ svcauth_gss_unwrap(SVCAUTH *auth, struct svc_req *req, XDR *xdrs,
 	mutex_unlock(&gd->lock);
 	return (result);
 }
+
+static bool
+svcauth_gss_checksum(SVCAUTH *auth, struct svc_req *req, XDR *xdrs,
+		     xdrproc_t xdr_func, caddr_t xdr_ptr)
+{
+	struct svc_rpc_gss_data *gd = SVCAUTH_PRIVATE(req->rq_auth);
+	u_int gc_seq = (u_int) (uintptr_t) req->rq_ap1;
+	bool result;
+
+	if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE) {
+		SVC_CHECKSUM(req);
+		return ((*xdr_func) (xdrs, xdr_ptr));
+	}
+
+	mutex_lock(&gd->lock);
+	/* XXX expand xdr_rpc_gss_data instead??? */
+	SVC_CHECKSUM(req);
+	result = xdr_rpc_gss_data(xdrs, xdr_func, xdr_ptr, gd->ctx,
+				  gd->sec.qop, gd->sec.svc, gc_seq);
+	mutex_unlock(&gd->lock);
+	return (result);
+}
+
+static struct svc_auth_ops svc_auth_gss_ops = {
+	svcauth_gss_wrap,
+	svcauth_gss_unwrap,
+	svcauth_gss_checksum,
+	svcauth_gss_release,
+	svcauth_gss_destroy
+};
 
 char *
 svcauth_gss_get_principal(SVCAUTH *auth)

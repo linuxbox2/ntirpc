@@ -46,13 +46,15 @@
 #include <rpc/types.h>
 #include <rpc/work_pool.h>
 #include <misc/portable.h>
-#include <misc/queue.h>
-#include <misc/rbtree.h>
 #include "reentrant.h"
 #if defined(HAVE_BLKIN)
 #include <blkin/zipkin_c.h>
 #endif
 
+typedef struct svc_xprt SVCXPRT;
+
+typedef enum xprt_stat (*svc_xprt_fun_t) (SVCXPRT *);
+typedef enum xprt_stat (*svc_xprt_xdr_fun_t) (SVCXPRT *, XDR *);
 
 /*
  * This interface must manage two items concerning remote procedure calling:
@@ -91,16 +93,8 @@
 #define SVCSET_VERSQUIET        2
 #define SVCGET_CONNMAXREC       3
 #define SVCSET_CONNMAXREC       4
-#define SVCGET_XP_RECV          5
-#define SVCSET_XP_RECV          6
 #define SVCGET_XP_FLAGS         7
 #define SVCSET_XP_FLAGS         8
-#define SVCGET_XP_GETREQ        9
-#define SVCSET_XP_GETREQ        10
-#define SVCGET_XP_DISPATCH      11
-#define SVCSET_XP_DISPATCH      12
-#define SVCGET_XP_RECV_USER_DATA        13
-#define SVCSET_XP_RECV_USER_DATA        14
 #define SVCGET_XP_FREE_USER_DATA        15
 #define SVCSET_XP_FREE_USER_DATA        16
 
@@ -114,23 +108,21 @@
 #define RPC_SVC_FDSET_GET       4
 #define RPC_SVC_FDSET_SET       5
 
-/* Svc event strategy */
-enum svc_event_type {
-	SVC_EVENT_FDSET /* trad. using select and poll (currently unhooked) */ ,
-	SVC_EVENT_EPOLL		/* Linux epoll interface */
-};
-
 typedef struct svc_init_params {
+	svc_xprt_fun_t disconnect_cb;
+	svc_xprt_xdr_fun_t request_cb;
+
 	u_long flags;
 	u_int max_connections;	/* xprts */
 	u_int max_events;	/* evchan events */
-	u_int svc_ioq_maxbuf;
-	int32_t idle_timeout;
+	u_int ioq_send_max;
+	u_int ioq_thrd_max;
 	u_int gss_ctx_hash_partitions;
 	u_int gss_max_ctx;
 	u_int gss_max_idle_gen;
 	u_int gss_max_gc;
-	u_int ioq_thrd_max;
+	uint32_t channels;
+	int32_t idle_timeout;
 } svc_init_params;
 
 /* Svc param flags */
@@ -170,77 +162,76 @@ typedef struct svc_init_params {
 #define SVC_RELEASE_FLAG_NONE		SVC_XPRT_FLAG_NONE
 #define SVC_RELEASE_FLAG_LOCKED		SVC_XPRT_FLAG_LOCKED
 
-/* XXX Ganesha
- * Don't confuse with (currently incomplete) transport type, nee
- * socktype. */
+/* Don't confuse with (currently incomplete) transport type, nee socktype.
+ */
 typedef enum xprt_type {
 	XPRT_UNKNOWN = 0,
+	XPRT_NON_RENDEZVOUS,
 	XPRT_UDP,
+	XPRT_UDP_RENDEZVOUS,
 	XPRT_TCP,
 	XPRT_TCP_RENDEZVOUS,
 	XPRT_SCTP,
+	XPRT_SCTP_RENDEZVOUS,
 	XPRT_RDMA,
+	XPRT_RDMA_RENDEZVOUS,
 	XPRT_VSOCK,
 	XPRT_VSOCK_RENDEZVOUS
 } xprt_type_t;
 
 enum xprt_stat {
-	XPRT_DIED,
+	XPRT_IDLE = 0,
 	XPRT_MOREREQS,
-	XPRT_IDLE,
+	/* always last in this order for comparisons */
+	XPRT_DIED,
 	XPRT_DESTROYED
 };
 
 struct SVCAUTH;			/* forward decl. */
 struct svc_req;			/* forward decl. */
 
+typedef enum xprt_stat (*svc_req_fun_t) (struct svc_req *);
+
 /*
  * Server side transport handle
  */
-typedef struct rpc_svcxprt {
+struct svc_xprt {
 	struct xp_ops {
 		/* receive incoming requests */
-		bool (*xp_recv) (struct svc_req *);
+		svc_xprt_fun_t xp_recv;
 
 		/* get transport status */
-		enum xprt_stat (*xp_stat) (struct rpc_svcxprt *);
+		svc_xprt_fun_t xp_stat;
 
-		/* get arguments, thread u_data in arg4 */
-		bool (*xp_getargs) (struct svc_req *, xdrproc_t, void *,
-				    void *);
+		/* decode incoming message header (called by request_cb) */
+		svc_req_fun_t xp_decode;
 
 		/* send reply */
-		bool (*xp_reply) (struct svc_req *);
+		svc_req_fun_t xp_reply;
 
-		/* free mem allocated for args */
-		bool (*xp_freeargs) (struct svc_req *, xdrproc_t, void *);
+		/* optional checksum (after authentication/decryption) */
+		svc_req_fun_t xp_checksum;
 
 		/* actually destroy after xp_destroy_it and xp_release_it */
-		void (*xp_destroy) (struct rpc_svcxprt *, u_int,
-				    const char *, const int);
+		void (*xp_destroy) (SVCXPRT *, u_int, const char *, const int);
 
 		/* catch-all function */
-		bool (*xp_control) (struct rpc_svcxprt *, const u_int, void *);
-
-		/* handle incoming requests (calls xp_recv) */
-		bool (*xp_getreq) (struct rpc_svcxprt *);
-
-		/* call dispatch strategy function */
-		void (*xp_dispatch) (struct rpc_svcxprt *, struct rpc_msg **);
-
-		/* rendezvous (epilogue) */
-		u_int (*xp_recv_user_data) (struct rpc_svcxprt *,
-					    struct rpc_svcxprt *,
-					    const u_int, void *);
+		bool (*xp_control) (SVCXPRT *, const u_int, void *);
 
 		/* free client user data */
-		bool (*xp_free_user_data) (struct rpc_svcxprt *);
+		svc_xprt_fun_t xp_free_user_data;
 	} *xp_ops;
+
+	/* handle incoming connections (per xp_fd) */
+	union {
+		svc_req_fun_t process_cb;
+		svc_xprt_fun_t rendezvous_cb;
+	}  xp_dispatch;
+	SVCXPRT *xp_parent;
 
 	char *xp_tp;		/* transport provider device name */
 	char *xp_netid;		/* network token */
 
-	void *xp_ev;		/* event handle */
 	void *xp_p1;		/* private: for use by svc ops */
 	void *xp_p2;		/* private: for use by svc ops */
 	void *xp_p3;		/* private: for use by svc lib */
@@ -263,34 +254,14 @@ typedef struct rpc_svcxprt {
 	/* serialize private data */
 	mutex_t xp_lock;
 
-	/* event vector list */
-	TAILQ_ENTRY(rpc_svcxprt) xp_evq;
-
-	/* indexed by fd */
-	struct opr_rbtree_node xp_fd_node;
-
-	uint32_t xp_refs;	/* handle reference count */
-	uint32_t xp_requests;	/* related requests count */
-
 	int xp_fd;
 	int xp_ifindex;		/* interface index */
 	int xp_si_type;		/* si type */
 	int xp_type;		/* xprt type */
 
+	uint32_t xp_refs;	/* handle reference count */
 	uint16_t xp_flags;	/* flags */
-
-	/*
-	 * union of event processor types
-	 */
-	enum svc_event_type ev_type;
-	union {
-#if defined(TIRPC_EPOLL)
-		struct {
-			struct epoll_event event;
-		} epoll;
-#endif
-	} ev_u;
-} SVCXPRT;
+};
 
 /* Service record used by exported search routines */
 typedef struct svc_record {
@@ -313,15 +284,6 @@ typedef enum svc_lookup_result {
 	SVC_LKP_ERR = 667,
 } svc_lookup_result_t;
 
-/* functions which can be installed using a control function, e.g.,
- * xp_ops->xp_control */
-typedef bool(*xp_recv_t) (struct svc_req *);
-typedef bool(*xp_getreq_t) (struct rpc_svcxprt *);
-typedef void (*xp_dispatch_t) (struct rpc_svcxprt *, struct rpc_msg **);
-typedef u_int(*xp_recv_user_data_t) (struct rpc_svcxprt *, struct rpc_svcxprt *,
-				     const u_int, void *);
-typedef bool(*xp_free_user_data_t) (struct rpc_svcxprt *);
-
 /*
  * Service request
  */
@@ -333,7 +295,7 @@ struct svc_req {
 	caddr_t rq_svcname;	/* read only cooked service cred */
 
 	/* New with N TI-RPC */
-	void *rq_context;	/* private context */
+	XDR *rq_xdrs;
 	void *rq_u1;		/* user data */
 	void *rq_u2;		/* user data */
 	uint64_t rq_cksum;
@@ -345,15 +307,6 @@ struct svc_req {
 
 	/* avoid separate alloc/free */
 	struct rpc_msg rq_msg;
-
-	/* copy of remote transport address */
-	struct sockaddr_storage rq_raddr;
-
-	/* Store dest addr for UDP to send replys from */
-	struct sockaddr_storage rq_daddr;
-
-	size_t rq_raddr_len;
-	size_t rq_daddr_len;
 
 #if defined(HAVE_BLKIN)
 	/* blkin tracing */
@@ -394,37 +347,26 @@ __END_DECLS
  *
  * SVCXPRT *xprt;
  * struct svc_req *req;
- * xdrproc_t xargs;
- * void * argsp;
  */
-#define SVC_RECV(req) \
-	(*((req)->rq_xprt)->xp_ops->xp_recv)((req))
-#define svc_recv(req)				\
-	(*((req)->rq_xprt)->xp_ops->xp_recv)((req))
+#define SVC_RECV(xprt) \
+	(*(xprt)->xp_ops->xp_recv)(xprt)
 
 #define SVC_STAT(xprt) \
 	(*(xprt)->xp_ops->xp_stat)(xprt)
-#define svc_stat(xprt)				\
-	(*(xprt)->xp_ops->xp_stat)(xprt)
 
-#define SVC_GETARGS(req, xargs, argsp, u_data)			\
-	(*((req)->rq_xprt)->xp_ops->xp_getargs)((req),(xargs),(argsp),(u_data))
-#define svc_getargs(req, xargs, argsp, u_data)			\
-	(*((req)->rq_xprt)->xp_ops->xp_getargs)((req),(xargs),(argsp),(u_data))
+#define SVC_DECODE(req) \
+	(*((req)->rq_xprt)->xp_ops->xp_decode)(req)
 
-#define SVC_REPLY(req)				\
-	(*((req)->rq_xprt)->xp_ops->xp_reply)((req))
-#define svc_reply(req) 				\
-	(*((req)->rq_xprt)->xp_ops->xp_reply)((req))
+#define SVC_REPLY(req) \
+	(*((req)->rq_xprt)->xp_ops->xp_reply)(req)
 
-#define SVC_FREEARGS(req, xargs, argsp)			\
-	(*((req)->rq_xprt)->xp_ops->xp_freeargs)((req),(xargs),(argsp))
-#define svc_freeargs(req, xargs, argsp)			\
-	(*((req)->rq_xprt)->xp_ops->xp_freeargs)((req),(xargs),(argsp))
+#define SVC_CHECKSUM(req) \
+	if (((req)->rq_xprt)->xp_ops->xp_checksum) \
+		(*((req)->rq_xprt)->xp_ops->xp_checksum)(req)
 
 /* Protect a SVCXPRT with a SVC_REF for each call or request.
  */
-static inline void svc_ref_it(struct rpc_svcxprt *xprt, u_int flags,
+static inline void svc_ref_it(SVCXPRT *xprt, u_int flags,
 			      const char *tag, const int line)
 {
 	atomic_inc_uint32_t(&xprt->xp_refs);
@@ -437,14 +379,10 @@ static inline void svc_ref_it(struct rpc_svcxprt *xprt, u_int flags,
 }
 #define SVC_REF2(xprt, flags, tag, line)				\
 	svc_ref_it(xprt, flags, tag, line)
-#define svc_ref2(xprt, flags, tag, line)				\
-	svc_ref_it(xprt, flags, tag, line)
 #define SVC_REF(xprt, flags)						\
 	svc_ref_it(xprt, flags, __func__, __LINE__)
-#define svc_ref(xprt, flags)						\
-	svc_ref_it(xprt, flags, __func__, __LINE__)
 
-static inline void svc_release_it(struct rpc_svcxprt *xprt, u_int flags,
+static inline void svc_release_it(SVCXPRT *xprt, u_int flags,
 				  const char *tag, const int line)
 {
 	uint32_t refs = atomic_dec_uint32_t(&xprt->xp_refs);
@@ -475,17 +413,13 @@ static inline void svc_release_it(struct rpc_svcxprt *xprt, u_int flags,
 }
 #define SVC_RELEASE2(xprt, flags, tag, line)				\
 	svc_release_it(xprt, flags, __func__, __LINE__)
-#define svc_release2(xprt, flags, tag, line)				\
-	svc_release_it(xprt, flags, __func__, __LINE__)
 #define SVC_RELEASE(xprt, flags)					\
-	svc_release_it(xprt, flags, __func__, __LINE__)
-#define svc_release(xprt, flags)					\
 	svc_release_it(xprt, flags, __func__, __LINE__)
 
 /* SVC_DESTROY is SVC_RELEASE with once-only semantics.  Also, idempotent
  * SVC_XPRT_FLAG_DESTROYED indicates that more references should not be taken.
  */
-static inline void svc_destroy_it(struct rpc_svcxprt *xprt,
+static inline void svc_destroy_it(SVCXPRT *xprt,
 				  const char *tag, const int line)
 {
 	uint16_t flags = atomic_postset_uint16_t_bits(&xprt->xp_flags,
@@ -502,10 +436,8 @@ static inline void svc_destroy_it(struct rpc_svcxprt *xprt,
 }
 #define SVC_DESTROY(xprt)						\
 	svc_destroy_it(xprt, __func__, __LINE__)
-#define svc_destroy(xprt)						\
-	svc_destroy_it(xprt, __func__, __LINE__)
 
-#define SVC_CONTROL(xprt, rq, in)			\
+#define SVC_CONTROL(xprt, rq, in)					\
 	(*(xprt)->xp_ops->xp_control)((xprt), (rq), (in))
 
 /*
@@ -622,6 +554,11 @@ __END_DECLS
 #define RPC_ANYSOCK -1
 #define RPC_ANYFD RPC_ANYSOCK
 /*
+ * Usual sizes for svcxxx_ncreate
+ */
+#define RPC_MAXDATA_DEFAULT (8192)
+#define RPC_MAXDATA_LEGACY (262144)
+/*
  * These are the existing service side transport implementations
  */
 __BEGIN_DECLS
@@ -718,9 +655,6 @@ extern SVCXPRT *svcunix_ncreate(int, u_int, u_int, char *);
 extern SVCXPRT *svc_dg_ncreatef(const int, const u_int, const u_int,
 				const uint32_t);
 /*
- * const int fd;                                -- open connection
- * const u_int sendsize;                        -- max send size
- * const u_int recvsize;                        -- max recv size
  *      const int fd;                           -- open connection end point
  *      const u_int sendsize;                   -- max send size
  *      const u_int recvsize;                   -- max recv size
@@ -762,16 +696,13 @@ extern SVCXPRT *svcunixfd_ncreate(int, u_int, u_int);
 extern SVCXPRT *svc_raw_ncreate(void);
 
 /*
- * RDMA based rpc
+ * RPC over RDMA
  */
 struct rpc_rdma_attr {
 	char *statistics_prefix;
 	/* silly char * to pass to rdma_getaddrinfo() */
 	char *node;			/**< remote peer's hostname */
 	char *port;			/**< service port (or name) */
-
-	void (*disconnect_cb)(SVCXPRT *);
-	enum xprt_stat (*request_cb)(void *, SVCXPRT *);
 
 	u_int sq_depth;			/**< depth of Send Queue */
 	u_int max_send_sge;		/**< s/g elements per send */
@@ -795,13 +726,11 @@ extern SVCXPRT *rpc_rdma_ncreatef(const struct rpc_rdma_attr *, const u_int,
  */
 
 static inline SVCXPRT *
-rpc_rdma_create(struct rpc_rdma_attr *xa)
+svc_rdma_ncreate(const struct rpc_rdma_attr *xa, const u_int sendsize,
+		 const u_int recvsize)
 {
-	return rpc_rdma_ncreatef(xa, 4*1024, 4*1024, SVC_XPRT_FLAG_NONE);
+	return rpc_rdma_ncreatef(xa, sendsize, recvsize, SVC_CREATE_FLAG_CLOSE);
 }
-
-extern SVCXPRT *svc_rdma_ncreate(void *arg, const u_int sendsize,
-                                const u_int recvsize, const u_int flags);
 
 /*
  * Getreq plug-out prototype

@@ -152,13 +152,12 @@ NTIRPC_${NTIRPC_VERSION} {
     svc_init;
     svc_ncreate;
     svc_raw_ncreate;
-    svc_rdma_ncreate;
     svc_reg;
     svc_register;
     svc_rqst_new_evchan;
     svc_rqst_evchan_reg;
     svc_rqst_evchan_unreg;
-    svc_rqst_rearm_events;
+    svc_rqst_shutdown;
     svc_rqst_thrd_run;
     svc_rqst_thrd_signal;
     svc_sendreply;
@@ -214,11 +213,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_float;
     xdr_free_null_stream;
     xdr_hyper;
-    xdr_inrec_cksum;
-    xdr_inrec_create;
-    xdr_inrec_eof;
-    xdr_inrec_readahead;
-    xdr_inrec_skiprecord;
     xdr_int;
     xdr_int8_t;
     xdr_int16_t;

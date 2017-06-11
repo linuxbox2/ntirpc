@@ -120,10 +120,11 @@ typedef struct xdr_vio {
 /* vio_wrap >= vio_tail >= vio_head >= vio_base */
 
 #define UIO_FLAG_NONE		0x0000
-#define UIO_FLAG_GIFT		0x0001
+#define UIO_FLAG_BUFQ		0x0001
 #define UIO_FLAG_FREE		0x0002
-#define UIO_FLAG_BUFQ		0x0004
-#define UIO_FLAG_REALLOC	0x0008
+#define UIO_FLAG_GIFT		0x0004
+#define UIO_FLAG_MORE		0x0008
+#define UIO_FLAG_REALLOC	0x0010
 
 struct xdr_uio;
 typedef void (*xdr_uio_release)(struct xdr_uio *, u_int);
@@ -147,9 +148,10 @@ typedef struct xdr_uio {
 #define XDR_PUTBUFS_FLAG_NONE    0x0000
 #define XDR_PUTBUFS_FLAG_RDNLY   0x0001
 
-#define XDR_FLAG_NONE    0x0000
-#define XDR_FLAG_CKSUM   0x0001
-#define XDR_FLAG_VIO     0x0002
+#define XDR_FLAG_NONE		0x0000
+#define XDR_FLAG_CKSUM		0x0001
+#define XDR_FLAG_FREE		0x0002
+#define XDR_FLAG_VIO		0x0004
 
 /*
  * The XDR handle.

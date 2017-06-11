@@ -60,7 +60,6 @@
 #include "rpc_dplx_internal.h"
 #include "rpc_ctx.h"
 #include <rpc/svc_rqst.h>
-#include <rpc/xdr_inrec.h>
 #include <rpc/xdr_ioq.h>
 #include <getpeereid.h>
 #include <misc/opr.h>
@@ -98,16 +97,6 @@ svc_ioq_init(void)
 		TAILQ_INIT(&ifph->qh);
 		mutex_init(&ifph->qmutex, NULL);
 	}
-}
-
-static inline void
-cfconn_set_dead(SVCXPRT *xprt)
-{
-	struct svc_vc_xprt *xd = VC_DR(REC_XPRT(xprt));
-
-	mutex_lock(&xprt->xp_lock);
-	xd->sx.strm_stat = XPRT_DIED;
-	mutex_unlock(&xprt->xp_lock);
 }
 
 #define LAST_FRAG ((u_int32_t)(1 << 31))
@@ -191,7 +180,7 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s() writev failed (%d)\n",
 				__func__, errno);
-			cfconn_set_dead(xprt);
+			SVC_DESTROY(xprt);
 			break;
 		}
 		fbytes -= result;

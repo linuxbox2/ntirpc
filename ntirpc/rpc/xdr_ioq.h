@@ -54,6 +54,8 @@ struct xdr_ioq_uv
 
 #define ioquv_length(uv) \
 	((uintptr_t)((uv)->v.vio_tail) - (uintptr_t)((uv)->v.vio_head))
+#define ioquv_more(uv) \
+	((uintptr_t)((uv)->v.vio_wrap) - (uintptr_t)((uv)->v.vio_tail))
 #define ioquv_size(uv) \
 	((uintptr_t)((uv)->v.vio_wrap) - (uintptr_t)((uv)->v.vio_base))
 
@@ -70,11 +72,11 @@ struct xdr_ioq_uv_head {
 					 char *comment, u_int count,
 					 u_int ioq_flags);
 
-	u_int plength;		/* sub-total of previous lengths, not including
+	size_t min_bsize;	/* multiple of pagesize */
+	size_t max_bsize;	/* multiple of min_bsize */
+	size_t plength;		/* sub-total of previous lengths, not including
 				 * any length in this xdr_ioq_uv */
 	u_int pcount;		/* fill index (0..m) in the current stream */
-	u_int min_bsize;	/* multiple of pagesize */
-	u_int max_bsize;	/* multiple of min_bsize */
 };
 
 struct xdr_ioq {
@@ -94,10 +96,14 @@ struct xdr_ioq {
 
 /* avoid conflicts with UIO_FLAG */
 #define IOQ_FLAG_NONE		0x0000
-#define IOQ_FLAG_BALLOC		0x4000
-#define IOQ_FLAG_XTENDQ		0x8000
+/* ioq_s.qflags */
+#define IOQ_FLAG_SEGMENT	0x0100
+/* uint32_t instructions */
+#define IOQ_FLAG_LOCKED		0x00010000
+#define IOQ_FLAG_UNLOCK		0x00020000
+#define IOQ_FLAG_BALLOC		0x00040000
 
-extern struct xdr_ioq_uv *xdr_ioq_uv_create(u_int size, u_int uio_flags);
+extern struct xdr_ioq_uv *xdr_ioq_uv_create(size_t size, u_int uio_flags);
 extern struct poolq_entry *xdr_ioq_uv_fetch(struct xdr_ioq *xioq,
 					     struct poolq_head *ioqh,
 					     char *comment,
@@ -110,7 +116,8 @@ extern struct poolq_entry *xdr_ioq_uv_fetch_nothing(struct xdr_ioq *xioq,
 						     u_int ioq_flags);
 extern void xdr_ioq_uv_release(struct xdr_ioq_uv *uv);
 
-extern XDR *xdr_ioq_create(u_int min_bsize, u_int max_bsize, u_int uio_flags);
+extern struct xdr_ioq *xdr_ioq_create(size_t min_bsize, size_t max_bsize,
+				      u_int uio_flags);
 extern void xdr_ioq_release(struct poolq_head *ioqh);
 extern void xdr_ioq_reset(struct xdr_ioq *xioq, u_int wh_pos);
 extern void xdr_ioq_setup(struct xdr_ioq *xioq);
