@@ -615,8 +615,6 @@ extern void svc_getreqset(fd_set *);
 extern void svc_getreq_common(int);
 struct pollfd;
 extern void svc_getreq_poll(struct pollfd *, int);
-extern void svc_run(void);
-extern void svc_exit(void);
 __END_DECLS
 /*
  * Socket to use on svcxxx_ncreate call to get default socket

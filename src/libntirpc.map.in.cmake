@@ -148,7 +148,6 @@ NTIRPC_${NTIRPC_VERSION} {
     svc_auth_authenticate;
     svc_auth_reg;
     svc_dg_ncreatef;
-    svc_exit;
     svc_fd_ncreatef;
     svc_init;
     svc_ncreate;
@@ -162,8 +161,6 @@ NTIRPC_${NTIRPC_VERSION} {
     svc_rqst_rearm_events;
     svc_rqst_thrd_run;
     svc_rqst_thrd_signal;
-    svc_run;
-    svc_run_epoll;
     svc_sendreply;
     svc_shutdown;
     svc_tli_ncreate;

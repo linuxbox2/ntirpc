@@ -78,8 +78,6 @@
 #define authunix_create(a, b, c, d, e) authunix_ncreate(a, b, c, d, e)
 #define authunix_create_default() authunix_ncreate_default()
 #define authnone_create() authnone_ncreate()
-#define authdes_create(a, b, c, d) authdes_ncreate(a, b, c, d)
-#define authdes_seccreate(a, b, c, d) authdes_nseccreate(a, b, c, d)
 #define authsys_create(c, i1, i2, i3, ip) \
 	authunix_ncreate((c), (i1), (i2), (i3), (ip))
 #define authsys_create_default() authunix_ncreate_default()

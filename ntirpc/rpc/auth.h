@@ -302,21 +302,7 @@ __BEGIN_DECLS
 extern AUTH *authunix_ncreate(char *, uid_t, uid_t, int, uid_t *);
 extern AUTH *authunix_ncreate_default(void);	/* takes no parameters */
 extern AUTH *authnone_ncreate(void);	/* takes no parameters */
-__END_DECLS
-/*
- * DES style authentication
- * AUTH *authsecdes_create(servername, window, timehost, ckey)
- *  char *servername;  - network name of server
- * u_int window;   - time to live
- *  const char *timehost;   - optional hostname to sync with
- *  des_block *ckey;  - optional conversation key to use
- */
-__BEGIN_DECLS
-extern AUTH *authdes_ncreate(char *, u_int, struct sockaddr *,
-			     des_block *);
-extern AUTH *authdes_nseccreate(const char *, const u_int, const char *,
-				const des_block *);
-__END_DECLS __BEGIN_DECLS
+
 extern bool xdr_opaque_auth(XDR *, struct opaque_auth *);
 __END_DECLS
 /*

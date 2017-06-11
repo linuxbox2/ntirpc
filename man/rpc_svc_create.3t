@@ -45,8 +45,6 @@ These routines are part of the RPC
 library which allows C language programs to make procedure
 calls on servers across the network.
 These routines deal with the creation of service handles.
-Once the handle is created, the server can be invoked by calling
-.Fn svc_run .
 .Sh Routines
 See
 .Xr rpc 3
@@ -144,16 +142,7 @@ service (see
 The
 .Fa dispatch
 function
-is called when there is a remote procedure call for the given
-.Fa prognum
-and
-.Fa versnum ;
-this requires calling
-.Fn svc_run
-(see
-.Fn svc_run
-in
-.Xr rpc_svc_reg 3 ) .
+is obsolete.
 If
 .Fn svc_create
 succeeds, it returns the number of server
@@ -226,10 +215,6 @@ without any kernel and networking interference.
 This routine returns
 .Dv NULL
 if it fails, and an error message is logged.
-.Pp
-Note:
-.Fn svc_run
-should not be called when the raw interface is being used.
 .It Fn svc_tli_create
 This routine creates an RPC
 server handle, and returns a pointer to it.
@@ -296,13 +281,7 @@ and registers itself with the rpcbind service.
 The
 .Fa dispatch
 function
-is called when there is a remote procedure call
-for the given
-.Fa prognum
-and
-.Fa versnum ;
-this requires calling
-.Fn svc_run .
+is obsolete.
 The
 .Fn svc_tp_create
 function

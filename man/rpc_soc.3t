@@ -46,7 +46,6 @@
 .Nm svc_getreq ,
 .Nm svc_getreqset ,
 .Nm svc_register ,
-.Nm svc_run ,
 .Nm svc_sendreply ,
 .Nm svc_unregister ,
 .Nm svcerr_auth ,
@@ -1075,9 +1074,7 @@ to the
 .Xr select 2
 system call.
 This is only of interest
-if a service implementor does not call
-.Fn svc_run ,
-but rather does his own asynchronous event processing.
+if a service implementor does his own asynchronous event processing.
 This variable is read\-only (do not pass its address to
 .Xr select 2 ! ) ,
 yet it may change after calls to
@@ -1157,9 +1154,7 @@ service transport handle,
 .Xc
 .Pp
 This routine is only of interest if a service implementor
-does not call
-.Fn svc_run ,
-but instead implements custom asynchronous event processing.
+implements custom asynchronous event processing.
 It is called when the
 .Xr select 2
 system call has determined that an
@@ -1232,21 +1227,6 @@ has the following form:
 The
 .Fn svc_register
 routine returns one if it succeeds, and zero otherwise.
-.Pp
-.It Xo
-.Fn svc_run
-.Xc
-.Pp
-This routine never returns.
-It waits for
-.Tn RPC
-requests to arrive, and calls the appropriate service
-procedure using
-.Fn svc_getreq
-when one arrives.
-This procedure is usually waiting for a
-.Xr select 2
-system call to return.
 .Pp
 .It Xo
 .Ft bool_t
