@@ -149,8 +149,6 @@ struct svc_dg_xprt {
 
 	struct msghdr su_msghdr;	/* msghdr received from clnt */
 	size_t su_iosz;			/* size of send.recv buffer */
-	u_int su_recvsz;
-	u_int su_sendsz;
 
 	unsigned char su_cmsg[SVC_CMSG_SIZE];	/* cmsghdr received from clnt */
 };
@@ -173,11 +171,8 @@ struct svc_vc_xprt {
 	struct {
 		enum xprt_stat strm_stat;
 		struct timespec last_recv;	/* XXX move to shared? */
-		int32_t maxrec;
 	} sx;
 	struct {
-		u_int sendsz;
-		u_int recvsz;
 		bool nonblock;
 	} shared;
 };

@@ -50,6 +50,10 @@ struct rpc_dplx_rec {
 		rpc_dplx_lock_t lock;
 	} recv;
 
+	size_t maxrec;
+	long pagesz;
+	u_int recvsz;
+	u_int sendsz;
 	uint32_t call_xid;		/**< current call xid */
 	uint32_t ev_count;		/**< atomic count of waiting events */
 };

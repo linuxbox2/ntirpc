@@ -214,9 +214,9 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	/*
 	 * Should be multiple of 4 for XDR.
 	 */
-	xd->shared.sendsz = ((sendsize + 3) / 4) * 4;
-	xd->shared.recvsz = ((recvsize + 3) / 4) * 4;
-	xd->sx.maxrec = __svc_maxrec;
+	xd->sx_dr.sendsz = ((sendsize + 3) / 4) * 4;
+	xd->sx_dr.recvsz = ((recvsize + 3) / 4) * 4;
+	xd->sx_dr.maxrec = __svc_maxrec;
 
 	/* duplex streams are not used by the rendevous transport */
 
@@ -396,12 +396,12 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 	/*
 	 * Should be multiple of 4 for XDR.
 	 */
-	xd->shared.sendsz = ((sendsize + 3) / 4) * 4;
-	xd->shared.recvsz = ((recvsize + 3) / 4) * 4;
-	xd->sx.maxrec = __svc_maxrec;
+	xd->sx_dr.sendsz = ((sendsize + 3) / 4) * 4;
+	xd->sx_dr.recvsz = ((recvsize + 3) / 4) * 4;
+	xd->sx_dr.maxrec = __svc_maxrec;
 
 	/* duplex streams */
-	xdr_inrec_create(rec->ioq.xdrs, xd->shared.recvsz, xd,
+	xdr_inrec_create(rec->ioq.xdrs, xd->sx_dr.recvsz, xd,
 			 generic_read_vc);
 
 	/* the SVCXPRT created in svc_vc_create accepts new connections
@@ -467,7 +467,7 @@ rendezvous_request(struct svc_req *req)
 	/*
 	 * make a new transport (re-uses xprt)
 	 */
-	newxprt = makefd_xprt(fd, req_xd->shared.sendsz, req_xd->shared.recvsz,
+	newxprt = makefd_xprt(fd, req_xd->sx_dr.sendsz, req_xd->sx_dr.recvsz,
 			      &si, SVC_XPRT_FLAG_CLOSE);
 	if ((!newxprt) || (!(newxprt->xp_flags & SVC_XPRT_FLAG_INITIAL)))
 		return (FALSE);
@@ -509,9 +509,9 @@ rendezvous_request(struct svc_req *req)
 #endif
 
 	xd = VC_DR(REC_XPRT(newxprt));
-	xd->shared.recvsz = req_xd->shared.recvsz;
-	xd->shared.sendsz = req_xd->shared.sendsz;
-	xd->sx.maxrec = req_xd->sx.maxrec;
+	xd->sx_dr.recvsz = req_xd->sx_dr.recvsz;
+	xd->sx_dr.sendsz = req_xd->sx_dr.sendsz;
+	xd->sx_dr.maxrec = req_xd->sx_dr.maxrec;
 
 #if 0  /* XXX vrec wont support atm (and it seems to need work) */
 	if (cd->maxrec != 0) {
@@ -668,10 +668,10 @@ svc_vc_rendezvous_control(SVCXPRT *xprt, const u_int rq, void *in)
 
 	switch (rq) {
 	case SVCGET_CONNMAXREC:
-		*(int *)in = xd->sx.maxrec;
+		*(int *)in = xd->sx_dr.maxrec;
 		break;
 	case SVCSET_CONNMAXREC:
-		xd->sx.maxrec = *(int *)in;
+		xd->sx_dr.maxrec = *(int *)in;
 		break;
 	case SVCGET_XP_RECV:
 		mutex_lock(&ops_lock);

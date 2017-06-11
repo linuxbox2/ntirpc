@@ -132,7 +132,7 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 	su = su_data(xprt);
 
 	/* buffer sizes should match svc side */
-	cx = alloc_cx_data(CX_DG_DATA, su->su_sendsz, su->su_recvsz);
+	cx = alloc_cx_data(CX_DG_DATA, su->su_dr.sendsz, su->su_dr.recvsz);
 	cx->cx_rec = &su->su_dr;
 	cu = CU_DATA(cx);
 
@@ -156,7 +156,7 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 	call_msg.cb_prog = program;
 	call_msg.cb_vers = version;
 
-	xdrmem_create(&(cu->cu_outxdrs), cu->cu_outbuf, su->su_sendsz,
+	xdrmem_create(&(cu->cu_outxdrs), cu->cu_outbuf, su->su_dr.sendsz,
 		      XDR_ENCODE);
 	if (!xdr_callhdr(&(cu->cu_outxdrs), &call_msg)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,

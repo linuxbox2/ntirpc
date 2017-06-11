@@ -181,7 +181,7 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 	xd = VC_DR(REC_XPRT(xprt));
 
 	/* buffer sizes should match svc side */
-	cx = alloc_cx_data(CX_VC_DATA, xd->shared.sendsz, xd->shared.recvsz);
+	cx = alloc_cx_data(CX_VC_DATA, xd->sx_dr.sendsz, xd->sx_dr.recvsz);
 	cx->cx_rec = &xd->sx_dr;
 	cs = CT_DATA(cx);
 
@@ -252,7 +252,7 @@ clnt_vc_ncreate_svc(const SVCXPRT *xprt, const rpcprog_t prog,
 	struct svc_vc_xprt *xd = VC_DR(REC_XPRT(xprt));
 
 	return clnt_vc_ncreatef(xprt->xp_fd, &xprt->xp_remote.nb, prog, vers,
-				xd->shared.sendsz, xd->shared.recvsz,
+				xd->sx_dr.sendsz, xd->sx_dr.recvsz,
 				flags | CLNT_CREATE_FLAG_SVCXPRT);
 }
 

@@ -195,8 +195,9 @@ svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	 * Should be multiple of 4 for XDR.
 	 */
 	su = DG_DR(rec);
-	su->su_sendsz = ((sendsize + 3) / 4) * 4;
-	su->su_recvsz = ((recvsize + 3) / 4) * 4;
+	su->su_dr.sendsz = ((sendsize + 3) / 4) * 4;
+	su->su_dr.recvsz = ((recvsize + 3) / 4) * 4;
+	su->su_dr.maxrec = ((MAX(sendsize, recvsize) + 3) / 4) * 4;
 	su->su_iosz = ((MAX(sendsize, recvsize) + 3) / 4) * 4;
 	rpc_buffer(xprt) = mem_alloc(su->su_iosz);
 
