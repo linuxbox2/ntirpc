@@ -411,7 +411,7 @@ rpc_rdma_worker_callback(struct work_pool_entry *wpe)
 		}
 
 		/* wpe->arg referenced before work_pool_submit() */
-		SVC_RELEASE(&xprt->xprt, SVC_REF_FLAG_NONE);
+		SVC_RELEASE(&xprt->sm_dr.xprt, SVC_REF_FLAG_NONE);
 		return;
 	}
 
@@ -437,7 +437,7 @@ rpc_rdma_worker_callback(struct work_pool_entry *wpe)
 	}
 
 	/* wpe->arg referenced before work_pool_submit() */
-	SVC_RELEASE(&xprt->xprt, SVC_REF_FLAG_NONE);
+	SVC_RELEASE(&xprt->sm_dr.xprt, SVC_REF_FLAG_NONE);
 }
 
 /**
@@ -717,7 +717,7 @@ rpc_rdma_cq_event_handler(RDMAXPRT *xprt)
 						break;
 				}
 
-				SVC_REF(&xprt->xprt, SVC_REF_FLAG_NONE);
+				SVC_REF(&xprt->sm_dr.xprt, SVC_REF_FLAG_NONE);
 				work_pool_submit(&svc_work_pool, &cbc->wpe);
 
 				if (xprt->state != RDMAXS_CLOSING
@@ -755,7 +755,7 @@ rpc_rdma_cq_event_handler(RDMAXPRT *xprt)
 						ntohl(wc[i].imm_data));
 				}
 
-				SVC_REF(&xprt->xprt, SVC_REF_FLAG_NONE);
+				SVC_REF(&xprt->sm_dr.xprt, SVC_REF_FLAG_NONE);
 				work_pool_submit(&svc_work_pool, &cbc->wpe);
 				break;
 
@@ -797,7 +797,7 @@ rpc_rdma_cq_event_handler(RDMAXPRT *xprt)
 						__func__, len);
 				}
 
-				SVC_REF(&xprt->xprt, SVC_REF_FLAG_NONE);
+				SVC_REF(&xprt->sm_dr.xprt, SVC_REF_FLAG_NONE);
 				work_pool_submit(&svc_work_pool, &cbc->wpe);
 				break;
 
@@ -1054,7 +1054,7 @@ rpc_rdma_cm_event_handler(RDMAXPRT *ep_xprt, struct rdma_cm_event *event)
 		mutex_unlock(&xprt->cm_lock);
 
 		if (xprt->xa->disconnect_cb)
-			xprt->xa->disconnect_cb(&xprt->xprt);
+			xprt->xa->disconnect_cb(&xprt->sm_dr.xprt);
 		break;
 
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
@@ -1163,7 +1163,7 @@ rpc_rdma_cm_thread(void *nullarg)
 
 			if (cm_xprt->state == RDMAXS_CLOSED
 			 && cm_xprt->destroy_on_disconnect)
-				SVC_DESTROY(&cm_xprt->xprt);
+				SVC_DESTROY(&cm_xprt->sm_dr.xprt);
 		}
 	}
 
@@ -1278,7 +1278,7 @@ rpc_rdma_destroy_stuff(RDMAXPRT *xprt)
 void
 rpc_rdma_destroy(SVCXPRT *s_xprt)
 {
-	RDMAXPRT *xprt = (RDMAXPRT *)s_xprt;
+	RDMAXPRT *xprt = RDMA_DR(REC_XPRT(s_xprt));
 
 	/* inhibit repeated destroy */
 	xprt->destroy_on_disconnect = false;
@@ -1339,8 +1339,8 @@ rpc_rdma_destroy(SVCXPRT *s_xprt)
 	 */
 	cond_destroy(&xprt->cm_cond);
 	mutex_destroy(&xprt->cm_lock);
-	mutex_destroy(&xprt->xprt.xp_lock);
-	mutex_destroy(&xprt->xprt.xp_auth_lock);
+	mutex_destroy(&xprt->sm_dr.xprt.xp_lock);
+	mutex_destroy(&xprt->sm_dr.xprt.xp_auth_lock);
 
 	mem_free(xprt, sizeof(*xprt));
 }
@@ -1353,7 +1353,7 @@ rpc_rdma_destroy(SVCXPRT *s_xprt)
  * @return xprt on success, NULL on failure
  */
 static RDMAXPRT *
-rpc_rdma_allocate(struct rpc_rdma_attr *xa)
+rpc_rdma_allocate(const struct rpc_rdma_attr *xa)
 {
 	RDMAXPRT *xprt;
 	int rc;
@@ -1367,9 +1367,9 @@ rpc_rdma_allocate(struct rpc_rdma_attr *xa)
 
 	xprt = mem_zalloc(sizeof(RDMAXPRT));
 
-	xprt->xprt.xp_type = XPRT_RDMA;
-	xprt->xprt.xp_refs = 1;
-	xprt->xprt.xp_ops = &rpc_rdma_ops;
+	xprt->sm_dr.xprt.xp_type = XPRT_RDMA;
+	xprt->sm_dr.xprt.xp_refs = 1;
+	xprt->sm_dr.xprt.xp_ops = &rpc_rdma_ops;
 
 	xprt->xa = xa;
 	xprt->conn_type = RDMA_PS_TCP;
@@ -1377,7 +1377,7 @@ rpc_rdma_allocate(struct rpc_rdma_attr *xa)
 
 	/* initialize locking first, will be destroyed last (above).
 	 */
-	rc = mutex_init(&xprt->xprt.xp_auth_lock, NULL);
+	rc = mutex_init(&xprt->sm_dr.xprt.xp_auth_lock, NULL);
 	if (rc) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s() mutex_init xp_auth_lock failed: %s (%d)",
@@ -1385,7 +1385,7 @@ rpc_rdma_allocate(struct rpc_rdma_attr *xa)
 		goto xp_auth_lock;
 	}
 
-	rc = mutex_init(&xprt->xprt.xp_lock, NULL);
+	rc = mutex_init(&xprt->sm_dr.xprt.xp_lock, NULL);
 	if (rc) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s() mutex_init xp_lock failed: %s (%d)",
@@ -1414,23 +1414,28 @@ rpc_rdma_allocate(struct rpc_rdma_attr *xa)
 cm_cond:
 	mutex_destroy(&xprt->cm_lock);
 cm_lock:
-	mutex_destroy(&xprt->xprt.xp_lock);
+	mutex_destroy(&xprt->sm_dr.xprt.xp_lock);
 xp_lock:
-	mutex_destroy(&xprt->xprt.xp_auth_lock);
+	mutex_destroy(&xprt->sm_dr.xprt.xp_auth_lock);
 xp_auth_lock:
 	mem_free(xprt, sizeof(*xprt));
 	return NULL;
 }
 
 /**
- * rpc_rdma_create: initialize rdma transport structures
+ * rpc_rdma_ncreatef: initialize rdma transport structures
  *
- * @param[IN] xa	parameters
+ * @param[IN] xa		parameters
+ * @param[IN] sendsize;		max send size
+ * @param[IN] recvsize;		max recv size
+ * @param[IN] flags; 		unused
  *
  * @return xprt on success, NULL on failure
  */
 SVCXPRT *
-rpc_rdma_create(struct rpc_rdma_attr *xa)
+rpc_rdma_ncreatef(const struct rpc_rdma_attr *xa,
+		  const u_int sendsize, const u_int recvsize,
+		  const uint32_t flags)
 {
 	RDMAXPRT *xprt;
 	int rc;
@@ -1484,6 +1489,25 @@ rpc_rdma_create(struct rpc_rdma_attr *xa)
 	}
 	pthread_mutex_unlock(&svc_work_pool.pqh.qmutex);
 
+	/* buffer sizes MUST be page sized */
+	xprt->sm_dr.pagesz = sysconf(_SC_PAGESIZE);
+	if (recvsize) {
+		/* round up */
+		xprt->sm_dr.recvsz = recvsize + (xprt->sm_dr.pagesz - 1);
+		xprt->sm_dr.recvsz &= ~(xprt->sm_dr.pagesz - 1);
+	} else {
+		/* default */
+		xprt->sm_dr.recvsz = xprt->sm_dr.pagesz;
+	}
+	if (sendsize) {
+		/* round up */
+		xprt->sm_dr.sendsz = sendsize + (xprt->sm_dr.pagesz - 1);
+		xprt->sm_dr.sendsz &= ~(xprt->sm_dr.pagesz - 1);
+	} else {
+		/* default */
+		xprt->sm_dr.recvsz = xprt->sm_dr.pagesz;
+	}
+
 	/* round up to the next power of two */
 	rpc_rdma_state.c_r.q_size = 2;
 	while (rpc_rdma_state.c_r.q_size < xa->backlog) {
@@ -1504,10 +1528,10 @@ rpc_rdma_create(struct rpc_rdma_attr *xa)
 		"%s() NFS/RDMA engine bound",
 		__func__);
 
-	return (&xprt->xprt);
+	return (&xprt->sm_dr.xprt);
 
 failure:
-	rpc_rdma_destroy(&xprt->xprt);
+	rpc_rdma_destroy(&xprt->sm_dr.xprt);
 	return NULL;
 }
 
@@ -1862,7 +1886,7 @@ rpc_rdma_clone(RDMAXPRT *l_xprt, struct rdma_cm_id *cm_id)
 	return xprt;
 
 failure:
-	rpc_rdma_destroy(&xprt->xprt);
+	rpc_rdma_destroy(&xprt->sm_dr.xprt);
 	return (NULL);
 }
 

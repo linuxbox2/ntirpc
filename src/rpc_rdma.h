@@ -43,6 +43,8 @@
 #include <rpc/svc.h>
 #include <rpc/xdr_ioq.h>
 
+#include "rpc_dplx_internal.h"
+
 typedef union sockaddr_union {
 	struct sockaddr sa;
 	struct sockaddr_in sa_in;
@@ -118,9 +120,9 @@ struct rpc_rdma_pd {
  * RDMA transport instance
  */
 struct rpc_rdma_xprt {
-	struct rpc_svcxprt xprt;	/**< Transport Independent handle */
+	struct rpc_dplx_rec sm_dr;
 
-	struct rpc_rdma_attr *xa;	/**< (shared) configured attributes */
+	const struct rpc_rdma_attr *xa;	/**< (shared) configured attributes */
 
 	struct rdma_event_channel *event_channel;
 	struct rdma_cm_id *cm_id;	/**< RDMA CM ID */
@@ -152,9 +154,6 @@ struct rpc_rdma_xprt {
 	struct msk_stats stats;
 	int stats_sock;
 
-	u_int recvsize;
-	u_int sendsize;
-
 	u_int conn_type;		/**< RDMA Port space (RDMA_PS_TCP) */
 	int server;			/**< connection backlog on server,
 					 * 0 (RDMAX_CLIENT):
@@ -178,6 +177,7 @@ struct rpc_rdma_xprt {
 	/* FIXME why configurable??? */
 	bool destroy_on_disconnect;	/**< should perform cleanup */
 };
+#define RDMA_DR(p) (opr_containerof((p), struct rpc_rdma_xprt, sm_dr))
 
 typedef struct rec_rdma_strm {
 	RDMAXPRT *xprt;
@@ -240,14 +240,15 @@ int rpc_rdma_accept_finalize(RDMAXPRT *xprt);
 RDMAXPRT *rpc_rdma_accept_wait(RDMAXPRT *l_xprt, int msleep);
 void rpc_rdma_destroy(SVCXPRT *s_xprt);
 
+enum xprt_stat svc_rdma_rendezvous(SVCXPRT *l_xprt);
+
 /* client */
 int rpc_rdma_connect(RDMAXPRT *xprt);
 int rpc_rdma_connect_finalize(RDMAXPRT *xprt);
 
 /* XDR functions */
-int xdr_rdma_create(XDR *, RDMAXPRT *, const u_int sendsize,
-			const u_int recvsize, const u_int flags);
-void xdr_rdma_destroy(XDR *xdrs);
+int xdr_rdma_create(XDR *, RDMAXPRT *);
+void xdr_rdma_destroy(XDR *);
 
 bool xdr_rdma_clnt_call(XDR *, u_int32_t);
 bool xdr_rdma_clnt_reply(XDR *, u_int32_t);

@@ -441,45 +441,6 @@ clnt_broadcast(u_long prog,	/* program number */
 			     (resultproc_t) rpc_wrap_bcast, "udp");
 }
 
-#if !defined(__APPLE__)
-#if USE_DES
-
-/*
- * Create the client des authentication object. Obsoleted by
- * authdes_seccreate().
- */
-AUTH *
-authdes_ncreate(char *servername,	/* network name of server */
-		u_int window,	/* time to live */
-		struct sockaddr *syncaddr, /* optional hostaddr to sync with */
-		des_block *ckey /* optional conversation key to use */)
-{
-	AUTH *dummy;
-	AUTH *nauth;
-	char hostname[NI_MAXHOST];
-
-	if (syncaddr) {
-		/*
-		 * Change addr to hostname, because that is the way
-		 * new interface takes it.
-		 */
-		if (getnameinfo
-		    (syncaddr, sizeof(syncaddr), hostname, sizeof(hostname),
-		     NULL, 0, 0) != 0)
-			goto fallback;
-
-		nauth = authdes_nseccreate(servername, window, hostname, ckey);
-		return (nauth);
-	}
- fallback:
-	dummy = authdes_nseccreate(servername, window, NULL, ckey);
-
-	return (dummy);
-}
-
-#endif				/* USE_DES */
-#endif				/* !APPLE */
-
 /*
  * Create a client handle for a unix connection. Obsoleted by clnt_vc_create()
  */

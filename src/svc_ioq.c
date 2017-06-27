@@ -224,6 +224,11 @@ svc_ioq_write(SVCXPRT *xprt, struct xdr_ioq *xioq, struct poolq_head *ifph)
 		if (svc_work_pool.params.thrd_max
 		 && !(xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
 			/* all systems are go! */
+			if (xioq->ioq_wpe.wpt) {
+				/* Spawn worker for more events */
+				rpc_dplx_ioq_submit(REC_XPRT(xprt),
+						    xioq->ioq_wpe.wpt);
+			}
 			svc_ioq_flushv(xprt, xioq);
 		}
 		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
@@ -262,6 +267,14 @@ svc_ioq_write_now(SVCXPRT *xprt, struct xdr_ioq *xioq)
 	mutex_lock(&ifph->qmutex);
 
 	if ((ifph->qcount)++ > 0) {
+		if (!xioq->ioq_wpe.wpt) {
+			/* Temporarily remember any existing task for queue */
+			xioq->ioq_wpe.wpt = REC_XPRT(xprt)->ioq.ioq_wpe.wpt;
+		} else {
+			/* Spawn worker for more events */
+			rpc_dplx_ioq_submit(REC_XPRT(xprt), xioq->ioq_wpe.wpt);
+		}
+
 		/* queue additional output requests without task switch */
 		TAILQ_INSERT_TAIL(&ifph->qh, &(xioq->ioq_s), q);
 		mutex_unlock(&ifph->qmutex);
@@ -291,6 +304,14 @@ svc_ioq_write_submit(SVCXPRT *xprt, struct xdr_ioq *xioq)
 	mutex_lock(&ifph->qmutex);
 
 	if ((ifph->qcount)++ > 0) {
+		if (!xioq->ioq_wpe.wpt) {
+			/* Temporarily remember any existing task for queue */
+			xioq->ioq_wpe.wpt = REC_XPRT(xprt)->ioq.ioq_wpe.wpt;
+		} else {
+			/* Spawn worker for more events */
+			rpc_dplx_ioq_submit(REC_XPRT(xprt), xioq->ioq_wpe.wpt);
+		}
+
 		/* queue additional output requests, they will be handled by
 		 * existing thread without another task switch.
 		 */

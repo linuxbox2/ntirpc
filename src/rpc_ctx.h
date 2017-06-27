@@ -63,10 +63,8 @@ typedef struct rpc_ctx_s {
 
 int call_xid_cmpf(const struct opr_rbtree_node *lhs,
 		  const struct opr_rbtree_node *rhs);
-void rpc_msg_init(struct rpc_msg *msg);
 
-rpc_ctx_t *rpc_ctx_alloc(CLIENT *, rpcproc_t, xdrproc_t, void *, xdrproc_t,
-			 void *, struct timeval);
+rpc_ctx_t *rpc_ctx_alloc(CLIENT *, struct timeval);
 bool rpc_ctx_next_xid(rpc_ctx_t *);
 int rpc_ctx_wait_reply(rpc_ctx_t *);
 bool rpc_ctx_xfer_replymsg(struct svc_vc_xprt *, struct rpc_msg *);

@@ -59,7 +59,6 @@ SET(ntirpc_common_SRCS
   svc_generic.c
   svc_raw.c
   svc_rqst.c
-  svc_run.c
   svc_simple.c
   svc_vc.c
   svc_xprt.c
@@ -76,13 +75,6 @@ SET(ntirpc_common_SRCS
   svc_ioq.c
   work_pool.c
 )
-
-if(USE_DES)
-  SET(ntirpc_des_SRCS
-  auth_des.c
-  authdes_prot.c
-  )
-endif(USE_DES)
 
 if(USE_GSS)
   SET(ntirpc_gss_SRCS
@@ -109,7 +101,6 @@ endif(USE_RPC_RDMA)
 # declares the library
 add_library(ntirpc SHARED
   ${ntirpc_common_SRCS}
-  ${ntirpc_des_SRCS}
   ${ntirpc_gss_SRCS}
   ${ntirpc_rdma_SRCS}
   )

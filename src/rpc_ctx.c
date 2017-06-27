@@ -65,25 +65,14 @@ call_xid_cmpf(const struct opr_rbtree_node *lhs,
 	return (1);
 }
 
-void
-rpc_msg_init(struct rpc_msg *msg)
-{
-	/* required for REPLY decodes */
-	msg->RPCM_ack.ar_verf = _null_auth;
-	msg->RPCM_ack.ar_results.where = NULL;
-	msg->RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
-}
-
 /*
  * On success, returns with RPC_CTX_FLAG_LOCKED followed by RPC_DPLX_FLAG_LOCKED
  */
 rpc_ctx_t *
-rpc_ctx_alloc(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args, void *args_ptr,
-	      xdrproc_t xdr_results, void *results_ptr, struct timeval timeout)
+rpc_ctx_alloc(CLIENT *clnt, struct timeval timeout)
 {
 	struct cx_data *cx = CX_DATA(clnt);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
-	struct svc_vc_xprt *xd = VC_DR(rec);
 	rpc_ctx_t *ctx = mem_alloc(sizeof(rpc_ctx_t));
 
 	rpc_msg_init(&ctx->cc_msg);
@@ -104,9 +93,9 @@ rpc_ctx_alloc(CLIENT *clnt, rpcproc_t proc, xdrproc_t xdr_args, void *args_ptr,
 
 	/* this lock protects both xid and rbtree */
 	rpc_dplx_rli(rec);
-	ctx->xid = ++(xd->cx.calls.xid);
+	ctx->xid = ++(rec->call_xid);
 
-	if (opr_rbtree_insert(&xd->cx.calls.t, &ctx->node_k)) {
+	if (opr_rbtree_insert(&rec->call_replies, &ctx->node_k)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: call ctx insert failed (xid %d client %p)",
 			__func__, ctx->xid, clnt);
@@ -125,14 +114,13 @@ rpc_ctx_next_xid(rpc_ctx_t *ctx)
 	CLIENT *clnt = ctx->ctx_u.clnt.clnt;
 	struct cx_data *cx = CX_DATA(clnt);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
-	struct svc_vc_xprt *xd = VC_DR(rec);
 
 	/* the lock protects both xid and rbtree */
-	opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
-	ctx->xid = ++(xd->cx.calls.xid);
+	opr_rbtree_remove(&rec->call_replies, &ctx->node_k);
+	ctx->xid = ++(rec->call_xid);
 	ctx->flags = RPC_CTX_FLAG_NONE;
 
-	if (opr_rbtree_insert(&xd->cx.calls.t, &ctx->node_k)) {
+	if (opr_rbtree_insert(&rec->call_replies, &ctx->node_k)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: call ctx insert failed (xid %d client %p)",
 			__func__, ctx->xid, clnt);
@@ -154,7 +142,7 @@ rpc_ctx_xfer_replymsg(struct svc_vc_xprt *xd, struct rpc_msg *msg)
 	rpc_dplx_lock_t *lk = &rec->recv.lock;
 
 	ctx_k.xid = msg->rm_xid;
-	nv = opr_rbtree_lookup(&xd->cx.calls.t, &ctx_k.node_k);
+	nv = opr_rbtree_lookup(&rec->call_replies, &ctx_k.node_k);
 	if (nv) {
 		ctx = opr_containerof(nv, rpc_ctx_t, node_k);
 		atomic_set_uint16_t_bits(&ctx->flags, RPC_CTX_FLAG_ACKSYNC);
@@ -184,13 +172,23 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx)
 	struct cx_data *cx = CX_DATA(clnt);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
 	struct timespec ts;
-	int code = 0;
+	int code;
 
 	/* no loop, signaled directly */
 	rpc_dplx_rui(rec);
+
+	__warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
+		"%s: call ctx %p (xid %" PRIu32 " client %p)",
+		__func__, ctx, ctx->xid, clnt);
+
 	(void)clock_gettime(CLOCK_REALTIME_FAST, &ts);
 	timespecadd(&ts, &ctx->ctx_u.clnt.timeout);
 	code = cond_timedwait(&ctx->we.cv, &ctx->we.mtx, &ts);
+
+	__warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
+		"%s: call ctx %p replied (xid %" PRIu32 " client %p)",
+		__func__, ctx, ctx->xid, clnt);
+
 	rpc_dplx_rli(rec);
 
 	/* it is possible for rpc_ctx_xfer_replymsg() to complete
@@ -245,13 +243,11 @@ rpc_ctx_release(rpc_ctx_t *ctx)
 {
 	CLIENT *clnt = ctx->ctx_u.clnt.clnt;
 	struct cx_data *cx = CX_DATA(clnt);
-	struct rpc_dplx_rec *rec = cx->cx_rec;
-	struct svc_vc_xprt *xd = VC_DR(rec);
 
 	if (atomic_dec_uint32_t(&ctx->refcount))
 		return;
 
-	opr_rbtree_remove(&xd->cx.calls.t, &ctx->node_k);
+	opr_rbtree_remove(&cx->cx_rec->call_replies, &ctx->node_k);
 	mutex_unlock(&ctx->we.mtx);
 	mutex_destroy(&ctx->we.mtx);
 	cond_destroy(&ctx->we.cv);

@@ -84,9 +84,6 @@ struct xdr_ioq {
 	pthread_cond_t ioq_cond;
 
 	struct poolq_head *ioq_pool;
-	void *ioq_p2;
-	void *ioq_u1;
-	void *ioq_u2;
 	struct xdr_ioq_uv_head ioq_uv;	/* header/vectors */
 
 	uint64_t id;

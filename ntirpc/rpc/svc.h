@@ -615,8 +615,6 @@ extern void svc_getreqset(fd_set *);
 extern void svc_getreq_common(int);
 struct pollfd;
 extern void svc_getreq_poll(struct pollfd *, int);
-extern void svc_run(void);
-extern void svc_exit(void);
 __END_DECLS
 /*
  * Socket to use on svcxxx_ncreate call to get default socket
@@ -787,7 +785,20 @@ struct rpc_rdma_attr {
 	bool use_srq;			/**< server use srq? */
 };
 
-extern SVCXPRT *rpc_rdma_create(struct rpc_rdma_attr *arg);
+extern SVCXPRT *rpc_rdma_ncreatef(const struct rpc_rdma_attr *, const u_int,
+				  const u_int, const uint32_t);
+/*
+ *      const struct rpc_rdma_attr;             -- RDMA configuration
+ *      const u_int sendsize;                   -- max send size
+ *      const u_int recvsize;                   -- max recv size
+ *      const uint32_t flags;                   -- flags
+ */
+
+static inline SVCXPRT *
+rpc_rdma_create(struct rpc_rdma_attr *xa)
+{
+	return rpc_rdma_ncreatef(xa, 4*1024, 4*1024, SVC_XPRT_FLAG_NONE);
+}
 
 extern SVCXPRT *svc_rdma_ncreate(void *arg, const u_int sendsize,
                                 const u_int recvsize, const u_int flags);

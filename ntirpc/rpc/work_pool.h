@@ -41,15 +41,6 @@
 
 #include <rpc/pool_queue.h>
 
-struct work_pool_entry;
-typedef void (*work_pool_fun_t) (struct work_pool_entry *);
-
-struct work_pool_entry {
-	struct poolq_entry pqe;		/*** 1st ***/
-	work_pool_fun_t fun;
-	void *arg;
-};
-
 struct work_pool_params {
 	int32_t thrd_max;
 	int32_t thrd_min;
@@ -63,14 +54,25 @@ struct work_pool {
 	uint32_t n_threads;
 };
 
+struct work_pool_entry;
+
 struct work_pool_thread {
 	struct poolq_entry pqe;		/*** 1st ***/
 	pthread_cond_t pqcond;
 
 	struct work_pool *pool;
 	struct work_pool_entry *work;
-	pthread_t id;
+	pthread_t pt;
 	uint32_t worker_index;
+};
+
+typedef void (*work_pool_fun_t) (struct work_pool_entry *);
+
+struct work_pool_entry {
+	struct poolq_entry pqe;		/*** 1st ***/
+	struct work_pool_thread *wpt;
+	work_pool_fun_t fun;
+	void *arg;
 };
 
 int work_pool_init(struct work_pool *, const char *, struct work_pool_params *);

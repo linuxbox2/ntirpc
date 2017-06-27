@@ -308,8 +308,6 @@ pages on which they are described:
 .Pp
 .It Fn auth_destroy
 .Xr rpc_clnt_auth 3
-.It Fn authdes_create
-.Xr rpc_soc 3
 .It Fn authnone_create
 .Xr rpc_clnt_auth 3
 .It Fn authsys_create
@@ -426,8 +424,6 @@ pages on which they are described:
 .Xr rpc_svc_calls 3
 .It Fn svc_register
 .Xr rpc_soc 3
-.It Fn svc_run
-.Xr rpc_svc_reg 3
 .It Fn svc_sendreply
 .Xr rpc_svc_reg 3
 .It Fn svc_tli_create

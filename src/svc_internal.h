@@ -148,11 +148,7 @@ struct svc_dg_xprt {
 	struct rpc_dplx_rec su_dr;	/* SVCXPRT indexed by fd */
 
 	struct msghdr su_msghdr;	/* msghdr received from clnt */
-	XDR su_xdrs;			/* XDR handle */
-
 	size_t su_iosz;			/* size of send.recv buffer */
-	u_int su_recvsz;
-	u_int su_sendsz;
 
 	unsigned char su_cmsg[SVC_CMSG_SIZE];	/* cmsghdr received from clnt */
 };
@@ -169,22 +165,14 @@ struct svc_dg_xprt {
 struct svc_vc_xprt {
 	struct rpc_dplx_rec sx_dr;	/* SVCXPRT indexed by fd */
 	struct {
-		struct {
-			uint32_t xid;	/* current xid */
-			struct opr_rbtree t;
-		} calls;
 		struct timeval cx_wait;	/* wait interval in milliseconds */
 		bool cx_waitset;	/* wait set by clnt_control? */
 	} cx;
 	struct {
 		enum xprt_stat strm_stat;
 		struct timespec last_recv;	/* XXX move to shared? */
-		int32_t maxrec;
 	} sx;
 	struct {
-		XDR xdrs_in;	/* recv queue */
-		u_int sendsz;
-		u_int recvsz;
 		bool nonblock;
 	} shared;
 };
