@@ -52,6 +52,8 @@ typedef struct SVCAUTH {
 				    xdrproc_t, caddr_t);
 		bool(*svc_ah_unwrap) (struct SVCAUTH *, struct svc_req *, XDR *,
 				      xdrproc_t, caddr_t);
+		bool(*svc_ah_checksum) (struct SVCAUTH *, struct svc_req *,
+					XDR *, xdrproc_t, caddr_t);
 		bool(*svc_ah_release) (struct SVCAUTH *, struct svc_req *);
 		bool(*svc_ah_destroy) (struct SVCAUTH *);
 	} *svc_ah_ops;
@@ -62,6 +64,9 @@ typedef struct SVCAUTH {
 	((*((auth)->svc_ah_ops->svc_ah_wrap))(auth, req, xdrs, xfunc, xwhere))
 
 #define SVCAUTH_UNWRAP(auth, req, xdrs, xfunc, xwhere) \
+	((*((auth)->svc_ah_ops->svc_ah_unwrap))(auth, req, xdrs, xfunc, xwhere))
+
+#define SVCAUTH_CHECKSUM(auth, req, xdrs, xfunc, xwhere) \
 	((*((auth)->svc_ah_ops->svc_ah_unwrap))(auth, req, xdrs, xfunc, xwhere))
 
 #define SVCAUTH_RELEASE(auth, req) \

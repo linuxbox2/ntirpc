@@ -1,5 +1,7 @@
 /*
  * Copyright (c) 2012 Linux Box Corporation.
+ * Copyright (c) 2013-2015 CohortFS, LLC.
+ * Copyright (c) 2017 Red Hat, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,8 +33,21 @@
 #include <misc/rbtree_x.h>
 
 /**
- ** Maintains a tree of all extant transports by fd
- **/
+ * @file svc_xprt.h
+ * @contributeur William Allen Simpson <bill@cohortfs.com>
+ * @brief Service transports package
+ *
+ * @section DESCRIPTION
+ *
+ * Maintains a tree of all extant transports by fd.
+ *
+ *  svc_xprt_init -- init module; usually called by svc_init()
+ *  svc_xprt_lookup -- find or create shared fd state
+ *  svc_xprt_clear -- remove a transport
+ *  svc_xprt_foreach -- scan registered transports
+ *  svc_xprt_dump_xprts -- dump registered transports
+ *  svc_xprt_shutdown -- clear the tree, destroy transports
+ */
 
 int svc_xprt_init(void);
 
@@ -42,8 +57,7 @@ typedef void (*svc_xprt_setup_t) (SVCXPRT **);
  * returns with lock taken
  */
 SVCXPRT *svc_xprt_lookup(int, svc_xprt_setup_t);
-SVCXPRT *svc_xprt_get(int);
-void svc_xprt_clear(SVCXPRT *, uint32_t);
+void svc_xprt_clear(SVCXPRT *);
 
 /* iterator callback prototype */
 #define SVC_XPRT_FOREACH_NONE    0x0000

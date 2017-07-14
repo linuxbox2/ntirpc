@@ -83,6 +83,14 @@ enum reject_stat {
 /*
  * Reply part of an rpc exchange
  */
+struct rpcversions {
+	rpcvers_t low;
+	rpcvers_t high;
+};
+struct xdrpair {
+	xdrproc_t proc;
+	void *where;
+};
 
 /*
  * Reply to an rpc request that was accepted by the server.
@@ -92,14 +100,8 @@ enum reject_stat {
 struct accepted_reply {
 	enum accept_stat ar_stat;
 	union {
-		struct {
-			rpcvers_t low;
-			rpcvers_t high;
-		} AR_versions;
-		struct {
-			caddr_t where;
-			xdrproc_t proc;
-		} AR_results;
+		struct rpcversions AR_versions;
+		struct xdrpair AR_results;
 		/* and many other null cases */
 	} ru;
 #define ar_results ru.AR_results
@@ -115,10 +117,7 @@ struct accepted_reply {
 struct rejected_reply {
 	enum reject_stat rj_stat;
 	union {
-		struct {
-			rpcvers_t low;
-			rpcvers_t high;
-		} RJ_versions;
+		struct rpcversions RJ_versions;
 		enum auth_stat RJ_why;	/* why authentication did not work */
 	} ru;
 #define rj_vers ru.RJ_versions

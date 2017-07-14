@@ -89,12 +89,13 @@ int __svc_maxiov = IOV_MAX;
 #else
 int __svc_maxiov = 1024; /* UIO_MAXIOV value from sys/uio.h */
 #endif
-int __svc_maxrec = 0;
+int __svc_maxrec = RPC_MAXDATA_LEGACY;
 
 struct svc_params __svc_params[1] = {
 	{
-	 false /* !initialized */ ,
-	 MUTEX_INITIALIZER}
+		MUTEX_INITIALIZER,
+		false /* !initialized */ ,
+	}
 };
 
 /*
@@ -140,12 +141,15 @@ svc_init(svc_init_params *params)
 {
 	mutex_lock(&__svc_params->mtx);
 	if (__svc_params->initialized) {
-		__warnx(TIRPC_DEBUG_FLAG_SVC,
+		__warnx(TIRPC_DEBUG_FLAG_WARN,
 			"%s: multiple initialization attempt (nothing happens)",
 			__func__);
 		mutex_unlock(&__svc_params->mtx);
 		return true;
 	}
+	__svc_params->disconnect_cb = params->disconnect_cb;
+	__svc_params->request_cb = params->request_cb;
+
 	__svc_params->max_connections =
 	    (params->max_connections) ? params->max_connections : FD_SETSIZE;
 
@@ -153,13 +157,11 @@ svc_init(svc_init_params *params)
 	__svc_params->xprt_u.vc.nconns = 0;
 	mutex_init(&__svc_params->xprt_u.vc.mtx, NULL);
 
-	svc_ioq_init();
-
 #if defined(HAVE_BLKIN)
 	if (params->flags & SVC_INIT_BLKIN) {
 		int r = blkin_init();
 		if (r < 0) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC,
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s: blkn_init failed\n",
 				__func__);
 		}
@@ -177,21 +179,32 @@ svc_init(svc_init_params *params)
 #endif
 	__svc_params->idle_timeout = params->idle_timeout;
 
-	/* XXX defaults to the legacy max sendsz */
-	__svc_params->svc_ioq_maxbuf =
-	    (params->svc_ioq_maxbuf) ? (params->svc_ioq_maxbuf) : 262144;
-
 	/* allow consumers to manage all xprt registration */
 	if (params->flags & SVC_INIT_NOREG_XPRTS)
 		__svc_params->flags |= SVC_FLAG_NOREG_XPRTS;
+
+	if (params->ioq_send_max)
+		__svc_params->ioq.send_max = params->ioq_send_max;
+	else
+		__svc_params->ioq.send_max = RPC_MAXDATA_DEFAULT;
 
 	if (params->ioq_thrd_max)
 		__svc_params->ioq.thrd_max = params->ioq_thrd_max;
 	else
 		__svc_params->ioq.thrd_max = 200;
 
+	svc_ioq_init();
+
 	/* uses ioq.thrd_max */
 	if (svc_work_pool_init()) {
+		mutex_unlock(&__svc_params->mtx);
+		return false;
+	}
+
+	/* uses svc_work_pool */
+	svc_rqst_init(params->channels ? params->channels : 8);
+
+	if (svc_xprt_init()) {
 		mutex_unlock(&__svc_params->mtx);
 		return false;
 	}
@@ -471,7 +484,7 @@ svc_find(rpcprog_t prog, rpcvers_t vers,
 }
 
 /* An exported search routing similar to svc_find, but with error reporting
- * needed by svc_getreq routines. */
+ */
 svc_lookup_result_t
 svc_lookup(svc_rec_t **rec, svc_vers_range_t *vrange,
 	   rpcprog_t prog, rpcvers_t vers, char *netid,
@@ -547,7 +560,7 @@ svc_sendreply(struct svc_req *req, xdrproc_t xdr_results, void *xdr_location)
 	req->rq_msg.RPCM_ack.ar_stat = SUCCESS;
 	req->rq_msg.RPCM_ack.ar_results.where = xdr_location;
 	req->rq_msg.RPCM_ack.ar_results.proc = xdr_results;
-	return (SVC_REPLY(req));
+	return (XPRT_DIED > SVC_REPLY(req));
 }
 
 /*
@@ -686,104 +699,6 @@ svcerr_progvers(struct svc_req *req, rpcvers_t low_vers, rpcvers_t high_vers)
 
 /* ******************* SERVER INPUT STUFF ******************* */
 
-/*
- * Get server side input from some transport.
- */
-
-#if !defined(_WIN32)		/* XXX */
-void
-svc_getreq(int rdfds)
-{
-	fd_set readfds;
-
-	FD_ZERO(&readfds);
-	readfds.fds_bits[0] = rdfds;
-	svc_getreqset(&readfds);
-}
-
-void
-svc_getreqset(fd_set *readfds)
-{
-	int bit, fd;
-	fd_mask mask, *maskp;
-	int sock;
-
-	assert(readfds != NULL);
-
-	maskp = readfds->fds_bits;
-	for (sock = 0; sock < FD_SETSIZE; sock += NFDBITS) {
-		for (mask = *maskp++; (bit = ffsl(mask)) != 0;
-		     mask ^= (1L << (bit - 1))) {
-			/* sock has input waiting */
-			fd = sock + bit - 1;
-			svc_getreq_common(fd);
-		}
-	}
-}
-
-void
-svc_getreq_poll(struct pollfd *pfdp, int pollretval)
-{
-	int i;
-	int fds_found;
-
-	for (i = fds_found = 0; fds_found < pollretval; i++) {
-		struct pollfd *p = &pfdp[i];
-
-		if (p->revents) {
-			/* fd has input waiting */
-			fds_found++;
-			/*
-			 *      We assume that this function is only called
-			 *      via someone _select()ing from svc_fdset or
-			 *      _poll()ing from svc_pollset[].  Thus it's safe
-			 *      to handle the POLLNVAL event by simply turning
-			 *      the corresponding bit off in svc_fdset.  The
-			 *      svc_pollset[] array is derived from svc_fdset
-			 *      and so will also be updated eventually.
-			 *
-			 *      XXX Should we do an xprt_unregister() instead?
-			 */
-			if (!(p->revents & POLLNVAL))
-				svc_getreq_common(p->fd);
-		}
-	}
-}
-#endif				/* _WIN32 */
-
-#if defined(TIRPC_EPOLL)
-void
-svc_getreqset_epoll(struct epoll_event *events, int nfds)
-{
-	int ix, code __attribute__ ((unused)) = 0;
-	SVCXPRT *xprt;
-
-	assert(events != NULL);
-
-	for (ix = 0; ix < nfds; ++ix) {
-		/* XXX should do constant-time validity check */
-		xprt = (SVCXPRT *) events[ix].data.ptr;
-		code = xprt->xp_ops->xp_getreq(xprt);
-	}
-}
-#endif				/* TIRPC_EPOLL */
-
-void
-svc_getreq_common(int fd)
-{
-	SVCXPRT *xprt;
-	bool code __attribute__ ((unused));
-
-	xprt = svc_xprt_get(fd);
-
-	if (xprt == NULL)
-		return;
-
-	code = xprt->xp_ops->xp_getreq(xprt);
-
-	return;
-}
-
 /* Allow internal or external getreq routines to validate xprt
  * has not been recursively disconnected.  (I don't completely buy the
  * logic, but it should be unchanged (Matt)) */
@@ -792,135 +707,11 @@ svc_validate_xprt_list(SVCXPRT *xprt)
 {
 	bool code;
 
-	code = (xprt == svc_xprt_get(xprt->xp_fd));
+	code = (xprt == svc_xprt_lookup(xprt->xp_fd, NULL));
+	if (code)
+		rpc_dplx_rui(REC_XPRT(xprt));
 
 	return (code);
-}
-
-void
-svc_dispatch_default(SVCXPRT *xprt, struct rpc_msg **ind_msg)
-{
-	struct svc_req r;
-	struct rpc_msg *msg = *ind_msg;
-	svc_vers_range_t vrange;
-	svc_lookup_result_t lkp_res;
-	svc_rec_t *svc_rec;
-	enum auth_stat why;
-	bool no_dispatch = false;
-
-	r.rq_xprt = xprt;
-	r.rq_msg.cb_prog = msg->cb_prog;
-	r.rq_msg.cb_vers = msg->cb_vers;
-	r.rq_msg.cb_proc = msg->cb_proc;
-	r.rq_msg.cb_cred = msg->cb_cred;
-	r.rq_msg.rm_xid = msg->rm_xid;
-
-	/* first authenticate the message */
-	why = svc_auth_authenticate(&r, &no_dispatch);
-	if ((why != AUTH_OK) || no_dispatch) {
-		svcerr_auth(&r, why);
-		return;
-	}
-
-	lkp_res = svc_lookup(&svc_rec, &vrange, r.rq_msg.cb_prog,
-			     r.rq_msg.cb_vers, NULL, 0);
-	switch (lkp_res) {
-	case SVC_LKP_SUCCESS:
-		/* call it */
-		(*svc_rec->sc_dispatch) (&r);
-		return;
-	case SVC_LKP_VERS_NOTFOUND:
-		svcerr_progvers(&r, vrange.lowvers, vrange.highvers);
-		break;
-	default:
-		svcerr_noprog(&r);
-		break;
-	}
-}
-
-bool
-svc_getreq_default(SVCXPRT *xprt)
-{
-	enum xprt_stat stat;
-	struct svc_req req = {.rq_xprt = xprt };
-	bool no_dispatch = false;
-
-	/* XXX !MT-SAFE */
-
-	/* now receive msgs from xprt (support batch calls) */
-	do {
-		if (SVC_RECV(&req)) {
-
-			/* now find the exported program and call it */
-			svc_vers_range_t vrange;
-			svc_lookup_result_t lkp_res;
-			svc_rec_t *svc_rec;
-			enum auth_stat why;
-
-			/* first authenticate the message */
-			why = svc_auth_authenticate(&req, &no_dispatch);
-			if ((why != AUTH_OK) || no_dispatch) {
-				svcerr_auth(&req, why);
-				goto call_done;
-			}
-
-			lkp_res =
-			    svc_lookup(&svc_rec, &vrange, req.rq_msg.cb_prog,
-				       req.rq_msg.cb_vers, NULL, 0);
-			switch (lkp_res) {
-			case SVC_LKP_SUCCESS:
-				(*svc_rec->sc_dispatch) (&req);
-				goto call_done;
-				break;
-			case SVC_LKP_VERS_NOTFOUND:
-				__warnx(TIRPC_DEBUG_FLAG_SVC,
-					"%s: dispatch prog vers notfound\n",
-					__func__);
-				svcerr_progvers(&req, vrange.lowvers,
-						vrange.highvers);
-				break;
-			default:
-				__warnx(TIRPC_DEBUG_FLAG_SVC,
-					"%s: dispatch prog notfound\n",
-					__func__);
-				svcerr_noprog(&req);
-				break;
-			}
-
-		}
-		/* SVC_RECV again? */
- call_done:
-		stat = SVC_STAT(xprt);
-		if (stat == XPRT_DIED) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC,
-				"%s: stat == XPRT_DIED (%p)\n", __func__,
-				xprt);
-			SVC_DESTROY(xprt);
-			SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-			xprt = 0;
-			break;
-
-		} else {
-			/*
-			 * Check if the xprt has been disconnected in a
-			 * recursive call in the service dispatch routine.
-			 * If so, then break.
-			 */
-			if (!svc_validate_xprt_list(xprt)) {
-				SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-				xprt = 0;
-				break;
-			}
-		}
-
-	} while (stat == XPRT_MOREREQS);
-
-	if (xprt) {
-		svc_rqst_rearm_events(xprt, SVC_RQST_FLAG_NONE);
-		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-	}
-
-	return (stat);
 }
 
 bool
@@ -988,6 +779,15 @@ void __rpc_set_blkin_endpoint(SVCXPRT *xprt, const char *tag)
 			xprt->blkin.svc_name);
 }
 #endif
+
+enum xprt_stat
+svc_rendezvous_stat(SVCXPRT *xprt)
+{
+	if (xprt && (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED))
+		return (XPRT_DESTROYED);
+
+	return (XPRT_IDLE);
+}
 
 int
 svc_shutdown(u_long flags)

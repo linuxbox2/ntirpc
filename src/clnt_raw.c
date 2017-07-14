@@ -160,12 +160,13 @@ clnt_raw_call(CLIENT *h, AUTH *auth, rpcproc_t proc,
 	}
 	(void)XDR_GETPOS(xdrs);	/* called just to cause overhead */
 
+#if 0
 	/*
 	 * We have to call server input routine here because this is
 	 * all going on in one process. Yuk.
 	 */
 	svc_getreq_common(FD_SETSIZE);
-
+#endif
 	/*
 	 * get results
 	 */

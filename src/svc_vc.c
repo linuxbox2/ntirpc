@@ -59,13 +59,17 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
-#include <misc/timespec.h>
+#include <getpeereid.h>
 
 #include <rpc/types.h>
+#include <misc/city.h>
 #include <misc/portable.h>
+#include <misc/timespec.h>
 #include <rpc/rpc.h>
 #include <rpc/svc.h>
 #include <rpc/svc_auth.h>
+#include <rpc/svc_rqst.h>
+#include <rpc/xdr_ioq.h>
 
 #include "rpc_com.h"
 #include "clnt_internal.h"
@@ -73,16 +77,9 @@
 #include "svc_xprt.h"
 #include "rpc_dplx_internal.h"
 #include "rpc_ctx.h"
-#include <rpc/svc_rqst.h>
-#include <rpc/xdr_inrec.h>
-#include <rpc/xdr_ioq.h>
-#include <getpeereid.h>
 #include "svc_ioq.h"
 
-int generic_read_vc(XDR *, void *, void *, int);
-
 static void svc_vc_rendezvous_ops(SVCXPRT *);
-static void svc_vc_ops(SVCXPRT *);
 static void svc_vc_override_ops(SVCXPRT *, SVCXPRT *);
 
 bool __svc_clean_idle2(int, bool);
@@ -90,7 +87,20 @@ bool __svc_clean_idle2(int, bool);
 static SVCXPRT *makefd_xprt(const int, const u_int, const u_int,
 			    struct __rpc_sockinfo *, u_int);
 
-extern pthread_mutex_t svc_ctr_lock;
+/*
+ * A record is composed of one or more record fragments.
+ * A record fragment is a four-byte header followed by zero to
+ * 2**32-1 bytes.  The header is treated as a long unsigned and is
+ * encode/decoded to the network via htonl/ntohl.  The low order 31 bits
+ * are a byte count of the fragment.  The highest order bit is a boolean:
+ * 1 => this fragment is the last fragment of the record,
+ * 0 => this fragment is followed by more fragment(s).
+ *
+ * The fragment/record machinery is not general;  it is constructed to
+ * meet the needs of xdr and rpc based on tcp.
+ */
+
+#define LAST_FRAG ((u_int32_t)(1 << 31))
 
 /*
  * Usage:
@@ -129,10 +139,8 @@ svc_vc_xprt_zalloc(void)
 	/* Init SVCXPRT locks, etc */
 	mutex_init(&xd->sx_dr.xprt.xp_lock, NULL);
 	mutex_init(&xd->sx_dr.xprt.xp_auth_lock, NULL);
-/*	TAILQ_INIT_ENTRY(&xd->sx_dr.xprt, xp_evq); sets NULL */
 	rpc_dplx_rec_init(&xd->sx_dr);
 
-	xd->sx.strm_stat = XPRT_IDLE;
 	xd->sx_dr.xprt.xp_refs = 1;
 	return (xd);
 }
@@ -216,6 +224,7 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	 */
 	xd->sx_dr.sendsz = ((sendsize + 3) / 4) * 4;
 	xd->sx_dr.recvsz = ((recvsize + 3) / 4) * 4;
+	xd->sx_dr.pagesz = sysconf(_SC_PAGESIZE);
 	xd->sx_dr.maxrec = __svc_maxrec;
 
 	/* duplex streams are not used by the rendevous transport */
@@ -283,6 +292,8 @@ svc_fd_ncreatef(const int fd, const u_int sendsize, const u_int recvsize,
 			   flags & SVC_XPRT_FLAG_CLOSE);
 	if ((!xprt) || (!(xprt->xp_flags & SVC_XPRT_FLAG_INITIAL)))
 		return (xprt);
+
+	svc_vc_override_ops(xprt, NULL);
 
 	__rpc_address_setup(&xprt->xp_local);
 	rc = getsockname(fd, xprt->xp_local.nb.buf, &xprt->xp_local.nb.len);
@@ -360,11 +371,6 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 		return (xprt);
 	}
 
-	/* XXX bi-directional?  initially I had assumed that explicit
-	 * routines to create a clnt or svc handle from an already-connected
-	 * handle of the other type, but perhaps it is more natural to
-	 * just discover it
-	 */
 	if (!__rpc_fd2sockinfo(fd, si)) {
 		atomic_clear_uint16_t_bits(&xprt->xp_flags,
 					   SVC_XPRT_FLAG_INITIALIZED);
@@ -398,22 +404,17 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 	 */
 	xd->sx_dr.sendsz = ((sendsize + 3) / 4) * 4;
 	xd->sx_dr.recvsz = ((recvsize + 3) / 4) * 4;
+	xd->sx_dr.pagesz = sysconf(_SC_PAGESIZE);
 	xd->sx_dr.maxrec = __svc_maxrec;
 
-	/* duplex streams */
-	xdr_inrec_create(rec->ioq.xdrs, xd->sx_dr.recvsz, xd,
-			 generic_read_vc);
-
-	/* the SVCXPRT created in svc_vc_create accepts new connections
-	 * in its xp_recv op, the rendezvous_request method, but xprt is
-	 * a call channel */
-	svc_vc_ops(xprt);
 #ifdef RPC_VSOCK
 	if (si->si_af == AF_VSOCK)
 		 xprt->xp_type = XPRT_VSOCK;
 #endif /* VSOCK */
 
 	xprt->xp_netid = mem_strdup(netid);
+
+	xdr_ioq_setup(&rec->ioq);
 
 	/* release */
 	rpc_dplx_rui(rec);
@@ -423,10 +424,9 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 }
 
  /*ARGSUSED*/
-static bool
-rendezvous_request(struct svc_req *req)
+static enum xprt_stat
+svc_vc_rendezvous(SVCXPRT *xprt)
 {
-	SVCXPRT *xprt = req->rq_xprt;
 	struct svc_vc_xprt *req_xd = VC_DR(REC_XPRT(xprt));
 	SVCXPRT *newxprt;
 	struct svc_vc_xprt *xd;
@@ -459,8 +459,10 @@ rendezvous_request(struct svc_req *req)
 			}	/* switch */
 			goto again;
 		}
-		return (FALSE);
+		return (XPRT_DIED);
 	}
+	if (svc_rqst_rearm_events(xprt))
+		return (XPRT_DIED);
 
 	(void) setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &n, sizeof(n));
 
@@ -470,15 +472,10 @@ rendezvous_request(struct svc_req *req)
 	newxprt = makefd_xprt(fd, req_xd->sx_dr.sendsz, req_xd->sx_dr.recvsz,
 			      &si, SVC_XPRT_FLAG_CLOSE);
 	if ((!newxprt) || (!(newxprt->xp_flags & SVC_XPRT_FLAG_INITIAL)))
-		return (FALSE);
+		return (XPRT_DIED);
 
-	/*
-	 * propagate special ops
-	 */
-	svc_vc_override_ops(xprt, newxprt);
-
-	/* move xprt_register() out of makefd_xprt */
-	(void)svc_rqst_xprt_register(xprt, newxprt);
+	svc_vc_override_ops(newxprt, xprt);
+	(void)svc_rqst_xprt_register(newxprt, xprt);
 
 	__rpc_address_setup(&newxprt->xp_remote);
 	memcpy(newxprt->xp_remote.nb.buf, &addr, len);
@@ -509,42 +506,16 @@ rendezvous_request(struct svc_req *req)
 #endif
 
 	xd = VC_DR(REC_XPRT(newxprt));
-	xd->sx_dr.recvsz = req_xd->sx_dr.recvsz;
 	xd->sx_dr.sendsz = req_xd->sx_dr.sendsz;
+	xd->sx_dr.recvsz = req_xd->sx_dr.recvsz;
+	xd->sx_dr.pagesz = req_xd->sx_dr.pagesz;
 	xd->sx_dr.maxrec = req_xd->sx_dr.maxrec;
 
-#if 0  /* XXX vrec wont support atm (and it seems to need work) */
-	if (cd->maxrec != 0) {
-		flags = fcntl(fd, F_GETFL, 0);
-		if (flags == -1)
-			return (FALSE);
-		if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
-			return (FALSE);
-		if (xd->shared.recvsz > xd->sx.maxrec)
-			xd->shared.recvsz = xd->sx.maxrec;
-		xd->shared.nonblock = TRUE;
-		__xdrrec_setnonblock(&xd->shared.xdrs_in, xd->sx.maxrec);
-		__xdrrec_setnonblock(&xd->shared.xdrs_out, xd->sx.maxrec);
-	} else
-		cd->nonblock = FALSE;
-#else
-	xd->shared.nonblock = FALSE;
-#endif
-	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx.last_recv);
+	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx_recv);
 
-	/* if parent has xp_recv_user_data, use it */
-	if (xprt->xp_ops->xp_recv_user_data)
-		xprt->xp_ops->xp_recv_user_data(xprt, newxprt,
-						SVC_RQST_FLAG_NONE, NULL);
-
-	return (FALSE);	/* there is never an rpc msg to be processed */
-}
-
- /*ARGSUSED*/
-static enum xprt_stat
-rendezvous_stat(SVCXPRT *xprt)
-{
-	return (XPRT_IDLE);
+	SVC_REF(xprt, SVC_REF_FLAG_NONE);
+	newxprt->xp_parent = xprt;
+	return (xprt->xp_dispatch.rendezvous_cb(newxprt));
 }
 
 /* XXX pending further unification
@@ -559,9 +530,9 @@ svc_vc_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	svc_rqst_xprt_unregister(xprt);
 
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-		"%s() %p xp_refs %" PRIu32
+		"%s() %p fd %d xp_refs %" PRIu32
 		" should actually destroy things @ %s:%d",
-		__func__, xprt, xprt->xp_refs, tag, line);
+		__func__, xprt, xprt->xp_fd, xprt->xp_refs, tag, line);
 
 	if ((xprt->xp_flags & SVC_XPRT_FLAG_CLOSE)
 	    && xprt->xp_fd != RPC_ANYFD)
@@ -588,6 +559,8 @@ svc_vc_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 
 	/* destroy shared XDR record streams (once) */
 	XDR_DESTROY(REC_XPRT(xprt)->ioq.xdrs);
+	if (xprt->xp_parent)
+		SVC_RELEASE(xprt->xp_parent, SVC_RELEASE_FLAG_NONE);
 
 	svc_vc_destroy_it(xprt, flags, tag, line);
 }
@@ -605,54 +578,14 @@ svc_vc_control(SVCXPRT *xprt, const u_int rq, void *in)
 	case SVCSET_XP_FLAGS:
 		xprt->xp_flags = *(u_int *) in;
 		break;
-	case SVCGET_XP_RECV:
-		mutex_lock(&ops_lock);
-		*(xp_recv_t *) in = xprt->xp_ops->xp_recv;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCSET_XP_RECV:
-		mutex_lock(&ops_lock);
-		xprt->xp_ops->xp_recv = *(xp_recv_t) in;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCGET_XP_GETREQ:
-		mutex_lock(&ops_lock);
-		*(xp_getreq_t *) in = xprt->xp_ops->xp_getreq;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCSET_XP_GETREQ:
-		mutex_lock(&ops_lock);
-		xprt->xp_ops->xp_getreq = *(xp_getreq_t) in;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCGET_XP_DISPATCH:
-		mutex_lock(&ops_lock);
-		*(xp_dispatch_t *) in = xprt->xp_ops->xp_dispatch;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCSET_XP_DISPATCH:
-		mutex_lock(&ops_lock);
-		xprt->xp_ops->xp_dispatch = *(xp_dispatch_t) in;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCGET_XP_RECV_USER_DATA:
-		mutex_lock(&ops_lock);
-		*(xp_recv_user_data_t *) in = xprt->xp_ops->xp_recv_user_data;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCSET_XP_RECV_USER_DATA:
-		mutex_lock(&ops_lock);
-		xprt->xp_ops->xp_recv_user_data = *(xp_recv_user_data_t) in;
-		mutex_unlock(&ops_lock);
-		break;
 	case SVCGET_XP_FREE_USER_DATA:
 		mutex_lock(&ops_lock);
-		*(xp_free_user_data_t *) in = xprt->xp_ops->xp_free_user_data;
+		*(svc_xprt_fun_t *) in = xprt->xp_ops->xp_free_user_data;
 		mutex_unlock(&ops_lock);
 		break;
 	case SVCSET_XP_FREE_USER_DATA:
 		mutex_lock(&ops_lock);
-		xprt->xp_ops->xp_free_user_data = *(xp_free_user_data_t) in;
+		xprt->xp_ops->xp_free_user_data = *(svc_xprt_fun_t) in;
 		mutex_unlock(&ops_lock);
 		break;
 	default:
@@ -673,54 +606,14 @@ svc_vc_rendezvous_control(SVCXPRT *xprt, const u_int rq, void *in)
 	case SVCSET_CONNMAXREC:
 		xd->sx_dr.maxrec = *(int *)in;
 		break;
-	case SVCGET_XP_RECV:
-		mutex_lock(&ops_lock);
-		*(xp_recv_t *) in = xprt->xp_ops->xp_recv;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCSET_XP_RECV:
-		mutex_lock(&ops_lock);
-		xprt->xp_ops->xp_recv = *(xp_recv_t) in;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCGET_XP_GETREQ:
-		mutex_lock(&ops_lock);
-		*(xp_getreq_t *) in = xprt->xp_ops->xp_getreq;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCSET_XP_GETREQ:
-		mutex_lock(&ops_lock);
-		xprt->xp_ops->xp_getreq = *(xp_getreq_t) in;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCGET_XP_DISPATCH:
-		mutex_lock(&ops_lock);
-		*(xp_dispatch_t *) in = xprt->xp_ops->xp_dispatch;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCSET_XP_DISPATCH:
-		mutex_lock(&ops_lock);
-		xprt->xp_ops->xp_dispatch = *(xp_dispatch_t) in;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCGET_XP_RECV_USER_DATA:
-		mutex_lock(&ops_lock);
-		*(xp_recv_user_data_t *) in = xprt->xp_ops->xp_recv_user_data;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCSET_XP_RECV_USER_DATA:
-		mutex_lock(&ops_lock);
-		xprt->xp_ops->xp_recv_user_data = *(xp_recv_user_data_t) in;
-		mutex_unlock(&ops_lock);
-		break;
 	case SVCGET_XP_FREE_USER_DATA:
 		mutex_lock(&ops_lock);
-		*(xp_free_user_data_t *) in = xprt->xp_ops->xp_free_user_data;
+		*(svc_xprt_fun_t *) in = xprt->xp_ops->xp_free_user_data;
 		mutex_unlock(&ops_lock);
 		break;
 	case SVCSET_XP_FREE_USER_DATA:
 		mutex_lock(&ops_lock);
-		xprt->xp_ops->xp_free_user_data = *(xp_free_user_data_t) in;
+		xprt->xp_ops->xp_free_user_data = *(svc_xprt_fun_t) in;
 		mutex_unlock(&ops_lock);
 		break;
 	default:
@@ -732,148 +625,212 @@ svc_vc_rendezvous_control(SVCXPRT *xprt, const u_int rq, void *in)
 static enum xprt_stat
 svc_vc_stat(SVCXPRT *xprt)
 {
-	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
-	struct svc_vc_xprt *xd = VC_DR(rec);
-	enum xprt_stat result = XPRT_IDLE;
 	uint16_t xp_flags = atomic_postclear_uint16_t_bits(&xprt->xp_flags,
 							SVC_XPRT_FLAG_BLOCKED);
 
 	if (xp_flags & SVC_XPRT_FLAG_BLOCKED) {
-		if (xd->sx.strm_stat == XPRT_DIED)
-			result = XPRT_DIED;
-		else if (!xdr_inrec_eof(rec->ioq.xdrs))
-			result = XPRT_MOREREQS;
-		rpc_dplx_rui(rec);
-		rpc_dplx_rsi(rec);
+		rpc_dplx_rui(REC_XPRT(xprt));
+		rpc_dplx_rsi(REC_XPRT(xprt));
 	}
 	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
 		return (XPRT_DESTROYED);
 
-	return (result);
+	return (XPRT_IDLE);
 }
 
-static bool
-svc_vc_recv(struct svc_req *req)
+static enum xprt_stat
+svc_vc_recv(SVCXPRT *xprt)
 {
-	SVCXPRT *xprt = req->rq_xprt;
 	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
 	struct svc_vc_xprt *xd = VC_DR(rec);
-	XDR *xdrs = rec->ioq.xdrs;	/* recv queue */
-	uint16_t xp_flags;
-	bool result = FALSE;
+	struct poolq_entry *have;
+	struct xdr_ioq_uv *uv;
+	struct xdr_ioq *xioq;
+	ssize_t rlen;
+	u_int flags;
+	int code;
 
-	/* SVC_RECV() locks dplx_rec, that is also unlocked and locked again
-	 * for rpc_ctx.  Need to ensure we're the only one with the lock now.
-	 */
+	/* See also svc_clnt (rpc_ctx via svc_vc_decode) and svc_vc_recv_task */
 	rpc_dplx_rli(rec);
-	do {
-		xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags,
-							SVC_XPRT_FLAG_BLOCKED);
-		if (!(xp_flags & SVC_XPRT_FLAG_BLOCKED))
-			break;
-		rpc_dplx_rwi(rec);
-	} while (TRUE);
+	atomic_set_uint16_t_bits(&xprt->xp_flags, SVC_XPRT_FLAG_BLOCKED);
 
-	/* XXX assert(! cd->nonblock) */
-	if (xd->shared.nonblock) {
-		if (!__xdrrec_getrec(xdrs, &xd->sx.strm_stat, TRUE))
-			return FALSE;
+	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx_recv);
+
+	have = TAILQ_LAST(&rec->ioq.ioq_uv.uvqh.qh, q_head);
+	if (!have) {
+		xioq = xdr_ioq_create(xd->sx_dr.pagesz, xd->sx_dr.maxrec,
+				      UIO_FLAG_BUFQ);
+		(rec->ioq.ioq_uv.uvqh.qcount)++;
+		TAILQ_INSERT_TAIL(&rec->ioq.ioq_uv.uvqh.qh, &xioq->ioq_s, q);
+	} else {
+		xioq = _IOQ(have);
 	}
 
-	xdrs->x_op = XDR_DECODE;
-	xdrs->x_lib[1] = (void *)xprt;	/* transiently thread xprt */
+	if (!xd->sx_fbtbc) {
+		rlen = recv(xprt->xp_fd, &xd->sx_fbtbc, BYTES_PER_XDR_UNIT,
+			    MSG_WAITALL);
 
-	/* Consumes any remaining -fragment- bytes, and clears last_frag */
-	(void)xdr_inrec_skiprecord(xdrs);
+		if (unlikely(rlen <= 0)) {
+			code = errno;
 
-	/* Advances to next record, will read up to 1024 bytes
-	 * into the stream. */
-	(void)xdr_inrec_readahead(xdrs, 1024);
+			__warnx(TIRPC_DEBUG_FLAG_WARN,
+				"%s: %p fd %d recv errno %d (will set dead)",
+				__func__, xprt, xprt->xp_fd, code);
+			SVC_DESTROY(xprt);
+			return SVC_STAT(xprt);
+		}
+
+		xd->sx_fbtbc = (int32_t)ntohl((long)xd->sx_fbtbc);
+
+		if (xd->sx_fbtbc & LAST_FRAG) {
+			xd->sx_fbtbc &= (~LAST_FRAG);
+			flags = UIO_FLAG_FREE;
+		} else {
+			flags = UIO_FLAG_FREE | UIO_FLAG_MORE;
+		}
+
+		if (unlikely(!xd->sx_fbtbc)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: %p fd %d fragment is zero (will set dead)",
+				__func__, xprt, xprt->xp_fd);
+			SVC_DESTROY(xprt);
+			return SVC_STAT(xprt);
+		}
+
+		/* one buffer per fragment */
+		uv = xdr_ioq_uv_create(xd->sx_fbtbc, flags);
+		(xioq->ioq_uv.uvqh.qcount)++;
+		TAILQ_INSERT_TAIL(&xioq->ioq_uv.uvqh.qh, &uv->uvq, q);
+	} else {
+		uv = IOQ_(TAILQ_LAST(&xioq->ioq_uv.uvqh.qh, q_head));
+	}
+
+	rlen = recv(xprt->xp_fd, uv->v.vio_tail, xd->sx_fbtbc, MSG_DONTWAIT);
+
+	if (unlikely(rlen < 0)) {
+		code = errno;
+
+		if (code == EAGAIN || code == EWOULDBLOCK) {
+			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+				"%s: %p fd %d recv errno %d (try again)",
+				__func__, xprt, xprt->xp_fd, code);
+			return SVC_STAT(xprt);
+		}
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d recv errno %d (will set dead)",
+			__func__, xprt, xprt->xp_fd, code);
+		SVC_DESTROY(xprt);
+		return SVC_STAT(xprt);
+	}
+
+	if (unlikely(!rlen)) {
+		__warnx(TIRPC_DEBUG_FLAG_EVENT,
+			"%s: %p fd %d recv closed (will set dead)",
+			__func__, xprt, xprt->xp_fd);
+		SVC_DESTROY(xprt);
+		return SVC_STAT(xprt);
+	}
+
+	if (unlikely(svc_rqst_rearm_events(xprt))) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
+			__func__, xprt, xprt->xp_fd);
+		SVC_DESTROY(xprt);
+		return SVC_STAT(xprt);
+	}
+
+	__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+		"%s: %p fd %d recv %zd of %" PRIu32,
+		__func__, xprt, xprt->xp_fd, rlen, xd->sx_fbtbc);
+
+	uv->v.vio_tail += rlen;
+	xd->sx_fbtbc -= rlen;
+
+	if (xd->sx_fbtbc || (flags & UIO_FLAG_MORE)) {
+		return SVC_STAT(xprt);
+	}
+
+	/* finished a request */
+	(rec->ioq.ioq_uv.uvqh.qcount)--;
+	TAILQ_REMOVE(&rec->ioq.ioq_uv.uvqh.qh, &xioq->ioq_s, q);
+	xdr_ioq_reset(xioq, 0);
+	return (__svc_params->request_cb(xprt, xioq->xdrs));
+}
+
+static enum xprt_stat
+svc_vc_decode(struct svc_req *req)
+{
+	XDR *xdrs = req->rq_xdrs;
+	SVCXPRT *xprt = req->rq_xprt;
+	enum xprt_stat result;
 
 	/* No need, already positioned to beginning ...
-	xdrs->x_op = XDR_DECODE;
 	XDR_SETPOS(xdrs, 0);
 	 */
+	xdrs->x_op = XDR_DECODE;
 	rpc_msg_init(&req->rq_msg);
 
 	if (!xdr_dplx_decode(xdrs, &req->rq_msg)) {
 		/* stream is unsynchronized beyond recovery */
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"%s: fd %d failed (will set xprt %p dead)",
-			__func__, xprt->xp_fd, xprt);
-		return (FALSE);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d failed (will set dead)",
+			__func__, xprt, xprt->xp_fd);
+		SVC_DESTROY(xprt);
+		return SVC_STAT(xprt);
 	}
 
 	switch (req->rq_msg.rm_direction) {
 	case CALL:
 		/* an ordinary call header */
-		result = TRUE;
+		result = xprt->xp_dispatch.process_cb(req);
 		break;
 	case REPLY:
 		/* reply header (xprt OK) */
-		rpc_ctx_xfer_replymsg(xd, &req->rq_msg);
+		result = rpc_ctx_xfer_replymsg(req);
 		break;
 	default:
-		/* not good (but xprt OK) */
-		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-			"%s: fd %d failed %p direction %" PRIu32,
-			__func__, xprt->xp_fd, xprt,
+		__warnx(TIRPC_DEBUG_FLAG_WARN,
+			"%s: %p fd %d failed direction %" PRIu32
+			" (will set dead)",
+			__func__, xprt, xprt->xp_fd,
 			req->rq_msg.rm_direction);
-		break;
+		SVC_DESTROY(xprt);
+		return SVC_STAT(xprt);
 	}
 	return (result);
 }
 
-static bool
-svc_vc_freeargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr)
+static enum xprt_stat
+svc_vc_checksum(struct svc_req *req)
 {
-	return xdr_free(xdr_args, args_ptr);
+	XDR *xdrs = req->rq_xdrs;
+
+	req->rq_cksum =
+#if 1
+	/* CithHash64 is -substantially- faster than crc32c from FreeBSD
+	 * SCTP, so prefer it until fast crc32c bests it */
+		CityHash64WithSeed(xdrs->x_data,
+				   MIN(256, xdr_size_inline(xdrs)),
+				   103);
+#else
+		calculate_crc32c(0, xdrs->x_data,
+				 MIN(256, xdr_size_inline(xdrs)));
+#endif
+	return (XPRT_IDLE);
 }
 
-static bool
-svc_vc_getargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr,
-	       void *u_data)
-{
-	XDR *xdrs = REC_XPRT(req->rq_xprt)->ioq.xdrs;	/* recv queue */
-	bool rslt;
-
-	/* threads u_data for advanced decoders */
-	xdrs->x_public = u_data;
-
-	rslt = SVCAUTH_UNWRAP(req->rq_auth, req, xdrs, xdr_args, args_ptr);
-
-	/* XXX Upstream TI-RPC lacks this call, but -does- call svc_dg_freeargs
-	 * in svc_dg_getargs if SVCAUTH_UNWRAP fails. */
-	if (rslt)
-		req->rq_cksum = xdr_inrec_cksum(xdrs);
-	else
-		svc_vc_freeargs(req, xdr_args, args_ptr);
-
-	return (rslt);
-}
-
-static bool
+static enum xprt_stat
 svc_vc_reply(struct svc_req *req)
 {
-	XDR *xdrs_2;
-	xdrproc_t xdr_results;
-	caddr_t xdr_location;
-	bool rstat = false;
-	bool has_args;
-	bool gss;
+	SVCXPRT *xprt = req->rq_xprt;
+	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
+	struct xdr_ioq *xioq;
+	uint16_t xp_flags = atomic_postclear_uint16_t_bits(&xprt->xp_flags,
+							SVC_XPRT_FLAG_BLOCKED);
 
-	if (req->rq_msg.rm_reply.rp_stat == MSG_ACCEPTED
-	    && req->rq_msg.rm_reply.rp_acpt.ar_stat == SUCCESS) {
-		has_args = TRUE;
-		xdr_results = req->rq_msg.RPCM_ack.ar_results.proc;
-		xdr_location = req->rq_msg.RPCM_ack.ar_results.where;
-
-		req->rq_msg.RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
-		req->rq_msg.RPCM_ack.ar_results.where = NULL;
-	} else {
-		has_args = FALSE;
-		xdr_results = NULL;
-		xdr_location = NULL;
+	if (xp_flags & SVC_XPRT_FLAG_BLOCKED) {
+		rpc_dplx_rui(rec);
+		rpc_dplx_rsi(rec);
 	}
 
 	/* XXX Until gss_get_mic and gss_wrap can be replaced with
@@ -883,27 +840,40 @@ svc_vc_reply(struct svc_req *req)
 	 * Nb, we should probably use getpagesize() on Unix.  Need
 	 * an equivalent for Windows.
 	 */
-	gss = (req->rq_msg.cb_cred.oa_flavor == RPCSEC_GSS);
-	xdrs_2 = xdr_ioq_create(8192 /* default segment size */ ,
-				__svc_params->svc_ioq_maxbuf + 8192,
-				gss
-				? UIO_FLAG_REALLOC | UIO_FLAG_FREE
-				: UIO_FLAG_FREE);
-	if (xdr_replymsg(xdrs_2, &req->rq_msg)
-	    && (!has_args
-		|| (req->rq_auth
-		    && SVCAUTH_WRAP(req->rq_auth, req, xdrs_2, xdr_results,
-				    xdr_location)))) {
-		rstat = TRUE;
-	}
+	xioq = xdr_ioq_create(RPC_MAXDATA_DEFAULT,
+			      __svc_params->ioq.send_max + RPC_MAXDATA_DEFAULT,
+			      (req->rq_msg.cb_cred.oa_flavor == RPCSEC_GSS)
+			      ? UIO_FLAG_REALLOC | UIO_FLAG_FREE
+			      : UIO_FLAG_FREE);
 
-	xdrs_2->x_lib[1] = (void *)req->rq_xprt;
-	svc_ioq_write_now(req->rq_xprt, XIOQ(xdrs_2));
-	return (rstat);
+	if (!xdr_reply_encode(xioq->xdrs, &req->rq_msg)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d xdr_reply_encode failed (will set dead)",
+			__func__, xprt, xprt->xp_fd);
+		return (XPRT_DIED);
+	}
+	xdr_tail_update(xioq->xdrs);
+
+	if (req->rq_msg.rm_reply.rp_stat == MSG_ACCEPTED
+	 && req->rq_msg.rm_reply.rp_acpt.ar_stat == SUCCESS
+	 && req->rq_auth
+	 && !SVCAUTH_WRAP(req->rq_auth, req, xioq->xdrs,
+			  req->rq_msg.RPCM_ack.ar_results.proc,
+			  req->rq_msg.RPCM_ack.ar_results.where)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d SVCAUTH_WRAP failed (will set dead)",
+			__func__, xprt, xprt->xp_fd);
+		return (XPRT_DIED);
+	}
+	xdr_tail_update(xioq->xdrs);
+
+	xioq->xdrs[0].x_lib[1] = (void *)req->rq_xprt;
+	svc_ioq_write_now(req->rq_xprt, xioq);
+	return (XPRT_IDLE);
 }
 
 static void
-svc_vc_ops(SVCXPRT *xprt)
+svc_vc_override_ops(SVCXPRT *xprt, SVCXPRT *rendezvous)
 {
 	static struct xp_ops ops;
 
@@ -915,37 +885,16 @@ svc_vc_ops(SVCXPRT *xprt)
 	if (ops.xp_recv == NULL) {
 		ops.xp_recv = svc_vc_recv;
 		ops.xp_stat = svc_vc_stat;
-		ops.xp_getargs = svc_vc_getargs;
+		ops.xp_decode = svc_vc_decode;
 		ops.xp_reply = svc_vc_reply;
-		ops.xp_freeargs = svc_vc_freeargs;
+		ops.xp_checksum = svc_vc_checksum;
 		ops.xp_destroy = svc_vc_destroy;
 		ops.xp_control = svc_vc_control;
-		ops.xp_getreq = svc_getreq_default;
-		ops.xp_dispatch = svc_dispatch_default;
-		ops.xp_recv_user_data = NULL;	/* no default */
 		ops.xp_free_user_data = NULL;	/* no default */
 	}
+	svc_override_ops(&ops, rendezvous);
 	xprt->xp_ops = &ops;
 	mutex_unlock(&ops_lock);
-}
-
-static void
-svc_vc_override_ops(SVCXPRT *xprt, SVCXPRT *newxprt)
-{
-	if (xprt->xp_ops->xp_getreq)
-		newxprt->xp_ops->xp_getreq = xprt->xp_ops->xp_getreq;
-
-	if (xprt->xp_ops->xp_dispatch)
-		newxprt->xp_ops->xp_dispatch = xprt->xp_ops->xp_dispatch;
-
-	if (xprt->xp_ops->xp_recv_user_data) {
-		newxprt->xp_ops->xp_recv_user_data =
-			xprt->xp_ops->xp_recv_user_data;
-	}
-	if (xprt->xp_ops->xp_free_user_data) {
-		newxprt->xp_ops->xp_free_user_data =
-			xprt->xp_ops->xp_free_user_data;
-	}
 }
 
 static void
@@ -959,22 +908,13 @@ svc_vc_rendezvous_ops(SVCXPRT *xprt)
 	xprt->xp_type = XPRT_TCP_RENDEZVOUS;
 
 	if (ops.xp_recv == NULL) {
-		ops.xp_recv = rendezvous_request;
-		ops.xp_stat = rendezvous_stat;
-		/* XXX wow */
-		ops.xp_getargs = (bool(*)
-				  (struct svc_req *, xdrproc_t,
-				   void *, void *))abort;
-		ops.xp_reply = (bool(*)
-				(struct svc_req *req))abort;
-		ops.xp_freeargs = (bool(*)
-				   (struct svc_req *, xdrproc_t,
-				    void *))abort;
+		ops.xp_recv = svc_vc_rendezvous;
+		ops.xp_stat = svc_rendezvous_stat;
+		ops.xp_decode = (svc_req_fun_t)abort;
+		ops.xp_reply = (svc_req_fun_t)abort;
+		ops.xp_checksum = (svc_req_fun_t)abort;
 		ops.xp_destroy = svc_vc_destroy_it;
 		ops.xp_control = svc_vc_rendezvous_control;
-		ops.xp_getreq = svc_getreq_default;
-		ops.xp_dispatch = svc_dispatch_default;
-		ops.xp_recv_user_data = NULL;	/* no default */
 		ops.xp_free_user_data = NULL;	/* no default */
 	}
 	xprt->xp_ops = &ops;
@@ -1036,52 +976,36 @@ svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
 {
 	struct timespec tdiff;
 	struct svc_clean_idle_arg *acc = (struct svc_clean_idle_arg *)arg;
-	uint32_t rflag = SVC_XPRT_FOREACH_NONE;
+	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
+	struct svc_vc_xprt *xd = VC_DR(rec);
 
-	if (!acc->cleanblock)
-		goto out;
+	if (!acc->cleanblock
+	 || xprt->xp_ops == NULL
+	 || xprt->xp_ops->xp_recv != svc_vc_recv
+	 || (xprt->xp_flags & (SVC_XPRT_FLAG_DESTROYED | SVC_XPRT_FLAG_UREG)))
+		return (SVC_XPRT_FOREACH_NONE);
 
-	mutex_lock(&xprt->xp_lock);
+	rpc_dplx_rli(rec);
 
-	/* invalid xprt (error) */
-	if (xprt->xp_ops == NULL)
-		goto unlock;
-
-	if (xprt->xp_ops->xp_recv != svc_vc_recv)
-		goto unlock;
-
-	if (xprt->xp_flags & (SVC_XPRT_FLAG_DESTROYED | SVC_XPRT_FLAG_UREG))
-		goto unlock;
-
-	{
-		/* XXX nb., safe because xprt type is verfied */
-		struct svc_vc_xprt *xd = VC_DR(REC_XPRT(xprt));
-		if (!xd->shared.nonblock)
-			goto unlock;
-
-		if (acc->timeout == 0) {
-			tdiff = acc->ts;
-			timespecsub(&tdiff, &xd->sx.last_recv);
-			if (timespeccmp(&tdiff, &acc->tmax, >)) {
-				acc->tmax = tdiff;
-				acc->least_active = xprt;
-			}
-			goto unlock;
+	if (acc->timeout == 0) {
+		tdiff = acc->ts;
+		timespecsub(&tdiff, &xd->sx_recv);
+		if (timespeccmp(&tdiff, &acc->tmax, >)) {
+			acc->tmax = tdiff;
+			acc->least_active = xprt;
 		}
-		if (acc->ts.tv_sec - xd->sx.last_recv.tv_sec > acc->timeout) {
-			rflag = SVC_XPRT_FOREACH_CLEAR;
-			mutex_unlock(&xprt->xp_lock);
-			SVC_DESTROY(xprt);
-			acc->ncleaned++;
-			goto out;
-		}
+		rpc_dplx_rui(rec);
+		return (SVC_XPRT_FOREACH_NONE);
+	}
+	if ((acc->ts.tv_sec - xd->sx_recv.tv_sec) < acc->timeout) {
+		rpc_dplx_rui(rec);
+		return (SVC_XPRT_FOREACH_NONE);
 	}
 
- unlock:
-	mutex_unlock(&xprt->xp_lock);
-
- out:
-	return (rflag);
+	rpc_dplx_rui(rec);
+	SVC_DESTROY(xprt);
+	acc->ncleaned++;
+	return (SVC_XPRT_FOREACH_CLEAR);
 }
 
 /* XXX move to svc_run */

@@ -107,8 +107,7 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 				__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
 					"%s:%u SUCCESS",
 					__func__, __LINE__);
-				return ((*(ar->ar_results.proc))(xdrs,
-						ar->ar_results.where));
+				return (true);
 
 			case PROG_MISMATCH:
 				__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
@@ -284,8 +283,7 @@ xdr_reply_decode(XDR *xdrs, struct rpc_msg *dmsg, int32_t *buf)
 			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
 				"%s:%u SUCCESS",
 				__func__, __LINE__);
-			return ((*(ar->ar_results.proc))(xdrs,
-						&(ar->ar_results.where)));
+			return (true);
 
 		case PROG_MISMATCH:
 			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,

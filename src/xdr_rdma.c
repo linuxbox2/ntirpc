@@ -270,10 +270,10 @@ xdr_rdma_respond_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 		"%s() %p[%u] cbc %p\n",
 		__func__, xprt, xprt->state, cbc);
 
-	mutex_lock(&xprt->waitq.ioq_uv.uvqh.qmutex);
-	TAILQ_REMOVE(&xprt->waitq.ioq_uv.uvqh.qh, &cbc->workq.ioq_s, q);
-	(xprt->waitq.ioq_uv.uvqh.qcount)--;
-	mutex_unlock(&xprt->waitq.ioq_uv.uvqh.qmutex);
+	mutex_lock(&xprt->sm_dr.ioq.ioq_uv.uvqh.qmutex);
+	TAILQ_REMOVE(&xprt->sm_dr.ioq.ioq_uv.uvqh.qh, &cbc->workq.ioq_s, q);
+	(xprt->sm_dr.ioq.ioq_uv.uvqh.qcount)--;
+	mutex_unlock(&xprt->sm_dr.ioq.ioq_uv.uvqh.qmutex);
 
 	xdr_ioq_destroy(&cbc->workq, sizeof(*cbc));
 	return (0);
@@ -286,10 +286,10 @@ xdr_rdma_destroy_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 		"%s() %p[%u] cbc %p\n",
 		__func__, xprt, xprt->state, cbc);
 
-	mutex_lock(&xprt->waitq.ioq_uv.uvqh.qmutex);
-	TAILQ_REMOVE(&xprt->waitq.ioq_uv.uvqh.qh, &cbc->workq.ioq_s, q);
-	(xprt->waitq.ioq_uv.uvqh.qcount)--;
-	mutex_unlock(&xprt->waitq.ioq_uv.uvqh.qmutex);
+	mutex_lock(&xprt->sm_dr.ioq.ioq_uv.uvqh.qmutex);
+	TAILQ_REMOVE(&xprt->sm_dr.ioq.ioq_uv.uvqh.qh, &cbc->workq.ioq_s, q);
+	(xprt->sm_dr.ioq.ioq_uv.uvqh.qcount)--;
+	mutex_unlock(&xprt->sm_dr.ioq.ioq_uv.uvqh.qmutex);
 
 	xdr_ioq_destroy(&cbc->workq, sizeof(*cbc));
 	return (0);
@@ -336,7 +336,9 @@ xdr_rdma_warn_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 static int
 xdr_rdma_wrap_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 {
-	return (int)xprt->xa->request_cb(cbc, &xprt->sm_dr.xprt);
+	XDR *xdrs = cbc->holdq.xdrs;
+
+	return (int)__svc_params->request_cb(&xprt->sm_dr.xprt, xdrs);
 }
 
 /***********************************/
@@ -891,7 +893,7 @@ static void
 xdr_rdma_callq(RDMAXPRT *xprt)
 {
 	struct poolq_entry *have =
-		xdr_ioq_uv_fetch(&xprt->waitq, &xprt->cbqh,
+		xdr_ioq_uv_fetch(&xprt->sm_dr.ioq, &xprt->cbqh,
 				 "callq context", 1, IOQ_FLAG_NONE);
 	struct rpc_rdma_cbc *cbc = (struct rpc_rdma_cbc *)(_IOQ(have));
 
@@ -932,7 +934,7 @@ xdr_rdma_destroy(XDR *xdrs)
 		xprt->mr = NULL;
 	}
 
-	xdr_ioq_destroy_pool(&xprt->waitq.ioq_uv.uvqh);
+	xdr_ioq_destroy_pool(&xprt->sm_dr.ioq.ioq_uv.uvqh);
 
 	/* must be after queues, xdr_ioq_destroy() moves them here */
 	xdr_ioq_release(&xprt->inbufs.uvqh);
@@ -1038,8 +1040,8 @@ xdr_rdma_create(XDR *xdrs, RDMAXPRT *xprt)
 		b += xprt->sm_dr.sendsz;
 	}
 
-	xdr_ioq_setup(&xprt->waitq);
-	while (xprt->waitq.ioq_uv.uvqh.qcount < CALLQ_SIZE) {
+	xdr_ioq_setup(&xprt->sm_dr.ioq);
+	while (xprt->sm_dr.ioq.ioq_uv.uvqh.qcount < CALLQ_SIZE) {
 		xdr_rdma_callq(xprt);
 	}
 	return 0;

@@ -55,11 +55,7 @@ Called by a service dispatch routine that refuses to perform
 a remote procedure call due to an authentication error.
 .It Fn svcerr_decode
 Called by a service dispatch routine that cannot successfully
-decode the remote arguments
-(see
-.Fn svc_getargs
-in
-.Xr rpc_svc_reg 3 ) .
+decode the remote arguments.
 .It Fn svcerr_noproc
 Called by a service dispatch routine that does not implement
 the procedure number that the caller requests.

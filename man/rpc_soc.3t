@@ -38,13 +38,8 @@
 .Nm pmap_unset ,
 .Nm registerrpc ,
 .Nm rpc_createerr ,
-.Nm svc_destroy ,
-.Nm svc_fds ,
-.Nm svc_fdset ,
-.Nm svc_getargs ,
+.Nm SVC_DESTROY ,
 .Nm svc_getcaller ,
-.Nm svc_getreq ,
-.Nm svc_getreqset ,
 .Nm svc_register ,
 .Nm svc_sendreply ,
 .Nm svc_unregister ,
@@ -1047,7 +1042,7 @@ to print the reason why.
 .Pp
 .It Xo
 .Ft bool_t
-.Fn svc_destroy "SVCXPRT * xprt"
+.Fn SVC_DESTROY "SVCXPRT * xprt"
 .Xc
 .Pp
 A macro that destroys the
@@ -1063,79 +1058,6 @@ Use of
 is undefined after calling this routine.
 .Pp
 .It Xo
-.Vt fd_set svc_fdset ;
-.Xc
-.Pp
-A global variable reflecting the
-.Tn RPC
-service side's
-read file descriptor bit mask; it is suitable as a template argument
-to the
-.Xr select 2
-system call.
-This is only of interest
-if a service implementor does his own asynchronous event processing.
-This variable is read\-only (do not pass its address to
-.Xr select 2 ! ) ,
-yet it may change after calls to
-.Fn svc_getreqset
-or any creation routines.
-As well, note that if the process has descriptor limits
-which are extended beyond
-.Dv FD_SETSIZE ,
-this variable will only be usable for the first
-.Dv FD_SETSIZE
-descriptors.
-.Pp
-.It Xo
-.Vt int svc_fds ;
-.Xc
-.Pp
-Similar to
-.Va svc_fdset ,
-but limited to 32 descriptors.
-This
-interface is obsoleted by
-.Va svc_fdset .
-.Pp
-.It Xo
-.Ft bool_t
-.Fn svc_freeargs "SVCXPRT *xprt" "xdrproc_t inproc" "char *in"
-.Xc
-.Pp
-A macro that frees any data allocated by the
-.Tn RPC/XDR
-system when it decoded the arguments to a service procedure
-using
-.Fn svc_getargs .
-This routine returns 1 if the results were successfully
-freed,
-and zero otherwise.
-.Pp
-.It Xo
-.Ft bool_t
-.Fn svc_getargs "SVCXPRT *xprt" "xdrproc_t inproc" "char *in"
-.Xc
-.Pp
-A macro that decodes the arguments of an
-.Tn RPC
-request
-associated with the
-.Tn RPC
-service transport handle,
-.Fa xprt .
-The
-.Fa in
-argument
-is the address where the arguments will be placed;
-.Fa inproc
-is the
-.Tn XDR
-routine used to decode the arguments.
-This routine returns one if decoding succeeds, and zero
-otherwise.
-.Pp
-.It Xo
 .Ft "struct sockaddr_in *"
 .Xc
 .It Xo
@@ -1147,38 +1069,6 @@ of a procedure associated with the
 .Tn RPC
 service transport handle,
 .Fa xprt .
-.Pp
-.It Xo
-.Ft void
-.Fn svc_getreqset "fd_set *rdfds"
-.Xc
-.Pp
-This routine is only of interest if a service implementor
-implements custom asynchronous event processing.
-It is called when the
-.Xr select 2
-system call has determined that an
-.Tn RPC
-request has arrived on some
-.Tn RPC
-socket(s);
-.Fa rdfds
-is the resultant read file descriptor bit mask.
-The routine returns when all sockets associated with the
-value of
-.Fa rdfds
-have been serviced.
-.Pp
-.It Xo
-.Ft void
-.Fn svc_getreq "int rdfds"
-.Xc
-.Pp
-Similar to
-.Fn svc_getreqset ,
-but limited to 32 descriptors.
-This interface is obsoleted by
-.Fn svc_getreqset .
 .Pp
 .It Xo
 .Ft bool_t
@@ -1281,8 +1171,6 @@ a remote procedure call due to an authentication error.
 .Pp
 Called by a service dispatch routine that cannot successfully
 decode its arguments.
-See also
-.Fn svc_getargs .
 .Pp
 .It Xo
 .Ft void

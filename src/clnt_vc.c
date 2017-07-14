@@ -70,23 +70,11 @@
 #include "rpc_com.h"
 #include "rpc_ctx.h"
 #include <rpc/svc_rqst.h>
-#include <rpc/xdr_inrec.h>
 #include <rpc/xdr_ioq.h>
 #include "svc_ioq.h"
 
-static enum clnt_stat clnt_vc_call(CLIENT *, AUTH *, rpcproc_t, xdrproc_t,
-				   void *, xdrproc_t, void *, struct timeval);
-static void clnt_vc_geterr(CLIENT *, struct rpc_err *);
-static bool clnt_vc_freeres(CLIENT *, xdrproc_t, void *);
-static void clnt_vc_abort(CLIENT *);
-static bool clnt_vc_control(CLIENT *, u_int, void *);
-static bool clnt_vc_ref(CLIENT *, u_int);
-static void clnt_vc_release(CLIENT *, u_int);
-static void clnt_vc_destroy(CLIENT *);
 static struct clnt_ops *clnt_vc_ops(void);
 static bool time_not_ok(struct timeval *);
-int generic_read_vc(XDR *, void *, void *, int);
-int generic_write_vc(XDR *, void *, void *, int);
 
 #include "clnt_internal.h"
 #include "svc_internal.h"
@@ -267,11 +255,11 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	struct rpc_dplx_rec *rec = cx->cx_rec;
 	struct svc_vc_xprt *xd = VC_DR(rec);
 	SVCXPRT *xprt = &rec->xprt;
+	struct xdr_ioq *xioq;
 	XDR *xdrs;
 	rpc_ctx_t *ctx;
 	enum clnt_stat result;
-	int code, refreshes = 2;
-	bool gss = false;
+	int code;
 
 	/* Create a call context.  A lot of TI-RPC decisions need to be
 	 * looked at, including:
@@ -299,6 +287,10 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	}
 	rpc_dplx_rui(rec);
 
+	ctx->cc_auth = auth;
+	ctx->cc_xdr.proc = xdr_results;
+	ctx->cc_xdr.where = results_ptr;
+
  call_again:
 	/* XXX Until gss_get_mic and gss_wrap can be replaced with
 	 * iov equivalents, replies with RPCSEC_GSS security must be
@@ -307,13 +299,13 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	 * Nb, we should probably use getpagesize() on Unix.  Need
 	 * an equivalent for Windows.
 	 */
-	gss = (auth->ah_cred.oa_flavor == RPCSEC_GSS);
-	xdrs = xdr_ioq_create(8192 /* default segment size */ ,
-			      __svc_params->svc_ioq_maxbuf + 8192,
-			      gss
+	xioq = xdr_ioq_create(RPC_MAXDATA_DEFAULT,
+			      __svc_params->ioq.send_max + RPC_MAXDATA_DEFAULT,
+			      (auth->ah_cred.oa_flavor == RPCSEC_GSS)
 			      ? UIO_FLAG_REALLOC | UIO_FLAG_FREE
 			      : UIO_FLAG_FREE);
 
+	xdrs = xioq->xdrs;
 	ctx->error.re_status = RPC_SUCCESS;
 
 	/* Need lock for ct_mcallc.
@@ -338,107 +330,29 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	mutex_unlock(&clnt->cl_lock);
 
 	xdrs->x_lib[1] = (void *)xprt;
-	svc_ioq_write_submit(xprt, XIOQ(xdrs));
+	svc_ioq_write_submit(xprt, xioq);
 
 	/* reply */
 	rpc_dplx_rli(rec);
 
-	if (!xprt->xp_ev)
+	if (!rec->ev_p)
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
 
-	/* if the channel is bi-directional, then the the shared conn is in a
-	 * svc event loop, and recv processing decodes reply headers */
+	code = rpc_ctx_wait_reply(ctx);
 
-	xdrs = rec->ioq.xdrs;
-	if (xdrs->x_lib[1] != NULL) {
-		code = rpc_ctx_wait_reply(ctx);
-		if (code == ETIMEDOUT) {
-			/* UL can retry, we dont.  This CAN indicate xprt
-			 * destroyed (error status already set). */
-			__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
-				"%s: fd %d ETIMEDOUT",
-				__func__, xprt->xp_fd);
-			rpc_ctx_release(ctx);
-			rpc_dplx_rui(rec);
-			return (RPC_TIMEDOUT);
-		}
-	} else {
-		xdrs->x_lib[0] = (void *)ctx; /* transiently thread ctx */
-		xdrs->x_op = XDR_DECODE;
-		/*
-		 * Keep receiving until we get a valid transaction id.
-		 */
-		while (true) {
-
-			/* skiprecord */
-			if (!xdr_inrec_skiprecord(xdrs)) {
-				xdrs->x_lib[0] = NULL;
-				__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
-					"%s: error at skiprecord", __func__);
-				result = ctx->error.re_status;
-				rpc_ctx_release(ctx);
-				rpc_dplx_rui(rec);
-				return (result);
-			}
-
-			/* now decode and validate the response header */
-			if (!xdr_dplx_decode(xdrs, &ctx->cc_msg)) {
-				xdrs->x_lib[0] = NULL;
-				__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
-					"%s: error at xdr_dplx_decode",
-					__func__);
-				result = ctx->error.re_status;
-				rpc_ctx_release(ctx);
-				rpc_dplx_rui(rec);
-				return (result);
-			}
-
-			/* switch on direction */
-			switch (ctx->cc_msg.rm_direction) {
-			case REPLY:
-				if (ctx->cc_msg.rm_xid == ctx->xid)
-					goto replied;
-				break;
-			case CALL:
-				/* in this configuration, we do not expect
-				 * calls */
-				break;
-			default:
-				break;
-			}
-		}		/* while (true) */
-	}			/* ! bi-directional */
-
-	/*
-	 * process header
-	 */
- replied:
-	/* XXX move into routine which can be called from rpc_ctx_xfer_replymsg,
-	 * for (maybe) reduced MP overhead */
-	xdrs->x_lib[0] = NULL;
-	_seterr_reply(&ctx->cc_msg, &(ctx->error));
-	if (ctx->error.re_status == RPC_SUCCESS) {
-		if (!AUTH_VALIDATE(auth, &(ctx->cc_msg.RPCM_ack.ar_verf))) {
-			ctx->error.re_status = RPC_AUTHERROR;
-			ctx->error.re_why = AUTH_INVALIDRESP;
-		} else if (xdr_results /* XXX caller setup error? */ &&
-			   !AUTH_UNWRAP(auth, xdrs, xdr_results, results_ptr)) {
-			if (ctx->error.re_status == RPC_SUCCESS)
-				ctx->error.re_status = RPC_CANTDECODERES;
-		}
-		rpc_ctx_ack_xfer(ctx);
-	} /* end successful completion */
-	else {
-		/* maybe our credentials need to be refreshed ... */
-		if (refreshes-- && AUTH_REFRESH(auth, &(ctx->cc_msg))) {
-			rpc_ctx_ack_xfer(ctx);
-			if (!rpc_ctx_next_xid(ctx))
-				return (RPC_TLIERROR);
-			rpc_dplx_rui(rec);
-			goto call_again;
-		}
-	}			/* end of unsuccessful completion */
+	if (ctx->refreshes > 0) {
+		ctx->flags = RPC_CTX_FLAG_NONE;
+		rpc_dplx_rui(rec);
+		goto call_again;
+	}
+	if (code == ETIMEDOUT) {
+		/* UL can retry, we dont.  This CAN indicate xprt
+		 * destroyed (error status already set). */
+		__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
+			"%s: fd %d ETIMEDOUT",
+			__func__, xprt->xp_fd);
+	}
 
 	result = ctx->error.re_status;
 	rpc_ctx_release(ctx);

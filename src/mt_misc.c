@@ -44,9 +44,6 @@ pthread_mutex_t loopnconf_lock = MUTEX_INITIALIZER;
 /* serializes ops initializations */
 pthread_mutex_t ops_lock = MUTEX_INITIALIZER;
 
-/* protect svc counters */
-pthread_mutex_t svc_ctr_lock = MUTEX_INITIALIZER;
-
 /* protects ``port'' static in bindresvport() */
 pthread_mutex_t portnum_lock = MUTEX_INITIALIZER;
 

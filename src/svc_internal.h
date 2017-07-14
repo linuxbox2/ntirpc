@@ -38,9 +38,8 @@ extern int __svc_maxrec;
 
 /* threading fdsets around is annoying */
 struct svc_params {
-	bool initialized;
 	mutex_t mtx;
-	u_long flags;
+	bool initialized;
 
 	/* package global event handling--may be overridden using the
 	 * svc_rqst interface */
@@ -55,9 +54,8 @@ struct svc_params {
 		} fd;
 	} ev_u;
 
-	int32_t idle_timeout;
-	u_int max_connections;
-	u_int svc_ioq_maxbuf;
+	svc_xprt_fun_t disconnect_cb;
+	svc_xprt_xdr_fun_t request_cb;
 
 	union {
 		struct {
@@ -74,8 +72,13 @@ struct svc_params {
 	} gss;
 
 	struct {
+		u_int send_max;
 		u_int thrd_max;
 	} ioq;
+
+	u_long flags;
+	u_int max_connections;
+	int32_t idle_timeout;
 };
 
 extern struct svc_params __svc_params[1];
@@ -142,14 +145,11 @@ union pktinfo_u {
  * DG transport instance
  *
  * Replaces old struct svc_dg_data by locally wrapping struct rpc_dplx_rec,
- * which wraps struct rpc_svcxprt indexed by fd.
+ * which wraps struct svc_xprt indexed by fd.
  */
 struct svc_dg_xprt {
 	struct rpc_dplx_rec su_dr;	/* SVCXPRT indexed by fd */
-
 	struct msghdr su_msghdr;	/* msghdr received from clnt */
-	size_t su_iosz;			/* size of send.recv buffer */
-
 	unsigned char su_cmsg[SVC_CMSG_SIZE];	/* cmsghdr received from clnt */
 };
 #define DG_DR(p) (opr_containerof((p), struct svc_dg_xprt, su_dr))
@@ -160,21 +160,16 @@ struct svc_dg_xprt {
  * VC transport instance
  *
  * Replaces old struct x_vc_data by locally wrapping struct rpc_dplx_rec,
- * which wraps struct rpc_svcxprt indexed by fd.
+ * which wraps struct svc_xprt indexed by fd.
  */
 struct svc_vc_xprt {
 	struct rpc_dplx_rec sx_dr;	/* SVCXPRT indexed by fd */
+	struct timespec sx_recv;
+	int32_t sx_fbtbc;		/* fragment bytes to be consumed */
 	struct {
 		struct timeval cx_wait;	/* wait interval in milliseconds */
 		bool cx_waitset;	/* wait set by clnt_control? */
 	} cx;
-	struct {
-		enum xprt_stat strm_stat;
-		struct timespec last_recv;	/* XXX move to shared? */
-	} sx;
-	struct {
-		bool nonblock;
-	} shared;
 };
 #define VC_DR(p) (opr_containerof((p), struct svc_vc_xprt, sx_dr))
 
@@ -198,6 +193,20 @@ epoll_create_wr(size_t size, int flags)
 extern void __rpc_set_blkin_endpoint(SVCXPRT *xprt, const char *tag);
 #endif
 
-void svc_rqst_shutdown(void);
+enum xprt_stat svc_rendezvous_stat(SVCXPRT *);
+
+static inline void
+svc_override_ops(struct xp_ops *ops, SVCXPRT *rendezvous)
+{
+	if (rendezvous) {
+		if (!ops->xp_free_user_data)
+			ops->xp_free_user_data =
+				rendezvous->xp_ops->xp_free_user_data;
+	}
+}
+
+int svc_rqst_rearm_events(SVCXPRT *);
+int svc_rqst_xprt_register(SVCXPRT *, SVCXPRT *);
+void svc_rqst_xprt_unregister(SVCXPRT *);
 
 #endif				/* TIRPC_SVC_INTERNAL_H */

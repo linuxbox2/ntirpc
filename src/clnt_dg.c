@@ -303,7 +303,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	rpc_dplx_rli(rec);
 	rlocked = true;
 
-	if (!xprt->xp_ev)
+	if (!rec->ev_p)
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
 

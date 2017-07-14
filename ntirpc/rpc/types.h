@@ -124,9 +124,9 @@ typedef int32_t rpc_inline_t;
 #define TIRPC_DEBUG_FLAG_NONE           0x0000000
 #define TIRPC_DEBUG_FLAG_ERROR          0x0000001
 #define TIRPC_DEBUG_FLAG_EVENT          0x0000002
-#define TIRPC_DEBUG_FLAG_REFCNT         0x0000004
+#define TIRPC_DEBUG_FLAG_WARN           0x0000004
 #define TIRPC_DEBUG_FLAG_LOCK           0x0000008
-#define TIRPC_DEBUG_FLAG_MEM            0x0000010
+#define TIRPC_DEBUG_FLAG_REFCNT         0x0000010
 #define TIRPC_DEBUG_FLAG_RBTREE         0x0000020
 #define TIRPC_DEBUG_FLAG_RPCSEC_GSS     0x0000040
 #define TIRPC_DEBUG_FLAG_AUTH           0x0000080
@@ -153,7 +153,11 @@ typedef int32_t rpc_inline_t;
 
 /* or symbolic names for default */
 #define TIRPC_DEBUG_FLAG_DEFAULT \
-	(TIRPC_DEBUG_FLAG_ERROR | TIRPC_DEBUG_FLAG_EVENT)
+	(TIRPC_DEBUG_FLAG_ERROR | \
+	 TIRPC_DEBUG_FLAG_EVENT | \
+	 TIRPC_DEBUG_FLAG_WARN)
+
+#define TIRPC_DEBUG_FLAG_MEM            (TIRPC_DEBUG_FLAG_ERROR)
 
 typedef void *(*mem_1_size_t) (size_t,
 	     const char *file, int line, const char *function);

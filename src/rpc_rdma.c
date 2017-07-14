@@ -1053,8 +1053,8 @@ rpc_rdma_cm_event_handler(RDMAXPRT *ep_xprt, struct rdma_cm_event *event)
 		cond_broadcast(&xprt->cm_cond);
 		mutex_unlock(&xprt->cm_lock);
 
-		if (xprt->xa->disconnect_cb)
-			xprt->xa->disconnect_cb(&xprt->sm_dr.xprt);
+		if (__svc_params->disconnect_cb)
+			__svc_params->disconnect_cb(&xprt->sm_dr.xprt);
 		break;
 
 	case RDMA_CM_EVENT_DEVICE_REMOVAL:
@@ -2219,12 +2219,46 @@ rpc_rdma_connect(RDMAXPRT *xprt)
 				rpc_rdma_state.cm_epollfd);
 }
 
+static void
+rpc_rdma_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
+{
+	if (xprt->xp_ops->xp_free_user_data) {
+		/* call free hook */
+		xprt->xp_ops->xp_free_user_data(xprt);
+	}
+	rpc_rdma_destroy(xprt);
+}
+
+extern mutex_t ops_lock;
+
+static bool
+/*ARGSUSED*/
+rpc_rdma_control(SVCXPRT *xprt, const u_int rq, void *in)
+{
+	switch (rq) {
+	case SVCGET_XP_FREE_USER_DATA:
+	    mutex_lock(&ops_lock);
+	    *(svc_xprt_fun_t *)in = xprt->xp_ops->xp_free_user_data;
+	    mutex_unlock(&ops_lock);
+	    break;
+	case SVCSET_XP_FREE_USER_DATA:
+	    mutex_lock(&ops_lock);
+	    xprt->xp_ops->xp_free_user_data = *(svc_xprt_fun_t)in;
+	    mutex_unlock(&ops_lock);
+	    break;
+	default:
+	    return (FALSE);
+	}
+	return (TRUE);
+}
+
 static struct xp_ops rpc_rdma_ops = {
-	/* XXX wow */
-	.xp_getargs = (bool(*)(struct svc_req *, xdrproc_t, void *,
-				void *))abort,
-	.xp_reply = (bool(*)(struct svc_req *))
-				abort,
-	.xp_freeargs = (bool(*)(struct svc_req *, xdrproc_t, void *))
-				abort,
+	.xp_recv = svc_rdma_rendezvous,
+	.xp_stat = svc_rendezvous_stat,
+	.xp_decode = (svc_req_fun_t)abort,
+	.xp_reply = (svc_req_fun_t)abort,
+	.xp_checksum = NULL,		/* not used */
+	.xp_destroy = rpc_rdma_destroy_it,
+	.xp_control = rpc_rdma_control,
+	.xp_free_user_data = NULL,	/* no default */
 };

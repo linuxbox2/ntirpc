@@ -72,7 +72,7 @@
 #define svc_fd_create(a, b, c) svc_fd_ncreate(a, b, c)
 #define svcunixfd_create(a, b, c) svcunixfd_ncreate(a, b, c)
 #define svc_raw_create() svc_raw_ncreate()
-#define svc_rdma_create(a, b, c, d) svc_rdma_ncreate(a, b, c, d)
+#define svc_rdma_create(a, b, c) svc_rdma_ncreate(a, b, c)
 
 /* auth */
 #define authunix_create(a, b, c, d, e) authunix_ncreate(a, b, c, d, e)

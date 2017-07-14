@@ -63,16 +63,15 @@
 #include <misc/city.h>
 #include <rpc/rpc_cksum.h>
 
-#define rpc_buffer(xprt) ((xprt)->xp_p1)
-
 #ifndef MAX
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #endif
 
-static void svc_dg_ops(SVCXPRT *);
+static void svc_dg_rendezvous_ops(SVCXPRT *);
+static void svc_dg_override_ops(SVCXPRT *, SVCXPRT *);
 
 static void svc_dg_enable_pktinfo(int, const struct __rpc_sockinfo *);
-static int svc_dg_store_pktinfo(struct msghdr *, struct svc_req *);
+static int svc_dg_store_pktinfo(struct msghdr *, SVCXPRT *);
 
 /*
  * Usage:
@@ -93,18 +92,17 @@ svc_dg_xprt_free(struct svc_dg_xprt *su)
 	if (su->su_dr.xprt.blkin.svc_name)
 		mem_free(su->su_dr.xprt.blkin.svc_name, 2*INET6_ADDRSTRLEN);
 #endif
-	mem_free(su, sizeof(struct svc_dg_xprt));
+	mem_free(su, sizeof(struct svc_dg_xprt) + su->su_dr.maxrec);
 }
 
 static struct svc_dg_xprt *
-svc_dg_xprt_zalloc(void)
+svc_dg_xprt_zalloc(size_t iosz)
 {
-	struct svc_dg_xprt *su = mem_zalloc(sizeof(struct svc_dg_xprt));
+	struct svc_dg_xprt *su = mem_zalloc(sizeof(struct svc_dg_xprt) + iosz);
 
 	/* Init SVCXPRT locks, etc */
 	mutex_init(&su->su_dr.xprt.xp_lock, NULL);
 	mutex_init(&su->su_dr.xprt.xp_auth_lock, NULL);
-/*	TAILQ_INIT_ENTRY(&su->su_dr.xprt, xp_evq); sets NULL */
 	rpc_dplx_rec_init(&su->su_dr);
 
 	su->su_dr.xprt.xp_refs = 1;
@@ -118,7 +116,7 @@ svc_dg_xprt_setup(SVCXPRT **sxpp)
 		svc_dg_xprt_free(su_data(*sxpp));
 		*sxpp = NULL;
 	} else {
-		struct svc_dg_xprt *su = svc_dg_xprt_zalloc();
+		struct svc_dg_xprt *su = svc_dg_xprt_zalloc(0);
 
 		*sxpp = &su->su_dr.xprt;
 	}
@@ -198,13 +196,7 @@ svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	su->su_dr.sendsz = ((sendsize + 3) / 4) * 4;
 	su->su_dr.recvsz = ((recvsize + 3) / 4) * 4;
 	su->su_dr.maxrec = ((MAX(sendsize, recvsize) + 3) / 4) * 4;
-	su->su_iosz = ((MAX(sendsize, recvsize) + 3) / 4) * 4;
-	rpc_buffer(xprt) = mem_alloc(su->su_iosz);
-
-	xdrmem_create(su->su_dr.ioq.xdrs,  rpc_buffer(xprt), su->su_iosz,
-		      XDR_DECODE);
-
-	svc_dg_ops(xprt);
+	svc_dg_rendezvous_ops(xprt);
 
 	/* Enable reception of IP*_PKTINFO control msgs */
 	svc_dg_enable_pktinfo(fd, &si);
@@ -231,84 +223,35 @@ svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 static enum xprt_stat
 svc_dg_stat(SVCXPRT *xprt)
 {
-	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
-	uint16_t xp_flags = atomic_postclear_uint16_t_bits(&xprt->xp_flags,
-							SVC_XPRT_FLAG_BLOCKED);
-
-	if (xp_flags & SVC_XPRT_FLAG_BLOCKED) {
-		rpc_dplx_rui(rec);
-		rpc_dplx_rsi(rec);
-	}
-	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
-		return (XPRT_DESTROYED);
-
-	return (XPRT_IDLE);
+	return SVC_STAT(xprt->xp_parent);
 }
 
-static void svc_dg_set_pktinfo(struct cmsghdr *cmsg, struct svc_req *req)
+static enum xprt_stat
+svc_dg_rendezvous(SVCXPRT *xprt)
 {
-	switch (req->rq_daddr.ss_family) {
-	case AF_INET: {
-		struct in_pktinfo *pki = (struct in_pktinfo *)CMSG_DATA(cmsg);
-		struct sockaddr_in *daddr =
-			(struct sockaddr_in *)&req->rq_daddr;
-
-		cmsg->cmsg_level = SOL_IP;
-		cmsg->cmsg_type = IP_PKTINFO;
-		pki->ipi_ifindex = 0;
-#ifdef __FreeBSD__
-		pki->ipi_addr = daddr->sin_addr;
-#else
-		pki->ipi_spec_dst = daddr->sin_addr;
-#endif
-		cmsg->cmsg_len = CMSG_LEN(sizeof(*pki));
-		break;
-	}
-	case AF_INET6: {
-		struct in6_pktinfo *pki = (struct in6_pktinfo *)CMSG_DATA(cmsg);
-		struct sockaddr_in6 *daddr =
-			(struct sockaddr_in6 *)&req->rq_daddr;
-
-		cmsg->cmsg_level = SOL_IPV6;
-		cmsg->cmsg_type = IPV6_PKTINFO;
-		pki->ipi6_ifindex = daddr->sin6_scope_id;
-		pki->ipi6_addr = daddr->sin6_addr;
-		cmsg->cmsg_len = CMSG_LEN(sizeof(*pki));
-		break;
-	}
-	default:
-	       break;
-	}
-}
-
-static bool
-svc_dg_recv(struct svc_req *req)
-{
-	SVCXPRT *xprt = req->rq_xprt;
-	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
-	struct svc_dg_xprt *su = DG_DR(rec);
-	XDR *xdrs = rec->ioq.xdrs;
-	struct sockaddr *sp = (struct sockaddr *)&xprt->xp_remote.ss;
+	struct svc_dg_xprt *req_su = DG_DR(REC_XPRT(xprt));
+	struct svc_dg_xprt *su = svc_dg_xprt_zalloc(req_su->su_dr.maxrec);
+	SVCXPRT *newxprt = &su->su_dr.xprt;
+	struct sockaddr *sp = (struct sockaddr *)&newxprt->xp_remote.ss;
 	struct msghdr *mesgp;
 	struct iovec iov;
 	ssize_t rlen;
-	uint16_t xp_flags;
 
-	__rpc_address_setup(&xprt->xp_remote);
+	if (svc_rqst_rearm_events(xprt)){
+		svc_dg_xprt_free(su);
+		return (XPRT_DIED);
+	}
+	newxprt->xp_fd = xprt->xp_fd;
+	newxprt->xp_flags = SVC_XPRT_FLAG_INITIAL | SVC_XPRT_FLAG_INITIALIZED;
 
-	/* XXX same XDR used in both directions */
-	rpc_dplx_rli(rec);
-	do {
-		xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags,
-							SVC_XPRT_FLAG_BLOCKED);
-		if (!(xp_flags & SVC_XPRT_FLAG_BLOCKED))
-			break;
-		rpc_dplx_rwi(rec);
-	} while (TRUE);
+	su->su_dr.sendsz = req_su->su_dr.sendsz;
+	su->su_dr.recvsz = req_su->su_dr.recvsz;
+	su->su_dr.maxrec = req_su->su_dr.maxrec;
+	svc_dg_override_ops(newxprt, xprt);
 
  again:
-	iov.iov_base = rpc_buffer(xprt);
-	iov.iov_len = su->su_iosz;
+	iov.iov_base = &su[1];
+	iov.iov_len = su->su_dr.maxrec;
 	mesgp = &su->su_msghdr;
 	memset(mesgp, 0, sizeof(*mesgp));
 	mesgp->msg_iov = &iov;
@@ -319,153 +262,169 @@ svc_dg_recv(struct svc_req *req)
 	mesgp->msg_control = su->su_cmsg;
 	mesgp->msg_controllen = sizeof(su->su_cmsg);
 
-	rlen = recvmsg(xprt->xp_fd, mesgp, 0);
+	rlen = recvmsg(newxprt->xp_fd, mesgp, 0);
 
-	if (sp->sa_family == (sa_family_t) 0xffff)
-		return false;
+	if (sp->sa_family == (sa_family_t) 0xffff) {
+		svc_dg_xprt_free(su);
+		return (XPRT_DIED);
+	}
 
 	if (rlen == -1 && errno == EINTR)
 		goto again;
-	if (rlen == -1 || (rlen < (ssize_t) (4 * sizeof(u_int32_t))))
-		return (false);
+	if (rlen == -1 || (rlen < (ssize_t) (4 * sizeof(u_int32_t)))) {
+		svc_dg_xprt_free(su);
+		return (XPRT_DIED);
+	}
 
-	xprt->xp_remote.nb.len = mesgp->msg_namelen;
+	__rpc_address_setup(&newxprt->xp_local);
+	__rpc_address_setup(&newxprt->xp_remote);
+	newxprt->xp_remote.nb.len = mesgp->msg_namelen;
 
 	/* Check whether there's an IP_PKTINFO or IP6_PKTINFO control message.
 	 * If yes, preserve it for svc_dg_reply; otherwise just zap any cmsgs */
-	if (!svc_dg_store_pktinfo(mesgp, req)) {
+	if (!svc_dg_store_pktinfo(mesgp, newxprt)) {
 		mesgp->msg_control = NULL;
 		mesgp->msg_controllen = 0;
-		req->rq_daddr_len = 0;
+		newxprt->xp_local.nb.len = 0;
 	}
+	XPRT_TRACE(newxprt, __func__, __func__, __LINE__);
+
+#if defined(HAVE_BLKIN)
+	__rpc_set_blkin_endpoint(newxprt, "svc_dg");
+#endif
+
+	xdrmem_create(su->su_dr.ioq.xdrs, iov.iov_base, iov.iov_len,
+		      XDR_DECODE);
+
+	SVC_REF(xprt, SVC_REF_FLAG_NONE);
+	newxprt->xp_parent = xprt;
+	return (xprt->xp_dispatch.rendezvous_cb(newxprt));
+}
+
+static enum xprt_stat
+svc_dg_recv(SVCXPRT *xprt)
+{
+	/* Stolen reference! Callee must take a reference to rq_xprt. */
+	xprt->xp_refs--;
+
+	/* pass the xdrs to user to store in struct svc_req, as most of
+	 * the work has already been done on rendezvous
+	 */
+	return (__svc_params->request_cb(xprt, REC_XPRT(xprt)->ioq.xdrs));
+}
+
+static enum xprt_stat
+svc_dg_decode(struct svc_req *req)
+{
+	XDR *xdrs = req->rq_xdrs;
 
 	xdrs->x_op = XDR_DECODE;
 	XDR_SETPOS(xdrs, 0);
 	rpc_msg_init(&req->rq_msg);
 
-	if (!xdr_callmsg(xdrs, &req->rq_msg))
-		return (false);
-
-	/* save remote address */
-	req->rq_raddr_len = xprt->xp_remote.nb.len;
-	memcpy(&req->rq_raddr, xprt->xp_remote.nb.buf, req->rq_raddr_len);
-
-	/* the checksum */
-	req->rq_cksum =
-#if 1
-	    CityHash64WithSeed(iov.iov_base, MIN(256, iov.iov_len), 103);
-#else
-	    calculate_crc32c(0, iov.iov_base, MIN(256, iov.iov_len));
-#endif
-	return (true);
+	if (!xdr_dplx_decode(xdrs, &req->rq_msg)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d failed (will set dead)",
+			__func__, req->rq_xprt, req->rq_xprt->xp_fd);
+		return (XPRT_DIED);
+	}
+	return (req->rq_xprt->xp_dispatch.process_cb(req));
 }
 
-static bool
+static enum xprt_stat
+svc_dg_checksum(struct svc_req *req)
+{
+	XDR *xdrs = req->rq_xdrs;
+
+	req->rq_cksum =
+#if 1
+	/* CithHash64 is -substantially- faster than crc32c from FreeBSD
+	 * SCTP, so prefer it until fast crc32c bests it */
+		CityHash64WithSeed(xdrs->x_data,
+				   MIN(256, xdr_size_inline(xdrs)),
+				   103);
+#else
+		calculate_crc32c(0, xdrs->x_data,
+				 MIN(256, xdr_size_inline(xdrs)));
+#endif
+	return (XPRT_IDLE);
+}
+
+static enum xprt_stat
 svc_dg_reply(struct svc_req *req)
 {
 	SVCXPRT *xprt = req->rq_xprt;
 	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
-	struct svc_dg_xprt *su = DG_DR(rec);
 	XDR *xdrs = rec->ioq.xdrs;
-	bool stat = false;
+	struct svc_dg_xprt *su = DG_DR(rec);
+	struct msghdr *msg = &su->su_msghdr;
+	struct iovec iov;
 	size_t slen;
 
-	xdrproc_t xdr_results;
-	caddr_t xdr_location;
-	bool has_args;
-
-	if (req->rq_msg.rm_reply.rp_stat == MSG_ACCEPTED
-	    && req->rq_msg.rm_reply.rp_acpt.ar_stat == SUCCESS) {
-		has_args = true;
-		xdr_results = req->rq_msg.RPCM_ack.ar_results.proc;
-		xdr_location = req->rq_msg.RPCM_ack.ar_results.where;
-		req->rq_msg.RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
-		req->rq_msg.RPCM_ack.ar_results.where = NULL;
-	} else {
-		xdr_results = NULL;
-		xdr_location = NULL;
-		has_args = false;
+	if (!xprt->xp_remote.nb.len) {
+		__warnx(TIRPC_DEBUG_FLAG_WARN,
+			"%s: %p fd %d has no remote address",
+			__func__, xprt, xprt->xp_fd);
+		return (XPRT_IDLE);
 	}
-
-	/* XXX same XDR used in both directions */
-	rpc_dplx_rli(rec);
 	xdrs->x_op = XDR_ENCODE;
 	XDR_SETPOS(xdrs, 0);
 
-	if (xdr_replymsg(xdrs, &req->rq_msg) && req->rq_raddr_len
-	    && (!has_args
-		||
-		(SVCAUTH_WRAP
-		 (req->rq_auth, req, xdrs, xdr_results, xdr_location)))) {
-		struct msghdr *msg = &su->su_msghdr;
-		struct cmsghdr *cmsg;
-		struct iovec iov;
-
-		iov.iov_base = rpc_buffer(xprt);
-		iov.iov_len = slen = XDR_GETPOS(xdrs);
-		msg->msg_iov = &iov;
-		msg->msg_iovlen = 1;
-		msg->msg_name = (struct sockaddr *)&req->rq_raddr;
-		msg->msg_namelen = req->rq_raddr_len;
-
-		/* Set source IP address of the reply message in PKTINFO */
-		if (req->rq_daddr_len != 0) {
-			msg->msg_control = su->su_cmsg;
-			cmsg = (struct cmsghdr *)msg->msg_control;
-			svc_dg_set_pktinfo(cmsg, req);
-			msg->msg_controllen = CMSG_ALIGN(cmsg->cmsg_len);
-		}
-
-		if (sendmsg(xprt->xp_fd, msg, 0) == (ssize_t) slen) {
-			stat = true;
-		}
-	}
-	rpc_dplx_rui(rec);
-	return (stat);
-}
-
-static bool
-svc_dg_freeargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr)
-{
-	return xdr_free(xdr_args, args_ptr);
-}
-
-static bool
-svc_dg_getargs(struct svc_req *req, xdrproc_t xdr_args, void *args_ptr,
-	       void *u_data)
-{
-	XDR *xdrs = REC_XPRT(req->rq_xprt)->ioq.xdrs;
-	bool rslt;
-
-	/* threads u_data for advanced decoders */
-	xdrs->x_public = u_data;
-
-	rslt = SVCAUTH_UNWRAP(req->rq_auth, req, xdrs, xdr_args, args_ptr);
-	if (!rslt) {
-		svc_dg_freeargs(req, xdr_args, args_ptr);
+	if (!xdr_reply_encode(xdrs, &req->rq_msg)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d xdr_reply_encode failed (will set dead)",
+			__func__, xprt, xprt->xp_fd);
+		return (XPRT_DIED);
 	}
 
-	return (rslt);
+	if (req->rq_msg.rm_reply.rp_stat == MSG_ACCEPTED
+	 && req->rq_msg.rm_reply.rp_acpt.ar_stat == SUCCESS
+	 && req->rq_auth
+	 && !SVCAUTH_WRAP(req->rq_auth, req, xdrs,
+			  req->rq_msg.RPCM_ack.ar_results.proc,
+			  req->rq_msg.RPCM_ack.ar_results.where)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d SVCAUTH_WRAP failed (will set dead)",
+			__func__, xprt, xprt->xp_fd);
+		return (XPRT_DIED);
+	}
+	iov.iov_base = &su[1];
+	iov.iov_len = slen = XDR_GETPOS(xdrs);
+	msg->msg_iov = &iov;
+	msg->msg_iovlen = 1;
+	msg->msg_name = (struct sockaddr *)&xprt->xp_remote.ss;
+	msg->msg_namelen = xprt->xp_remote.nb.len;
+	/* cmsg already set in svc_dg_rendezvous */
+
+	if (sendmsg(xprt->xp_fd, msg, 0) != (ssize_t) slen) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d sendmsg failed (will set dead)",
+			__func__, xprt, xprt->xp_fd);
+		return (XPRT_DIED);
+	}
+
+	return (XPRT_IDLE);
 }
 
 static void
-svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
+svc_dg_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
 	struct svc_dg_xprt *su = su_data(xprt);
 
-	/* clears xprt from the xprt table (eg, idle scans) */
-	svc_rqst_xprt_unregister(xprt);
+	if (xprt->xp_parent) {
+		SVC_RELEASE(xprt->xp_parent, SVC_RELEASE_FLAG_NONE);
+	} else {
+		/* only original parent is registered */
+		svc_rqst_xprt_unregister(xprt);
+	}
 
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-		"%s() %p xp_refs %" PRIu32
+		"%s() %p fd %d xp_refs %" PRIu32
 		" should actually destroy things @ %s:%d",
-		__func__, xprt, xprt->xp_refs, tag, line);
+		__func__, xprt, xprt->xp_fd, xprt->xp_refs, tag, line);
 
 	if ((xprt->xp_flags & SVC_XPRT_FLAG_CLOSE) && xprt->xp_fd != -1)
 		(void)close(xprt->xp_fd);
-
-	XDR_DESTROY(REC_XPRT(xprt)->ioq.xdrs);
-	mem_free(rpc_buffer(xprt), su->su_iosz);
 
 	if (xprt->xp_tp)
 		mem_free(xprt->xp_tp, 0);
@@ -477,6 +436,14 @@ svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		xprt->xp_ops->xp_free_user_data(xprt);
 	}
 	svc_dg_xprt_free(su);
+}
+
+static void
+svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
+{
+	XDR_DESTROY(REC_XPRT(xprt)->ioq.xdrs);
+
+	svc_dg_destroy_it(xprt, flags, tag, line);
 }
 
 extern mutex_t ops_lock;
@@ -492,44 +459,14 @@ svc_dg_control(SVCXPRT *xprt, const u_int rq, void *in)
 	case SVCSET_XP_FLAGS:
 		xprt->xp_flags = *(u_int *) in;
 		break;
-	case SVCGET_XP_RECV:
-		mutex_lock(&ops_lock);
-		*(xp_recv_t *) in = xprt->xp_ops->xp_recv;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCSET_XP_RECV:
-		mutex_lock(&ops_lock);
-		xprt->xp_ops->xp_recv = *(xp_recv_t) in;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCGET_XP_GETREQ:
-		mutex_lock(&ops_lock);
-		*(xp_getreq_t *) in = xprt->xp_ops->xp_getreq;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCSET_XP_GETREQ:
-		mutex_lock(&ops_lock);
-		xprt->xp_ops->xp_getreq = *(xp_getreq_t) in;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCGET_XP_DISPATCH:
-		mutex_lock(&ops_lock);
-		*(xp_dispatch_t *) in = xprt->xp_ops->xp_dispatch;
-		mutex_unlock(&ops_lock);
-		break;
-	case SVCSET_XP_DISPATCH:
-		mutex_lock(&ops_lock);
-		xprt->xp_ops->xp_dispatch = *(xp_dispatch_t) in;
-		mutex_unlock(&ops_lock);
-		break;
 	case SVCGET_XP_FREE_USER_DATA:
 		mutex_lock(&ops_lock);
-		*(xp_free_user_data_t *) in = xprt->xp_ops->xp_free_user_data;
+		*(svc_xprt_fun_t *) in = xprt->xp_ops->xp_free_user_data;
 		mutex_unlock(&ops_lock);
 		break;
 	case SVCSET_XP_FREE_USER_DATA:
 		mutex_lock(&ops_lock);
-		xprt->xp_ops->xp_free_user_data = *(xp_free_user_data_t) in;
+		xprt->xp_ops->xp_free_user_data = *(svc_xprt_fun_t) in;
 		mutex_unlock(&ops_lock);
 		break;
 	default:
@@ -539,7 +476,7 @@ svc_dg_control(SVCXPRT *xprt, const u_int rq, void *in)
 }
 
 static void
-svc_dg_ops(SVCXPRT *xprt)
+svc_dg_override_ops(SVCXPRT *xprt, SVCXPRT *rendezvous)
 {
 	static struct xp_ops ops;
 
@@ -552,14 +489,35 @@ svc_dg_ops(SVCXPRT *xprt)
 	if (ops.xp_recv == NULL) {
 		ops.xp_recv = svc_dg_recv;
 		ops.xp_stat = svc_dg_stat;
-		ops.xp_getargs = svc_dg_getargs;
+		ops.xp_decode = svc_dg_decode;
 		ops.xp_reply = svc_dg_reply;
-		ops.xp_freeargs = svc_dg_freeargs;
+		ops.xp_checksum = svc_dg_checksum;
 		ops.xp_destroy = svc_dg_destroy;
 		ops.xp_control = svc_dg_control;
-		ops.xp_getreq = svc_getreq_default;
-		ops.xp_dispatch = svc_dispatch_default;
-		ops.xp_recv_user_data = NULL;	/* no default */
+		ops.xp_free_user_data = NULL;	/* no default */
+	}
+	svc_override_ops(&ops, rendezvous);
+	xprt->xp_ops = &ops;
+	mutex_unlock(&ops_lock);
+}
+
+static void
+svc_dg_rendezvous_ops(SVCXPRT *xprt)
+{
+	static struct xp_ops ops;
+
+	mutex_lock(&ops_lock);
+
+	xprt->xp_type = XPRT_UDP_RENDEZVOUS;
+
+	if (ops.xp_recv == NULL) {
+		ops.xp_recv = svc_dg_rendezvous;
+		ops.xp_stat = svc_rendezvous_stat;
+		ops.xp_decode = (svc_req_fun_t)abort;
+		ops.xp_reply = (svc_req_fun_t)abort;
+		ops.xp_checksum = NULL;
+		ops.xp_destroy = svc_dg_destroy_it;
+		ops.xp_control = svc_dg_control;
 		ops.xp_free_user_data = NULL;	/* no default */
 	}
 	xprt->xp_ops = &ops;
@@ -582,8 +540,10 @@ svc_dg_enable_pktinfo(int fd, const struct __rpc_sockinfo *si)
 		break;
 
 	case AF_INET6:
-#ifdef SOL_IPV6
+#ifdef SOL_IP
 		(void)setsockopt(fd, SOL_IP, IP_PKTINFO, &val, sizeof(val));
+#endif
+#ifdef SOL_IPV6
 		(void)setsockopt(fd, SOL_IPV6, IPV6_RECVPKTINFO,
 				&val, sizeof(val));
 #endif
@@ -592,23 +552,23 @@ svc_dg_enable_pktinfo(int fd, const struct __rpc_sockinfo *si)
 }
 
 static int
-svc_dg_store_in_pktinfo(struct cmsghdr *cmsg, struct svc_req *req)
+svc_dg_store_in_pktinfo(struct cmsghdr *cmsg, SVCXPRT *xprt)
 {
 	if (cmsg->cmsg_level == SOL_IP &&
 	    cmsg->cmsg_type == IP_PKTINFO &&
 	    cmsg->cmsg_len >= CMSG_LEN(sizeof(struct in_pktinfo))) {
-		struct in_pktinfo *pkti;
-		struct sockaddr_in *daddr;
+		struct in_pktinfo *pkti = (struct in_pktinfo *)
+						CMSG_DATA(cmsg);
+		struct sockaddr_in *daddr = (struct sockaddr_in *)
+						&xprt->xp_local.ss;
 
-		pkti = (struct in_pktinfo *)CMSG_DATA(cmsg);
-		daddr = (struct sockaddr_in *)&req->rq_daddr;
 		daddr->sin_family = AF_INET;
 #ifdef __FreeBSD__
 		daddr->sin_addr = pkti->ipi_addr;
 #else
 		daddr->sin_addr.s_addr = pkti->ipi_spec_dst.s_addr;
 #endif
-		req->rq_daddr_len = sizeof(struct sockaddr_in);
+		xprt->xp_local.nb.len = sizeof(struct sockaddr_in);
 		return 1;
 	} else {
 		return 0;
@@ -616,20 +576,20 @@ svc_dg_store_in_pktinfo(struct cmsghdr *cmsg, struct svc_req *req)
 }
 
 static int
-svc_dg_store_in6_pktinfo(struct cmsghdr *cmsg, struct svc_req *req)
+svc_dg_store_in6_pktinfo(struct cmsghdr *cmsg, SVCXPRT *xprt)
 {
 	if (cmsg->cmsg_level == SOL_IPV6 &&
 	    cmsg->cmsg_type == IPV6_PKTINFO &&
 	    cmsg->cmsg_len >= CMSG_LEN(sizeof(struct in6_pktinfo))) {
-		struct in6_pktinfo *pkti;
-		struct sockaddr_in6 *daddr;
+		struct in6_pktinfo *pkti = (struct in6_pktinfo *)
+						CMSG_DATA(cmsg);
+		struct sockaddr_in6 *daddr = (struct sockaddr_in6 *)
+						&xprt->xp_local.ss;
 
-		pkti = (struct in6_pktinfo *)CMSG_DATA(cmsg);
-		daddr = (struct sockaddr_in6 *) &req->rq_daddr;
 		daddr->sin6_family = AF_INET6;
 		daddr->sin6_addr = pkti->ipi6_addr;
 		daddr->sin6_scope_id = pkti->ipi6_ifindex;
-		req->rq_daddr_len = sizeof(struct sockaddr_in6);
+		xprt->xp_local.nb.len = sizeof(struct sockaddr_in6);
 		return 1;
 	} else {
 		return 0;
@@ -642,7 +602,7 @@ svc_dg_store_in6_pktinfo(struct cmsghdr *cmsg, struct svc_req *req)
  * If so, store the data in the request.
  */
 static int
-svc_dg_store_pktinfo(struct msghdr *msg, struct svc_req *req)
+svc_dg_store_pktinfo(struct msghdr *msg, SVCXPRT *xprt)
 {
 	struct cmsghdr *cmsg;
 
@@ -659,18 +619,19 @@ svc_dg_store_pktinfo(struct msghdr *msg, struct svc_req *req)
 	switch (((struct sockaddr *)msg->msg_name)->sa_family) {
 	case AF_INET:
 #ifdef SOL_IP
-		if (svc_dg_store_in_pktinfo(cmsg, req))
-				return 1;
+		if (svc_dg_store_in_pktinfo(cmsg, xprt))
+			return 1;
 #endif
 		break;
 
 	case AF_INET6:
-#ifdef SOL_IPV6
+#ifdef SOL_IP
 		/* Handle IPv4 PKTINFO as well on IPV6 interface */
-		if (svc_dg_store_in_pktinfo(cmsg, req))
+		if (svc_dg_store_in_pktinfo(cmsg, xprt))
 			return 1;
-
-		if (svc_dg_store_in6_pktinfo(cmsg, req))
+#endif
+#ifdef SOL_IPV6
+		if (svc_dg_store_in6_pktinfo(cmsg, xprt))
 			return 1;
 #endif
 		break;
