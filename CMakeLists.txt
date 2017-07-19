@@ -199,6 +199,11 @@ configure_file(
   "${PROJECT_BINARY_DIR}/libntirpc.pc"
 )
 
+configure_file(
+  "${NTIRPC_BASE_DIR}/libntirpc.spec-in.cmake"
+  "${PROJECT_SOURCE_DIR}/libntirpc.spec"
+)
+
 ########### install files ###############
 
 install(FILES  ${PROJECT_BINARY_DIR}/libntirpc.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
