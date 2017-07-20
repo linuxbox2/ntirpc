@@ -406,6 +406,9 @@ svc_rqst_rearm_events(SVCXPRT *xprt)
 	if (!(xprt->xp_flags & SVC_XPRT_FLAG_BLOCKED))
 		rpc_dplx_rli(rec);
 
+	/* assuming success */
+	atomic_set_uint16_t_bits(&xprt->xp_flags, SVC_XPRT_FLAG_ADDED);
+
 	switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
 	case SVC_EVENT_EPOLL:
@@ -420,6 +423,8 @@ svc_rqst_rearm_events(SVCXPRT *xprt)
 				 EPOLL_CTL_MOD, xprt->xp_fd, ev);
 		if (code) {
 			code = errno;
+			atomic_clear_uint16_t_bits(&xprt->xp_flags,
+						   SVC_XPRT_FLAG_ADDED);
 			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
 				"%s: %p fd %d epoll arm failed "
 				"sr_rec %p epoll_fd %d "
@@ -428,9 +433,6 @@ svc_rqst_rearm_events(SVCXPRT *xprt)
 				sr_rec, sr_rec->ev_u.epoll.epoll_fd,
 				sr_rec->sv[0], sr_rec->sv[1], code);
 		} else {
-			atomic_set_uint16_t_bits(&xprt->xp_flags,
-						 SVC_XPRT_FLAG_ADDED);
-
 			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
 				"%s: %p fd %d epoll arm "
 				"sr_rec %p epoll_fd %d "
@@ -480,6 +482,8 @@ svc_rqst_hook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
 				 EPOLL_CTL_ADD, xprt->xp_fd, ev);
 		if (code) {
 			code = errno;
+			atomic_clear_uint16_t_bits(&xprt->xp_flags,
+						   SVC_XPRT_FLAG_ADDED);
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s: %p fd %d epoll add failed "
 				"sr_rec %p epoll_fd %d "
@@ -488,9 +492,6 @@ svc_rqst_hook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
 				sr_rec, sr_rec->ev_u.epoll.epoll_fd,
 				sr_rec->sv[0], sr_rec->sv[1], code);
 		} else {
-			atomic_set_uint16_t_bits(&xprt->xp_flags,
-						 SVC_XPRT_FLAG_ADDED);
-
 			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
 				"%s: %p fd %d epoll add "
 				"sr_rec %p epoll_fd %d "
@@ -552,7 +553,7 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 	struct svc_rqst_rec *sr_rec;
 	struct svc_rqst_rec *ev_p;
 	int code;
-	uint16_t bits = (flags & SVC_XPRT_FLAG_UREG);
+	uint16_t bits = SVC_XPRT_FLAG_ADDED | (flags & SVC_XPRT_FLAG_UREG);
 
 	if (chan_id == 0) {
 		/* Create a global/legacy event channel */
@@ -590,6 +591,9 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 		mutex_unlock(&ev_p->mtx);
 	}
 
+	/* assuming success */
+	atomic_set_uint16_t_bits(&xprt->xp_flags, bits);
+
 	TAILQ_INSERT_TAIL(&sr_rec->ev_qh, rec, ev_q);
 
 	/* link from xprt */
@@ -597,17 +601,12 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 
 	/* register on event channel */
 	code = svc_rqst_hook_events(rec, sr_rec);
-	if (!code) {
-		__warnx(TIRPC_DEBUG_FLAG_REFCNT | TIRPC_DEBUG_FLAG_SVC_RQST,
-			"%s: %p fd %d xp_refs %" PRIu32
-			" chan_id %d refcnt %" PRIu32,
-			__func__, xprt, xprt->xp_fd, xprt->xp_refs,
-			sr_rec->id_k, sr_rec->refcnt);
-		bits |= SVC_XPRT_FLAG_ADDED;
-	}
 
-	if (bits)
-		atomic_set_uint16_t_bits(&xprt->xp_flags, bits);
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT | TIRPC_DEBUG_FLAG_SVC_RQST,
+		"%s: %p fd %d xp_refs %" PRIu32
+		" chan_id %d refcnt %" PRIu32,
+		__func__, xprt, xprt->xp_fd, xprt->xp_refs,
+		sr_rec->id_k, sr_rec->refcnt);
 
 	/* Unlocking after debug message ensures both the xprt and the sr_rec
 	 * are still present, as the xprt unregisters before release.

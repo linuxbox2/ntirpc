@@ -180,9 +180,9 @@ typedef struct {
 .Sh "The SVCXPRT structure"
 .Bd -literal
 enum xprt_stat {
+    XPRT_IDLE = 0,
     XPRT_DIED,
-    XPRT_MOREREQS,
-    XPRT_IDLE
+    XPRT_DESTROYED
 };
 
 /*
@@ -190,11 +190,11 @@ enum xprt_stat {
  */
 typedef struct {
     const struct xp_ops {
-        bool_t    (*xp_recv)();    /* receive incoming requests */
+        enum xprt_stat    (*xp_recv)();    /* receive incoming requests */
         enum xprt_stat    (*xp_stat)();    /* get transport status */
-        bool_t    (*xp_getargs)();    /* get arguments */
-        bool_t    (*xp_reply)();      /* send reply */
-        bool_t    (*xp_freeargs)(); /* free mem allocated for args */
+        enum xprt_stat    (*xp_decode)();  /* get arguments */
+        enum xprt_stat    (*xp_reply)();   /* send reply */
+        void    (*xp_checksum)();          /* checksum for cache */
         void    (*xp_destroy)();    /* destroy this struct */
         bool_t    (*xp_control)();    /* catch-all function */
     } *xp_ops;

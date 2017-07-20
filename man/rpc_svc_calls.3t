@@ -17,8 +17,8 @@
 .In rpc/rpc.h
 .Ft "struct netbuf *"
 .Fn svc_getrpccaller "const SVCXPRT *xprt"
-.Ft bool_t
-.Fn svc_sendreply "SVCXPRT *xprt" "xdrproc_t outproc" "char *out"
+.Ft enum xprt_stat
+.Fn svc_sendreply "struct svc_req *request"
 .Sh DESCRIPTION
 These routines are part of the
 RPC
@@ -41,19 +41,24 @@ data structure.
 Called by an RPC service's dispatch routine to send the results of a
 remote procedure call.
 The
-.Fa xprt
+.Fa request
 argument
-is the request's associated transport handle;
-.Fa outproc
-is the XDR
+is the request.
+Its
+.Tn struct rpc_msg
+.Fa ar_results
+fields must be set:
+.Fa proc
+is the
+.Tn XDR
 routine which is used to encode the results; and
-.Fa out
+.Fa where
 is the address of the results.
 This routine returns
-.Dv TRUE
-if it succeeds,
-.Dv FALSE
-otherwise.
+.Dv XPRT_IDLE (0)
+for success,
+.Dv XPRT_DIED
+or greater otherwise.
 .El
 .Sh SEE ALSO
 .Xr poll 2 ,

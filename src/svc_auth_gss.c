@@ -197,9 +197,9 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 	/* Deserialize arguments. */
 	memset(&recv_tok, 0, sizeof(recv_tok));
 
-	if (!SVCAUTH_UNWRAP(req->rq_auth, req, req->rq_xdrs,
-			    (xdrproc_t)xdr_rpc_gss_init_args,
-			    (caddr_t)&recv_tok)) {
+	req->rq_msg.rm_xdr.where = (caddr_t)&recv_tok;
+	req->rq_msg.rm_xdr.proc = (xdrproc_t)xdr_rpc_gss_init_args;
+	if (!SVCAUTH_UNWRAP(req)) {
 		xdr_free((xdrproc_t)xdr_rpc_gss_init_args, (caddr_t)&recv_tok);
 		return (false);
 	}
@@ -366,11 +366,11 @@ svcauth_gss_nextverf(struct svc_req *req, struct svc_rpc_gss_data *gd,
 	    gss_get_mic(&min_stat, gd->ctx, gd->sec.qop, &signbuf, &checksum);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		log_status("gss_get_mic", maj_stat, min_stat);
+		gss_log_status("gss_get_mic", maj_stat, min_stat);
 		return (false);
 	}
 	if (checksum.length > MAX_AUTH_BYTES) {
-		log_status("checksum.length", maj_stat, min_stat);
+		gss_log_status("checksum.length", maj_stat, min_stat);
 		return (false);
 	}
 	req->rq_msg.RPCM_ack.ar_verf.oa_flavor = RPCSEC_GSS;
@@ -523,17 +523,17 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 
 		*no_dispatch = true;
 
-		call_stat =
-		    svc_sendreply(req,
-				  (xdrproc_t) xdr_rpc_gss_init_res,
-				  (caddr_t) &gr);
+		req->rq_msg.RPCM_ack.ar_results.where = (caddr_t) &gr;
+		req->rq_msg.RPCM_ack.ar_results.proc =
+					(xdrproc_t) xdr_rpc_gss_init_res;
+		call_stat = svc_sendreply(req);
 
 		/* XXX */
 		gss_release_buffer(&min_stat, &gr.gr_token);
 		gss_release_buffer(&min_stat, &gd->checksum);
 		mem_free(gr.gr_ctx.value, 0);
 
-		if (!call_stat)
+		if (call_stat >= XPRT_DIED)
 			svcauth_gss_return(AUTH_FAILED);
 
 		if (gr.gr_major == GSS_S_COMPLETE) {
@@ -609,10 +609,13 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 		mutex_unlock(&gd->lock);
 		gd_locked = false;
 
-		call_stat =
-		    svc_sendreply(req,
-				  (xdrproc_t) xdr_void,
-				  (caddr_t) NULL);
+		req->rq_msg.RPCM_ack.ar_results.where = NULL;
+		req->rq_msg.RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
+		if (svc_sendreply(req) >= XPRT_DIED) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() svc_sendreply failed",
+				__func__);
+		}
 
 		/* We acquired a reference on gd with authgss_ctx_hash_get
 		 * call.  Time to release the reference as we don't need
@@ -632,11 +635,11 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 }
 
 static bool
-svcauth_gss_release(SVCAUTH *auth, struct svc_req *req)
+svcauth_gss_release(struct svc_req *req)
 {
 	struct svc_rpc_gss_data *gd;
 
-	gd = SVCAUTH_PRIVATE(auth);
+	gd = SVCAUTH_PRIVATE(req->rq_auth);
 	if (gd)
 		unref_svc_rpc_gss_data(gd, SVC_RPC_GSS_FLAG_NONE);
 	req->rq_auth = NULL;
@@ -670,61 +673,145 @@ svcauth_gss_destroy(SVCAUTH *auth)
 }
 
 static bool
-svcauth_gss_wrap(SVCAUTH *auth, struct svc_req *req, XDR *xdrs,
-		 xdrproc_t xdr_func, caddr_t xdr_ptr)
+svcauth_gss_wrap(struct svc_req *req, XDR *xdrs)
 {
-	bool result;
 	struct svc_rpc_gss_data *gd = SVCAUTH_PRIVATE(req->rq_auth);
 	u_int gc_seq = (u_int) (uintptr_t) req->rq_ap1;
 	struct rpc_gss_cred *gc = (struct rpc_gss_cred *)
 					req->rq_msg.rq_cred_body;
+	bool result;
 
 	if (!gd->established || gc->gc_svc == RPCSEC_GSS_SVC_NONE)
-		return ((*xdr_func) (xdrs, xdr_ptr));
+		return (svc_auth_none.svc_ah_ops->svc_ah_wrap(req, xdrs));
 
 	mutex_lock(&gd->lock);
-	result = xdr_rpc_gss_data(xdrs, xdr_func, xdr_ptr, gd->ctx,
-				  gd->sec.qop, gc->gc_svc, gc_seq);
+	result = xdr_rpc_gss_wrap(xdrs, req->rq_msg.RPCM_ack.ar_results.proc,
+				  req->rq_msg.RPCM_ack.ar_results.where,
+				  gd->ctx, gd->sec.qop, gc->gc_svc, gc_seq);
 	mutex_unlock(&gd->lock);
 	return (result);
 }
 
 static bool
-svcauth_gss_unwrap(SVCAUTH *auth, struct svc_req *req, XDR *xdrs,
-		   xdrproc_t xdr_func, caddr_t xdr_ptr)
+svcauth_gss_unwrap(struct svc_req *req)
 {
-	bool result;
 	struct svc_rpc_gss_data *gd = SVCAUTH_PRIVATE(req->rq_auth);
 	u_int gc_seq = (u_int) (uintptr_t) req->rq_ap1;
+	bool result;
 
 	if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE)
-		return ((*xdr_func) (xdrs, xdr_ptr));
+		return (svc_auth_none.svc_ah_ops->svc_ah_unwrap(req));
 
 	mutex_lock(&gd->lock);
-	result = xdr_rpc_gss_data(xdrs, xdr_func, xdr_ptr, gd->ctx,
-				  gd->sec.qop, gd->sec.svc, gc_seq);
+	result = xdr_rpc_gss_unwrap(req->rq_xdrs, req->rq_msg.rm_xdr.proc,
+				    req->rq_msg.rm_xdr.where, gd->ctx,
+				    gd->sec.qop, gd->sec.svc, gc_seq);
 	mutex_unlock(&gd->lock);
 	return (result);
 }
 
+static inline bool
+xdr_rpc_gss_checksum(struct svc_req *req, gss_ctx_id_t ctx, gss_qop_t qop,
+		     rpc_gss_svc_t svc, u_int seq)
+{
+	XDR *xdrs = req->rq_xdrs;
+	XDR tmpxdrs;
+	gss_buffer_desc databuf, wrapbuf;
+	OM_uint32 maj_stat, min_stat;
+	u_int seq_num, qop_state;
+	int conf_state;
+	bool xdr_stat;
+
+	if (req->rq_msg.rm_xdr.proc == (xdrproc_t) xdr_void
+	 || req->rq_msg.rm_xdr.where == NULL)
+		return (TRUE);
+
+	memset(&databuf, 0, sizeof(databuf));
+	memset(&wrapbuf, 0, sizeof(wrapbuf));
+
+	if (svc == RPCSEC_GSS_SVC_INTEGRITY) {
+		/* Decode databody_integ. */
+		if (!xdr_rpc_gss_decode(xdrs, &databuf)) {
+			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
+				"%s() xdr_rpc_gss_decode databody_integ failed",
+				__func__);
+			return (FALSE);
+		}
+		/* Decode checksum. */
+		if (!xdr_rpc_gss_decode(xdrs, &wrapbuf)) {
+			gss_release_buffer(&min_stat, &databuf);
+			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
+				"%s() xdr_rpc_gss_decode checksum failed",
+				__func__);
+			return (FALSE);
+		}
+		/* Verify checksum and QOP. */
+		maj_stat =
+		    gss_verify_mic(&min_stat, ctx, &databuf, &wrapbuf,
+				   &qop_state);
+		gss_release_buffer(&min_stat, &wrapbuf);
+
+		if (maj_stat != GSS_S_COMPLETE || qop_state != qop) {
+			gss_release_buffer(&min_stat, &databuf);
+			gss_log_status("gss_verify_mic", maj_stat, min_stat);
+			return (FALSE);
+		}
+	} else if (svc == RPCSEC_GSS_SVC_PRIVACY) {
+		/* Decode databody_priv. */
+		if (!xdr_rpc_gss_decode(xdrs, &wrapbuf)) {
+			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
+				"%s() xdr_rpc_gss_decode databody_priv failed",
+				__func__);
+			return (FALSE);
+		}
+		/* Decrypt databody. */
+		maj_stat =
+		    gss_unwrap(&min_stat, ctx, &wrapbuf, &databuf, &conf_state,
+			       &qop_state);
+
+		gss_release_buffer(&min_stat, &wrapbuf);
+
+		/* Verify encryption and QOP. */
+		if (maj_stat != GSS_S_COMPLETE || qop_state != qop
+		    || conf_state != TRUE) {
+			gss_release_buffer(&min_stat, &databuf);
+			gss_log_status("gss_unwrap", maj_stat, min_stat);
+			return (FALSE);
+		}
+	}
+	/* Decode rpc_gss_data_t (sequence number + arguments). */
+	xdrmem_create(&tmpxdrs, databuf.value, databuf.length, XDR_DECODE);
+	SVC_CHECKSUM(req, databuf.value, databuf.length);
+	xdr_stat = (xdr_u_int(&tmpxdrs, &seq_num)
+		    && (*req->rq_msg.rm_xdr.proc)
+			(&tmpxdrs, req->rq_msg.rm_xdr.where));
+	XDR_DESTROY(&tmpxdrs);
+	gss_release_buffer(&min_stat, &databuf);
+
+	/* Verify sequence number. */
+	if (xdr_stat == TRUE && seq_num != seq) {
+		__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
+			"%s() wrong sequence number in databody",
+			__func__);
+		return (FALSE);
+	}
+	return (xdr_stat);
+}
+
 static bool
-svcauth_gss_checksum(SVCAUTH *auth, struct svc_req *req, XDR *xdrs,
-		     xdrproc_t xdr_func, caddr_t xdr_ptr)
+svcauth_gss_checksum(struct svc_req *req)
 {
 	struct svc_rpc_gss_data *gd = SVCAUTH_PRIVATE(req->rq_auth);
 	u_int gc_seq = (u_int) (uintptr_t) req->rq_ap1;
 	bool result;
 
 	if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE) {
-		SVC_CHECKSUM(req);
-		return ((*xdr_func) (xdrs, xdr_ptr));
+		return (svc_auth_none.svc_ah_ops->svc_ah_checksum(req));
 	}
 
 	mutex_lock(&gd->lock);
-	/* XXX expand xdr_rpc_gss_data instead??? */
-	SVC_CHECKSUM(req);
-	result = xdr_rpc_gss_data(xdrs, xdr_func, xdr_ptr, gd->ctx,
-				  gd->sec.qop, gd->sec.svc, gc_seq);
+	result = xdr_rpc_gss_checksum(req, gd->ctx, gd->sec.qop, gd->sec.svc,
+				      gc_seq);
 	mutex_unlock(&gd->lock);
 	return (result);
 }

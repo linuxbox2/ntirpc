@@ -331,23 +331,17 @@ svc_dg_decode(struct svc_req *req)
 	return (req->rq_xprt->xp_dispatch.process_cb(req));
 }
 
-static enum xprt_stat
-svc_dg_checksum(struct svc_req *req)
+static void
+svc_dg_checksum(struct svc_req *req, void *data, size_t length)
 {
-	XDR *xdrs = req->rq_xdrs;
-
 	req->rq_cksum =
 #if 1
 	/* CithHash64 is -substantially- faster than crc32c from FreeBSD
 	 * SCTP, so prefer it until fast crc32c bests it */
-		CityHash64WithSeed(xdrs->x_data,
-				   MIN(256, xdr_size_inline(xdrs)),
-				   103);
+		CityHash64WithSeed(data, MIN(256, length), 103);
 #else
-		calculate_crc32c(0, xdrs->x_data,
-				 MIN(256, xdr_size_inline(xdrs)));
+		calculate_crc32c(0, data, MIN(256, length));
 #endif
-	return (XPRT_IDLE);
 }
 
 static enum xprt_stat
@@ -380,9 +374,7 @@ svc_dg_reply(struct svc_req *req)
 	if (req->rq_msg.rm_reply.rp_stat == MSG_ACCEPTED
 	 && req->rq_msg.rm_reply.rp_acpt.ar_stat == SUCCESS
 	 && req->rq_auth
-	 && !SVCAUTH_WRAP(req->rq_auth, req, xdrs,
-			  req->rq_msg.RPCM_ack.ar_results.proc,
-			  req->rq_msg.RPCM_ack.ar_results.where)) {
+	 && !SVCAUTH_WRAP(req, xdrs)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d SVCAUTH_WRAP failed (will set dead)",
 			__func__, xprt, xprt->xp_fd);
@@ -515,7 +507,7 @@ svc_dg_rendezvous_ops(SVCXPRT *xprt)
 		ops.xp_stat = svc_rendezvous_stat;
 		ops.xp_decode = (svc_req_fun_t)abort;
 		ops.xp_reply = (svc_req_fun_t)abort;
-		ops.xp_checksum = NULL;
+		ops.xp_checksum = NULL;		/* not used */
 		ops.xp_destroy = svc_dg_destroy_it;
 		ops.xp_control = svc_dg_control;
 		ops.xp_free_user_data = NULL;	/* no default */

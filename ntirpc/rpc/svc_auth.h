@@ -48,29 +48,26 @@
  */
 typedef struct SVCAUTH {
 	struct svc_auth_ops {
-		bool(*svc_ah_wrap) (struct SVCAUTH *, struct svc_req *, XDR *,
-				    xdrproc_t, caddr_t);
-		bool(*svc_ah_unwrap) (struct SVCAUTH *, struct svc_req *, XDR *,
-				      xdrproc_t, caddr_t);
-		bool(*svc_ah_checksum) (struct SVCAUTH *, struct svc_req *,
-					XDR *, xdrproc_t, caddr_t);
-		bool(*svc_ah_release) (struct SVCAUTH *, struct svc_req *);
+		bool(*svc_ah_wrap) (struct svc_req *, XDR *);
+		bool(*svc_ah_unwrap) (struct svc_req *);
+		bool(*svc_ah_checksum) (struct svc_req *);
+		bool(*svc_ah_release) (struct svc_req *);
 		bool(*svc_ah_destroy) (struct SVCAUTH *);
 	} *svc_ah_ops;
 	caddr_t svc_ah_private;
 } SVCAUTH;
 
-#define SVCAUTH_WRAP(auth, req, xdrs, xfunc, xwhere) \
-	((*((auth)->svc_ah_ops->svc_ah_wrap))(auth, req, xdrs, xfunc, xwhere))
+#define SVCAUTH_WRAP(req, xdrs) \
+	((*(((req)->rq_auth)->svc_ah_ops->svc_ah_wrap))(req, xdrs))
 
-#define SVCAUTH_UNWRAP(auth, req, xdrs, xfunc, xwhere) \
-	((*((auth)->svc_ah_ops->svc_ah_unwrap))(auth, req, xdrs, xfunc, xwhere))
+#define SVCAUTH_UNWRAP(req) \
+	((*(((req)->rq_auth)->svc_ah_ops->svc_ah_unwrap))(req))
 
-#define SVCAUTH_CHECKSUM(auth, req, xdrs, xfunc, xwhere) \
-	((*((auth)->svc_ah_ops->svc_ah_unwrap))(auth, req, xdrs, xfunc, xwhere))
+#define SVCAUTH_CHECKSUM(req) \
+	((*(((req)->rq_auth)->svc_ah_ops->svc_ah_checksum))(req))
 
-#define SVCAUTH_RELEASE(auth, req) \
-	((*((auth)->svc_ah_ops->svc_ah_release))(auth, req))
+#define SVCAUTH_RELEASE(req) \
+	((*(((req)->rq_auth)->svc_ah_ops->svc_ah_release))(req))
 
 #define SVCAUTH_DESTROY(auth) \
 	((*((auth)->svc_ah_ops->svc_ah_destroy))(auth))

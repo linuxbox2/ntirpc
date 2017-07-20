@@ -91,11 +91,11 @@ print_rpc_gss_sec(struct rpc_gss_sec *ptr)
 	int i;
 	char *p;
 
-	log_debug("rpc_gss_sec:");
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "rpc_gss_sec:");
 	if (ptr->mech == NULL)
-		log_debug("NULL gss_OID mech");
+		__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "NULL gss_OID mech");
 	else {
-		__warnx(TIRPC_DEBUG_FLAG_AUTH, "     mechanism_OID: {");
+		__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "     mechanism_OID: {");
 		p = (char *)ptr->mech->elements;
 		for (i = 0; i < ptr->mech->length; i++)
 			/* First byte of OIDs encoded to save a byte */
@@ -115,20 +115,21 @@ print_rpc_gss_sec(struct rpc_gss_sec *ptr)
 					first = -1;
 					second = -1;
 				}
-				__warnx(TIRPC_DEBUG_FLAG_AUTH, " %u %u", first,
-					second);
+				__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, " %u %u",
+					first, second);
 				p++;
 			} else {
-				__warnx(TIRPC_DEBUG_FLAG_AUTH, " %u",
+				__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, " %u",
 					(unsigned char)*p++);
 			}
-		__warnx(" }\n");
+		__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, " }");
 	}
-	__warnx(TIRPC_DEBUG_FLAG_AUTH, "     qop: %d\n", ptr->qop);
-	__warnx(TIRPC_DEBUG_FLAG_AUTH, "     service: %d\n", ptr->svc);
-	__warnx(TIRPC_DEBUG_FLAG_AUTH, "     cred: %p\n", ptr->cred);
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "     qop: %d", ptr->qop);
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "     service: %d", ptr->svc);
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "     cred: %p", ptr->cred);
 }
 #endif /*DEBUG*/
+
 struct rpc_gss_data {
 	mutex_t lock;
 	bool established;	/* context established */
@@ -155,7 +156,7 @@ authgss_ncreate(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 	OM_uint32 maj_stat;
 	OM_uint32 min_stat = 0;
 
-	log_debug("in authgss_ncreate()");
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
 
 	memset(&rpc_createerr, 0, sizeof(rpc_createerr));
 	auth = mem_alloc(sizeof(*auth));
@@ -164,9 +165,8 @@ authgss_ncreate(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 	gd = mem_alloc(sizeof(*gd));
 
 	mutex_init(&gd->lock, NULL);
-#ifdef DEBUG
-	__warnx(TIRPC_DEBUG_FLAG_AUTH, "authgss_ncreate: name is %p\n", name);
-#endif
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s() name is %p", __func__, name);
+
 	if (name != GSS_C_NO_NAME) {
 		maj_stat = gss_duplicate_name(&min_stat, name, &gd->name);
 		if (maj_stat != GSS_S_COMPLETE) {
@@ -179,10 +179,9 @@ authgss_ncreate(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 	} else
 		gd->name = name;
 
-#ifdef DEBUG
-	__warnx(TIRPC_DEBUG_FLAG_AUTH, "authgss_ncreate: gd->name is %p\n",
-		gd->name);
-#endif
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s() gd->name is %p",
+		__func__, gd->name);
+
 	gd->clnt = clnt;
 	gd->ctx = GSS_C_NO_CONTEXT;
 	gd->sec = *sec;
@@ -211,7 +210,7 @@ authgss_ncreate_default(CLIENT *clnt, char *service,
 	gss_buffer_desc sname;
 	gss_name_t name = GSS_C_NO_NAME;
 
-	log_debug("in authgss_ncreate_default()");
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
 
 	sname.value = service;
 	sname.length = strlen(service);
@@ -221,7 +220,7 @@ authgss_ncreate_default(CLIENT *clnt, char *service,
 			    (gss_OID) GSS_C_NT_HOSTBASED_SERVICE, &name);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		log_status("gss_import_name", maj_stat, min_stat);
+		gss_log_status("gss_import_name", maj_stat, min_stat);
 		rpc_createerr.cf_stat = RPC_AUTHERROR;
 		return (NULL);
 	}
@@ -229,10 +228,8 @@ authgss_ncreate_default(CLIENT *clnt, char *service,
 	auth = authgss_ncreate(clnt, name, sec);
 
 	if (name != GSS_C_NO_NAME) {
-#ifdef DEBUG
-		__warnx(TIRPC_DEBUG_FLAG_AUTH,
-			"authgss_ncreate_default: freeing name %p\n", name);
-#endif
+		__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
+			"%s() freeing name %p", __func__, name);
 		gss_release_name(&min_stat, &name);
 	}
 
@@ -244,7 +241,7 @@ authgss_get_private_data(AUTH *auth, struct authgss_private_data *pd)
 {
 	struct rpc_gss_data *gd;
 
-	log_debug("in authgss_get_private_data()");
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
 
 	if (!auth || !pd)
 		return (false);
@@ -264,7 +261,7 @@ authgss_get_private_data(AUTH *auth, struct authgss_private_data *pd)
 static void
 authgss_nextverf(AUTH *auth)
 {
-	log_debug("in authgss_nextverf()");
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
 	/* no action necessary */
 }
 
@@ -278,7 +275,7 @@ authgss_marshal(AUTH *auth, XDR *xdrs)
 	OM_uint32 maj_stat, min_stat;
 	bool xdr_stat;
 
-	log_debug("in authgss_marshal()");
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
 
 	gd = AUTH_PRIVATE(auth);
 
@@ -321,7 +318,7 @@ authgss_marshal(AUTH *auth, XDR *xdrs)
 	    gss_get_mic(&min_stat, gd->ctx, gd->sec.qop, &rpcbuf, &checksum);
 
 	if (maj_stat != GSS_S_COMPLETE) {
-		log_status("gss_get_mic", maj_stat, min_stat);
+		gss_log_status("gss_get_mic", maj_stat, min_stat);
 		if (maj_stat == GSS_S_CONTEXT_EXPIRED) {
 			gd->established = false;
 			authgss_destroy_context(auth);
@@ -329,7 +326,7 @@ authgss_marshal(AUTH *auth, XDR *xdrs)
 		return (false);
 	}
 	if (checksum.length > MAX_AUTH_BYTES) {
-		log_status("checksum.length", maj_stat, min_stat);
+		gss_log_status("checksum.length", maj_stat, min_stat);
 		gss_release_buffer(&min_stat, &checksum);
 		return (false);
 	}
@@ -351,7 +348,7 @@ authgss_validate(AUTH *auth, struct opaque_auth *verf)
 	gss_buffer_desc signbuf, checksum;
 	OM_uint32 maj_stat, min_stat;
 
-	log_debug("in authgss_validate()");
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
 
 	gd = AUTH_PRIVATE(auth);
 
@@ -383,7 +380,7 @@ authgss_validate(AUTH *auth, struct opaque_auth *verf)
 	maj_stat =
 	    gss_verify_mic(&min_stat, gd->ctx, &signbuf, &checksum, &qop_state);
 	if (maj_stat != GSS_S_COMPLETE || qop_state != gd->sec.qop) {
-		log_status("gss_verify_mic", maj_stat, min_stat);
+		gss_log_status("gss_verify_mic", maj_stat, min_stat);
 		if (maj_stat == GSS_S_CONTEXT_EXPIRED) {
 			gd->established = false;
 			authgss_destroy_context(auth);
@@ -409,7 +406,7 @@ authgss_refresh(AUTH *auth, void *arg)
 	OM_uint32 maj_stat, min_stat, call_stat, ret_flags;
 	bool gd_locked = false;
 
-	log_debug("in authgss_refresh()");
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
 
 	gd = AUTH_PRIVATE(auth);
 
@@ -431,8 +428,9 @@ authgss_refresh(AUTH *auth, void *arg)
 #ifdef DEBUG
 		/* print the token we just received */
 		if (recv_tokenp != GSS_C_NO_BUFFER) {
-			log_debug("The token we just received (length %d):",
-				  recv_tokenp->length);
+			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
+				"The token we just received (length %d):",
+				recv_tokenp->length);
 			gss_log_hexdump(recv_tokenp->value, recv_tokenp->length,
 					0);
 		}
@@ -457,7 +455,8 @@ authgss_refresh(AUTH *auth, void *arg)
 		}
 		if (maj_stat != GSS_S_COMPLETE
 		    && maj_stat != GSS_S_CONTINUE_NEEDED) {
-			log_status("gss_init_sec_context", maj_stat, min_stat);
+			gss_log_status("gss_init_sec_context",
+					maj_stat, min_stat);
 			break;
 		}
 		if (send_token.length != 0) {
@@ -465,8 +464,9 @@ authgss_refresh(AUTH *auth, void *arg)
 
 #ifdef DEBUG
 			/* print the token we are about to send */
-			log_debug("The token being sent (length %d):",
-				  send_token.length);
+			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
+				"The token being sent (length %d):",
+				send_token.length);
 			gss_log_hexdump(send_token.value, send_token.length, 0);
 #endif
 
@@ -518,8 +518,8 @@ authgss_refresh(AUTH *auth, void *arg)
 
 			if (maj_stat != GSS_S_COMPLETE
 			    || qop_state != gd->sec.qop) {
-				log_status("gss_verify_mic", maj_stat,
-					   min_stat);
+				gss_log_status("gss_verify_mic",
+						maj_stat, min_stat);
 				if (maj_stat == GSS_S_CONTEXT_EXPIRED) {
 					gd->established = false;
 					authgss_destroy_context(auth);
@@ -552,7 +552,7 @@ authgss_service(AUTH *auth, int svc)
 {
 	struct rpc_gss_data *gd;
 
-	log_debug("in authgss_service()");
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
 
 	if (!auth)
 		return (false);
@@ -570,7 +570,7 @@ authgss_destroy_context(AUTH *auth)
 	struct rpc_gss_data *gd;
 	OM_uint32 min_stat;
 
-	log_debug("in authgss_destroy_context()");
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
 
 	gd = AUTH_PRIVATE(auth);
 
@@ -604,15 +604,15 @@ authgss_destroy(AUTH *auth)
 	struct rpc_gss_data *gd;
 	OM_uint32 min_stat;
 
-	log_debug("in authgss_destroy()");
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
 
 	gd = AUTH_PRIVATE(auth);
 
 	authgss_destroy_context(auth);
 
 #ifdef DEBUG
-	__warnx(TIRPC_DEBUG_FLAG_AUTH, "authgss_destroy: freeing name %p\n",
-		gd->name);
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s() freeing name %p",
+		__func__, gd->name);
 #endif
 	if (gd->name != GSS_C_NO_NAME)
 		gss_release_name(&min_stat, &gd->name);
@@ -626,32 +626,31 @@ authgss_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr)
 {
 	struct rpc_gss_data *gd;
 
-	log_debug("in authgss_wrap()");
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
 
 	gd = AUTH_PRIVATE(auth);
 
 	if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE)
 		return ((*xdr_func) (xdrs, xdr_ptr));
 
-	return (xdr_rpc_gss_data
+	return (xdr_rpc_gss_wrap
 		(xdrs, xdr_func, xdr_ptr, gd->ctx, gd->sec.qop, gd->sec.svc,
 		 gd->gc.gc_seq));
 }
 
 bool
-authgss_unwrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func,
-	       caddr_t xdr_ptr)
+authgss_unwrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr)
 {
 	struct rpc_gss_data *gd;
 
-	log_debug("in authgss_unwrap()");
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
 
 	gd = AUTH_PRIVATE(auth);
 
 	if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE)
 		return ((*xdr_func) (xdrs, xdr_ptr));
 
-	return (xdr_rpc_gss_data
+	return (xdr_rpc_gss_unwrap
 		(xdrs, xdr_func, xdr_ptr, gd->ctx, gd->sec.qop, gd->sec.svc,
 		 gd->gc.gc_seq));
 }

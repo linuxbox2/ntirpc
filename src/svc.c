@@ -550,23 +550,22 @@ svc_lookup(svc_rec_t **rec, svc_vers_range_t *vrange,
  * Send a reply to an rpc request (MT-SAFE).
  *
  */
-bool
-svc_sendreply(struct svc_req *req, xdrproc_t xdr_results, void *xdr_location)
+enum xprt_stat
+svc_sendreply(struct svc_req *req)
 {
 	assert(req != NULL);
+	assert(req->rq_msg.RPCM_ack.ar_results.proc != NULL);
 
 	req->rq_msg.rm_direction = REPLY;
 	req->rq_msg.rm_reply.rp_stat = MSG_ACCEPTED;
 	req->rq_msg.RPCM_ack.ar_stat = SUCCESS;
-	req->rq_msg.RPCM_ack.ar_results.where = xdr_location;
-	req->rq_msg.RPCM_ack.ar_results.proc = xdr_results;
-	return (XPRT_DIED > SVC_REPLY(req));
+	return SVC_REPLY(req);
 }
 
 /*
  * No procedure error reply (MT-SAFE)
  */
-void
+enum xprt_stat
 svcerr_noproc(struct svc_req *req)
 {
 	assert(req != NULL);
@@ -574,13 +573,13 @@ svcerr_noproc(struct svc_req *req)
 	req->rq_msg.rm_direction = REPLY;
 	req->rq_msg.rm_reply.rp_stat = MSG_ACCEPTED;
 	req->rq_msg.RPCM_ack.ar_stat = PROC_UNAVAIL;
-	SVC_REPLY(req);
+	return SVC_REPLY(req);
 }
 
 /*
  * Can't decode args error reply (MT-SAFE)
  */
-void
+enum xprt_stat
 svcerr_decode(struct svc_req *req)
 {
 	assert(req != NULL);
@@ -588,13 +587,13 @@ svcerr_decode(struct svc_req *req)
 	req->rq_msg.rm_direction = REPLY;
 	req->rq_msg.rm_reply.rp_stat = MSG_ACCEPTED;
 	req->rq_msg.RPCM_ack.ar_stat = GARBAGE_ARGS;
-	SVC_REPLY(req);
+	return SVC_REPLY(req);
 }
 
 /*
  * Some system error (MT-SAFE)
  */
-void
+enum xprt_stat
 svcerr_systemerr(struct svc_req *req)
 {
 	assert(req != NULL);
@@ -602,7 +601,7 @@ svcerr_systemerr(struct svc_req *req)
 	req->rq_msg.rm_direction = REPLY;
 	req->rq_msg.rm_reply.rp_stat = MSG_ACCEPTED;
 	req->rq_msg.RPCM_ack.ar_stat = SYSTEM_ERR;
-	SVC_REPLY(req);
+	return SVC_REPLY(req);
 }
 
 #if 0
@@ -646,7 +645,7 @@ __svc_versquiet_get(SVCXPRT *xprt)
 /*
  * Authentication error reply (MT-SAFE)
  */
-void
+enum xprt_stat
 svcerr_auth(struct svc_req *req, enum auth_stat why)
 {
 	assert(req != NULL);
@@ -655,22 +654,22 @@ svcerr_auth(struct svc_req *req, enum auth_stat why)
 	req->rq_msg.rm_reply.rp_stat = MSG_DENIED;
 	req->rq_msg.RPCM_rej.rj_stat = AUTH_ERROR;
 	req->rq_msg.RPCM_rej.rj_why = why;
-	SVC_REPLY(req);
+	return SVC_REPLY(req);
 }
 
 /*
  * Auth too weak error reply (MT-SAFE)
  */
-void
+enum xprt_stat
 svcerr_weakauth(struct svc_req *req)
 {
-	svcerr_auth(req, AUTH_TOOWEAK);
+	return svcerr_auth(req, AUTH_TOOWEAK);
 }
 
 /*
  * Program unavailable error reply (MT-SAFE)
  */
-void
+enum xprt_stat
 svcerr_noprog(struct svc_req *req)
 {
 	assert(req != NULL);
@@ -678,13 +677,13 @@ svcerr_noprog(struct svc_req *req)
 	req->rq_msg.rm_direction = REPLY;
 	req->rq_msg.rm_reply.rp_stat = MSG_ACCEPTED;
 	req->rq_msg.RPCM_ack.ar_stat = PROG_UNAVAIL;
-	SVC_REPLY(req);
+	return SVC_REPLY(req);
 }
 
 /*
  * Program version mismatch error reply
  */
-void
+enum xprt_stat
 svcerr_progvers(struct svc_req *req, rpcvers_t low_vers, rpcvers_t high_vers)
 {
 	assert(req != NULL);
@@ -694,7 +693,7 @@ svcerr_progvers(struct svc_req *req, rpcvers_t low_vers, rpcvers_t high_vers)
 	req->rq_msg.RPCM_ack.ar_stat = PROG_MISMATCH;
 	req->rq_msg.RPCM_ack.ar_vers.low = (u_int32_t) low_vers;
 	req->rq_msg.RPCM_ack.ar_vers.high = (u_int32_t) high_vers;
-	SVC_REPLY(req);
+	return SVC_REPLY(req);
 }
 
 /* ******************* SERVER INPUT STUFF ******************* */
