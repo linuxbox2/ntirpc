@@ -56,8 +56,6 @@ set(NTIRPC_BASE_DIR ${PROJECT_SOURCE_DIR} CACHE
 
 option (USE_GSS "enable RPCSEC_GSS support" ON)
 
-option(TIRPC_EPOLL "platform supports EPOLL or emulation" ON)
-
 option(USE_RPC_RDMA "platform supports RDMA" OFF)
 if (USE_RPC_RDMA)
   find_package(RDMA REQUIRED)
@@ -112,6 +110,8 @@ endif(${BIGENDIAN})
 
 find_package(Threads REQUIRED)
 find_package(Krb5 REQUIRED gssapi)
+find_package(EPOLL REQUIRED)
+set(TIRPC_EPOLL ${EPOLL_FOUND})
 
 if(KRB5_FOUND)
   set(HAVE_KRB5 ON)
