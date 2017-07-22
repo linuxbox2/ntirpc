@@ -196,17 +196,4 @@ rpc_dplx_rsi(struct rpc_dplx_rec *rec)
 	cond_signal(&lk->we.cv);
 }
 
-static inline void
-rpc_dplx_ioq_submit(struct rpc_dplx_rec *rec, struct work_pool_thread *wpt)
-{
-	if (wpt == rec->ioq.ioq_wpe.wpt && rec->ev_count > 1) {
-		/* Unlikely spawn prior to lengthy queueing or system call;
-		 * xprt should pass through this test one-at-a-time
-		 * preceded by prior locking/unlocking barrier.
-		 */
-		rec->ioq.ioq_wpe.wpt = NULL;
-		work_pool_submit(&svc_work_pool, &rec->ioq.ioq_wpe);
-	}
-}
-
 #endif				/* RPC_DPLX_INTERNAL_H */

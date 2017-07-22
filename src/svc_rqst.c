@@ -350,19 +350,18 @@ svc_rqst_unhook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
 #if defined(TIRPC_EPOLL)
 	case SVC_EVENT_EPOLL:
 	{
-		SVCXPRT *xprt = &rec->xprt;
 		struct epoll_event *ev = &rec->ev_u.epoll.event;
 
 		/* clear epoll vector */
 		code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
-				 EPOLL_CTL_DEL, xprt->xp_fd, ev);
+				 EPOLL_CTL_DEL, rec->xprt.xp_fd, ev);
 		if (code) {
 			code = errno;
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s: %p fd %d epoll del failed "
 				"sr_rec %p epoll_fd %d "
 				"control fd pair (%d:%d) (%d)",
-				__func__, xprt, xprt->xp_fd,
+				__func__, rec, rec->xprt.xp_fd,
 				sr_rec, sr_rec->ev_u.epoll.epoll_fd,
 				sr_rec->sv[0], sr_rec->sv[1], code);
 		} else {
@@ -370,7 +369,7 @@ svc_rqst_unhook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
 				"%s: %p fd %d epoll del "
 				"sr_rec %p epoll_fd %d "
 				"control fd pair (%d:%d)",
-				__func__, xprt, xprt->xp_fd,
+				__func__, rec, rec->xprt.xp_fd,
 				sr_rec, sr_rec->ev_u.epoll.epoll_fd,
 				sr_rec->sv[0], sr_rec->sv[1]);
 		}
@@ -468,27 +467,26 @@ svc_rqst_hook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
 #if defined(TIRPC_EPOLL)
 	case SVC_EVENT_EPOLL:
 	{
-		SVCXPRT *xprt = &rec->xprt;
 		struct epoll_event *ev = &rec->ev_u.epoll.event;
 
 		/* set up epoll user data */
-		ev->data.ptr = xprt;
+		ev->data.ptr = rec;
 
 		/* wait for read events, level triggered, oneshot */
 		ev->events = EPOLLIN | EPOLLONESHOT;
 
 		/* add to epoll vector */
 		code = epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
-				 EPOLL_CTL_ADD, xprt->xp_fd, ev);
+				 EPOLL_CTL_ADD, rec->xprt.xp_fd, ev);
 		if (code) {
 			code = errno;
-			atomic_clear_uint16_t_bits(&xprt->xp_flags,
+			atomic_clear_uint16_t_bits(&rec->xprt.xp_flags,
 						   SVC_XPRT_FLAG_ADDED);
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s: %p fd %d epoll add failed "
 				"sr_rec %p epoll_fd %d "
 				"control fd pair (%d:%d) (%d)",
-				__func__, xprt, xprt->xp_fd,
+				__func__, rec, rec->xprt.xp_fd,
 				sr_rec, sr_rec->ev_u.epoll.epoll_fd,
 				sr_rec->sv[0], sr_rec->sv[1], code);
 		} else {
@@ -496,7 +494,7 @@ svc_rqst_hook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
 				"%s: %p fd %d epoll add "
 				"sr_rec %p epoll_fd %d "
 				"control fd pair (%d:%d)",
-				__func__, xprt, xprt->xp_fd,
+				__func__, rec, rec->xprt.xp_fd,
 				sr_rec, sr_rec->ev_u.epoll.epoll_fd,
 				sr_rec->sv[0], sr_rec->sv[1]);
 		}
@@ -678,35 +676,19 @@ svc_rqst_xprt_task(struct work_pool_entry *wpe)
 {
 	struct rpc_dplx_rec *rec =
 			opr_containerof(wpe, struct rpc_dplx_rec, ioq.ioq_wpe);
-	SVCXPRT *xprt = &(rec->xprt);
-	enum xprt_stat xstat = XPRT_IDLE;
 
-	rec->ioq.ioq_wpe.fun = NULL;
-
-	do {
-		if ((xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
-		 || xstat >= XPRT_DIED
-		 || xprt->xp_refs <= 1) {
-			/* (idempotent) xp_flags and xp_refs are set atomic.
-			 * xp_refs need more than 1 (this task).
-			 */
-			atomic_store_uint32_t(&rec->ev_count, 0);
-			break;
-		}
-		xstat = SVC_RECV(xprt);
-	} while (atomic_dec_uint32_t(&rec->ev_count));
-
-	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+	(void)SVC_RECV(&rec->xprt);
+	SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
 }
 
 bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
 
 #ifdef TIRPC_EPOLL
 
-static SVCXPRT *
+static struct rpc_dplx_rec *
 svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 {
-	SVCXPRT *xprt = (SVCXPRT *) ev->data.ptr;
+	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) ev->data.ptr;
 
 	if (unlikely(ev->data.fd == sr_rec->sv[1])) {
 		/* signalled -- there was a wakeup on ctrl_ev (see
@@ -725,12 +707,10 @@ svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 
 	__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
 		"%s: %p fd %d event %d",
-		__func__, xprt, xprt->xp_fd, ev->events);
+		__func__, rec, rec->xprt.xp_fd, ev->events);
 
-	atomic_clear_uint16_t_bits(&xprt->xp_flags, SVC_XPRT_FLAG_ADDED);
-	/* take extra ref, callout will release */
-	SVC_REF(xprt, SVC_REF_FLAG_NONE);
-	return (xprt);
+	atomic_clear_uint16_t_bits(&rec->xprt.xp_flags, SVC_XPRT_FLAG_ADDED);
+	return (rec);
 }
 
 /*
@@ -741,20 +721,14 @@ svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 static inline bool
 svc_rqst_epoll_events(struct svc_rqst_rec *sr_rec, int n_events)
 {
-	SVCXPRT *xprt;
 	struct rpc_dplx_rec *rec = NULL;
 	int ix = 0;
 
 	while (ix < n_events) {
-		xprt = svc_rqst_epoll_event(sr_rec,
-					    &(sr_rec->ev_u.epoll.events[ix++]));
-		if (!xprt)
-			continue;
-		rec = REC_XPRT(xprt);
-		if (!atomic_postinc_uint32_t(&(rec->ev_count))) {
+		rec = svc_rqst_epoll_event(sr_rec,
+					   &(sr_rec->ev_u.epoll.events[ix++]));
+		if (rec)
 			break;
-		}
-		rec = NULL;
 	}
 
 	if (!rec) {
@@ -763,15 +737,14 @@ svc_rqst_epoll_events(struct svc_rqst_rec *sr_rec, int n_events)
 	}
 
 	while (ix < n_events) {
-		xprt = svc_rqst_epoll_event(sr_rec,
+		struct rpc_dplx_rec *rec = svc_rqst_epoll_event(sr_rec,
 					    &(sr_rec->ev_u.epoll.events[ix++]));
-		if (!xprt
-		 || atomic_postinc_uint32_t(&(REC_XPRT(xprt)->ev_count)))
+		if (!rec)
 			continue;
 
-		REC_XPRT(xprt)->ioq.ioq_wpe.fun = svc_rqst_xprt_task;
-		work_pool_submit(&svc_work_pool,
-				 &(REC_XPRT(xprt)->ioq.ioq_wpe));
+		SVC_REF(&rec->xprt, SVC_REF_FLAG_NONE);
+		rec->ioq.ioq_wpe.fun = svc_rqst_xprt_task;
+		work_pool_submit(&svc_work_pool, &(rec->ioq.ioq_wpe));
 	}
 
 	/* submit another task to handle events in order */
@@ -781,6 +754,8 @@ svc_rqst_epoll_events(struct svc_rqst_rec *sr_rec, int n_events)
 	/* in most cases have only one event, use this hot thread */
 	mutex_unlock(&sr_rec->mtx);
 
+	SVC_REF(&rec->xprt, SVC_REF_FLAG_NONE);
+	rec->ioq.ioq_wpe.fun = svc_rqst_xprt_task;
 	svc_rqst_xprt_task(&(rec->ioq.ioq_wpe));
 
 	/* failsafe idle processing after work task */

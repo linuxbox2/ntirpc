@@ -107,7 +107,7 @@ rpc_ctx_alloc(CLIENT *clnt, struct timeval timeout)
 	return (ctx);
 }
 
-/* RPC_DPLX_FLAG_LOCKED
+/* unlocked
  */
 enum xprt_stat
 rpc_ctx_xfer_replymsg(struct svc_req *req)
@@ -118,10 +118,12 @@ rpc_ctx_xfer_replymsg(struct svc_req *req)
 	rpc_ctx_t ctx_k, *ctx;
 	struct opr_rbtree_node *nv;
 
+	rpc_dplx_rli(rec);
 	ctx_k.xid = req->rq_msg.rm_xid;
 	nv = opr_rbtree_lookup(&rec->call_replies, &ctx_k.node_k);
 	if (!nv) {
 		/* release internal locks */
+		rpc_dplx_rui(rec);
 		return SVC_STAT(xprt);
 	}
 
@@ -165,6 +167,7 @@ rpc_ctx_xfer_replymsg(struct svc_req *req)
 		__func__, xprt, xprt->xp_fd, ctx->xid);
 
 	/* release internal locks */
+	rpc_dplx_rui(rec);
 	return SVC_STAT(xprt);
 }
 

@@ -237,10 +237,6 @@ svc_dg_rendezvous(SVCXPRT *xprt)
 	struct iovec iov;
 	ssize_t rlen;
 
-	if (svc_rqst_rearm_events(xprt)){
-		svc_dg_xprt_free(su);
-		return (XPRT_DIED);
-	}
 	newxprt->xp_fd = xprt->xp_fd;
 	newxprt->xp_flags = SVC_XPRT_FLAG_INITIAL | SVC_XPRT_FLAG_INITIALIZED;
 
@@ -272,6 +268,14 @@ svc_dg_rendezvous(SVCXPRT *xprt)
 	if (rlen == -1 && errno == EINTR)
 		goto again;
 	if (rlen == -1 || (rlen < (ssize_t) (4 * sizeof(u_int32_t)))) {
+		svc_dg_xprt_free(su);
+		return (XPRT_DIED);
+	}
+
+	if (unlikely(svc_rqst_rearm_events(xprt))) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
+			__func__, xprt, xprt->xp_fd);
 		svc_dg_xprt_free(su);
 		return (XPRT_DIED);
 	}
