@@ -629,13 +629,6 @@ svc_vc_rendezvous_control(SVCXPRT *xprt, const u_int rq, void *in)
 static enum xprt_stat
 svc_vc_stat(SVCXPRT *xprt)
 {
-	uint16_t xp_flags = atomic_postclear_uint16_t_bits(&xprt->xp_flags,
-							SVC_XPRT_FLAG_BLOCKED);
-
-	if (xp_flags & SVC_XPRT_FLAG_BLOCKED) {
-		rpc_dplx_rui(REC_XPRT(xprt));
-		rpc_dplx_rsi(REC_XPRT(xprt));
-	}
 	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
 		return (XPRT_DESTROYED);
 
@@ -830,15 +823,7 @@ static enum xprt_stat
 svc_vc_reply(struct svc_req *req)
 {
 	SVCXPRT *xprt = req->rq_xprt;
-	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
 	struct xdr_ioq *xioq;
-	uint16_t xp_flags = atomic_postclear_uint16_t_bits(&xprt->xp_flags,
-							SVC_XPRT_FLAG_BLOCKED);
-
-	if (xp_flags & SVC_XPRT_FLAG_BLOCKED) {
-		rpc_dplx_rui(rec);
-		rpc_dplx_rsi(rec);
-	}
 
 	/* XXX Until gss_get_mic and gss_wrap can be replaced with
 	 * iov equivalents, replies with RPCSEC_GSS security must be

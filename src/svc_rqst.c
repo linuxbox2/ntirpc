@@ -402,8 +402,7 @@ svc_rqst_rearm_events(SVCXPRT *xprt)
 	if (sr_rec->states & SVC_RQST_STATE_DESTROYED)
 		return (0);
 
-	if (!(xprt->xp_flags & SVC_XPRT_FLAG_BLOCKED))
-		rpc_dplx_rli(rec);
+	rpc_dplx_rli(rec);
 
 	/* assuming success */
 	atomic_set_uint16_t_bits(&xprt->xp_flags, SVC_XPRT_FLAG_ADDED);
@@ -449,8 +448,7 @@ svc_rqst_rearm_events(SVCXPRT *xprt)
 		break;
 	}			/* switch */
 
-	if (!(xprt->xp_flags & SVC_XPRT_FLAG_BLOCKED))
-		rpc_dplx_rui(rec);
+	rpc_dplx_rui(rec);
 
 	return (code);
 }
