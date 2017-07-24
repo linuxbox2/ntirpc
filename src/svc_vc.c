@@ -461,8 +461,12 @@ svc_vc_rendezvous(SVCXPRT *xprt)
 		}
 		return (XPRT_DIED);
 	}
-	if (svc_rqst_rearm_events(xprt))
+	if (unlikely(svc_rqst_rearm_events(xprt))) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
+			__func__, xprt, xprt->xp_fd);
 		return (XPRT_DIED);
+	}
 
 	(void) setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &n, sizeof(n));
 
@@ -625,13 +629,6 @@ svc_vc_rendezvous_control(SVCXPRT *xprt, const u_int rq, void *in)
 static enum xprt_stat
 svc_vc_stat(SVCXPRT *xprt)
 {
-	uint16_t xp_flags = atomic_postclear_uint16_t_bits(&xprt->xp_flags,
-							SVC_XPRT_FLAG_BLOCKED);
-
-	if (xp_flags & SVC_XPRT_FLAG_BLOCKED) {
-		rpc_dplx_rui(REC_XPRT(xprt));
-		rpc_dplx_rsi(REC_XPRT(xprt));
-	}
 	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
 		return (XPRT_DESTROYED);
 
@@ -650,9 +647,12 @@ svc_vc_recv(SVCXPRT *xprt)
 	u_int flags;
 	int code;
 
-	/* See also svc_clnt (rpc_ctx via svc_vc_decode) and svc_vc_recv_task */
-	rpc_dplx_rli(rec);
-	atomic_set_uint16_t_bits(&xprt->xp_flags, SVC_XPRT_FLAG_BLOCKED);
+	/* no need for locking, only one svc_rqst_xprt_task() per event.
+	 * depends upon svc_rqst_rearm_events() for ordering.
+	 */
+	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
+		return (XPRT_DESTROYED);
+	}
 
 	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx_recv);
 
@@ -731,14 +731,6 @@ svc_vc_recv(SVCXPRT *xprt)
 		return SVC_STAT(xprt);
 	}
 
-	if (unlikely(svc_rqst_rearm_events(xprt))) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
-			__func__, xprt, xprt->xp_fd);
-		SVC_DESTROY(xprt);
-		return SVC_STAT(xprt);
-	}
-
 	__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 		"%s: %p fd %d recv %zd of %" PRIu32,
 		__func__, xprt, xprt->xp_fd, rlen, xd->sx_fbtbc);
@@ -747,6 +739,12 @@ svc_vc_recv(SVCXPRT *xprt)
 	xd->sx_fbtbc -= rlen;
 
 	if (xd->sx_fbtbc || (flags & UIO_FLAG_MORE)) {
+		if (unlikely(svc_rqst_rearm_events(xprt))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
+				__func__, xprt, xprt->xp_fd);
+			SVC_DESTROY(xprt);
+		}
 		return SVC_STAT(xprt);
 	}
 
@@ -754,6 +752,16 @@ svc_vc_recv(SVCXPRT *xprt)
 	(rec->ioq.ioq_uv.uvqh.qcount)--;
 	TAILQ_REMOVE(&rec->ioq.ioq_uv.uvqh.qh, &xioq->ioq_s, q);
 	xdr_ioq_reset(xioq, 0);
+
+	if (unlikely(svc_rqst_rearm_events(xprt))) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
+			__func__, xprt, xprt->xp_fd);
+		xdr_ioq_destroy(xioq, xioq->ioq_s.qsize);
+		SVC_DESTROY(xprt);
+		return SVC_STAT(xprt);
+	}
+
 	return (__svc_params->request_cb(xprt, xioq->xdrs));
 }
 
@@ -762,7 +770,6 @@ svc_vc_decode(struct svc_req *req)
 {
 	XDR *xdrs = req->rq_xdrs;
 	SVCXPRT *xprt = req->rq_xprt;
-	enum xprt_stat result;
 
 	/* No need, already positioned to beginning ...
 	XDR_SETPOS(xdrs, 0);
@@ -779,25 +786,24 @@ svc_vc_decode(struct svc_req *req)
 		return SVC_STAT(xprt);
 	}
 
-	switch (req->rq_msg.rm_direction) {
-	case CALL:
+	/* in order of likelihood */
+	if (req->rq_msg.rm_direction == CALL) {
 		/* an ordinary call header */
-		result = xprt->xp_dispatch.process_cb(req);
-		break;
-	case REPLY:
-		/* reply header (xprt OK) */
-		result = rpc_ctx_xfer_replymsg(req);
-		break;
-	default:
-		__warnx(TIRPC_DEBUG_FLAG_WARN,
-			"%s: %p fd %d failed direction %" PRIu32
-			" (will set dead)",
-			__func__, xprt, xprt->xp_fd,
-			req->rq_msg.rm_direction);
-		SVC_DESTROY(xprt);
-		return SVC_STAT(xprt);
+		return xprt->xp_dispatch.process_cb(req);
 	}
-	return (result);
+
+	if (req->rq_msg.rm_direction == REPLY) {
+		/* reply header (xprt OK) */
+		return rpc_ctx_xfer_replymsg(req);
+	}
+
+	__warnx(TIRPC_DEBUG_FLAG_WARN,
+		"%s: %p fd %d failed direction %" PRIu32
+		" (will set dead)",
+		__func__, xprt, xprt->xp_fd,
+		req->rq_msg.rm_direction);
+	SVC_DESTROY(xprt);
+	return SVC_STAT(xprt);
 }
 
 static void
@@ -817,15 +823,7 @@ static enum xprt_stat
 svc_vc_reply(struct svc_req *req)
 {
 	SVCXPRT *xprt = req->rq_xprt;
-	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
 	struct xdr_ioq *xioq;
-	uint16_t xp_flags = atomic_postclear_uint16_t_bits(&xprt->xp_flags,
-							SVC_XPRT_FLAG_BLOCKED);
-
-	if (xp_flags & SVC_XPRT_FLAG_BLOCKED) {
-		rpc_dplx_rui(rec);
-		rpc_dplx_rsi(rec);
-	}
 
 	/* XXX Until gss_get_mic and gss_wrap can be replaced with
 	 * iov equivalents, replies with RPCSEC_GSS security must be

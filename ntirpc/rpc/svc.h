@@ -136,7 +136,7 @@ typedef struct svc_init_params {
 #define SVC_XPRT_FLAG_NONE		0x0000
 /* uint16_t actually used */
 #define SVC_XPRT_FLAG_ADDED		0x0001
-#define SVC_XPRT_FLAG_BLOCKED		0x0002
+
 #define SVC_XPRT_FLAG_INITIAL		0x0004
 #define SVC_XPRT_FLAG_INITIALIZED	0x0008
 #define SVC_XPRT_FLAG_CLOSE		0x0010
