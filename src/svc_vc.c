@@ -964,7 +964,6 @@ struct svc_clean_idle_arg {
 static uint32_t
 svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
 {
-	struct timespec tdiff;
 	struct svc_clean_idle_arg *acc = (struct svc_clean_idle_arg *)arg;
 	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
 	struct svc_vc_xprt *xd = VC_DR(rec);
@@ -977,16 +976,6 @@ svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
 
 	rpc_dplx_rli(rec);
 
-	if (acc->timeout == 0) {
-		tdiff = acc->ts;
-		timespecsub(&tdiff, &xd->sx_recv);
-		if (timespeccmp(&tdiff, &acc->tmax, >)) {
-			acc->tmax = tdiff;
-			acc->least_active = xprt;
-		}
-		rpc_dplx_rui(rec);
-		return (SVC_XPRT_FOREACH_NONE);
-	}
 	if ((acc->ts.tv_sec - xd->sx_recv.tv_sec) < acc->timeout) {
 		rpc_dplx_rui(rec);
 		return (SVC_XPRT_FOREACH_NONE);
@@ -1021,6 +1010,9 @@ __svc_clean_idle2(int timeout, bool cleanblock)
 	/* trim gss context cache */
 	authgss_ctx_gc_idle();
 #endif /* _HAVE_GSSAPI */
+
+	if (timeout <= 0)
+		goto unlock;
 
 	/* trim xprts (not sorted, not aggressive [but self limiting]) */
 	memset(&acc, 0, sizeof(struct svc_clean_idle_arg));
