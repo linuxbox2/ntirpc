@@ -217,7 +217,9 @@ include(${CMAKE_SOURCE_DIR}/cmake/cpack_config.cmake)
 include(CPack)
 
 set( PKG_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}.tar.gz")
-add_custom_target(dist COMMAND ${CMAKE_MAKE_PROGRAM} package_source)
+if (NOT TARGET dist)
+	add_custom_target(dist COMMAND ${CMAKE_MAKE_PROGRAM} package_source)
+endif (NOT TARGET dist)
 
 ########### install files ###############
 
