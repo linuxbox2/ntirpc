@@ -7,5 +7,5 @@ Name: libntirpc
 Description: New Transport Independent RPC Library
 Requires:
 Version: @NTIRPC_VERSION@
-Libs: -L@libdir@ -lintirpc
+Libs: -L@libdir@ -lntirpc
 Cflags: -I@includedir@/ntirpc
