@@ -821,7 +821,7 @@ svc_rqst_epoll_loop(struct svc_rqst_rec *sr_rec)
 			sr_rec->ev_u.epoll.epoll_fd,
 			n_events);
 
-		if (n_events == EINTR)
+		if (n_events != EINTR)
 			return;
 	}
 }
