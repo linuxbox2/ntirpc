@@ -86,7 +86,6 @@ svc_dg_xprt_free(struct svc_dg_xprt *su)
 {
 	rpc_dplx_rec_destroy(&su->su_dr);
 	mutex_destroy(&su->su_dr.xprt.xp_lock);
-	mutex_destroy(&su->su_dr.xprt.xp_auth_lock);
 
 #if defined(HAVE_BLKIN)
 	if (su->su_dr.xprt.blkin.svc_name)
@@ -102,7 +101,6 @@ svc_dg_xprt_zalloc(size_t iosz)
 
 	/* Init SVCXPRT locks, etc */
 	mutex_init(&su->su_dr.xprt.xp_lock, NULL);
-	mutex_init(&su->su_dr.xprt.xp_auth_lock, NULL);
 	rpc_dplx_rec_init(&su->su_dr);
 
 	su->su_dr.xprt.xp_refs = 1;

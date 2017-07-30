@@ -248,9 +248,6 @@ struct svc_xprt {
 		struct blkin_endpoint endp;
 	} blkin;
 #endif
-	/* auth */
-	mutex_t xp_auth_lock;	/* lock owned by installed authenticator */
-
 	/* serialize private data */
 	mutex_t xp_lock;
 
