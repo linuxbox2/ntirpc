@@ -686,20 +686,6 @@ extern uint64_t xdrmem_cksum(XDR *, u_int);
 /* XDR using stdio library */
 extern void xdrstdio_create(XDR *, FILE *, enum xdr_op);
 
-/* XDR pseudo records for tcp */
-extern void xdrrec_create(XDR *, u_int, u_int, void *,
-			  int (*)(XDR *, void *, void *, int),
-			  int (*)(XDR *, void *, void *, int));
-
-/* make end of xdr record */
-extern bool xdrrec_endofrecord(XDR *, bool);
-
-/* move to beginning of next record */
-extern bool xdrrec_skiprecord(XDR *);
-
-/* true if no more input */
-extern bool xdrrec_eof(XDR *);
-
 __END_DECLS
 /* For backward compatibility */
 #include <rpc/tirpc_compat.h>
