@@ -120,15 +120,6 @@ svc_vc_new_conn_ok(void)
 		mutex_unlock(&(__svc_params->xprt_u.vc.mtx)); \
 	} while (0)
 
-struct __svc_ops {
-	bool (*svc_clean_idle) (fd_set *fds, int timeout, bool cleanblock);
-	void (*svc_run) (void);
-	void (*svc_getreq) (int rdfds);	/* XXX */
-	void (*svc_getreqset) (fd_set *readfds); /* XXX */
-	void (*svc_exit) (void);
-};
-
-extern struct __svc_ops *svc_ops;
 
 /*
  * The following union is defined just to use SVC_CMSG_SIZE macro for an array
