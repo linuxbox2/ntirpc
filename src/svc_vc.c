@@ -118,6 +118,7 @@ static SVCXPRT *makefd_xprt(const int, const u_int, const u_int,
 static void
 svc_vc_xprt_free(struct svc_vc_xprt *xd)
 {
+	XDR_DESTROY(xd->sx_dr.ioq.xdrs);
 	rpc_dplx_rec_destroy(&xd->sx_dr);
 	mutex_destroy(&xd->sx_dr.xprt.xp_lock);
 
@@ -136,6 +137,7 @@ svc_vc_xprt_zalloc(void)
 	/* Init SVCXPRT locks, etc */
 	mutex_init(&xd->sx_dr.xprt.xp_lock, NULL);
 	rpc_dplx_rec_init(&xd->sx_dr);
+	xdr_ioq_setup(&xd->sx_dr.ioq);
 
 	xd->sx_dr.xprt.xp_refs = 1;
 	return (xd);
@@ -223,7 +225,8 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	xd->sx_dr.pagesz = sysconf(_SC_PAGESIZE);
 	xd->sx_dr.maxrec = __svc_maxrec;
 
-	/* duplex streams are not used by the rendevous transport */
+	/* duplex streams are not used by the rendezvous transport */
+	xdrmem_create(xd->sx_dr.ioq.xdrs, NULL, 0, XDR_ENCODE);
 
 	svc_vc_rendezvous_ops(xprt);
 #ifdef RPC_VSOCK
@@ -410,8 +413,6 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 
 	xprt->xp_netid = mem_strdup(netid);
 
-	xdr_ioq_setup(&rec->ioq);
-
 	/* release */
 	rpc_dplx_rui(rec);
 	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
@@ -516,13 +517,39 @@ svc_vc_rendezvous(SVCXPRT *xprt)
 	return (xprt->xp_dispatch.rendezvous_cb(newxprt));
 }
 
-/* XXX pending further unification
- */
+static void
+svc_vc_destroy_task(struct work_pool_entry *wpe)
+{
+	struct rpc_dplx_rec *rec =
+			opr_containerof(wpe, struct rpc_dplx_rec, ioq.ioq_wpe);
+
+	if (rec->xprt.xp_refs) {
+		/* instead of nanosleep */
+		work_pool_submit(&svc_work_pool, &(rec->ioq.ioq_wpe));
+		return;
+	}
+
+	if (rec->xprt.xp_ops->xp_free_user_data)
+		rec->xprt.xp_ops->xp_free_user_data(&rec->xprt);
+
+	if (rec->xprt.xp_tp)
+		mem_free(rec->xprt.xp_tp, 0);
+	if (rec->xprt.xp_netid)
+		mem_free(rec->xprt.xp_netid, 0);
+
+	if (rec->xprt.xp_parent)
+		SVC_RELEASE(rec->xprt.xp_parent, SVC_RELEASE_FLAG_NONE);
+
+	svc_vc_xprt_free(VC_DR(rec));
+}
 
 static void
 svc_vc_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
-	struct svc_vc_xprt *xd = VC_DR(REC_XPRT(xprt));
+	struct timespec ts = {
+		.tv_sec = 0,
+		.tv_nsec = 0,
+	};
 
 	/* clears xprt from the xprt table (eg, idle scans) */
 	svc_rqst_xprt_unregister(xprt);
@@ -536,17 +563,14 @@ svc_vc_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	    && xprt->xp_fd != RPC_ANYFD)
 		(void)close(xprt->xp_fd);
 
-	if (xprt->xp_ops->xp_free_user_data) {
-		/* call free hook */
-		xprt->xp_ops->xp_free_user_data(xprt);
+	while (atomic_postset_uint16_t_bits(&(REC_XPRT(xprt)->ioq.ioq_s.qflags),
+					    IOQ_FLAG_WORKING)
+	       & IOQ_FLAG_WORKING) {
+		nanosleep(&ts, NULL);
 	}
 
-	if (xprt->xp_tp)
-		mem_free(xprt->xp_tp, 0);
-	if (xprt->xp_netid)
-		mem_free(xprt->xp_netid, 0);
-
-	svc_vc_xprt_free(xd);
+	REC_XPRT(xprt)->ioq.ioq_wpe.fun = svc_vc_destroy_task;
+	work_pool_submit(&svc_work_pool, &(REC_XPRT(xprt)->ioq.ioq_wpe));
 }
 
 static void
@@ -554,11 +578,6 @@ svc_vc_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
 	/* connection tracking--decrement now, he's dead jim */
 	svc_vc_dec_nconns();
-
-	/* destroy shared XDR record streams (once) */
-	XDR_DESTROY(REC_XPRT(xprt)->ioq.xdrs);
-	if (xprt->xp_parent)
-		SVC_RELEASE(xprt->xp_parent, SVC_RELEASE_FLAG_NONE);
 
 	svc_vc_destroy_it(xprt, flags, tag, line);
 }

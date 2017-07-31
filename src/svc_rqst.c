@@ -677,6 +677,8 @@ svc_rqst_xprt_task(struct work_pool_entry *wpe)
 		/* (idempotent) xp_flags and xp_refs are set atomic.
 		 * xp_refs need more than 1 (this task).
 		 */
+		atomic_clear_uint16_t_bits(&rec->ioq.ioq_s.qflags,
+					   IOQ_FLAG_WORKING);
 		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &(rec->recv.ts));
 		(void)SVC_RECV(&rec->xprt);
 	}
@@ -793,7 +795,10 @@ svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 
 	if (rec->xprt.xp_refs > 1
 	 && (xp_flags & SVC_XPRT_FLAG_ADDED)
-	 && !(xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
+	 && !(xp_flags & SVC_XPRT_FLAG_DESTROYED)
+	 && !(atomic_postset_uint16_t_bits(&rec->ioq.ioq_s.qflags,
+					   IOQ_FLAG_WORKING)
+	      & IOQ_FLAG_WORKING)) {
 		/* (idempotent) xp_flags and xp_refs are set atomic.
 		 * xp_refs need more than 1 (this event).
 		 */

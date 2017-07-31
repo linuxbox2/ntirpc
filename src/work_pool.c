@@ -195,7 +195,6 @@ work_pool_thread(void *arg)
 				__func__, pool->name, wpt->work);
 			wpt->work->wpt = wpt;
 			wpt->work->fun(wpt->work);
-			wpt->work->wpt = NULL;
 			wpt->work = NULL;
 		}
 
