@@ -155,7 +155,6 @@ struct svc_dg_xprt {
  */
 struct svc_vc_xprt {
 	struct rpc_dplx_rec sx_dr;	/* SVCXPRT indexed by fd */
-	struct timespec sx_recv;
 	int32_t sx_fbtbc;		/* fragment bytes to be consumed */
 	struct {
 		struct timeval cx_wait;	/* wait interval in milliseconds */

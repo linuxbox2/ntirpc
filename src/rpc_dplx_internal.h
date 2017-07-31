@@ -54,6 +54,7 @@ struct rpc_dplx_rec {
 	struct opr_rbtree_node fd_node;
 	struct {
 		rpc_dplx_lock_t lock;
+		struct timespec ts;
 	} recv;
 
 	/*

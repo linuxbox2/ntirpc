@@ -84,7 +84,5 @@ bool __rpc_control(int, void *);
 
 char *_get_next_token(char *, int);
 
-bool __svc_clean_idle(fd_set *, int, bool);
-
 __END_DECLS
 #endif				/* _TIRPC_RPCCOM_H */

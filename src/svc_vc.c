@@ -82,8 +82,6 @@
 static void svc_vc_rendezvous_ops(SVCXPRT *);
 static void svc_vc_override_ops(SVCXPRT *, SVCXPRT *);
 
-bool __svc_clean_idle2(int, bool);
-
 static SVCXPRT *makefd_xprt(const int, const u_int, const u_int,
 			    struct __rpc_sockinfo *, u_int);
 
@@ -513,8 +511,6 @@ svc_vc_rendezvous(SVCXPRT *xprt)
 	xd->sx_dr.pagesz = req_xd->sx_dr.pagesz;
 	xd->sx_dr.maxrec = req_xd->sx_dr.maxrec;
 
-	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx_recv);
-
 	SVC_REF(xprt, SVC_REF_FLAG_NONE);
 	newxprt->xp_parent = xprt;
 	return (xprt->xp_dispatch.rendezvous_cb(newxprt));
@@ -648,12 +644,6 @@ svc_vc_recv(SVCXPRT *xprt)
 	/* no need for locking, only one svc_rqst_xprt_task() per event.
 	 * depends upon svc_rqst_rearm_events() for ordering.
 	 */
-	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED) {
-		return (XPRT_DESTROYED);
-	}
-
-	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &xd->sx_recv);
-
 	have = TAILQ_LAST(&rec->ioq.ioq_uv.uvqh.qh, q_head);
 	if (!have) {
 		xioq = xdr_ioq_create(xd->sx_dr.pagesz, xd->sx_dr.maxrec,
@@ -931,105 +921,3 @@ __rpc_get_local_uid(SVCXPRT *transp, uid_t *uid)
 	} else
 		return (-1);
 }
-
-/*
- * Destroy xprts that have not have had any activity in 'timeout' seconds.
- * If 'cleanblock' is true, blocking connections (the default) are also
- * cleaned. If timeout is 0, the least active connection is picked.
- *
- * Though this is not a publicly documented interface, some versions of
- * rpcbind are known to call this function.  Do not alter or remove this
- * API without changing the library's sonum.
- */
-
-bool
-__svc_clean_idle(fd_set *fds, int timeout, bool cleanblock)
-{
-	return (__svc_clean_idle2(timeout, cleanblock));
-
-}				/* __svc_clean_idle */
-
-/*
- * Like __svc_clean_idle but event-type independent.  For now no cleanfds.
- */
-
-struct svc_clean_idle_arg {
-	SVCXPRT *least_active;
-	struct timespec ts, tmax;
-	int cleanblock, ncleaned, timeout;
-};
-
-static uint32_t
-svc_clean_idle2_func(SVCXPRT *xprt, void *arg)
-{
-	struct svc_clean_idle_arg *acc = (struct svc_clean_idle_arg *)arg;
-	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
-	struct svc_vc_xprt *xd = VC_DR(rec);
-
-	if (!acc->cleanblock
-	 || xprt->xp_ops == NULL
-	 || xprt->xp_ops->xp_recv != svc_vc_recv
-	 || (xprt->xp_flags & (SVC_XPRT_FLAG_DESTROYED | SVC_XPRT_FLAG_UREG)))
-		return (SVC_XPRT_FOREACH_NONE);
-
-	rpc_dplx_rli(rec);
-
-	if ((acc->ts.tv_sec - xd->sx_recv.tv_sec) < acc->timeout) {
-		rpc_dplx_rui(rec);
-		return (SVC_XPRT_FOREACH_NONE);
-	}
-
-	rpc_dplx_rui(rec);
-	SVC_DESTROY(xprt);
-	acc->ncleaned++;
-	return (SVC_XPRT_FOREACH_CLEAR);
-}
-
-/* XXX move to svc_run */
-void authgss_ctx_gc_idle(void);
-
-bool
-__svc_clean_idle2(int timeout, bool cleanblock)
-{
-	struct svc_clean_idle_arg acc;
-	static mutex_t active_mtx = MUTEX_INITIALIZER;
-	static uint32_t active;
-	bool_t rslt = FALSE;
-
-	if (mutex_trylock(&active_mtx) != 0)
-		goto out;
-
-	if (active > 0)
-		goto unlock;
-
-	++active;
-
-#ifdef _HAVE_GSSAPI
-	/* trim gss context cache */
-	authgss_ctx_gc_idle();
-#endif /* _HAVE_GSSAPI */
-
-	if (timeout <= 0)
-		goto unlock;
-
-	/* trim xprts (not sorted, not aggressive [but self limiting]) */
-	memset(&acc, 0, sizeof(struct svc_clean_idle_arg));
-	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &acc.ts);
-	acc.cleanblock = cleanblock;
-	acc.timeout = timeout;
-
-	svc_xprt_foreach(svc_clean_idle2_func, (void *)&acc);
-
-	if (timeout == 0 && acc.least_active != NULL) {
-		SVC_DESTROY(acc.least_active);
-		acc.ncleaned++;
-	}
-	rslt = (acc.ncleaned > 0) ? TRUE : FALSE;
-	--active;
-
- unlock:
-	mutex_unlock(&active_mtx);
- out:
-	return (rslt);
-
-}				/* __svc_clean_idle2 */

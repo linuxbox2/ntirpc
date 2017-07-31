@@ -140,9 +140,12 @@ typedef struct svc_init_params {
 #define SVC_XPRT_FLAG_INITIAL		0x0004
 #define SVC_XPRT_FLAG_INITIALIZED	0x0008
 #define SVC_XPRT_FLAG_CLOSE		0x0010
-#define SVC_XPRT_FLAG_DESTROYED		0x0020	/* SVC_DESTROY() was called */
-#define SVC_XPRT_FLAG_DESTROYING	0x0040	/* (*xp_destroy) was called */
+#define SVC_XPRT_FLAG_DESTROYING	0x0020	/* SVC_DESTROY() was called */
+#define SVC_XPRT_FLAG_RELEASING		0x0040	/* (*xp_destroy) was called */
 #define SVC_XPRT_FLAG_UREG		0x0080
+
+#define SVC_XPRT_FLAG_DESTROYED (SVC_XPRT_FLAG_DESTROYING \
+				| SVC_XPRT_FLAG_RELEASING)
 
 /* uint32_t instructions */
 #define SVC_XPRT_FLAG_LOCKED		0x00010000
@@ -398,10 +401,10 @@ static inline void svc_release_it(SVCXPRT *xprt, u_int flags,
 
 	/* enforce once-only semantic, trace others */
 	xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags,
-						SVC_XPRT_FLAG_DESTROYING);
+						SVC_XPRT_FLAG_RELEASING);
 
-	if (xp_flags & SVC_XPRT_FLAG_DESTROYING) {
-		XPRT_TRACE(xprt, "ERROR! already destroying!", tag, line);
+	if (xp_flags & SVC_XPRT_FLAG_RELEASING) {
+		XPRT_TRACE(xprt, "WARNING! already destroying!", tag, line);
 		return;
 	}
 
@@ -420,11 +423,11 @@ static inline void svc_destroy_it(SVCXPRT *xprt,
 				  const char *tag, const int line)
 {
 	uint16_t flags = atomic_postset_uint16_t_bits(&xprt->xp_flags,
-						      SVC_XPRT_FLAG_DESTROYED);
+						      SVC_XPRT_FLAG_DESTROYING);
 
 	XPRT_TRACE(xprt, __func__, tag, line);
 
-	if (flags & SVC_XPRT_FLAG_DESTROYED) {
+	if (flags & SVC_XPRT_FLAG_DESTROYING) {
 		/* previously set, do nothing */
 		return;
 	}

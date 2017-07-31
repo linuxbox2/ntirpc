@@ -59,11 +59,7 @@ typedef void (*svc_xprt_setup_t) (SVCXPRT **);
 SVCXPRT *svc_xprt_lookup(int, svc_xprt_setup_t);
 void svc_xprt_clear(SVCXPRT *);
 
-/* iterator callback prototype */
-#define SVC_XPRT_FOREACH_NONE    0x0000
-#define SVC_XPRT_FOREACH_CLEAR   0x0001	/* each_f destroyed xprt */
-
-typedef uint32_t(*svc_xprt_each_func_t) (SVCXPRT *, void *);
+typedef bool(*svc_xprt_each_func_t) (SVCXPRT *, void *);
 int svc_xprt_foreach(svc_xprt_each_func_t, void *);
 
 void svc_xprt_dump_xprts(const char *);
