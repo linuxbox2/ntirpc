@@ -782,7 +782,10 @@ void __rpc_set_blkin_endpoint(SVCXPRT *xprt, const char *tag)
 enum xprt_stat
 svc_rendezvous_stat(SVCXPRT *xprt)
 {
-	if (xprt && (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED))
+	if (!xprt)
+		return (XPRT_IDLE);
+
+	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
 		return (XPRT_DESTROYED);
 
 	return (XPRT_IDLE);

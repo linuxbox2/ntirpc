@@ -84,9 +84,5 @@ bool __rpc_control(int, void *);
 
 char *_get_next_token(char *, int);
 
-bool __svc_clean_idle(fd_set *, int, bool);
-bool __xdrrec_setnonblock(XDR *, int);
-bool __xdrrec_getrec(XDR *, enum xprt_stat *, bool);
-
 __END_DECLS
 #endif				/* _TIRPC_RPCCOM_H */

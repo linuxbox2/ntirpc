@@ -1340,7 +1340,6 @@ rpc_rdma_destroy(SVCXPRT *s_xprt)
 	cond_destroy(&xprt->cm_cond);
 	mutex_destroy(&xprt->cm_lock);
 	mutex_destroy(&xprt->sm_dr.xprt.xp_lock);
-	mutex_destroy(&xprt->sm_dr.xprt.xp_auth_lock);
 
 	mem_free(xprt, sizeof(*xprt));
 }
@@ -1377,14 +1376,6 @@ rpc_rdma_allocate(const struct rpc_rdma_attr *xa)
 
 	/* initialize locking first, will be destroyed last (above).
 	 */
-	rc = mutex_init(&xprt->sm_dr.xprt.xp_auth_lock, NULL);
-	if (rc) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s() mutex_init xp_auth_lock failed: %s (%d)",
-			__func__, strerror(rc), rc);
-		goto xp_auth_lock;
-	}
-
 	rc = mutex_init(&xprt->sm_dr.xprt.xp_lock, NULL);
 	if (rc) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -1416,8 +1407,6 @@ cm_cond:
 cm_lock:
 	mutex_destroy(&xprt->sm_dr.xprt.xp_lock);
 xp_lock:
-	mutex_destroy(&xprt->sm_dr.xprt.xp_auth_lock);
-xp_auth_lock:
 	mem_free(xprt, sizeof(*xprt));
 	return NULL;
 }

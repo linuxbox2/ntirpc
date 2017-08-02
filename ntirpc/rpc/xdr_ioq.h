@@ -98,6 +98,7 @@ struct xdr_ioq {
 #define IOQ_FLAG_NONE		0x0000
 /* ioq_s.qflags */
 #define IOQ_FLAG_SEGMENT	0x0100
+#define IOQ_FLAG_WORKING	0x0200	/* (atomic) using ioq_wpe */
 /* uint32_t instructions */
 #define IOQ_FLAG_LOCKED		0x00010000
 #define IOQ_FLAG_UNLOCK		0x00020000

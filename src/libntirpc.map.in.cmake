@@ -276,10 +276,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_void;
     xdr_wrapstring;
     xdrmem_ncreate;
-    xdrrec_create;
-    xdrrec_endofrecord;
-    xdrrec_eof;
-    xdrrec_skiprecord;
     xdrstdio_create;
 
   local:

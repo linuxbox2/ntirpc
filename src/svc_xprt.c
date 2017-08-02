@@ -235,7 +235,6 @@ svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 	struct rbtree_x_part *t;
 	struct opr_rbtree_node *n;
 	uint64_t tgen;
-	uint32_t rflag;
 	int p_ix;
 	int x_ix;
 	int restarts;
@@ -271,8 +270,7 @@ svc_xprt_foreach(svc_xprt_each_func_t each_f, void *arg)
 			rwlock_unlock(&t->lock);
 
 			/* restart if each_f disposed xprt */
-			rflag = each_f(&rec->xprt, arg);
-			if (rflag == SVC_XPRT_FOREACH_CLEAR)
+			if (each_f(&rec->xprt, arg))
 				goto restart;
 
 			/* validate */

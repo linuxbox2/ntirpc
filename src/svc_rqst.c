@@ -392,10 +392,7 @@ svc_rqst_rearm_events(SVCXPRT *xprt)
 	struct svc_rqst_rec *sr_rec = (struct svc_rqst_rec *)rec->ev_p;
 	int code = EINVAL;
 
-	if (xprt->xp_flags & SVC_XPRT_FLAG_ADDED)
-		return (0);
-
-	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
+	if (xprt->xp_flags & (SVC_XPRT_FLAG_ADDED | SVC_XPRT_FLAG_DESTROYED))
 		return (0);
 
 	/* MUST follow the destroyed check above */
@@ -675,11 +672,87 @@ svc_rqst_xprt_task(struct work_pool_entry *wpe)
 	struct rpc_dplx_rec *rec =
 			opr_containerof(wpe, struct rpc_dplx_rec, ioq.ioq_wpe);
 
-	(void)SVC_RECV(&rec->xprt);
+	if (rec->xprt.xp_refs > 1
+	 && !(rec->xprt.xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
+		/* (idempotent) xp_flags and xp_refs are set atomic.
+		 * xp_refs need more than 1 (this task).
+		 */
+		atomic_clear_uint16_t_bits(&rec->ioq.ioq_s.qflags,
+					   IOQ_FLAG_WORKING);
+		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &(rec->recv.ts));
+		(void)SVC_RECV(&rec->xprt);
+	}
+
+	/* If tests fail, log non-fatal "WARNING! already destroying!" */
 	SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
 }
 
-bool_t __svc_clean_idle2(int timeout, bool_t cleanblock);
+/*
+ * Like __svc_clean_idle but event-type independent.  For now no cleanfds.
+ */
+
+struct svc_rqst_clean_arg {
+	struct timespec ts;
+	int timeout;
+	int cleaned;
+};
+
+static bool
+svc_rqst_clean_func(SVCXPRT *xprt, void *arg)
+{
+	struct svc_rqst_clean_arg *acc = (struct svc_rqst_clean_arg *)arg;
+
+	if (xprt->xp_ops == NULL)
+		return (false);
+
+	if (xprt->xp_flags & (SVC_XPRT_FLAG_DESTROYED | SVC_XPRT_FLAG_UREG))
+		return (false);
+
+	if ((acc->ts.tv_sec - REC_XPRT(xprt)->recv.ts.tv_sec) < acc->timeout)
+		return (false);
+
+	SVC_DESTROY(xprt);
+	acc->cleaned++;
+	return (true);
+}
+
+void authgss_ctx_gc_idle(void);
+
+static void
+svc_rqst_clean_idle(int timeout)
+{
+	struct svc_rqst_clean_arg acc;
+	static mutex_t active_mtx = MUTEX_INITIALIZER;
+	static uint32_t active;
+
+	if (mutex_trylock(&active_mtx) != 0)
+		return;
+
+	if (active > 0)
+		goto unlock;
+
+	++active;
+
+#ifdef _HAVE_GSSAPI
+	/* trim gss context cache */
+	authgss_ctx_gc_idle();
+#endif /* _HAVE_GSSAPI */
+
+	if (timeout <= 0)
+		goto unlock;
+
+	/* trim xprts (not sorted, not aggressive [but self limiting]) */
+	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &acc.ts);
+	acc.timeout = timeout;
+	acc.cleaned = 0;
+
+	svc_xprt_foreach(svc_rqst_clean_func, (void *)&acc);
+
+ unlock:
+	--active;
+	mutex_unlock(&active_mtx);
+	return;
+}
 
 #ifdef TIRPC_EPOLL
 
@@ -687,6 +760,7 @@ static struct rpc_dplx_rec *
 svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 {
 	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) ev->data.ptr;
+	uint16_t xp_flags;
 
 	if (unlikely(ev->data.fd == sr_rec->sv[1])) {
 		/* signalled -- there was a wakeup on ctrl_ev (see
@@ -703,12 +777,39 @@ svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 		return (NULL);
 	}
 
+	/* Another task may release transport in parallel.
+	 * Take extra reference now to keep window as small as possible.
+	 * Under normal circumstances, worker task (above) will release.
+	 */
+	SVC_REF(&rec->xprt, SVC_REF_FLAG_NONE);
+
+	/* MUST handle flags after reference.
+	 * Although another task may unhook, the error is non-fatal.
+	 */
+	xp_flags = atomic_postclear_uint16_t_bits(&rec->xprt.xp_flags,
+						  SVC_XPRT_FLAG_ADDED);
+
 	__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
 		"%s: %p fd %d event %d",
 		__func__, rec, rec->xprt.xp_fd, ev->events);
 
-	atomic_clear_uint16_t_bits(&rec->xprt.xp_flags, SVC_XPRT_FLAG_ADDED);
-	return (rec);
+	if (rec->xprt.xp_refs > 1
+	 && (xp_flags & SVC_XPRT_FLAG_ADDED)
+	 && !(xp_flags & SVC_XPRT_FLAG_DESTROYED)
+	 && !(atomic_postset_uint16_t_bits(&rec->ioq.ioq_s.qflags,
+					   IOQ_FLAG_WORKING)
+	      & IOQ_FLAG_WORKING)) {
+		/* (idempotent) xp_flags and xp_refs are set atomic.
+		 * xp_refs need more than 1 (this event).
+		 */
+		return (rec);
+	}
+
+	/* Do not return destroyed transports.
+	 * Probably log non-fatal "WARNING! already destroying!"
+	 */
+	SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
+	return (NULL);
 }
 
 /*
@@ -740,7 +841,6 @@ svc_rqst_epoll_events(struct svc_rqst_rec *sr_rec, int n_events)
 		if (!rec)
 			continue;
 
-		SVC_REF(&rec->xprt, SVC_REF_FLAG_NONE);
 		rec->ioq.ioq_wpe.fun = svc_rqst_xprt_task;
 		work_pool_submit(&svc_work_pool, &(rec->ioq.ioq_wpe));
 	}
@@ -752,14 +852,13 @@ svc_rqst_epoll_events(struct svc_rqst_rec *sr_rec, int n_events)
 	/* in most cases have only one event, use this hot thread */
 	mutex_unlock(&sr_rec->mtx);
 
-	SVC_REF(&rec->xprt, SVC_REF_FLAG_NONE);
 	rec->ioq.ioq_wpe.fun = svc_rqst_xprt_task;
 	svc_rqst_xprt_task(&(rec->ioq.ioq_wpe));
 
 	/* failsafe idle processing after work task */
 	if (atomic_postclear_uint32_t_bits(&wakeups, ~SVC_RQST_WAKEUPS)
 	    > SVC_RQST_WAKEUPS) {
-		__svc_clean_idle2(__svc_params->idle_timeout, true);
+		svc_rqst_clean_idle(__svc_params->idle_timeout);
 	}
 
 	mutex_lock(&sr_rec->mtx);

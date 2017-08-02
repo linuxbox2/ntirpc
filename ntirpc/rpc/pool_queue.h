@@ -47,7 +47,7 @@ struct poolq_entry {
 	TAILQ_ENTRY(poolq_entry) q;	/*** 1st ***/
 	u_int qsize;			/* allocated size of q entry,
 					 * 0: default size */
-	u_int qflags;
+	uint16_t qflags;
 };
 
 struct poolq_head {

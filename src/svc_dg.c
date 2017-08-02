@@ -84,9 +84,9 @@ static int svc_dg_store_pktinfo(struct msghdr *, SVCXPRT *);
 static void
 svc_dg_xprt_free(struct svc_dg_xprt *su)
 {
+	XDR_DESTROY(su->su_dr.ioq.xdrs);
 	rpc_dplx_rec_destroy(&su->su_dr);
 	mutex_destroy(&su->su_dr.xprt.xp_lock);
-	mutex_destroy(&su->su_dr.xprt.xp_auth_lock);
 
 #if defined(HAVE_BLKIN)
 	if (su->su_dr.xprt.blkin.svc_name)
@@ -102,8 +102,8 @@ svc_dg_xprt_zalloc(size_t iosz)
 
 	/* Init SVCXPRT locks, etc */
 	mutex_init(&su->su_dr.xprt.xp_lock, NULL);
-	mutex_init(&su->su_dr.xprt.xp_auth_lock, NULL);
 	rpc_dplx_rec_init(&su->su_dr);
+	xdr_ioq_setup(&su->su_dr.ioq);
 
 	su->su_dr.xprt.xp_refs = 1;
 	return (su);
@@ -196,6 +196,10 @@ svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	su->su_dr.sendsz = ((sendsize + 3) / 4) * 4;
 	su->su_dr.recvsz = ((recvsize + 3) / 4) * 4;
 	su->su_dr.maxrec = ((MAX(sendsize, recvsize) + 3) / 4) * 4;
+
+	/* duplex streams are not used by the rendezvous transport */
+	xdrmem_create(su->su_dr.ioq.xdrs, NULL, 0, XDR_ENCODE);
+
 	svc_dg_rendezvous_ops(xprt);
 
 	/* Enable reception of IP*_PKTINFO control msgs */
@@ -229,7 +233,7 @@ svc_dg_stat(SVCXPRT *xprt)
 static enum xprt_stat
 svc_dg_rendezvous(SVCXPRT *xprt)
 {
-	struct svc_dg_xprt *req_su = DG_DR(REC_XPRT(xprt));
+	struct svc_dg_xprt *req_su = su_data(xprt);
 	struct svc_dg_xprt *su = svc_dg_xprt_zalloc(req_su->su_dr.maxrec);
 	SVCXPRT *newxprt = &su->su_dr.xprt;
 	struct sockaddr *sp = (struct sockaddr *)&newxprt->xp_remote.ss;
@@ -403,13 +407,40 @@ svc_dg_reply(struct svc_req *req)
 }
 
 static void
+svc_dg_destroy_task(struct work_pool_entry *wpe)
+{
+	struct rpc_dplx_rec *rec =
+			opr_containerof(wpe, struct rpc_dplx_rec, ioq.ioq_wpe);
+
+	if (rec->xprt.xp_refs) {
+		/* instead of nanosleep */
+		work_pool_submit(&svc_work_pool, &(rec->ioq.ioq_wpe));
+		return;
+	}
+
+	if (rec->xprt.xp_ops->xp_free_user_data)
+		rec->xprt.xp_ops->xp_free_user_data(&rec->xprt);
+
+	if (rec->xprt.xp_tp)
+		mem_free(rec->xprt.xp_tp, 0);
+	if (rec->xprt.xp_netid)
+		mem_free(rec->xprt.xp_netid, 0);
+
+	if (rec->xprt.xp_parent)
+		SVC_RELEASE(rec->xprt.xp_parent, SVC_RELEASE_FLAG_NONE);
+
+	svc_dg_xprt_free(DG_DR(rec));
+}
+
+static void
 svc_dg_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
-	struct svc_dg_xprt *su = su_data(xprt);
+	struct timespec ts = {
+		.tv_sec = 0,
+		.tv_nsec = 0,
+	};
 
-	if (xprt->xp_parent) {
-		SVC_RELEASE(xprt->xp_parent, SVC_RELEASE_FLAG_NONE);
-	} else {
+	if (!xprt->xp_parent) {
 		/* only original parent is registered */
 		svc_rqst_xprt_unregister(xprt);
 	}
@@ -422,23 +453,19 @@ svc_dg_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	if ((xprt->xp_flags & SVC_XPRT_FLAG_CLOSE) && xprt->xp_fd != -1)
 		(void)close(xprt->xp_fd);
 
-	if (xprt->xp_tp)
-		mem_free(xprt->xp_tp, 0);
-	if (xprt->xp_netid)
-		mem_free(xprt->xp_netid, 0);
-
-	if (xprt->xp_ops->xp_free_user_data) {
-		/* call free hook */
-		xprt->xp_ops->xp_free_user_data(xprt);
+	while (atomic_postset_uint16_t_bits(&(REC_XPRT(xprt)->ioq.ioq_s.qflags),
+					    IOQ_FLAG_WORKING)
+	       & IOQ_FLAG_WORKING) {
+		nanosleep(&ts, NULL);
 	}
-	svc_dg_xprt_free(su);
+
+	REC_XPRT(xprt)->ioq.ioq_wpe.fun = svc_dg_destroy_task;
+	work_pool_submit(&svc_work_pool, &(REC_XPRT(xprt)->ioq.ioq_wpe));
 }
 
 static void
 svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
-	XDR_DESTROY(REC_XPRT(xprt)->ioq.xdrs);
-
 	svc_dg_destroy_it(xprt, flags, tag, line);
 }
 
