@@ -117,6 +117,7 @@ find_package(Threads REQUIRED)
 find_package(Krb5 REQUIRED gssapi)
 find_package(EPOLL REQUIRED)
 set(TIRPC_EPOLL ${EPOLL_FOUND})
+find_package(Sanitizers)
 
 if(KRB5_FOUND)
   set(HAVE_KRB5 ON)
