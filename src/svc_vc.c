@@ -82,9 +82,6 @@
 static void svc_vc_rendezvous_ops(SVCXPRT *);
 static void svc_vc_override_ops(SVCXPRT *, SVCXPRT *);
 
-static SVCXPRT *makefd_xprt(const int, const u_int, const u_int,
-			    struct __rpc_sockinfo *, u_int);
-
 /*
  * A record is composed of one or more record fragments.
  * A record fragment is a four-byte header followed by zero to
@@ -208,7 +205,6 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 			__func__, fd);
 		return (NULL);
 	}
-	xd = VC_DR(rec);
 
 	opr_rbtree_init(&rec->call_replies, call_xid_cmpf);
 
@@ -220,6 +216,7 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	/*
 	 * Should be multiple of 4 for XDR.
 	 */
+	xd = VC_DR(rec);
 	xd->sx_dr.sendsz = ((sendsize + 3) / 4) * 4;
 	xd->sx_dr.recvsz = ((recvsize + 3) / 4) * 4;
 	xd->sx_dr.pagesz = sysconf(_SC_PAGESIZE);
@@ -258,63 +255,6 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 
 	/* release rec */
 	rpc_dplx_rui(rec);
-	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
-
-	/* Conditional register */
-	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
-	     && !(flags & SVC_CREATE_FLAG_XPRT_NOREG))
-	    || (flags & SVC_CREATE_FLAG_XPRT_DOREG))
-		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
-				    SVC_RQST_FLAG_CHAN_AFFINITY);
-
-#if defined(HAVE_BLKIN)
-	__rpc_set_blkin_endpoint(xprt, "svc_vc");
-#endif
-
-	return (xprt);
-}
-
-/*
- * Like sv_fd_ncreate(), except export flags for additional control.
- */
-SVCXPRT *
-svc_fd_ncreatef(const int fd, const u_int sendsize, const u_int recvsize,
-		const uint32_t flags)
-{
-	SVCXPRT *xprt;
-	struct __rpc_sockinfo si;
-	int rc;
-
-	assert(fd != -1);
-
-	xprt = makefd_xprt(fd, sendsize, recvsize, &si,
-			   flags & SVC_XPRT_FLAG_CLOSE);
-	if ((!xprt) || (!(xprt->xp_flags & SVC_XPRT_FLAG_INITIAL)))
-		return (xprt);
-
-	svc_vc_override_ops(xprt, NULL);
-
-	__rpc_address_setup(&xprt->xp_local);
-	rc = getsockname(fd, xprt->xp_local.nb.buf, &xprt->xp_local.nb.len);
-	if (rc < 0) {
-		xprt->xp_local.nb.len = sizeof(struct sockaddr_storage);
-		memset(xprt->xp_local.nb.buf, 0xfe, xprt->xp_local.nb.len);
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: fd %d getsockname failed (%d)",
-			 __func__, fd, rc);
-		return (NULL);
-	}
-
-	__rpc_address_setup(&xprt->xp_remote);
-	rc = getpeername(fd, xprt->xp_remote.nb.buf, &xprt->xp_remote.nb.len);
-	if (rc < 0) {
-		xprt->xp_remote.nb.len = sizeof(struct sockaddr_storage);
-		memset(xprt->xp_remote.nb.buf, 0xfe, xprt->xp_remote.nb.len);
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: fd %d getpeername failed (%d)",
-			 __func__, fd, rc);
-		return (NULL);
-	}
 	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
 
 	/* Conditional register */
@@ -389,7 +329,6 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 			__func__, fd);
 		return (NULL);
 	}
-	xd = VC_DR(rec);
 
 	opr_rbtree_init(&rec->call_replies, call_xid_cmpf);
 
@@ -401,6 +340,7 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 	/*
 	 * Should be multiple of 4 for XDR.
 	 */
+	xd = VC_DR(rec);
 	xd->sx_dr.sendsz = ((sendsize + 3) / 4) * 4;
 	xd->sx_dr.recvsz = ((recvsize + 3) / 4) * 4;
 	xd->sx_dr.pagesz = sysconf(_SC_PAGESIZE);
@@ -416,6 +356,63 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 	/* release */
 	rpc_dplx_rui(rec);
 	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
+
+	return (xprt);
+}
+
+/*
+ * Like sv_fd_ncreate(), except export flags for additional control.
+ */
+SVCXPRT *
+svc_fd_ncreatef(const int fd, const u_int sendsize, const u_int recvsize,
+		const uint32_t flags)
+{
+	SVCXPRT *xprt;
+	struct __rpc_sockinfo si;
+	int rc;
+
+	assert(fd != -1);
+
+	xprt = makefd_xprt(fd, sendsize, recvsize, &si,
+			   flags & SVC_XPRT_FLAG_CLOSE);
+	if ((!xprt) || (!(xprt->xp_flags & SVC_XPRT_FLAG_INITIAL)))
+		return (xprt);
+
+	svc_vc_override_ops(xprt, NULL);
+
+	__rpc_address_setup(&xprt->xp_local);
+	rc = getsockname(fd, xprt->xp_local.nb.buf, &xprt->xp_local.nb.len);
+	if (rc < 0) {
+		xprt->xp_local.nb.len = sizeof(struct sockaddr_storage);
+		memset(xprt->xp_local.nb.buf, 0xfe, xprt->xp_local.nb.len);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d getsockname failed (%d)",
+			 __func__, fd, rc);
+		return (NULL);
+	}
+
+	__rpc_address_setup(&xprt->xp_remote);
+	rc = getpeername(fd, xprt->xp_remote.nb.buf, &xprt->xp_remote.nb.len);
+	if (rc < 0) {
+		xprt->xp_remote.nb.len = sizeof(struct sockaddr_storage);
+		memset(xprt->xp_remote.nb.buf, 0xfe, xprt->xp_remote.nb.len);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d getpeername failed (%d)",
+			 __func__, fd, rc);
+		return (NULL);
+	}
+	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
+
+	/* Conditional register */
+	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
+	     && !(flags & SVC_CREATE_FLAG_XPRT_NOREG))
+	    || (flags & SVC_CREATE_FLAG_XPRT_DOREG))
+		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+				    SVC_RQST_FLAG_CHAN_AFFINITY);
+
+#if defined(HAVE_BLKIN)
+	__rpc_set_blkin_endpoint(xprt, "svc_vc");
+#endif
 
 	return (xprt);
 }
