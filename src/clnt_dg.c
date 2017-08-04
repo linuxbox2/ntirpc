@@ -191,6 +191,15 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 	return (clnt);
 }
 
+static enum xprt_stat
+clnt_dg_rendezvous(SVCXPRT *xprt)
+{
+	__warnx(TIRPC_DEBUG_FLAG_WARN,
+		"%s: %p fd %d unexpected rendezvous",
+		__func__, xprt, xprt->xp_fd);
+	return SVC_STAT(xprt);
+}
+
 static enum clnt_stat
 clnt_dg_call(CLIENT *clnt,	/* client handle */
 	     AUTH *auth,	/* auth handle */
@@ -303,10 +312,11 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	rpc_dplx_rli(rec);
 	rlocked = true;
 
-	if (!rec->ev_p)
+	if (!rec->ev_p) {
+		xprt->xp_dispatch.rendezvous_cb = clnt_dg_rendezvous;
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
-
+	}
 	reply_msg.RPCM_ack.ar_verf = _null_auth;
 	reply_msg.RPCM_ack.ar_results.where = NULL;
 	reply_msg.RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;
