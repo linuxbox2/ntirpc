@@ -243,6 +243,17 @@ clnt_vc_ncreate_svc(const SVCXPRT *xprt, const rpcprog_t prog,
 				flags | CLNT_CREATE_FLAG_SVCXPRT);
 }
 
+static enum xprt_stat
+clnt_vc_process(struct svc_req *req)
+{
+	SVCXPRT *xprt = req->rq_xprt;
+
+	__warnx(TIRPC_DEBUG_FLAG_WARN,
+		"%s: %p fd %d unexpected CALL",
+		__func__, xprt, xprt->xp_fd);
+	return SVC_STAT(xprt);
+}
+
 static enum clnt_stat
 clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	     xdrproc_t xdr_args, void *args_ptr,
@@ -322,10 +333,11 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	svc_ioq_write_submit(xprt, xioq);
 
 	/* reply */
-	if (!rec->ev_p)
+	if (!rec->ev_p) {
+		xprt->xp_dispatch.process_cb = clnt_vc_process;
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
-
+	}
 	code = rpc_ctx_wait_reply(ctx);
 
 	if (ctx->refreshes > 0) {
