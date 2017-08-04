@@ -74,7 +74,6 @@
 #include "svc_ioq.h"
 
 static struct clnt_ops *clnt_vc_ops(void);
-static bool time_not_ok(struct timeval *);
 
 #include "clnt_internal.h"
 #include "svc_internal.h"
@@ -253,7 +252,6 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	struct cx_data *cx = CX_DATA(clnt);
 	struct ct_data *cs = CT_DATA(cx);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
-	struct svc_vc_xprt *xd = VC_DR(rec);
 	SVCXPRT *xprt = &rec->xprt;
 	struct xdr_ioq *xioq;
 	XDR *xdrs;
@@ -279,13 +277,6 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	ctx = rpc_ctx_alloc(clnt, timeout);
 	if (!ctx)
 		return (RPC_TLIERROR);
-
-	if (!xd->cx.cx_waitset) {
-		/* If time is not within limits, we ignore it. */
-		if (time_not_ok(&timeout) == false)
-			xd->cx.cx_wait = timeout;
-	}
-	rpc_dplx_rui(rec);
 
 	ctx->cc_auth = auth;
 	ctx->cc_xdr.proc = xdr_results;
@@ -322,9 +313,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
 			"%s: fd %d failed @ %s:%d",
 			__func__, xprt->xp_fd, __func__, __LINE__);
-		rpc_dplx_rli(rec);
 		rpc_ctx_release(ctx);
-		rpc_dplx_rui(rec);
 		return (RPC_CANTENCODEARGS);
 	}
 	mutex_unlock(&clnt->cl_lock);
@@ -333,8 +322,6 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	svc_ioq_write_submit(xprt, xioq);
 
 	/* reply */
-	rpc_dplx_rli(rec);
-
 	if (!rec->ev_p)
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
@@ -343,7 +330,6 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 
 	if (ctx->refreshes > 0) {
 		ctx->flags = RPC_CTX_FLAG_NONE;
-		rpc_dplx_rui(rec);
 		goto call_again;
 	}
 	if (code == ETIMEDOUT) {
@@ -356,7 +342,6 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 
 	result = ctx->error.re_status;
 	rpc_ctx_release(ctx);
-	rpc_dplx_rui(rec);
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
 		"%s: fd %d result=%d",
 		__func__, xprt->xp_fd, result);
@@ -396,8 +381,6 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 	struct cx_data *cx = CX_DATA(clnt);
 	struct ct_data *cs = CT_DATA(cx);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
-	struct svc_vc_xprt *xd = VC_DR(rec);
-	void *infop = info;
 	struct netbuf *addr;
 	bool rslt = true;
 
@@ -430,17 +413,6 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 		goto unlock;
 	}
 	switch (request) {
-	case CLSET_TIMEOUT:
-		if (time_not_ok((struct timeval *)info)) {
-			rslt = false;
-			goto unlock;
-		}
-		xd->cx.cx_wait = *(struct timeval *)infop;
-		xd->cx.cx_waitset = true;
-		break;
-	case CLGET_TIMEOUT:
-		*(struct timeval *)infop = xd->cx.cx_wait;
-		break;
 	case CLGET_SERVER_ADDR:
 		/* Now obsolete. Only for backward compatibility */
 		(void)memcpy(info, &cs->ct_raddr, (size_t) cs->ct_rlen);
@@ -630,14 +602,4 @@ clnt_vc_ops(void)
 	mutex_unlock(&ops_lock);
 	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 	return (&ops);
-}
-
-/*
- * Make sure that the time is not garbage.   -1 value is disallowed.
- * Note this is different from time_not_ok in clnt_dg.c
- */
-static bool time_not_ok(struct timeval *t)
-{
-	return (t->tv_sec <= -1 || t->tv_sec > 100000000 || t->tv_usec <= -1
-		|| t->tv_usec > 1000000);
 }

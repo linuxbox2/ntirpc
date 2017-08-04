@@ -156,10 +156,6 @@ struct svc_dg_xprt {
 struct svc_vc_xprt {
 	struct rpc_dplx_rec sx_dr;	/* SVCXPRT indexed by fd */
 	int32_t sx_fbtbc;		/* fragment bytes to be consumed */
-	struct {
-		struct timeval cx_wait;	/* wait interval in milliseconds */
-		bool cx_waitset;	/* wait set by clnt_control? */
-	} cx;
 };
 #define VC_DR(p) (opr_containerof((p), struct svc_vc_xprt, sx_dr))
 

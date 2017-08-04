@@ -66,7 +66,7 @@ call_xid_cmpf(const struct opr_rbtree_node *lhs,
 }
 
 /*
- * On success, returns with RPC_CTX_FLAG_LOCKED followed by RPC_DPLX_FLAG_LOCKED
+ * On success, returns with RPC_CTX_FLAG_LOCKED
  */
 rpc_ctx_t *
 rpc_ctx_alloc(CLIENT *clnt, struct timeval timeout)
@@ -74,6 +74,7 @@ rpc_ctx_alloc(CLIENT *clnt, struct timeval timeout)
 	struct cx_data *cx = CX_DATA(clnt);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
 	rpc_ctx_t *ctx = mem_alloc(sizeof(rpc_ctx_t));
+	struct opr_rbtree_node *nv;
 
 	rpc_msg_init(&ctx->cc_msg);
 
@@ -95,13 +96,13 @@ rpc_ctx_alloc(CLIENT *clnt, struct timeval timeout)
 	/* this lock protects both xid and rbtree */
 	rpc_dplx_rli(rec);
 	ctx->xid = ++(rec->call_xid);
-
-	if (opr_rbtree_insert(&rec->call_replies, &ctx->node_k)) {
+	nv = opr_rbtree_insert(&rec->call_replies, &ctx->node_k);
+	rpc_dplx_rui(rec);
+	if (nv) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d call ctx insert failed xid %" PRIu32,
 			__func__, &rec->xprt, rec->xprt.xp_fd, ctx->xid);
 		rpc_ctx_release(ctx);
-		rpc_dplx_rui(rec);
 		return (NULL);
 	}
 	return (ctx);
@@ -121,13 +122,16 @@ rpc_ctx_xfer_replymsg(struct svc_req *req)
 	rpc_dplx_rli(rec);
 	ctx_k.xid = req->rq_msg.rm_xid;
 	nv = opr_rbtree_lookup(&rec->call_replies, &ctx_k.node_k);
+	rpc_dplx_rui(rec);
 	if (!nv) {
-		/* release internal locks */
-		rpc_dplx_rui(rec);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d call ctx lookup failed xid %" PRIu32,
+			__func__, &rec->xprt, rec->xprt.xp_fd, ctx_k.xid);
 		return SVC_STAT(xprt);
 	}
 
 	ctx = opr_containerof(nv, rpc_ctx_t, node_k);
+	atomic_set_uint16_t_bits(&ctx->flags, RPC_CTX_FLAG_ACKSYNC);
 
 	_seterr_reply(&req->rq_msg, &(ctx->error));
 	if (ctx->error.re_status == RPC_SUCCESS) {
@@ -146,10 +150,12 @@ rpc_ctx_xfer_replymsg(struct svc_req *req)
 	} else if (ctx->refreshes-- > 0
 		   && AUTH_REFRESH(ctx->cc_auth, &(ctx->cc_msg))) {
 		/* maybe our credentials need to be refreshed ... */
+		rpc_dplx_rli(rec);
 		opr_rbtree_remove(&rec->call_replies, &ctx->node_k);
 		ctx->xid = ++(rec->call_xid);
-
-		if (opr_rbtree_insert(&rec->call_replies, &ctx->node_k)) {
+		nv = opr_rbtree_insert(&rec->call_replies, &ctx->node_k);
+		rpc_dplx_rui(rec);
+		if (nv) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s: %p fd %d call ctx insert failed xid %" PRIu32,
 				__func__, xprt, xprt->xp_fd, ctx->xid);
@@ -157,21 +163,20 @@ rpc_ctx_xfer_replymsg(struct svc_req *req)
 			ctx->refreshes = 0;
 		}
 	}
-	atomic_set_uint16_t_bits(&ctx->flags, RPC_CTX_FLAG_ACKSYNC);
 
 	/* signal the specific ctx  */
+	mutex_lock(&ctx->we.mtx);
 	cond_signal(&ctx->we.cv);
+	mutex_unlock(&ctx->we.mtx);
 
 	__warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
 		"%s: %p fd %d call ctx acknowledged xid %" PRIu32,
 		__func__, xprt, xprt->xp_fd, ctx->xid);
 
-	/* release internal locks */
-	rpc_dplx_rui(rec);
 	return SVC_STAT(xprt);
 }
 
-/* RPC_CTX_FLAG_LOCKED, RPC_DPLX_FLAG_LOCKED
+/* RPC_CTX_FLAG_LOCKED
  */
 int
 rpc_ctx_wait_reply(rpc_ctx_t *ctx)
@@ -183,8 +188,6 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx)
 	int code;
 
 	/* no loop, signaled directly */
-	rpc_dplx_rui(rec);
-
 	__warnx(TIRPC_DEBUG_FLAG_RPC_CTX,
 		"%s: %p fd %d call ctx xid %" PRIu32,
 		__func__, &rec->xprt, rec->xprt.xp_fd, ctx->xid);
@@ -197,11 +200,6 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx)
 		"%s: %p fd %d call ctx replied xid %" PRIu32,
 		__func__, &rec->xprt, rec->xprt.xp_fd, ctx->xid);
 
-	rpc_dplx_rli(rec);
-
-	/* it is possible for rpc_ctx_xfer_replymsg() to complete
-	 * in the window between cond_timedwait() and rpc_dplx_rli()
-	 */
 	if (!(atomic_fetch_uint16_t(&ctx->flags) & RPC_CTX_FLAG_ACKSYNC)
 	 && (code == ETIMEDOUT)) {
 		if (rec->xprt.xp_flags & SVC_XPRT_FLAG_DESTROYED) {
@@ -214,7 +212,7 @@ rpc_ctx_wait_reply(rpc_ctx_t *ctx)
 	return (code);
 }
 
-/* RPC_CTX_FLAG_LOCKED, RPC_DPLX_FLAG_LOCKED
+/* RPC_CTX_FLAG_LOCKED
  */
 void
 rpc_ctx_release(rpc_ctx_t *ctx)
@@ -225,7 +223,9 @@ rpc_ctx_release(rpc_ctx_t *ctx)
 	if (atomic_dec_uint32_t(&ctx->refcount))
 		return;
 
+	rpc_dplx_rli(cx->cx_rec);
 	opr_rbtree_remove(&cx->cx_rec->call_replies, &ctx->node_k);
+	rpc_dplx_rui(cx->cx_rec);
 	mutex_unlock(&ctx->we.mtx);
 	mutex_destroy(&ctx->we.mtx);
 	cond_destroy(&ctx->we.cv);
