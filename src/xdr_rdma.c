@@ -198,7 +198,7 @@ xdr_rdma_chunk_in(struct poolq_entry *have, u_int k, u_int m, u_int sized)
 	IOQ_(have)->v.vio_tail = (char *)IOQ_(have)->v.vio_base + m;
 	IOQ_(have)->v.vio_wrap = (char *)IOQ_(have)->v.vio_base + sized;
 
-	while (0 < --k && NULL != (have = TAILQ_PREV(have, q_head, q))) {
+	while (0 < --k && NULL != (have = TAILQ_PREV(have, poolq_head_s, q))) {
 		/* restore defaults after previous usage */
 		IOQ_(have)->v.vio_head = IOQ_(have)->v.vio_base;
 		IOQ_(have)->v.vio_tail =
@@ -214,7 +214,7 @@ xdr_rdma_chunk_out(struct poolq_entry *have, u_int k, u_int m, u_int sized)
 	IOQ_(have)->v.vio_tail = IOQ_(have)->v.vio_base;
 	IOQ_(have)->v.vio_wrap = (char *)IOQ_(have)->v.vio_base + m;
 
-	while (0 < --k && NULL != (have = TAILQ_PREV(have, q_head, q))) {
+	while (0 < --k && NULL != (have = TAILQ_PREV(have, poolq_head_s, q))) {
 		/* restore defaults after previous usage */
 		IOQ_(have)->v.vio_head =
 		IOQ_(have)->v.vio_tail = IOQ_(have)->v.vio_base;

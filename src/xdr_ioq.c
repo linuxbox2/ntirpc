@@ -135,7 +135,7 @@ xdr_ioq_uv_fetch(struct xdr_ioq *xioq, struct poolq_head *ioqh,
 			xioq->xdrs[0].x_handy = saved;
 
 			/* entry was already added directly to the queue */
-			have = TAILQ_LAST(&xioq->ioq_uv.uvqh.qh, q_head);
+			have = TAILQ_LAST(&xioq->ioq_uv.uvqh.qh, poolq_head_s);
 		}
 	}
 
