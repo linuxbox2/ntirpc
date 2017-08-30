@@ -660,7 +660,7 @@ svc_vc_recv(SVCXPRT *xprt)
 	/* no need for locking, only one svc_rqst_xprt_task() per event.
 	 * depends upon svc_rqst_rearm_events() for ordering.
 	 */
-	have = TAILQ_LAST(&rec->ioq.ioq_uv.uvqh.qh, q_head);
+	have = TAILQ_LAST(&rec->ioq.ioq_uv.uvqh.qh, poolq_head_s);
 	if (!have) {
 		xioq = xdr_ioq_create(xd->sx_dr.pagesz, xd->sx_dr.maxrec,
 				      UIO_FLAG_BUFQ);
@@ -706,7 +706,7 @@ svc_vc_recv(SVCXPRT *xprt)
 		(xioq->ioq_uv.uvqh.qcount)++;
 		TAILQ_INSERT_TAIL(&xioq->ioq_uv.uvqh.qh, &uv->uvq, q);
 	} else {
-		uv = IOQ_(TAILQ_LAST(&xioq->ioq_uv.uvqh.qh, q_head));
+		uv = IOQ_(TAILQ_LAST(&xioq->ioq_uv.uvqh.qh, poolq_head_s));
 	}
 
 	rlen = recv(xprt->xp_fd, uv->v.vio_tail, xd->sx_fbtbc, MSG_DONTWAIT);

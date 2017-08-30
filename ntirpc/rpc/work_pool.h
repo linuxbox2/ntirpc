@@ -46,8 +46,11 @@ struct work_pool_params {
 	int32_t thrd_min;
 };
 
+struct work_pool_thread;
+
 struct work_pool {
 	struct poolq_head pqh;
+	TAILQ_HEAD(work_pool_s, work_pool_thread) wptqh;
 	char *name;
 	pthread_attr_t attr;
 	struct work_pool_params params;
@@ -58,6 +61,7 @@ struct work_pool_entry;
 
 struct work_pool_thread {
 	struct poolq_entry pqe;		/*** 1st ***/
+	TAILQ_ENTRY(work_pool_thread) wptq;
 	pthread_cond_t pqcond;
 
 	struct work_pool *pool;

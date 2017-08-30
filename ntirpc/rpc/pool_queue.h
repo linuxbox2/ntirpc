@@ -51,7 +51,7 @@ struct poolq_entry {
 };
 
 struct poolq_head {
-	TAILQ_HEAD(q_head, poolq_entry) qh;
+	TAILQ_HEAD(poolq_head_s, poolq_entry) qh;
 	pthread_mutex_t qmutex;
 
 	u_int qsize;			/* default size of q entries,

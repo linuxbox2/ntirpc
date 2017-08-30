@@ -801,14 +801,14 @@ svc_shutdown(u_long flags)
 	rpc_rdma_internals_fini();
 #endif
 
-	/* finalize ioq */
-	work_pool_shutdown(&svc_work_pool);
-
 	/* dispose all xprts and support */
 	svc_xprt_shutdown();
 
 	/* release request event channels */
 	svc_rqst_shutdown();
+
+	/* release workers after event channels */
+	work_pool_shutdown(&svc_work_pool);
 
 	/* XXX assert quiescent */
 
