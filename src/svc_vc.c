@@ -473,7 +473,6 @@ svc_vc_rendezvous(SVCXPRT *xprt)
 		return (XPRT_DIED);
 
 	svc_vc_override_ops(newxprt, xprt);
-	(void)svc_rqst_xprt_register(newxprt, xprt);
 
 	__rpc_address_setup(&newxprt->xp_remote);
 	memcpy(newxprt->xp_remote.nb.buf, &addr, len);
@@ -511,7 +510,12 @@ svc_vc_rendezvous(SVCXPRT *xprt)
 
 	SVC_REF(xprt, SVC_REF_FLAG_NONE);
 	newxprt->xp_parent = xprt;
-	return (xprt->xp_dispatch.rendezvous_cb(newxprt));
+	if (xprt->xp_dispatch.rendezvous_cb(newxprt)
+	 || svc_rqst_xprt_register(newxprt, xprt)) {
+		SVC_DESTROY(newxprt);
+		return (XPRT_DESTROYED);
+	}
+	return (XPRT_IDLE);
 }
 
 static void
