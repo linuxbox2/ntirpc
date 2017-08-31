@@ -689,12 +689,11 @@ svc_vc_recv(SVCXPRT *xprt)
 		}
 
 		xd->sx_fbtbc = (int32_t)ntohl((long)xd->sx_fbtbc);
+		flags = UIO_FLAG_FREE | UIO_FLAG_MORE;
 
 		if (xd->sx_fbtbc & LAST_FRAG) {
 			xd->sx_fbtbc &= (~LAST_FRAG);
 			flags = UIO_FLAG_FREE;
-		} else {
-			flags = UIO_FLAG_FREE | UIO_FLAG_MORE;
 		}
 
 		if (unlikely(!xd->sx_fbtbc)) {
@@ -711,6 +710,7 @@ svc_vc_recv(SVCXPRT *xprt)
 		TAILQ_INSERT_TAIL(&xioq->ioq_uv.uvqh.qh, &uv->uvq, q);
 	} else {
 		uv = IOQ_(TAILQ_LAST(&xioq->ioq_uv.uvqh.qh, poolq_head_s));
+		flags = uv->u.uio_flags;
 	}
 
 	rlen = recv(xprt->xp_fd, uv->v.vio_tail, xd->sx_fbtbc, MSG_DONTWAIT);
@@ -739,12 +739,12 @@ svc_vc_recv(SVCXPRT *xprt)
 		return SVC_STAT(xprt);
 	}
 
-	__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-		"%s: %p fd %d recv %zd of %" PRIu32,
-		__func__, xprt, xprt->xp_fd, rlen, xd->sx_fbtbc);
-
 	uv->v.vio_tail += rlen;
 	xd->sx_fbtbc -= rlen;
+
+	__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+		"%s: %p fd %d recv %zd, need %" PRIu32 ", flags %x",
+		__func__, xprt, xprt->xp_fd, rlen, xd->sx_fbtbc, flags);
 
 	if (xd->sx_fbtbc || (flags & UIO_FLAG_MORE)) {
 		if (unlikely(svc_rqst_rearm_events(xprt))) {
