@@ -83,6 +83,8 @@
 #define SVC_VERSQUIET 0x0001	/* keep quiet about vers mismatch */
 #define version_keepquiet(xp) ((u_long)(xp)->xp_p3 & SVC_VERSQUIET)
 
+#define SVC_WORK_POOL_THRD_MIN (2)
+
 /* svc_internal.h */
 #ifdef IOV_MAX
 int __svc_maxiov = IOV_MAX;
@@ -125,7 +127,7 @@ svc_work_pool_init()
 {
 	struct work_pool_params params = {
 		.thrd_max = __svc_params->ioq.thrd_max,
-		.thrd_min = 2
+		.thrd_min = SVC_WORK_POOL_THRD_MIN,
 	};
 
 	return work_pool_init(&svc_work_pool, "svc_work_pool", &params);
@@ -139,6 +141,8 @@ svc_work_pool_init()
 bool
 svc_init(svc_init_params *params)
 {
+	uint32_t channels = params->channels ? params->channels : 8;
+
 	mutex_lock(&__svc_params->mtx);
 	if (__svc_params->initialized) {
 		__warnx(TIRPC_DEBUG_FLAG_WARN,
@@ -193,6 +197,9 @@ svc_init(svc_init_params *params)
 	else
 		__svc_params->ioq.thrd_max = 200;
 
+	if (__svc_params->ioq.thrd_max < channels + SVC_WORK_POOL_THRD_MIN)
+		__svc_params->ioq.thrd_max = channels + SVC_WORK_POOL_THRD_MIN;
+
 	svc_ioq_init();
 
 	/* uses ioq.thrd_max */
@@ -202,7 +209,7 @@ svc_init(svc_init_params *params)
 	}
 
 	/* uses svc_work_pool */
-	svc_rqst_init(params->channels ? params->channels : 8);
+	svc_rqst_init(channels);
 
 	if (svc_xprt_init()) {
 		mutex_unlock(&__svc_params->mtx);

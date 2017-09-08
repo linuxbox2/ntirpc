@@ -81,7 +81,6 @@ struct svc_rqst_rec {
 
 	int sv[2];
 	uint32_t id_k;		/* chan id */
-	uint32_t states;
 	uint32_t signals;
 	uint32_t refcnt;
 	uint16_t flags;
@@ -267,7 +266,6 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 #endif
 
 	sr_rec->id_k = n_id;
-	sr_rec->states = SVC_RQST_STATE_NONE;
 	sr_rec->refcnt = 1;	/* svc_rqst_set ref */
 	mutex_init(&sr_rec->mtx, NULL);
 	TAILQ_INIT(&sr_rec->ev_qh);
@@ -330,12 +328,13 @@ svc_rqst_release(struct svc_rqst_rec *sr_rec /* LOCKED => UNLOCKED */)
 
 	mutex_unlock(&sr_rec->mtx);
 
-	if (refcnt == 0) {
-		/* assert sr_rec DESTROYED */
-		svc_rqst_set.srr[sr_rec->id_k] = NULL;
-		mutex_destroy(&sr_rec->mtx);
-		mem_free(sr_rec, sizeof(struct svc_rqst_rec));
-	}
+	if (refcnt)
+		return;
+
+	/* assert sr_rec DESTROYED */
+	svc_rqst_set.srr[sr_rec->id_k] = NULL;
+	mutex_destroy(&sr_rec->mtx);
+	mem_free(sr_rec, sizeof(struct svc_rqst_rec));
 }
 
 /*
@@ -396,7 +395,7 @@ svc_rqst_rearm_events(SVCXPRT *xprt)
 		return (0);
 
 	/* MUST follow the destroyed check above */
-	if (sr_rec->states & SVC_RQST_STATE_DESTROYED)
+	if (sr_rec->signals & SVC_RQST_SIGNAL_SHUTDOWN)
 		return (0);
 
 	rpc_dplx_rli(rec);
@@ -876,13 +875,6 @@ svc_rqst_epoll_loop(struct svc_rqst_rec *sr_rec)
 	int n_events;
 
 	for (;;) {
-		/* check for signals */
-		if (sr_rec->signals & SVC_RQST_SIGNAL_SHUTDOWN)
-			return;
-
-		if (sr_rec->states & SVC_RQST_STATE_DESTROYED)
-			return;
-
 		mutex_unlock(&sr_rec->mtx);
 
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
@@ -897,8 +889,12 @@ svc_rqst_epoll_loop(struct svc_rqst_rec *sr_rec)
 
 		mutex_lock(&sr_rec->mtx);
 
-		if (unlikely(!svc_work_pool.params.thrd_max)) {
-			/* pool is draining */
+		if (unlikely(sr_rec->signals & SVC_RQST_SIGNAL_SHUTDOWN)) {
+			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+				"%s: epoll_fd %d epoll_wait shutdown (%d)",
+				__func__,
+				sr_rec->ev_u.epoll.epoll_fd,
+				n_events);
 			return;
 		}
 		if (n_events > 0) {
@@ -936,7 +932,6 @@ svc_rqst_run_task(struct work_pool_entry *wpe)
 	 * with a secondary state machine to detect inconsistencies (e.g.,
 	 * trying to unregister a channel when it is active) */
 	mutex_lock(&sr_rec->mtx);
-	sr_rec->states |= SVC_RQST_STATE_ACTIVE;
 
 	/* enter event loop */
 	switch (sr_rec->ev_type) {
@@ -992,6 +987,8 @@ svc_rqst_delete_evchan(uint32_t chan_id)
 	if (!sr_rec) {
 		return (ENOENT);
 	}
+	sr_rec->signals |= SVC_RQST_SIGNAL_SHUTDOWN;
+	ev_sig(sr_rec->sv[0], SVC_RQST_SIGNAL_SHUTDOWN);
 
 	/* sr_rec LOCKED */
 	rec = TAILQ_FIRST(&sr_rec->ev_qh);
@@ -1001,8 +998,6 @@ svc_rqst_delete_evchan(uint32_t chan_id)
 
 		svc_rqst_unreg(rec, sr_rec);
 
-		/* wake up */
-		ev_sig(sr_rec->sv[0], 0);
 		switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
 		case SVC_EVENT_EPOLL:
@@ -1037,7 +1032,7 @@ svc_rqst_delete_evchan(uint32_t chan_id)
 		/* XXX */
 		break;
 	}
-	sr_rec->states = SVC_RQST_STATE_DESTROYED;
+
 	/*	ref count here should be 2:
 	 *	1	initial create/rbt ref we just deleted
 	 *	+1	lookup (top of this routine through here)
@@ -1051,8 +1046,9 @@ svc_rqst_delete_evchan(uint32_t chan_id)
 void
 svc_rqst_shutdown(void)
 {
-	if (__svc_params->ev_u.evchan.id) {
-		svc_rqst_delete_evchan(__svc_params->ev_u.evchan.id);
-		__svc_params->ev_u.evchan.id = 0;
+	uint32_t channels = svc_rqst_set.max_id;
+
+	while (channels > 0) {
+		svc_rqst_delete_evchan(--channels);
 	}
 }
