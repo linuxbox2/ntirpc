@@ -75,7 +75,6 @@ static uint32_t round_robin;
 /*static*/ uint32_t wakeups;
 
 struct svc_rqst_rec {
-	TAILQ_HEAD(evq_head, rpc_dplx_rec) ev_qh;	/* xprt handles */
 	struct work_pool_entry ev_wpe;
 	pthread_mutex_t mtx;
 
@@ -106,7 +105,7 @@ struct svc_rqst_rec {
 
 struct svc_rqst_set {
 	mutex_t mtx;
-	struct svc_rqst_rec **srr;
+	struct svc_rqst_rec *srr;
 	uint32_t max_id;
 	uint32_t next_id;
 };
@@ -135,7 +134,7 @@ svc_rqst_init(uint32_t channels)
 
 	svc_rqst_set.max_id = channels;
 	svc_rqst_set.next_id = channels;
-	svc_rqst_set.srr = mem_zalloc(channels * sizeof(struct svc_rqst_rec *));
+	svc_rqst_set.srr = mem_zalloc(channels * sizeof(struct svc_rqst_rec));
 
  unlock:
 	mutex_unlock(&svc_rqst_set.mtx);
@@ -154,12 +153,12 @@ svc_rqst_lookup_chan(uint32_t chan_id)
 	if (chan_id >= svc_rqst_set.max_id)
 		return (NULL);
 
-	sr_rec = svc_rqst_set.srr[chan_id];
-	if (!sr_rec)
+	sr_rec = &svc_rqst_set.srr[chan_id];
+	if (!sr_rec->refcnt)
 		return (NULL);
 
 	mutex_lock(&sr_rec->mtx);
-	++(sr_rec->refcnt);
+	atomic_inc_uint32_t(&sr_rec->refcnt);
 
 	return (sr_rec);
 }
@@ -183,8 +182,9 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 		return (0);
 	}
 	n_id = --(svc_rqst_set.next_id);
+	sr_rec = &svc_rqst_set.srr[n_id];
 
-	if (svc_rqst_set.srr[n_id]) {
+	if (sr_rec->refcnt) {
 		/* already exists */
 		*chan_id = n_id;
 		mutex_unlock(&svc_rqst_set.mtx);
@@ -193,15 +193,12 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 
 	flags |= SVC_RQST_FLAG_EPOLL;	/* XXX */
 
-	sr_rec = mem_zalloc(sizeof(struct svc_rqst_rec));
-
 	/* create a pair of anonymous sockets for async event channel wakeups */
 	code = socketpair(AF_UNIX, SOCK_STREAM, 0, sr_rec->sv);
 	if (code) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: failed creating event signal socketpair (%d)",
 			__func__, code);
-		mem_free(sr_rec, sizeof(struct svc_rqst_rec));
 		++(svc_rqst_set.next_id);
 		mutex_unlock(&svc_rqst_set.mtx);
 		return (code);
@@ -213,9 +210,6 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 
 #if defined(TIRPC_EPOLL)
 	if (flags & SVC_RQST_FLAG_EPOLL) {
-
-		sr_rec->flags = flags & SVC_RQST_FLAG_MASK;
-
 		sr_rec->ev_type = SVC_EVENT_EPOLL;
 
 		/* XXX improve this too */
@@ -237,7 +231,6 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 			mem_free(sr_rec->ev_u.epoll.events,
 				 sr_rec->ev_u.epoll.max_events *
 				 sizeof(struct epoll_event));
-			mem_free(sr_rec, sizeof(struct svc_rqst_rec));
 			++(svc_rqst_set.next_id);
 			mutex_unlock(&svc_rqst_set.mtx);
 			return (EINVAL);
@@ -265,18 +258,11 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 	sr_rec->ev_type = SVC_EVENT_FDSET;
 #endif
 
+	*chan_id =
 	sr_rec->id_k = n_id;
 	sr_rec->refcnt = 1;	/* svc_rqst_set ref */
+	sr_rec->flags = flags & SVC_RQST_FLAG_MASK;
 	mutex_init(&sr_rec->mtx, NULL);
-	TAILQ_INIT(&sr_rec->ev_qh);
-
-	__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-		"%s: create evchan %d socketpair %d:%d", __func__, n_id,
-		sr_rec->sv[0], sr_rec->sv[1]);
-
-	svc_rqst_set.srr[n_id] = sr_rec;
-	mutex_unlock(&svc_rqst_set.mtx);
-	*chan_id = n_id;
 
 	if (!code) {
 		sr_rec->refcnt = 2;
@@ -284,6 +270,12 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 		sr_rec->ev_wpe.arg = u_data;
 		work_pool_submit(&svc_work_pool, &sr_rec->ev_wpe);
 	}
+	mutex_unlock(&svc_rqst_set.mtx);
+
+	__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+		"%s: create evchan %d control fd pair (%d:%d)",
+		__func__, n_id,
+		sr_rec->sv[0], sr_rec->sv[1]);
 	return (code);
 }
 
@@ -322,19 +314,16 @@ consume_ev_sig_nb(int fd)
 static inline void
 svc_rqst_release(struct svc_rqst_rec *sr_rec /* LOCKED => UNLOCKED */)
 {
-	uint32_t refcnt;
-
-	refcnt = --(sr_rec->refcnt);
-
 	mutex_unlock(&sr_rec->mtx);
 
-	if (refcnt)
+	if (atomic_dec_uint32_t(&sr_rec->refcnt))
 		return;
 
-	/* assert sr_rec DESTROYED */
-	svc_rqst_set.srr[sr_rec->id_k] = NULL;
+	__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+		"%s: remove evchan %d control fd pair (%d:%d)",
+		__func__, sr_rec->id_k,
+		sr_rec->sv[0], sr_rec->sv[1]);
 	mutex_destroy(&sr_rec->mtx);
-	mem_free(sr_rec, sizeof(struct svc_rqst_rec));
 }
 
 /*
@@ -356,7 +345,7 @@ svc_rqst_unhook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
 				 EPOLL_CTL_DEL, rec->xprt.xp_fd, ev);
 		if (code) {
 			code = errno;
-			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			__warnx(TIRPC_DEBUG_FLAG_WARN,
 				"%s: %p fd %d epoll del failed "
 				"sr_rec %p epoll_fd %d "
 				"control fd pair (%d:%d) (%d)",
@@ -419,7 +408,7 @@ svc_rqst_rearm_events(SVCXPRT *xprt)
 			code = errno;
 			atomic_clear_uint16_t_bits(&xprt->xp_flags,
 						   SVC_XPRT_FLAG_ADDED);
-			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s: %p fd %d epoll arm failed "
 				"sr_rec %p epoll_fd %d "
 				"control fd pair (%d:%d) (%d)",
@@ -519,8 +508,6 @@ svc_rqst_unreg(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
 	if (xp_flags & SVC_XPRT_FLAG_ADDED)
 		(void)svc_rqst_unhook_events(rec, sr_rec);
 
-	TAILQ_REMOVE(&sr_rec->ev_qh, rec, ev_q);
-
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT | TIRPC_DEBUG_FLAG_SVC_RQST,
 		"%s: %p fd %d xp_refs %" PRIu32
 		" chan_id %d refcnt %" PRIu32,
@@ -535,7 +522,7 @@ svc_rqst_unreg(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
 	/* DROP one ref per xprt, but need no release here;
 	 * by definition, there is always another partition ref.
 	 */
-	--(sr_rec->refcnt);
+	atomic_dec_uint32_t(&sr_rec->refcnt);
 }
 
 int
@@ -585,8 +572,6 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 
 	/* assuming success */
 	atomic_set_uint16_t_bits(&xprt->xp_flags, bits);
-
-	TAILQ_INSERT_TAIL(&sr_rec->ev_qh, rec, ev_q);
 
 	/* link from xprt */
 	rec->ev_p = sr_rec;
@@ -845,7 +830,7 @@ svc_rqst_epoll_events(struct svc_rqst_rec *sr_rec, int n_events)
 	}
 
 	/* submit another task to handle events in order */
-	++(sr_rec->refcnt);
+	atomic_inc_uint32_t(&sr_rec->refcnt);
 	work_pool_submit(&svc_work_pool, &sr_rec->ev_wpe);
 
 	/* in most cases have only one event, use this hot thread */
@@ -869,7 +854,7 @@ svc_rqst_epoll_events(struct svc_rqst_rec *sr_rec, int n_events)
  *  (sr_rec unlocked during loop).
  * - Returns with sr_rec locked.
  */
-static inline void
+static inline bool
 svc_rqst_epoll_loop(struct svc_rqst_rec *sr_rec)
 {
 	int n_events;
@@ -895,13 +880,13 @@ svc_rqst_epoll_loop(struct svc_rqst_rec *sr_rec)
 				__func__,
 				sr_rec->ev_u.epoll.epoll_fd,
 				n_events);
-			return;
+			return true;
 		}
 		if (n_events > 0) {
 			atomic_add_uint32_t(&wakeups, n_events);
 
 			if (svc_rqst_epoll_events(sr_rec, n_events))
-				return;
+				return false;
 			continue;
 		}
 		if (!n_events) {
@@ -910,14 +895,14 @@ svc_rqst_epoll_loop(struct svc_rqst_rec *sr_rec)
 			continue;
 		}
 		n_events = errno;
-		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+		__warnx(TIRPC_DEBUG_FLAG_WARN,
 			"%s: epoll_fd %d epoll_wait failed (%d)",
 			__func__,
 			sr_rec->ev_u.epoll.epoll_fd,
 			n_events);
 
 		if (n_events != EINTR)
-			return;
+			return true;
 	}
 }
 #endif
@@ -927,17 +912,21 @@ svc_rqst_run_task(struct work_pool_entry *wpe)
 {
 	struct svc_rqst_rec *sr_rec =
 		opr_containerof(wpe, struct svc_rqst_rec, ev_wpe);
+	bool finished;
 
-	/* serialization model for srec is mutual exclusion on mutation only,
-	 * with a secondary state machine to detect inconsistencies (e.g.,
-	 * trying to unregister a channel when it is active) */
 	mutex_lock(&sr_rec->mtx);
 
 	/* enter event loop */
 	switch (sr_rec->ev_type) {
 #if defined(TIRPC_EPOLL)
 	case SVC_EVENT_EPOLL:
-		svc_rqst_epoll_loop(sr_rec);
+		finished = svc_rqst_epoll_loop(sr_rec);
+		if (finished) {
+			close(sr_rec->ev_u.epoll.epoll_fd);
+			mem_free(sr_rec->ev_u.epoll.events,
+				 sr_rec->ev_u.epoll.max_events *
+				 sizeof(struct epoll_event));
+		}
 		break;
 #endif
 	default:
@@ -949,6 +938,14 @@ svc_rqst_run_task(struct work_pool_entry *wpe)
 		break;
 	}			/* switch */
 
+	if (finished) {
+		/* reference count here should be 2:
+		 *	1	svc_rqst_set
+		 *	+1	this work_pool thread
+		 * so, DROP one here so the final release will go to 0.
+		 */
+		atomic_dec_uint32_t(&sr_rec->refcnt);	/* svc_rqst_set */
+	}
 	svc_rqst_release(sr_rec);
 }
 
@@ -965,7 +962,6 @@ svc_rqst_thrd_signal(uint32_t chan_id, uint32_t flags)
 		return (ENOENT);
 	}
 
-	sr_rec->signals |= (flags & SVC_RQST_SIGNAL_MASK);
 	ev_sig(sr_rec->sv[0], flags);	/* send wakeup */
 
 	__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -979,66 +975,15 @@ static int
 svc_rqst_delete_evchan(uint32_t chan_id)
 {
 	struct svc_rqst_rec *sr_rec;
-	struct rpc_dplx_rec *next;
-	struct rpc_dplx_rec *rec;
 	int code = 0;
 
 	sr_rec = svc_rqst_lookup_chan(chan_id);
 	if (!sr_rec) {
 		return (ENOENT);
 	}
-	sr_rec->signals |= SVC_RQST_SIGNAL_SHUTDOWN;
+	atomic_set_uint32_t_bits(&sr_rec->signals, SVC_RQST_SIGNAL_SHUTDOWN);
 	ev_sig(sr_rec->sv[0], SVC_RQST_SIGNAL_SHUTDOWN);
 
-	/* sr_rec LOCKED */
-	rec = TAILQ_FIRST(&sr_rec->ev_qh);
-
-	while (rec) {
-		next = TAILQ_NEXT(rec, ev_q);
-
-		svc_rqst_unreg(rec, sr_rec);
-
-		switch (sr_rec->ev_type) {
-#if defined(TIRPC_EPOLL)
-		case SVC_EVENT_EPOLL:
-			code =
-			    epoll_ctl(sr_rec->ev_u.epoll.epoll_fd,
-				      EPOLL_CTL_DEL, sr_rec->sv[1],
-				      &sr_rec->ev_u.epoll.ctrl_ev);
-			if (code == -1)
-				__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-					"%s: epoll del control socket failed (%d)",
-					__func__, errno);
-			break;
-#endif
-		default:
-			break;
-		}
-
-		rec = next;
-	}
-
-	/* now remove sr_rec */
-	switch (sr_rec->ev_type) {
-#if defined(TIRPC_EPOLL)
-	case SVC_EVENT_EPOLL:
-		close(sr_rec->ev_u.epoll.epoll_fd);
-		mem_free(sr_rec->ev_u.epoll.events,
-			 sr_rec->ev_u.epoll.max_events *
-			 sizeof(struct epoll_event));
-		break;
-#endif
-	default:
-		/* XXX */
-		break;
-	}
-
-	/*	ref count here should be 2:
-	 *	1	initial create/rbt ref we just deleted
-	 *	+1	lookup (top of this routine through here)
-	 * so, DROP one ref here so the final release will go to 0.
-	 */
-	--(sr_rec->refcnt);	/* DROP one extra ref - initial create */
 	svc_rqst_release(sr_rec);
 	return (code);
 }
