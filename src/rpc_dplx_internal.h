@@ -67,9 +67,6 @@ struct rpc_dplx_rec {
 		} epoll;
 #endif
 	} ev_u;
-
-	/* event vector list */
-	TAILQ_ENTRY(rpc_dplx_rec) ev_q;
 	void *ev_p;			/* struct svc_rqst_rec (internal) */
 
 	size_t maxrec;
@@ -111,7 +108,6 @@ static inline void
 rpc_dplx_rec_init(struct rpc_dplx_rec *rec)
 {
 	rpc_dplx_lock_init(&rec->recv.lock);
-/*	TAILQ_INIT_ENTRY(rec, ev_q); sets NULL */
 }
 
 static inline void
