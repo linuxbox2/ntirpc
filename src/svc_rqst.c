@@ -930,6 +930,7 @@ svc_rqst_run_task(struct work_pool_entry *wpe)
 		break;
 #endif
 	default:
+		finished = true;
 		/* XXX formerly select/fd_set case, now placeholder for new
 		 * event systems, reworked select, etc. */
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
