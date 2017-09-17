@@ -252,7 +252,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_rpcbs_rmtcalllist;
     xdr_rpcbs_rmtcalllist_ptr;
     xdr_short;
-    xdr_string;
     xdr_u_char;
     xdr_u_hyper;
     xdr_u_int8_t;

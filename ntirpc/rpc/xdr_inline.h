@@ -742,79 +742,134 @@ inline_xdr_union(XDR *xdrs, enum_t *dscmp,
  * of the string as specified by a protocol.
  */
 static inline bool
-inline_xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
+xdr_string_decode(XDR *xdrs, char **cpp, u_int maxsize)
 {
 	char *sp = *cpp;	/* sp is the actual string pointer */
-	u_int size = 0;		/* XXX remove warning */
+	u_long size;
 	u_int nodesize;
 	bool ret;
 
 	/*
 	 * first deal with the length since xdr strings are counted-strings
 	 */
-	switch (xdrs->x_op) {
-	case XDR_FREE:
-		if (sp == NULL)
-			return (true);	/* already free */
-		break;
-	case XDR_ENCODE:
-		if (sp == NULL)
-			return false;
-		size = strlen(sp);
-		break;
-	case XDR_DECODE:
-		break;
+	if (!XDR_GETLONG(xdrs, &size)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR size",
+			__func__, __LINE__);
+		return (false);
 	}
-	if (!inline_xdr_u_int(xdrs, &size))
+
+	if (size > maxsize) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR size %ul > max %u",
+			__func__, __LINE__,
+			size, maxsize);
 		return (false);
-	if (size > maxsize && xdrs->x_op != XDR_FREE)
+	}
+
+	nodesize = (uint32_t)(size + 1);
+	if (nodesize < (size + 1)) {
+		/* caller provided very large maxsize */
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR overflow %ul",
+			__func__, __LINE__,
+			size);
 		return (false);
-	nodesize = size + 1;
-	if (nodesize == 0) {
-		/* This means an overflow.  It a bug in the caller which
-		 * provided a too large maxsize but nevertheless catch it
-		 * here.
-		 */
-		return false;
 	}
 
 	/*
 	 * now deal with the actual bytes
 	 */
-	switch (xdrs->x_op) {
+	if (!sp)
+		sp = (char *)mem_alloc(nodesize);
 
-	case XDR_DECODE:
-		if (sp == NULL)
-			*cpp = sp = (char *)mem_alloc(nodesize);
-		ret = xdr_opaque_decode(xdrs, sp, size);
-		if (! ret) {
-			mem_free(sp, -1);
-			*cpp = NULL;
-		} else
-			sp[size] = 0;
+	ret = xdr_opaque_decode(xdrs, sp, size);
+	if (!ret) {
+		mem_free(sp, nodesize);
 		return (ret);
+	}
+	sp[size] = '\0';
+	*cpp = sp;			/* only valid pointer */
+	return (ret);
+}
 
-	case XDR_ENCODE:
-		return (xdr_opaque_encode(xdrs, sp, size));
+static inline bool
+xdr_string_encode(XDR *xdrs, char **cpp, u_int maxsize)
+{
+	u_long size;
+	u_int nodesize;
 
-	case XDR_FREE:
-		mem_free(sp, -1);
+	if (!(*cpp)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR missing string pointer",
+			__func__, __LINE__);
+		return (false);
+	}
+
+	size = strlen(*cpp);
+	if (size > maxsize) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR size %ul > max %u",
+			__func__, __LINE__,
+			size, maxsize);
+		return (false);
+	}
+
+	nodesize = (uint32_t)(size + 1);
+	if (nodesize < (size + 1)) {
+		/* caller provided very large maxsize */
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR overflow %ul",
+			__func__, __LINE__,
+			size);
+		return (false);
+	}
+
+	if (!XDR_PUTLONG(xdrs, &size)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR size",
+			__func__, __LINE__);
+		return (false);
+	}
+
+	return (xdr_opaque_encode(xdrs, *cpp, size));
+}
+
+static inline bool
+xdr_string_free(XDR *xdrs, char **cpp)
+{
+	if (*cpp) {
+		mem_free(*cpp, strlen(*cpp) + 1);
 		*cpp = NULL;
 		return (true);
 	}
-	/* NOTREACHED */
-	return (false);
+
+	/* normal for switch x_op, sometimes useful to track */
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s:%u already free",
+		__func__, __LINE__);
+	return (true);
 }
 
-/*
- * Wrapper for xdr_string that can be called directly from
- * routines like clnt_call
- */
 static inline bool
-inline_xdr_wrapstring(XDR *xdrs, char **cpp)
+xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 {
-	return inline_xdr_string(xdrs, cpp, RPC_MAXDATASIZE);
+	switch (xdrs->x_op) {
+	case XDR_DECODE:
+		return (xdr_string_decode(xdrs, cpp, maxsize));
+	case XDR_ENCODE:
+		return (xdr_string_encode(xdrs, cpp, maxsize));
+	case XDR_FREE:
+		return (xdr_string_free(xdrs, cpp));
+	}
+
+	__warnx(TIRPC_DEBUG_FLAG_ERROR,
+		"%s:%u ERROR xdrs->x_op (%u)",
+		__func__, __LINE__,
+		xdrs->x_op);
+	return (false);
 }
+#define inline_xdr_string xdr_string
 
 /*
  * NOTE: xdr_hyper(), xdr_u_hyper(), xdr_longlong_t(), and xdr_u_longlong_t()
