@@ -56,22 +56,6 @@ static void rejected(enum reject_stat, struct rpc_err *);
 extern struct opaque_auth _null_auth;
 
 /*
- * XDR an opaque authentication struct
- * (see auth.h)
- */
-bool
-xdr_opaque_auth(XDR *xdrs, struct opaque_auth *ap)
-{
-	assert(xdrs != NULL);
-	assert(ap != NULL);
-
-	if (inline_xdr_enum(xdrs, &(ap->oa_flavor)))
-		return (inline_xdr_opaques
-			(xdrs, ap->oa_body, &ap->oa_length, MAX_AUTH_BYTES));
-	return (false);
-}
-
-/*
  * XDR a DES block
  */
 bool
@@ -96,7 +80,7 @@ xdr_naccepted_reply(XDR *xdrs, struct accepted_reply *ar)
 	assert(ar != NULL);
 
 	/* personalized union, rather than calling xdr_union */
-	if (!inline_xdr_opaque_auth(xdrs, &(ar->ar_verf)))
+	if (!xdr_opaque_auth(xdrs, &(ar->ar_verf)))
 		return (false);
 	if (!inline_xdr_enum(xdrs, (enum_t *) &(ar->ar_stat)))
 		return (false);

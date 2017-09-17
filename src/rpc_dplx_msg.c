@@ -264,7 +264,7 @@ xdr_reply_decode(XDR *xdrs, struct rpc_msg *dmsg, int32_t *buf)
 		struct accepted_reply *ar = (struct accepted_reply *)
 						&(dmsg->rm_reply.ru);
 
-		if (!inline_auth_decode(xdrs, &ar->ar_verf, buf)) {
+		if (!xdr_opaque_auth_decode(xdrs, &ar->ar_verf, buf)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR (return)",
 				__func__, __LINE__);

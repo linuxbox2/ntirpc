@@ -228,7 +228,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_nrejected_reply;
     xdr_nreplymsg;
     xdr_opaque;
-    xdr_opaque_auth;
     xdr_pmap;
     xdr_pmaplist;
     xdr_pmaplist_ptr;

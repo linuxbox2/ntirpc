@@ -167,13 +167,13 @@ xdr_call_encode(XDR *xdrs, struct rpc_msg *cmsg)
 				cmsg->cb_proc);
 			return (false);
 		}
-		if (!inline_auth_encode(xdrs, &(cmsg->cb_cred))) {
+		if (!xdr_opaque_auth_encode(xdrs, &(cmsg->cb_cred))) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR (return)",
 				__func__, __LINE__);
 			return (false);
 		}
-		if (!inline_auth_encode(xdrs, &(cmsg->cb_verf))) {
+		if (!xdr_opaque_auth_encode(xdrs, &(cmsg->cb_verf))) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR (return)",
 				__func__, __LINE__);
@@ -234,7 +234,7 @@ xdr_call_decode(XDR *xdrs, struct rpc_msg *cmsg, int32_t *buf)
 	buf = XDR_INLINE(xdrs, 3 * BYTES_PER_XDR_UNIT);
 	if (buf != NULL) {
 		cmsg->cb_proc = IXDR_GET_U_INT32(buf);
-		if (!inline_auth_decode(xdrs, &(cmsg->cb_cred), buf)) {
+		if (!xdr_opaque_auth_decode(xdrs, &(cmsg->cb_cred), buf)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR (return)",
 				__func__, __LINE__);
@@ -245,14 +245,14 @@ xdr_call_decode(XDR *xdrs, struct rpc_msg *cmsg, int32_t *buf)
 			"%s:%u ERROR cb_proc",
 			__func__, __LINE__);
 		return (false);
-	} else if (!inline_auth_decode(xdrs, &(cmsg->cb_cred), NULL)) {
+	} else if (!xdr_opaque_auth_decode(xdrs, &(cmsg->cb_cred), NULL)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR (return)",
 			__func__, __LINE__);
 		return (false);
 	}
 
-	if (!inline_auth_decode(xdrs, &(cmsg->cb_verf), NULL)) {
+	if (!xdr_opaque_auth_decode(xdrs, &(cmsg->cb_verf), NULL)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR (return)",
 			__func__, __LINE__);

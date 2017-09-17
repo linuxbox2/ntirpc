@@ -302,8 +302,6 @@ __BEGIN_DECLS
 extern AUTH *authunix_ncreate(char *, uid_t, uid_t, int, uid_t *);
 extern AUTH *authunix_ncreate_default(void);	/* takes no parameters */
 extern AUTH *authnone_ncreate(void);	/* takes no parameters */
-
-extern bool xdr_opaque_auth(XDR *, struct opaque_auth *);
 __END_DECLS
 /*
  * Netname manipulation routines.
