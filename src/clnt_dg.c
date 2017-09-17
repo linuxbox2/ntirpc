@@ -315,6 +315,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	if (!rec->ev_p) {
 		xprt->xp_dispatch.rendezvous_cb = clnt_dg_rendezvous;
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+				    SVC_RQST_FLAG_LOCKED |
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
 	}
 	reply_msg.RPCM_ack.ar_verf = _null_auth;

@@ -205,16 +205,17 @@ svc_dg_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	/* Enable reception of IP*_PKTINFO control msgs */
 	svc_dg_enable_pktinfo(fd, &si);
 
-	/* release */
-	rpc_dplx_rui(rec);
-	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
-
 	/* Conditional register */
 	if ((!(__svc_params->flags & SVC_FLAG_NOREG_XPRTS)
 	     && !(flags & SVC_CREATE_FLAG_XPRT_NOREG))
 	    || (flags & SVC_CREATE_FLAG_XPRT_DOREG))
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+				    SVC_RQST_FLAG_LOCKED |
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
+
+	/* release */
+	rpc_dplx_rui(rec);
+	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
 
 #if defined(HAVE_BLKIN)
 	__rpc_set_blkin_endpoint(xprt, "svc_dg");

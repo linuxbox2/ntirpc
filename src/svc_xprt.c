@@ -204,7 +204,7 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
  *
  * @note Locking
  * - xprt is locked
- *   returned unlocked
+ *   returned locked
  */
 void
 svc_xprt_clear(SVCXPRT *xprt)
@@ -214,8 +214,6 @@ svc_xprt_clear(SVCXPRT *xprt)
 	if (svc_xprt_init_failure())
 		return;
 
-	rpc_dplx_rli(REC_XPRT(xprt));
-
 	if (opr_rbtree_node_valid(&REC_XPRT(xprt)->fd_node)) {
 		t = rbtx_partition_of_scalar(&svc_xprt_fd.xt, xprt->xp_fd);
 
@@ -223,8 +221,6 @@ svc_xprt_clear(SVCXPRT *xprt)
 		opr_rbtree_remove(&t->t, &REC_XPRT(xprt)->fd_node);
 		rwlock_unlock(&t->lock);
 	}
-
-	rpc_dplx_rui(REC_XPRT(xprt));
 }
 
 int
