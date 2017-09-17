@@ -444,63 +444,6 @@ xdr_enum(XDR *xdrs, enum_t *ep)
 }
 
 /*
- * XDR counted bytes
- * *cpp is a pointer to the bytes, *sizep is the count.
- * If *cpp is NULL maxsize bytes are allocated
- */
-bool
-xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
-{
-	char *sp = *cpp;	/* sp is the actual string pointer */
-	u_int nodesize;
-	bool ret, allocated = false;
-
-	/*
-	 * first deal with the length since xdr bytes are counted
-	 */
-	if (!xdr_u_int(xdrs, sizep))
-		return (false);
-
-	nodesize = *sizep;
-	if ((nodesize > maxsize) && (xdrs->x_op != XDR_FREE))
-		return (false);
-
-	/*
-	 * now deal with the actual bytes
-	 */
-	switch (xdrs->x_op) {
-
-	case XDR_DECODE:
-		if (nodesize == 0)
-			return (true);
-		if (sp == NULL) {
-			*cpp = sp = mem_alloc(nodesize);
-			allocated = true;
-		}
-		/* FALLTHROUGH */
-
-	case XDR_ENCODE:
-		ret = xdr_opaque(xdrs, sp, nodesize);
-		if ((xdrs->x_op == XDR_DECODE) && (ret == false)) {
-			if (allocated) {
-				mem_free(sp, nodesize);
-				*cpp = NULL;
-			}
-		}
-		return (ret);
-
-	case XDR_FREE:
-		if (sp != NULL) {
-			mem_free(sp, nodesize);
-			*cpp = NULL;
-		}
-		return (true);
-	}
-	/* NOTREACHED */
-	return (false);
-}
-
-/*
  * Implemented here due to commonality of the object.
  */
 bool

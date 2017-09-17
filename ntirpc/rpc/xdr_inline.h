@@ -573,52 +573,117 @@ xdr_opaques(XDR *xdrs, char *sp, u_int *sizep, u_int maxsize)
  * If *cpp is NULL maxsize bytes are allocated
  */
 static inline bool
-inline_xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep,
-		 u_int maxsize)
+xdr_bytes_decode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 {
 	char *sp = *cpp;	/* sp is the actual string pointer */
-	u_int nodesize;
+	u_long size;
 	bool ret;
 
 	/*
 	 * first deal with the length since xdr bytes are counted
 	 */
-	if (!inline_xdr_u_int(xdrs, sizep))
+	if (!XDR_GETLONG(xdrs, &size)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR size",
+			__func__, __LINE__);
 		return (false);
-	nodesize = *sizep;
-	if ((nodesize > maxsize) && (xdrs->x_op != XDR_FREE))
+	}
+	if (size > maxsize) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR size %ul > max %u",
+			__func__, __LINE__,
+			size, maxsize);
 		return (false);
+	}
+	*sizep = (u_int)size;		/* only valid size */
 
 	/*
 	 * now deal with the actual bytes
 	 */
-	switch (xdrs->x_op) {
+	if (!size)
+		return (true);
+	if (!sp)
+		sp = (char *)mem_alloc(size);
 
-	case XDR_DECODE:
-		if (nodesize == 0)
-			return (true);
-		if (sp == NULL)
-			*cpp = sp = (char *)mem_alloc(nodesize);
-		ret = xdr_opaque_decode(xdrs, sp, nodesize);
-		if (! ret) {
-			mem_free(sp, -1);
-			*cpp = NULL;
-		}
+	ret = xdr_opaque_decode(xdrs, sp, size);
+	if (!ret) {
+		mem_free(sp, size);
 		return (ret);
+	}
+	*cpp = sp;			/* only valid pointer */
+	return (ret);
+}
 
-	case XDR_ENCODE:
-		return (xdr_opaque_encode(xdrs, sp, nodesize));
+static inline bool
+xdr_bytes_encode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
+{
+	char *sp = *cpp;	/* sp is the actual string pointer */
+	u_long size = *sizep;
+	u_int nodesize;
 
-	case XDR_FREE:
-		if (sp != NULL) {
-			mem_free(sp, -1);
-			*cpp = NULL;
-		}
+	if (size > maxsize) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR size %ul > max %u",
+			__func__, __LINE__,
+			size, maxsize);
+		return (false);
+	}
+
+	nodesize = (uint32_t)size;
+	if (nodesize < size) {
+		/* caller provided very large maxsize */
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR overflow %ul",
+			__func__, __LINE__,
+			size);
+		return (false);
+	}
+
+	if (!XDR_PUTLONG(xdrs, &size)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR size",
+			__func__, __LINE__);
+		return (false);
+	}
+
+	return (xdr_opaque_encode(xdrs, sp, nodesize));
+}
+
+static inline bool
+xdr_bytes_free(XDR *xdrs, char **cpp, size_t size)
+{
+	if (*cpp) {
+		mem_free(*cpp, size);
+		*cpp = NULL;
 		return (true);
 	}
-	/* NOTREACHED */
+
+	/* normal for switch x_op, sometimes useful to track */
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s:%u already free",
+		__func__, __LINE__);
+	return (true);
+}
+
+static inline bool
+xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
+{
+	switch (xdrs->x_op) {
+	case XDR_DECODE:
+		return (xdr_bytes_decode(xdrs, cpp, sizep, maxsize));
+	case XDR_ENCODE:
+		return (xdr_bytes_encode(xdrs, cpp, sizep, maxsize));
+	case XDR_FREE:
+		return (xdr_bytes_free(xdrs, cpp, *sizep));
+	}
+
+	__warnx(TIRPC_DEBUG_FLAG_ERROR,
+		"%s:%u ERROR xdrs->x_op (%u)",
+		__func__, __LINE__,
+		xdrs->x_op);
 	return (false);
 }
+#define inline_xdr_bytes xdr_bytes
 
 /*
  * XDR a descriminated union

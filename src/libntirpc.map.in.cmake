@@ -202,7 +202,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_array;
     xdr_authunix_parms;
     xdr_bool;
-    xdr_bytes;
     xdr_call_decode;
     xdr_call_encode;
     xdr_char;

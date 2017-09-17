@@ -59,8 +59,8 @@ xdr_rpc_gss_encode(XDR *xdrs, gss_buffer_t buf, u_int maxsize)
 	if (buf->length > UINT_MAX)
 		return FALSE;
 
-	xdr_stat =
-	    inline_xdr_bytes(xdrs, (char **)&buf->value, &tmplen, maxsize);
+	xdr_stat = xdr_bytes_encode(xdrs, (char **)&buf->value, &tmplen,
+					   maxsize);
 
 	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s() %s (%p:%d)",
 		__func__,
@@ -76,8 +76,8 @@ xdr_rpc_gss_decode(XDR *xdrs, gss_buffer_t buf)
 	u_int tmplen = 0;
 	bool xdr_stat;
 
-	xdr_stat =
-	    inline_xdr_bytes(xdrs, (char **)&buf->value, &tmplen, UINT_MAX);
+	xdr_stat = xdr_bytes_decode(xdrs, (char **)&buf->value, &tmplen,
+					   UINT_MAX);
 
 	if (xdr_stat)
 		buf->length = tmplen;
