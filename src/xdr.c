@@ -59,11 +59,6 @@ typedef u_quad_t u_longlong_t;	/* ANSI unsigned long long type */
 #define RPC_MAXDATASIZE 9000
 
 /*
- * for unit alignment
- */
-static const char xdr_zero[BYTES_PER_XDR_UNIT] = { 0, 0, 0, 0 };
-
-/*
  * for cleanup
  */
 XDR xdr_free_null_stream = {
@@ -446,52 +441,6 @@ xdr_enum(XDR *xdrs, enum_t *ep)
 	} else {
 		return (false);
 	}
-}
-
-/*
- * XDR opaque data
- * Allows the specification of a fixed size sequence of opaque bytes.
- * cp points to the opaque object and cnt gives the byte length.
- */
-bool
-xdr_opaque(XDR *xdrs, caddr_t cp, u_int cnt)
-{
-	u_int rndup;
-	static int crud[BYTES_PER_XDR_UNIT];
-
-	/*
-	 * if no data we are done
-	 */
-	if (cnt == 0)
-		return (true);
-
-	/*
-	 * round byte count to full xdr units
-	 */
-	rndup = cnt % BYTES_PER_XDR_UNIT;
-	if (rndup > 0)
-		rndup = BYTES_PER_XDR_UNIT - rndup;
-
-	if (xdrs->x_op == XDR_DECODE) {
-		if (!XDR_GETBYTES(xdrs, cp, cnt))
-			return (false);
-		if (rndup == 0)
-			return (true);
-		return (XDR_GETBYTES(xdrs, (caddr_t) (void *)crud, rndup));
-	}
-
-	if (xdrs->x_op == XDR_ENCODE) {
-		if (!XDR_PUTBYTES(xdrs, cp, cnt))
-			return (false);
-		if (rndup == 0)
-			return (true);
-		return (XDR_PUTBYTES(xdrs, xdr_zero, rndup));
-	}
-
-	if (xdrs->x_op == XDR_FREE)
-		return (true);
-
-	return (false);
 }
 
 /*

@@ -227,7 +227,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_nnetobj;
     xdr_nrejected_reply;
     xdr_nreplymsg;
-    xdr_opaque;
     xdr_pmap;
     xdr_pmaplist;
     xdr_pmaplist_ptr;

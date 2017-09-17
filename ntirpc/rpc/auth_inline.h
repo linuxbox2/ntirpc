@@ -65,7 +65,7 @@ xdr_opaque_auth_encode_it(XDR *xdrs, struct opaque_auth *oa)
 		return (false);
 	}
 
-	return (inline_xdr_putopaque(xdrs, oa->oa_body, oa->oa_length));
+	return (xdr_opaque_encode(xdrs, oa->oa_body, oa->oa_length));
 }
 
 /*
@@ -114,7 +114,7 @@ xdr_opaque_auth_decode_it(XDR *xdrs, struct opaque_auth *oa)
 		return (false);
 	}
 
-	return (inline_xdr_getopaque(xdrs, oa->oa_body, oa->oa_length));
+	return (xdr_opaque_decode(xdrs, oa->oa_body, oa->oa_length));
 }
 
 /*

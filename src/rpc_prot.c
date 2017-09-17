@@ -64,8 +64,7 @@ xdr_des_block(XDR *xdrs, des_block *blkp)
 	assert(xdrs != NULL);
 	assert(blkp != NULL);
 
-	return (inline_xdr_opaque
-		(xdrs, (caddr_t) (void *)blkp, sizeof(des_block)));
+	return (xdr_opaque(xdrs, (caddr_t) (void *)blkp, sizeof(des_block)));
 }
 
 /* * * * * * * * * * * * * * XDR RPC MESSAGE * * * * * * * * * * * * * * * */

@@ -421,7 +421,7 @@ inline_xdr_enum(XDR *xdrs, enum_t *ep)
  * cp points to the opaque object and cnt gives the byte length.
  */
 static inline bool
-inline_xdr_getopaque(XDR *xdrs, caddr_t cp, u_int cnt)
+xdr_opaque_decode(XDR *xdrs, char *cp, u_int cnt)
 {
 	u_int rndup;
 
@@ -468,7 +468,7 @@ inline_xdr_getopaque(XDR *xdrs, caddr_t cp, u_int cnt)
  * cp points to the opaque object and cnt gives the byte length.
  */
 static inline bool
-inline_xdr_putopaque(XDR *xdrs, caddr_t cp, u_int cnt)
+xdr_opaque_encode(XDR *xdrs, const char *cp, u_int cnt)
 {
 	u_int rndup;
 
@@ -515,16 +515,16 @@ inline_xdr_putopaque(XDR *xdrs, caddr_t cp, u_int cnt)
  * cp points to the opaque object and cnt gives the byte length.
  */
 static inline bool
-inline_xdr_opaque(XDR *xdrs, caddr_t cp, u_int cnt)
+xdr_opaque(XDR *xdrs, caddr_t cp, u_int cnt)
 {
-	if (xdrs->x_op == XDR_DECODE)
-		return (inline_xdr_getopaque(xdrs, cp, cnt));
-
-	if (xdrs->x_op == XDR_ENCODE)
-		return (inline_xdr_putopaque(xdrs, cp, cnt));
-
-	if (xdrs->x_op == XDR_FREE)
+	switch (xdrs->x_op) {
+	case XDR_DECODE:
+		return (xdr_opaque_decode(xdrs, cp, cnt));
+	case XDR_ENCODE:
+		return (xdr_opaque_encode(xdrs, cp, cnt));
+	case XDR_FREE:
 		return (true);
+	}
 
 	__warnx(TIRPC_DEBUG_FLAG_ERROR,
 		"%s:%u ERROR xdrs->x_op (%u)",
@@ -538,7 +538,7 @@ inline_xdr_opaque(XDR *xdrs, caddr_t cp, u_int cnt)
  * *sp is a pointer to the bytes, *sizep is the count.
  */
 static inline bool
-inline_xdr_opaques(XDR *xdrs, char *sp, u_int *sizep, u_int maxsize)
+xdr_opaques(XDR *xdrs, char *sp, u_int *sizep, u_int maxsize)
 {
 	u_int nodesize;
 
@@ -556,15 +556,10 @@ inline_xdr_opaques(XDR *xdrs, char *sp, u_int *sizep, u_int maxsize)
 	 * now deal with the actual bytes
 	 */
 	switch (xdrs->x_op) {
-
 	case XDR_DECODE:
-		if (nodesize == 0)
-			return (true);
-		return (inline_xdr_getopaque(xdrs, sp, nodesize));
-
+		return (xdr_opaque_decode(xdrs, sp, nodesize));
 	case XDR_ENCODE:
-		return (inline_xdr_putopaque(xdrs, sp, nodesize));
-
+		return (xdr_opaque_encode(xdrs, sp, nodesize));
 	case XDR_FREE:
 		return (true);
 	}
@@ -604,7 +599,7 @@ inline_xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep,
 			return (true);
 		if (sp == NULL)
 			*cpp = sp = (char *)mem_alloc(nodesize);
-		ret = inline_xdr_getopaque(xdrs, sp, nodesize);
+		ret = xdr_opaque_decode(xdrs, sp, nodesize);
 		if (! ret) {
 			mem_free(sp, -1);
 			*cpp = NULL;
@@ -612,7 +607,7 @@ inline_xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep,
 		return (ret);
 
 	case XDR_ENCODE:
-		return (inline_xdr_putopaque(xdrs, sp, nodesize));
+		return (xdr_opaque_encode(xdrs, sp, nodesize));
 
 	case XDR_FREE:
 		if (sp != NULL) {
@@ -726,7 +721,7 @@ inline_xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 	case XDR_DECODE:
 		if (sp == NULL)
 			*cpp = sp = (char *)mem_alloc(nodesize);
-		ret = inline_xdr_getopaque(xdrs, sp, size);
+		ret = xdr_opaque_decode(xdrs, sp, size);
 		if (! ret) {
 			mem_free(sp, -1);
 			*cpp = NULL;
@@ -735,7 +730,7 @@ inline_xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 		return (ret);
 
 	case XDR_ENCODE:
-		return (inline_xdr_putopaque(xdrs, sp, size));
+		return (xdr_opaque_encode(xdrs, sp, size));
 
 	case XDR_FREE:
 		mem_free(sp, -1);
