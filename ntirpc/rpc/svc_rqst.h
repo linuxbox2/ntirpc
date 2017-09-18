@@ -50,6 +50,7 @@
 
 #define SVC_RQST_FLAG_NONE		SVC_XPRT_FLAG_NONE
 /* uint16_t actually used */
+#define SVC_RQST_FLAG_SHUTDOWN		SVC_XPRT_FLAG_DESTROYING
 #define SVC_RQST_FLAG_XPRT_UREG		SVC_XPRT_FLAG_UREG
 #define SVC_RQST_FLAG_CHAN_AFFINITY	0x1000 /* bind conn to parent chan */
 #define SVC_RQST_FLAG_MASK (SVC_RQST_FLAG_CHAN_AFFINITY)
@@ -73,7 +74,5 @@ typedef void (*svc_rqst_xprt_each_func_t) (uint32_t chan_id, SVCXPRT *xprt,
 int svc_rqst_foreach_xprt(uint32_t chan_id, svc_rqst_xprt_each_func_t each_f,
 			  void *arg);
 
-#define SVC_RQST_SIGNAL_SHUTDOWN      0x00008	/* chan shutdown */
-#define SVC_RQST_SIGNAL_MASK (SVC_RQST_SIGNAL_SHUTDOWN)
 
 #endif				/* TIRPC_SVC_RQST_H */
