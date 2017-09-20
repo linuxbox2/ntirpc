@@ -59,11 +59,6 @@ typedef u_quad_t u_longlong_t;	/* ANSI unsigned long long type */
 #define RPC_MAXDATASIZE 9000
 
 /*
- * for unit alignment
- */
-static const char xdr_zero[BYTES_PER_XDR_UNIT] = { 0, 0, 0, 0 };
-
-/*
  * for cleanup
  */
 XDR xdr_free_null_stream = {
@@ -449,109 +444,6 @@ xdr_enum(XDR *xdrs, enum_t *ep)
 }
 
 /*
- * XDR opaque data
- * Allows the specification of a fixed size sequence of opaque bytes.
- * cp points to the opaque object and cnt gives the byte length.
- */
-bool
-xdr_opaque(XDR *xdrs, caddr_t cp, u_int cnt)
-{
-	u_int rndup;
-	static int crud[BYTES_PER_XDR_UNIT];
-
-	/*
-	 * if no data we are done
-	 */
-	if (cnt == 0)
-		return (true);
-
-	/*
-	 * round byte count to full xdr units
-	 */
-	rndup = cnt % BYTES_PER_XDR_UNIT;
-	if (rndup > 0)
-		rndup = BYTES_PER_XDR_UNIT - rndup;
-
-	if (xdrs->x_op == XDR_DECODE) {
-		if (!XDR_GETBYTES(xdrs, cp, cnt))
-			return (false);
-		if (rndup == 0)
-			return (true);
-		return (XDR_GETBYTES(xdrs, (caddr_t) (void *)crud, rndup));
-	}
-
-	if (xdrs->x_op == XDR_ENCODE) {
-		if (!XDR_PUTBYTES(xdrs, cp, cnt))
-			return (false);
-		if (rndup == 0)
-			return (true);
-		return (XDR_PUTBYTES(xdrs, xdr_zero, rndup));
-	}
-
-	if (xdrs->x_op == XDR_FREE)
-		return (true);
-
-	return (false);
-}
-
-/*
- * XDR counted bytes
- * *cpp is a pointer to the bytes, *sizep is the count.
- * If *cpp is NULL maxsize bytes are allocated
- */
-bool
-xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
-{
-	char *sp = *cpp;	/* sp is the actual string pointer */
-	u_int nodesize;
-	bool ret, allocated = false;
-
-	/*
-	 * first deal with the length since xdr bytes are counted
-	 */
-	if (!xdr_u_int(xdrs, sizep))
-		return (false);
-
-	nodesize = *sizep;
-	if ((nodesize > maxsize) && (xdrs->x_op != XDR_FREE))
-		return (false);
-
-	/*
-	 * now deal with the actual bytes
-	 */
-	switch (xdrs->x_op) {
-
-	case XDR_DECODE:
-		if (nodesize == 0)
-			return (true);
-		if (sp == NULL) {
-			*cpp = sp = mem_alloc(nodesize);
-			allocated = true;
-		}
-		/* FALLTHROUGH */
-
-	case XDR_ENCODE:
-		ret = xdr_opaque(xdrs, sp, nodesize);
-		if ((xdrs->x_op == XDR_DECODE) && (ret == false)) {
-			if (allocated) {
-				mem_free(sp, nodesize);
-				*cpp = NULL;
-			}
-		}
-		return (ret);
-
-	case XDR_FREE:
-		if (sp != NULL) {
-			mem_free(sp, nodesize);
-			*cpp = NULL;
-		}
-		return (true);
-	}
-	/* NOTREACHED */
-	return (false);
-}
-
-/*
  * Implemented here due to commonality of the object.
  */
 bool
@@ -606,83 +498,6 @@ xdr_union(XDR  *xdrs, enum_t *dscmp, /* enum to decide which arm to work on */
  * Non-portable xdr primitives.
  * Care should be taken when moving these routines to new architectures.
  */
-
-/*
- * XDR null terminated ASCII strings
- * xdr_string deals with "C strings" - arrays of bytes that are
- * terminated by a NULL character.  The parameter cpp references a
- * pointer to storage; If the pointer is null, then the necessary
- * storage is allocated.  The last parameter is the max allowed length
- * of the string as specified by a protocol.
- */
-bool
-xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
-{
-	char *sp = *cpp;	/* sp is the actual string pointer */
-	u_int size = 0;
-	u_int nodesize;
-	bool ret, allocated = false;
-
-	/*
-	 * first deal with the length since xdr strings are counted-strings
-	 */
-	switch (xdrs->x_op) {
-	case XDR_FREE:
-		if (sp == NULL)
-			return (true);	/* already free */
-		/* FALLTHROUGH */
-	case XDR_ENCODE:
-		if (sp == NULL)
-			return false;
-		size = strlen(sp);
-		break;
-	case XDR_DECODE:
-		break;
-	}
-	if (!xdr_u_int(xdrs, &size))
-		return (false);
-	if (size > maxsize)
-		return (false);
-	nodesize = size + 1;
-	if (nodesize == 0) {
-		/* This means an overflow.  It a bug in the caller which
-		 * provided a too large maxsize but nevertheless catch it
-		 * here.
-		 */
-		return false;
-	}
-
-	/*
-	 * now deal with the actual bytes
-	 */
-	switch (xdrs->x_op) {
-
-	case XDR_DECODE:
-		if (sp == NULL) {
-			*cpp = sp = mem_alloc(nodesize);
-			allocated = true;
-		}
-		sp[size] = 0;
-		/* FALLTHROUGH */
-
-	case XDR_ENCODE:
-		ret = xdr_opaque(xdrs, sp, size);
-		if ((xdrs->x_op == XDR_DECODE) && (ret == false)) {
-			if (allocated) {
-				mem_free(sp, nodesize);
-				*cpp = NULL;
-			}
-		}
-		return (ret);
-
-	case XDR_FREE:
-		mem_free(sp, nodesize);
-		*cpp = NULL;
-		return (true);
-	}
-	/* NOTREACHED */
-	return (false);
-}
 
 /*
  * Wrapper for xdr_string that can be called directly from

@@ -846,7 +846,7 @@ xdr_rdma_encode_error(struct xdr_ioq_uv *call_uv, enum rpcrdma_errcode err)
 	case RDMA_ERR_BADHEADER:
 		break;
 	}
-	call_uv->v.vio_tail = va;
+	call_uv->v.vio_tail = (uint8_t *)va;
 }
 
 #ifdef UNUSED

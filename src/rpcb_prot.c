@@ -40,7 +40,7 @@
 #include <config.h>
 #include <rpc/rpc.h>
 #include <rpc/types.h>
-#include <rpc/xdr.h>
+#include <rpc/xdr_inline.h>
 #include <rpc/rpcb_prot.h>
 
 bool

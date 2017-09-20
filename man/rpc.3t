@@ -257,7 +257,7 @@ typedef  bool_t (*xdrproc_t)();
  */
 typedef struct {
     enum xdr_op    x_op;    /* operation; fast additional param */
-    struct xdr_ops {
+    const struct xdr_ops {
         bool_t    (*x_getlong)();    /* get a long from underlying stream */
         bool_t    (*x_putlong)();    /* put a long to underlying stream */
         bool_t    (*x_getbytes)(); /* get bytes from underlying stream */
@@ -267,10 +267,14 @@ typedef struct {
         long *    (*x_inline)();    /* buf quick ptr to buffered data */
         void    (*x_destroy)();    /* free privates of this xdr_stream */
     } *x_ops;
-    caddr_t    x_public;    /* users' data */
-    caddr_t    x_private;    /* pointer to private data */
-    caddr_t    x_base;    /* private used for position info */
-    u_int    x_handy;    /* extra private word */
+    void *x_public; /* users' data */
+    void *x_private; /* pointer to private data */
+    void *x_lib[2]; /* RPC library private */
+    uint8_t *x_data;  /* private used for position inline */
+    void *x_base;  /* private used for position info */
+    struct xdr_vio x_v; /* private buffer vector */
+    u_int x_handy; /* extra private word */
+    u_int x_flags; /* shared flags */
 } XDR;
 
 /*

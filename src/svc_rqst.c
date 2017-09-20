@@ -653,13 +653,13 @@ svc_rqst_xprt_task(struct work_pool_entry *wpe)
 	struct rpc_dplx_rec *rec =
 			opr_containerof(wpe, struct rpc_dplx_rec, ioq.ioq_wpe);
 
+	atomic_clear_uint16_t_bits(&rec->ioq.ioq_s.qflags, IOQ_FLAG_WORKING);
+
 	if (rec->xprt.xp_refs > 1
 	 && !(rec->xprt.xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
 		/* (idempotent) xp_flags and xp_refs are set atomic.
 		 * xp_refs need more than 1 (this task).
 		 */
-		atomic_clear_uint16_t_bits(&rec->ioq.ioq_s.qflags,
-					   IOQ_FLAG_WORKING);
 		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &(rec->recv.ts));
 		(void)SVC_RECV(&rec->xprt);
 	}

@@ -57,6 +57,7 @@
 #include <rpc/xdr.h>
 #include <rpc/clnt.h>
 #include <rpc/auth.h>
+#include <rpc/auth_inline.h>
 #include <rpc/auth_unix.h>
 
 /* auth_unix.c */
@@ -251,7 +252,7 @@ authunix_validate(AUTH *auth, struct opaque_auth *verf)
 		xdrmem_create(&xdrs, verf->oa_body, verf->oa_length,
 			      XDR_DECODE);
 
-		if (xdr_opaque_auth(&xdrs, &au->au_shcred)) {
+		if (xdr_opaque_auth_decode(&xdrs, &au->au_shcred, NULL)) {
 			auth->ah_cred = au->au_shcred;
 		} else {
 			auth->ah_cred = au->au_origcred;
@@ -330,8 +331,8 @@ marshal_new_auth(AUTH *auth)
 
 	au = AUTH_PRIVATE(auth);
 	xdrmem_create(xdrs, au->au_marshed, MAX_AUTH_BYTES, XDR_ENCODE);
-	if ((!xdr_opaque_auth(xdrs, &(auth->ah_cred)))
-	    || (!xdr_opaque_auth(xdrs, &(auth->ah_verf))))
+	if ((!xdr_opaque_auth_encode(xdrs, &(auth->ah_cred)))
+	    || (!xdr_opaque_auth_encode(xdrs, &(auth->ah_verf))))
 		__warnx(TIRPC_DEBUG_FLAG_AUTH,
 			"auth_none.c - Fatal marshalling " "problem");
 	else
