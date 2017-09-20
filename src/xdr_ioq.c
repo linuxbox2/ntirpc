@@ -352,7 +352,7 @@ xdr_ioq_uv_append(struct xdr_ioq *xioq, u_int ioq_flags)
 		/* XXX workaround for lack of segmented buffer
 		 * interfaces in some callers (e.g, GSS_WRAP) */
 		if (uv->u.uio_flags & UIO_FLAG_REALLOC) {
-			void *base;
+			uint8_t *base;
 			size_t size = ioquv_size(uv);
 			size_t delta = xdr_tail_inline(xioq->xdrs);
 			size_t len = ioquv_length(uv);
@@ -394,7 +394,7 @@ static bool
 xdr_ioq_getlong(XDR *xdrs, long *lp)
 {
 	struct xdr_ioq_uv *uv;
-	void *future = xdrs->x_data + sizeof(uint32_t);
+	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
 
 	while (future > xdrs->x_v.vio_tail) {
 		if (unlikely(xdrs->x_data != xdrs->x_v.vio_tail)) {
@@ -423,7 +423,7 @@ static bool
 xdr_ioq_putlong(XDR *xdrs, const long *lp)
 {
 	struct xdr_ioq_uv *uv;
-	void *future = xdrs->x_data + sizeof(uint32_t);
+	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
 
 	while (future > xdrs->x_v.vio_wrap) {
 		/* advance fill pointer, skipping unaligned */
@@ -689,7 +689,7 @@ xdr_ioq_inline(XDR *xdrs, u_int len)
 {
 	/* bugfix:  return fill pointer, not head! */
 	int32_t *buf = (int32_t *)xdrs->x_data;
-	void *future = xdrs->x_data + len;
+	uint8_t *future = xdrs->x_data + len;
 
 	/* bugfix: do not move fill position beyond tail or wrap */
 	switch (xdrs->x_op) {

@@ -53,7 +53,7 @@
  * encode auth opaque
  */
 static inline bool
-inline_auth_encode_opaque(XDR *xdrs, struct opaque_auth *oa)
+xdr_opaque_auth_encode_it(XDR *xdrs, struct opaque_auth *oa)
 {
 	if (oa->oa_length > MAX_AUTH_BYTES) {
 		/* duplicate test, usually done earlier by caller */
@@ -65,14 +65,14 @@ inline_auth_encode_opaque(XDR *xdrs, struct opaque_auth *oa)
 		return (false);
 	}
 
-	return (inline_xdr_putopaque(xdrs, oa->oa_body, oa->oa_length));
+	return (xdr_opaque_encode(xdrs, oa->oa_body, oa->oa_length));
 }
 
 /*
  * encode an auth message
  */
 static inline bool
-inline_auth_encode(XDR *xdrs, struct opaque_auth *oa)
+xdr_opaque_auth_encode(XDR *xdrs, struct opaque_auth *oa)
 {
 	/*
 	 * XDR_INLINE is just as likely to do a function call,
@@ -93,7 +93,7 @@ inline_auth_encode(XDR *xdrs, struct opaque_auth *oa)
 
 	if (oa->oa_length) {
 		/* only call and alloc for > 0 length */
-		return (inline_auth_encode_opaque(xdrs, oa));
+		return (xdr_opaque_auth_encode_it(xdrs, oa));
 	}
 	return (true);	/* 0 length succeeds */
 }
@@ -102,7 +102,7 @@ inline_auth_encode(XDR *xdrs, struct opaque_auth *oa)
  * decode auth opaque
  */
 static inline bool
-inline_auth_decode_opaque(XDR *xdrs, struct opaque_auth *oa)
+xdr_opaque_auth_decode_it(XDR *xdrs, struct opaque_auth *oa)
 {
 	if (oa->oa_length > MAX_AUTH_BYTES) {
 		/* duplicate test, usually done earlier by caller */
@@ -114,7 +114,7 @@ inline_auth_decode_opaque(XDR *xdrs, struct opaque_auth *oa)
 		return (false);
 	}
 
-	return (inline_xdr_getopaque(xdrs, oa->oa_body, oa->oa_length));
+	return (xdr_opaque_decode(xdrs, oa->oa_body, oa->oa_length));
 }
 
 /*
@@ -123,7 +123,7 @@ inline_auth_decode_opaque(XDR *xdrs, struct opaque_auth *oa)
  * param[IN]	buf	2 more inline
  */
 static inline bool
-inline_auth_decode(XDR *xdrs, struct opaque_auth *oa, int32_t *buf)
+xdr_opaque_auth_decode(XDR *xdrs, struct opaque_auth *oa, int32_t *buf)
 {
 	if (buf != NULL) {
 		oa->oa_flavor = IXDR_GET_ENUM(buf, enum_t);
@@ -142,33 +142,24 @@ inline_auth_decode(XDR *xdrs, struct opaque_auth *oa, int32_t *buf)
 
 	if (oa->oa_length) {
 		/* only call and alloc for > 0 length */
-		return inline_auth_decode_opaque(xdrs, oa);
+		return xdr_opaque_auth_decode_it(xdrs, oa);
 	}
 	return (true);	/* 0 length succeeds */
-}
-
-/*
- * free an auth message
- */
-static inline bool
-inline_auth_free(XDR *xdrs, struct opaque_auth *oa)
-{
-	return (true);
 }
 
 /*
  * XDR an auth message
  */
 static inline bool
-inline_xdr_opaque_auth(XDR *xdrs, struct opaque_auth *oa)
+xdr_opaque_auth(XDR *xdrs, struct opaque_auth *oa)
 {
 	switch (xdrs->x_op) {
 	case XDR_ENCODE:
-		return (inline_auth_encode(xdrs, oa));
+		return (xdr_opaque_auth_encode(xdrs, oa));
 	case XDR_DECODE:
-		return (inline_auth_decode(xdrs, oa, NULL));
+		return (xdr_opaque_auth_decode(xdrs, oa, NULL));
 	case XDR_FREE:
-		return (inline_auth_free(xdrs, oa));
+		return (true);
 	default:
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR xdrs->x_op (%u)",

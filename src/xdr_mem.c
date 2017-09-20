@@ -70,6 +70,7 @@ xdrmem_ncreate(XDR *xdrs, char *addr, u_int size, enum xdr_op op)
 	xdrs->x_op = op;
 	if ((uintptr_t)addr & (sizeof(int32_t) - 1)) {
 		xdrs->x_ops = &xdrmem_ops_unaligned;
+		abort();
 	} else {
 		xdrs->x_ops = &xdrmem_ops_aligned;
 		xdrs->x_flags = XDR_FLAG_VIO;
@@ -99,7 +100,7 @@ xdrmem_ncreate(XDR *xdrs, char *addr, u_int size, enum xdr_op op)
 static bool
 xdrmem_getlong_aligned(XDR *xdrs, long *lp)
 {
-	void *future = xdrs->x_data + sizeof(uint32_t);
+	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
 
 	if (future > xdrs->x_v.vio_tail)
 		return (false);
@@ -111,7 +112,7 @@ xdrmem_getlong_aligned(XDR *xdrs, long *lp)
 static bool
 xdrmem_putlong_aligned(XDR *xdrs, const long *lp)
 {
-	void *future = xdrs->x_data + sizeof(uint32_t);
+	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
 
 	if (future > xdrs->x_v.vio_wrap)
 		return (false);
@@ -129,7 +130,7 @@ static bool
 xdrmem_getlong_unaligned(XDR *xdrs, long *lp)
 {
 	u_int32_t l;
-	void *future = xdrs->x_data + sizeof(uint32_t);
+	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
 
 	if (future > xdrs->x_v.vio_tail)
 		return (false);
@@ -143,7 +144,7 @@ static bool
 xdrmem_putlong_unaligned(XDR *xdrs, const long *lp)
 {
 	u_int32_t l;
-	void *future = xdrs->x_data + sizeof(uint32_t);
+	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
 
 	if (future > xdrs->x_v.vio_wrap)
 		return (false);
@@ -156,7 +157,7 @@ xdrmem_putlong_unaligned(XDR *xdrs, const long *lp)
 static bool
 xdrmem_getbytes(XDR *xdrs, char *addr, u_int len)
 {
-	void *future = xdrs->x_data + len;
+	uint8_t *future = xdrs->x_data + len;
 
 	if (future > xdrs->x_v.vio_tail)
 		return (false);
@@ -168,7 +169,7 @@ xdrmem_getbytes(XDR *xdrs, char *addr, u_int len)
 static bool
 xdrmem_putbytes(XDR *xdrs, const char *addr, u_int len)
 {
-	void *future = xdrs->x_data + len;
+	uint8_t *future = xdrs->x_data + len;
 
 	if (future > xdrs->x_v.vio_wrap)
 		return (false);
@@ -189,14 +190,14 @@ xdrmem_getpos(XDR *xdrs)
 static bool
 xdrmem_setpos(XDR *xdrs, u_int pos)
 {
-	void *newaddr = xdrs->x_v.vio_head + pos;
+	uint8_t *future = xdrs->x_v.vio_head + pos;
 
 	/* update the most recent data length, just in case */
 	xdr_tail_update(xdrs);
 
-	if (newaddr > xdrs->x_v.vio_wrap)
+	if (future > xdrs->x_v.vio_wrap)
 		return (false);
-	xdrs->x_data = newaddr;
+	xdrs->x_data = future;
 	return (true);
 }
 
@@ -204,7 +205,7 @@ static int32_t *
 xdrmem_inline_aligned(XDR *xdrs, u_int len)
 {
 	int32_t *buf = (int32_t *)xdrs->x_data;
-	void *future = xdrs->x_data + len;
+	uint8_t *future = xdrs->x_data + len;
 
 	switch (xdrs->x_op) {
 	case XDR_ENCODE:

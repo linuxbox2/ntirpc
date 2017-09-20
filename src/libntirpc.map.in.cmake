@@ -202,7 +202,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_array;
     xdr_authunix_parms;
     xdr_bool;
-    xdr_bytes;
     xdr_call_decode;
     xdr_call_encode;
     xdr_char;
@@ -227,8 +226,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_nnetobj;
     xdr_nrejected_reply;
     xdr_nreplymsg;
-    xdr_opaque;
-    xdr_opaque_auth;
     xdr_pmap;
     xdr_pmaplist;
     xdr_pmaplist_ptr;
@@ -255,7 +252,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_rpcbs_rmtcalllist;
     xdr_rpcbs_rmtcalllist_ptr;
     xdr_short;
-    xdr_string;
     xdr_u_char;
     xdr_u_hyper;
     xdr_u_int8_t;

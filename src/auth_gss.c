@@ -302,12 +302,12 @@ authgss_marshal(AUTH *auth, XDR *xdrs)
 
 	XDR_DESTROY(&tmpxdrs);
 
-	if (!inline_xdr_opaque_auth(xdrs, &auth->ah_cred))
+	if (!xdr_opaque_auth_encode(xdrs, &auth->ah_cred))
 		return (false);
 
 	if (gd->gc.gc_proc == RPCSEC_GSS_INIT
 	    || gd->gc.gc_proc == RPCSEC_GSS_CONTINUE_INIT) {
-		return (inline_xdr_opaque_auth(xdrs, &_null_auth));
+		return (xdr_opaque_auth_encode(xdrs, &_null_auth));
 	}
 	/* Checksum serialized RPC header, up to and including credential. */
 	rpcbuf.length = XDR_GETPOS(xdrs);
@@ -334,7 +334,7 @@ authgss_marshal(AUTH *auth, XDR *xdrs)
 	auth->ah_verf.oa_length = checksum.length;
 	memcpy(auth->ah_verf.oa_body, checksum.value, checksum.length);
 
-	xdr_stat = xdr_opaque_auth(xdrs, &auth->ah_verf);
+	xdr_stat = xdr_opaque_auth_encode(xdrs, &auth->ah_verf);
 	gss_release_buffer(&min_stat, &checksum);
 
 	return (xdr_stat);
