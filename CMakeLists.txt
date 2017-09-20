@@ -202,6 +202,7 @@ configure_file(
 configure_file(
   "${NTIRPC_BASE_DIR}/libntirpc.pc.in.cmake"
   "${PROJECT_BINARY_DIR}/libntirpc.pc"
+  @ONLY
 )
 
 configure_file(
