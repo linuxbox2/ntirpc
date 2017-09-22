@@ -40,7 +40,7 @@
  */
 typedef struct rpc_ctx_s {
 	struct opr_rbtree_node node_k;
-	struct wait_entry we;
+	struct waitq_entry we;
 	struct rpc_err error;
 	union {
 		struct {

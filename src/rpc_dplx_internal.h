@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2012 Linux Box Corporation.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,7 +40,7 @@ enum svc_event_type {
 };
 
 typedef struct rpc_dplx_lock {
-	struct wait_entry we;
+	struct waitq_entry we;
 	struct {
 		const char *func;
 		int line;
