@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,9 +47,8 @@
 #define RPC_SERVICE_PORT ((u_short) 2048)
 
 #include <rpc/auth.h>
-#include <rpc/clnt.h>
+#include <rpc/rpc_err.h>
 #include <rpc/xdr.h>
-#include <misc/queue.h>
 
 /*
  * Bottom up definition of an rpc message.

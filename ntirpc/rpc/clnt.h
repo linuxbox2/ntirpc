@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,6 +40,8 @@
 #ifndef _TIRPC_CLNT_H_
 #define _TIRPC_CLNT_H_
 
+#include <rpc/svc.h>
+#include <rpc/rpc_err.h>
 #include <rpc/clnt_stat.h>
 #include <rpc/auth.h>
 #include "reentrant.h"
@@ -73,34 +76,6 @@ enum CX_TYPE
 	CX_VC_DATA,
 	CX_MSK_DATA,
 };
-
-/*
- * Error info.
- */
-struct rpc_err {
-	enum clnt_stat re_status;
-	union {
-		int RE_errno;	/* related system error */
-		uint32_t RE_flags;
-		enum auth_stat RE_why;	/* why the auth error occurred */
-		struct {
-			rpcvers_t low;	/* lowest version supported */
-			rpcvers_t high;	/* highest version supported */
-		} RE_vers;
-		struct {	/* maybe meaningful if RPC_FAILED */
-			int32_t s1;
-			int32_t s2;
-		} RE_lb;	/* life boot & debugging only */
-	} ru;
-#define re_errno ru.RE_errno
-#define re_why  ru.RE_why
-#define re_vers  ru.RE_vers
-#define re_lb  ru.RE_lb
-#define re_flags        ru.RE_flags
-};
-
-#define RPC_ERR_FLAGS_NONE             0x0000
-#define RPC_ERR_FLAGS_ASYNC_REPLYFAIL  0x0001
 
 /*
  * Client rpc handle.
@@ -464,6 +439,18 @@ clnt_vc_ncreate(const int fd, const struct netbuf *raddr,
 	return (clnt_vc_ncreatef(fd, raddr, prog, vers, sendsz, recvsz,
 				 CLNT_CREATE_FLAG_CONNECT));
 }
+
+/*
+ * Create a client handle from an active service transport handle.
+ */
+extern CLIENT *clnt_vc_ncreate_svc(const SVCXPRT *, const rpcprog_t,
+				   const rpcvers_t, const uint32_t);
+/*
+ *      const SVCXPRT *xprt;                    -- active service xprt
+ *      const rpcprog_t prog;                   -- RPC program number
+ *      const rpcvers_t vers;                   -- RPC program version
+ *      const uint32_t flags;                   -- flags
+ */
 
 #if !defined(_WIN32)
 /*

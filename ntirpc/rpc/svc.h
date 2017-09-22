@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -626,19 +627,6 @@ svc_vc_ncreate(const int fd, const u_int sendsize, const u_int recvsize)
 {
 	return (svc_vc_ncreatef(fd, sendsize, recvsize, SVC_CREATE_FLAG_CLOSE));
 }
-
-/*
- * Create a client handle from an active service transport handle.
- * (Defined here because this file knows about clnt.h, but not vice versa.)
- */
-extern CLIENT *clnt_vc_ncreate_svc(const SVCXPRT *, const rpcprog_t,
-				   const rpcvers_t, const uint32_t);
-/*
- *      const SVCXPRT *xprt;                    -- active service xprt
- *      const rpcprog_t prog;                   -- RPC program number
- *      const rpcvers_t vers;                   -- RPC program version
- *      const uint32_t flags;                   -- flags
- */
 
 /*
  * Added for compatibility to old rpc 4.0. Obsoleted by svc_vc_create().
