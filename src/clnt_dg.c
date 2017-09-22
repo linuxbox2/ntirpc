@@ -68,7 +68,6 @@
 #include "rpc_com.h"
 #include "clnt_internal.h"
 #include "svc_internal.h"
-#include "rpc_ctx.h"
 
 #define MAX_DEFAULT_FDS                 20000
 

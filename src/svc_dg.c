@@ -56,7 +56,6 @@
 #include <err.h>
 
 #include "rpc_com.h"
-#include "rpc_ctx.h"
 #include "svc_internal.h"
 #include "svc_xprt.h"
 #include <rpc/svc_rqst.h>

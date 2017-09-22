@@ -66,6 +66,7 @@
 #include <misc/city.h>
 #include <misc/portable.h>
 #include <misc/timespec.h>
+#include <rpc/clnt.h>
 #include <rpc/rpc.h>
 #include <rpc/svc.h>
 #include <rpc/svc_auth.h>
@@ -77,7 +78,6 @@
 #include "svc_internal.h"
 #include "svc_xprt.h"
 #include "rpc_dplx_internal.h"
-#include "rpc_ctx.h"
 #include "svc_ioq.h"
 
 static void svc_vc_rendezvous_ops(SVCXPRT *);
@@ -207,7 +207,7 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 		return (NULL);
 	}
 
-	opr_rbtree_init(&rec->call_replies, call_xid_cmpf);
+	opr_rbtree_init(&rec->call_replies, clnt_req_xid_cmpf);
 
 	/*
 	 * Find the receive and the send size
@@ -332,7 +332,7 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 		return (NULL);
 	}
 
-	opr_rbtree_init(&rec->call_replies, call_xid_cmpf);
+	opr_rbtree_init(&rec->call_replies, clnt_req_xid_cmpf);
 
 	/*
 	 * Find the receive and the send size
@@ -818,7 +818,7 @@ svc_vc_decode(struct svc_req *req)
 
 	if (req->rq_msg.rm_direction == REPLY) {
 		/* reply header (xprt OK) */
-		return rpc_ctx_xfer_replymsg(req);
+		return clnt_req_xfer_replymsg(req);
 	}
 
 	__warnx(TIRPC_DEBUG_FLAG_WARN,

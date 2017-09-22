@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013 Linux Box Corporation.
+ * Copyright (c) 2013-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,7 +59,6 @@
 #include "svc_internal.h"
 #include "svc_xprt.h"
 #include "rpc_dplx_internal.h"
-#include "rpc_ctx.h"
 #include <rpc/svc_rqst.h>
 #include <rpc/xdr_ioq.h>
 #include <getpeereid.h>

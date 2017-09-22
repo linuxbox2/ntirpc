@@ -53,7 +53,6 @@
 #include <err.h>
 
 #include "rpc_com.h"
-#include "rpc_ctx.h"
 #include "misc/city.h"
 #include "svc_internal.h"
 #include "svc_xprt.h"

@@ -40,6 +40,8 @@
 #ifndef _TIRPC_CLNT_H_
 #define _TIRPC_CLNT_H_
 
+#include <misc/rbtree.h>
+#include <misc/wait_queue.h>
 #include <rpc/svc.h>
 #include <rpc/rpc_err.h>
 #include <rpc/clnt_stat.h>
@@ -123,6 +125,30 @@ typedef struct rpc_client {
 	enum CX_TYPE cl_type;
 
 } CLIENT;
+
+#define CLNT_REQ_FLAG_NONE	0x0000
+#define CLNT_REQ_FLAG_ACKSYNC	0x0008
+
+/*
+ * RPC context.  Intended to enable efficient multiplexing of calls
+ * and replies sharing a common channel.
+ */
+struct clnt_req {
+	struct opr_rbtree_node node_k;
+	struct waitq_entry we;
+	struct rpc_err error;
+	struct rpc_msg cc_msg;
+	struct xdrpair cc_xdr;
+
+	AUTH *cc_auth;
+	CLIENT *clnt;
+	struct timespec timeout;
+	int refreshes;
+	uint32_t xid;
+	uint32_t refcount;
+	uint16_t flags;
+};
+#define CTX_MSG(p) (opr_containerof((p), struct clnt_req, cc_msg))
 
 /*
  * Timers used for the pseudo-transport protocol when using datagrams
@@ -501,6 +527,14 @@ clnt_dg_ncreate(const int fd, const struct netbuf *raddr,
  * u_long vers;
  */
 extern CLIENT *clnt_raw_ncreate(rpcprog_t, rpcvers_t);
+
+int clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
+		      const struct opr_rbtree_node *rhs);
+
+struct clnt_req *clnt_req_alloc(CLIENT *, struct timeval);
+int clnt_req_wait_reply(struct clnt_req *);
+enum xprt_stat clnt_req_xfer_replymsg(struct svc_req *);
+void clnt_req_release(struct clnt_req *);
 
 __END_DECLS
 /*

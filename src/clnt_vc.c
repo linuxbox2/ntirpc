@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,7 +69,6 @@
 #include <reentrant.h>
 #include <rpc/rpc.h>
 #include "rpc_com.h"
-#include "rpc_ctx.h"
 #include <rpc/svc_rqst.h>
 #include <rpc/xdr_ioq.h>
 #include "svc_ioq.h"
@@ -266,7 +266,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	SVCXPRT *xprt = &rec->xprt;
 	struct xdr_ioq *xioq;
 	XDR *xdrs;
-	rpc_ctx_t *ctx;
+	struct clnt_req *ctx;
 	enum clnt_stat result;
 	int code;
 
@@ -283,9 +283,9 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	 * 3. the server has the XDR structure.  There is only one
 	 * physical byte stream.  The main issue that will arise is the
 	 * need to transition the stream between calls.  We'll keep the
-	 * call parameters, control transfer machinery, etc, in rpc_ctx_t.
+	 * call parameters, control transfer machinery, etc, in clnt_req.
 	 */
-	ctx = rpc_ctx_alloc(clnt, timeout);
+	ctx = clnt_req_alloc(clnt, timeout);
 	if (!ctx)
 		return (RPC_TLIERROR);
 
@@ -324,7 +324,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
 			"%s: fd %d failed @ %s:%d",
 			__func__, xprt->xp_fd, __func__, __LINE__);
-		rpc_ctx_release(ctx);
+		clnt_req_release(ctx);
 		return (RPC_CANTENCODEARGS);
 	}
 	mutex_unlock(&clnt->cl_lock);
@@ -338,10 +338,10 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
 	}
-	code = rpc_ctx_wait_reply(ctx);
+	code = clnt_req_wait_reply(ctx);
 
 	if (ctx->refreshes > 0) {
-		ctx->flags = RPC_CTX_FLAG_NONE;
+		ctx->flags = CLNT_REQ_FLAG_NONE;
 		goto call_again;
 	}
 	if (code == ETIMEDOUT) {
@@ -353,7 +353,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	}
 
 	result = ctx->error.re_status;
-	rpc_ctx_release(ctx);
+	clnt_req_release(ctx);
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
 		"%s: fd %d result=%d",
 		__func__, xprt->xp_fd, result);
@@ -367,7 +367,7 @@ clnt_vc_geterr(CLIENT *clnt, struct rpc_err *errp)
 	XDR *xdrs = cx->cx_rec->ioq.xdrs;
 
 	if (xdrs->x_lib[0]) {
-		rpc_ctx_t *ctx = (rpc_ctx_t *) xdrs->x_lib[0];
+		struct clnt_req *ctx = (struct clnt_req *) xdrs->x_lib[0];
 		*errp = ctx->error;
 	} else {
 		/* always zero */
