@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,6 +40,10 @@
 #ifndef _TIRPC_CLNT_H_
 #define _TIRPC_CLNT_H_
 
+#include <misc/rbtree.h>
+#include <misc/wait_queue.h>
+#include <rpc/svc.h>
+#include <rpc/rpc_err.h>
 #include <rpc/clnt_stat.h>
 #include <rpc/auth.h>
 #include "reentrant.h"
@@ -73,34 +78,6 @@ enum CX_TYPE
 	CX_VC_DATA,
 	CX_MSK_DATA,
 };
-
-/*
- * Error info.
- */
-struct rpc_err {
-	enum clnt_stat re_status;
-	union {
-		int RE_errno;	/* related system error */
-		uint32_t RE_flags;
-		enum auth_stat RE_why;	/* why the auth error occurred */
-		struct {
-			rpcvers_t low;	/* lowest version supported */
-			rpcvers_t high;	/* highest version supported */
-		} RE_vers;
-		struct {	/* maybe meaningful if RPC_FAILED */
-			int32_t s1;
-			int32_t s2;
-		} RE_lb;	/* life boot & debugging only */
-	} ru;
-#define re_errno ru.RE_errno
-#define re_why  ru.RE_why
-#define re_vers  ru.RE_vers
-#define re_lb  ru.RE_lb
-#define re_flags        ru.RE_flags
-};
-
-#define RPC_ERR_FLAGS_NONE             0x0000
-#define RPC_ERR_FLAGS_ASYNC_REPLYFAIL  0x0001
 
 /*
  * Client rpc handle.
@@ -148,6 +125,30 @@ typedef struct rpc_client {
 	enum CX_TYPE cl_type;
 
 } CLIENT;
+
+#define CLNT_REQ_FLAG_NONE	0x0000
+#define CLNT_REQ_FLAG_ACKSYNC	0x0008
+
+/*
+ * RPC context.  Intended to enable efficient multiplexing of calls
+ * and replies sharing a common channel.
+ */
+struct clnt_req {
+	struct opr_rbtree_node node_k;
+	struct waitq_entry we;
+	struct rpc_err error;
+	struct rpc_msg cc_msg;
+	struct xdrpair cc_xdr;
+
+	AUTH *cc_auth;
+	CLIENT *clnt;
+	struct timespec timeout;
+	int refreshes;
+	uint32_t xid;
+	uint32_t refcount;
+	uint16_t flags;
+};
+#define CTX_MSG(p) (opr_containerof((p), struct clnt_req, cc_msg))
 
 /*
  * Timers used for the pseudo-transport protocol when using datagrams
@@ -465,6 +466,18 @@ clnt_vc_ncreate(const int fd, const struct netbuf *raddr,
 				 CLNT_CREATE_FLAG_CONNECT));
 }
 
+/*
+ * Create a client handle from an active service transport handle.
+ */
+extern CLIENT *clnt_vc_ncreate_svc(const SVCXPRT *, const rpcprog_t,
+				   const rpcvers_t, const uint32_t);
+/*
+ *      const SVCXPRT *xprt;                    -- active service xprt
+ *      const rpcprog_t prog;                   -- RPC program number
+ *      const rpcvers_t vers;                   -- RPC program version
+ *      const uint32_t flags;                   -- flags
+ */
+
 #if !defined(_WIN32)
 /*
  * Added for compatibility to old rpc 4.0. Obsoleted by clnt_vc_create().
@@ -514,6 +527,14 @@ clnt_dg_ncreate(const int fd, const struct netbuf *raddr,
  * u_long vers;
  */
 extern CLIENT *clnt_raw_ncreate(rpcprog_t, rpcvers_t);
+
+int clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
+		      const struct opr_rbtree_node *rhs);
+
+struct clnt_req *clnt_req_alloc(CLIENT *, struct timeval);
+int clnt_req_wait_reply(struct clnt_req *);
+enum xprt_stat clnt_req_xfer_replymsg(struct svc_req *);
+void clnt_req_release(struct clnt_req *);
 
 __END_DECLS
 /*

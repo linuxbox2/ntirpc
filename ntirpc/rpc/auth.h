@@ -48,6 +48,7 @@
 
 #include <rpc/xdr.h>
 #include <rpc/clnt_stat.h>
+#include <rpc/auth_stat.h>
 #include <misc/abstract_atomic.h>
 
 #include <sys/cdefs.h>
@@ -118,42 +119,6 @@ typedef struct krb4_svc_data des_svcdata_t;
  */
 #define AUTH_F_RPCTIMESYNC 0x001	/* use RPC to do time sync */
 #define AUTH_F_TRYNONE  0x002	/* allow fall back to AUTH_NONE */
-
-/*
- * Status returned from authentication check
- */
-enum auth_stat {
-	AUTH_OK = 0,
-	/*
-	 * failed at  remote end
-	 */
-	AUTH_BADCRED = 1,	/* bogus credentials (seal broken) */
-	AUTH_REJECTEDCRED = 2,	/* client should begin new session */
-	AUTH_BADVERF = 3,	/* bogus verifier (seal broken) */
-	AUTH_REJECTEDVERF = 4,	/* verifier expired or was replayed */
-	AUTH_TOOWEAK = 5,	/* rejected due to security reasons */
-	/*
-	 * failed locally
-	 */
-	AUTH_INVALIDRESP = 6,	/* bogus response verifier */
-	AUTH_FAILED = 7,	/* some unknown reason */
-#ifdef KERBEROS
-	/*
-	 * kerberos errors
-	 */
-	AUTH_KERB_GENERIC = 8,	/* kerberos generic error */
-	AUTH_TIMEEXPIRE = 9,	/* time of credential expired */
-	AUTH_TKT_FILE = 10,	/* something wrong with ticket file */
-	AUTH_DECODE = 11,	/* can't decode authenticator */
-	AUTH_NET_ADDR = 12,	/* wrong net address in ticket */
-#endif				/* KERBEROS */
-
-	/*
-	 * RPCSEC_GSS errors
-	 */
-	RPCSEC_GSS_CREDPROBLEM = 13,
-	RPCSEC_GSS_CTXPROBLEM = 14
-};
 
 typedef u_int32_t u_int32;	/* 32-bit unsigned integers */
 

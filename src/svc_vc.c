@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -65,6 +66,7 @@
 #include <misc/city.h>
 #include <misc/portable.h>
 #include <misc/timespec.h>
+#include <rpc/clnt.h>
 #include <rpc/rpc.h>
 #include <rpc/svc.h>
 #include <rpc/svc_auth.h>
@@ -76,7 +78,6 @@
 #include "svc_internal.h"
 #include "svc_xprt.h"
 #include "rpc_dplx_internal.h"
-#include "rpc_ctx.h"
 #include "svc_ioq.h"
 
 static void svc_vc_rendezvous_ops(SVCXPRT *);
@@ -206,7 +207,7 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 		return (NULL);
 	}
 
-	opr_rbtree_init(&rec->call_replies, call_xid_cmpf);
+	opr_rbtree_init(&rec->call_replies, clnt_req_xid_cmpf);
 
 	/*
 	 * Find the receive and the send size
@@ -331,7 +332,7 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 		return (NULL);
 	}
 
-	opr_rbtree_init(&rec->call_replies, call_xid_cmpf);
+	opr_rbtree_init(&rec->call_replies, clnt_req_xid_cmpf);
 
 	/*
 	 * Find the receive and the send size
@@ -679,12 +680,26 @@ svc_vc_recv(SVCXPRT *xprt)
 		rlen = recv(xprt->xp_fd, &xd->sx_fbtbc, BYTES_PER_XDR_UNIT,
 			    MSG_WAITALL);
 
-		if (unlikely(rlen <= 0)) {
+		if (unlikely(rlen < 0)) {
 			code = errno;
 
+			if (code == EAGAIN || code == EWOULDBLOCK) {
+				__warnx(TIRPC_DEBUG_FLAG_WARN,
+					"%s: %p fd %d recv errno %d (try again)",
+					"svc_vc_wait", xprt, xprt->xp_fd, code);
+				return SVC_STAT(xprt);
+			}
 			__warnx(TIRPC_DEBUG_FLAG_WARN,
 				"%s: %p fd %d recv errno %d (will set dead)",
-				__func__, xprt, xprt->xp_fd, code);
+				"svc_vc_wait", xprt, xprt->xp_fd, code);
+			SVC_DESTROY(xprt);
+			return SVC_STAT(xprt);
+		}
+
+		if (unlikely(!rlen)) {
+			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+				"%s: %p fd %d recv closed (will set dead)",
+				"svc_vc_wait", xprt, xprt->xp_fd);
 			SVC_DESTROY(xprt);
 			return SVC_STAT(xprt);
 		}
@@ -733,7 +748,7 @@ svc_vc_recv(SVCXPRT *xprt)
 	}
 
 	if (unlikely(!rlen)) {
-		__warnx(TIRPC_DEBUG_FLAG_EVENT,
+		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 			"%s: %p fd %d recv closed (will set dead)",
 			__func__, xprt, xprt->xp_fd);
 		SVC_DESTROY(xprt);
@@ -803,7 +818,7 @@ svc_vc_decode(struct svc_req *req)
 
 	if (req->rq_msg.rm_direction == REPLY) {
 		/* reply header (xprt OK) */
-		return rpc_ctx_xfer_replymsg(req);
+		return clnt_req_xfer_replymsg(req);
 	}
 
 	__warnx(TIRPC_DEBUG_FLAG_WARN,

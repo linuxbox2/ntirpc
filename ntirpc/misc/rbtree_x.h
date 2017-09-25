@@ -6,6 +6,7 @@
 #include <inttypes.h>
 #include <misc/stdio.h>
 #include <misc/rbtree.h>
+#include <rpc/types.h>
 
 struct rbtree_x_part {
 	CACHE_PAD(0);

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013 Linux Box Corporation.
+ * Copyright (c) 2013-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,50 +34,48 @@
 #include <misc/queue.h>
 #include <reentrant.h>
 
-typedef struct wait_entry {
+struct waitq_entry {
 	mutex_t mtx;
 	cond_t cv;
-} wait_entry_t;
+};
 
 #define Wqe_LFlag_None        0x0000
 #define Wqe_LFlag_WaitSync    0x0001
 #define Wqe_LFlag_SyncDone    0x0002
 
 /* thread wait queue */
-typedef struct wait_q_entry {
+struct waitq_head {
+	TAILQ_HEAD(waitq_head_s, waiter) waitq;
+	struct waitq_entry lwe;	/* left */
+	struct waitq_entry rwe;	/* right */
 	uint32_t flags;
 	uint32_t waiters;
-	wait_entry_t lwe;	/* left */
-	wait_entry_t rwe;	/* right */
-	 TAILQ_HEAD(we_tailq, waiter) waitq;
-} wait_q_entry_t;
+};
 
-static inline void init_wait_entry(wait_entry_t *we)
+static inline void waitq_entry_init(struct waitq_entry *we)
 {
 	mutex_init(&we->mtx, NULL);
 	pthread_cond_init(&we->cv, NULL);
 }
 
-static inline void destroy_wait_entry(wait_entry_t *we)
+static inline void waitq_entry_destroy(struct waitq_entry *we)
 {
 	mutex_destroy(&we->mtx);
 	cond_destroy(&we->cv);
 }
 
-static inline void init_wait_q_entry(wait_q_entry_t *wqe)
+static inline void waitq_head_init(struct waitq_head *wqe)
 {
 	TAILQ_INIT(&wqe->waitq);
-	init_wait_entry(&wqe->lwe);
-	init_wait_entry(&wqe->rwe);
+	waitq_entry_init(&wqe->lwe);
+	waitq_entry_init(&wqe->rwe);
 }
 
-static inline void thread_delay_ms(unsigned long ms)
+static inline void waitq_head_destroy(struct waitq_head *wqe)
 {
-	struct timespec then = {
-		.tv_sec = ms / 1000,
-		.tv_nsec = ms % 1000000UL
-	};
-	nanosleep(&then, NULL);
+	TAILQ_INIT(&wqe->waitq);
+	waitq_entry_destroy(&wqe->lwe);
+	waitq_entry_destroy(&wqe->rwe);
 }
 
 #endif				/* WAIT_QUEUE_H */
