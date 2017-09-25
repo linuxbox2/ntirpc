@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2012 Linux Box Corporation.
  * Copyright (c) 2013-2015 CohortFS, LLC.
- * Copyright (c) 2017 Red Hat, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -878,14 +878,14 @@ svc_rqst_epoll_loop(struct svc_rqst_rec *sr_rec)
 			continue;
 		}
 		n_events = errno;
-		__warnx(TIRPC_DEBUG_FLAG_WARN,
-			"%s: epoll_fd %d epoll_wait failed (%d)",
-			__func__,
-			sr_rec->ev_u.epoll.epoll_fd,
-			n_events);
-
-		if (n_events != EINTR)
+		if (n_events != EINTR) {
+			__warnx(TIRPC_DEBUG_FLAG_WARN,
+				"%s: epoll_fd %d epoll_wait failed (%d)",
+				__func__,
+				sr_rec->ev_u.epoll.epoll_fd,
+				n_events);
 			return true;
+		}
 	}
 }
 #endif
