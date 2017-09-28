@@ -526,10 +526,20 @@ svc_vc_destroy_task(struct work_pool_entry *wpe)
 	struct rpc_dplx_rec *rec =
 			opr_containerof(wpe, struct rpc_dplx_rec, ioq.ioq_wpe);
 
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
+		"%s() %p fd %d xp_refs %" PRIu32,
+		__func__, rec, rec->xprt.xp_fd, rec->xprt.xp_refs);
+
 	if (rec->xprt.xp_refs) {
 		/* instead of nanosleep */
 		work_pool_submit(&svc_work_pool, &(rec->ioq.ioq_wpe));
 		return;
+	}
+
+	if ((rec->xprt.xp_flags & SVC_XPRT_FLAG_CLOSE)
+	    && rec->xprt.xp_fd != RPC_ANYFD) {
+		(void)close(rec->xprt.xp_fd);
+		rec->xprt.xp_fd = RPC_ANYFD;
 	}
 
 	if (rec->xprt.xp_ops->xp_free_user_data)
@@ -561,10 +571,6 @@ svc_vc_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		"%s() %p fd %d xp_refs %" PRIu32
 		" should actually destroy things @ %s:%d",
 		__func__, xprt, xprt->xp_fd, xprt->xp_refs, tag, line);
-
-	if ((xprt->xp_flags & SVC_XPRT_FLAG_CLOSE)
-	    && xprt->xp_fd != RPC_ANYFD)
-		(void)close(xprt->xp_fd);
 
 	while (atomic_postset_uint16_t_bits(&(REC_XPRT(xprt)->ioq.ioq_s.qflags),
 					    IOQ_FLAG_WORKING)

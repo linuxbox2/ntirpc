@@ -770,9 +770,12 @@ svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 	xp_flags = atomic_postclear_uint16_t_bits(&rec->xprt.xp_flags,
 						  SVC_XPRT_FLAG_ADDED);
 
-	__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-		"%s: %p fd %d event %d",
-		__func__, rec, rec->xprt.xp_fd, ev->events);
+	__warnx(TIRPC_DEBUG_FLAG_SVC_RQST |
+		TIRPC_DEBUG_FLAG_REFCNT,
+		"%s: %p fd %d xp_refs %" PRIu32
+		" event %d",
+		__func__, rec, rec->xprt.xp_fd, rec->xprt.xp_refs,
+		ev->events);
 
 	if (rec->xprt.xp_refs > 1
 	 && (xp_flags & SVC_XPRT_FLAG_ADDED)
