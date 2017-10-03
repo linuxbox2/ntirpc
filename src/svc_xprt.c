@@ -214,9 +214,13 @@ svc_xprt_clear(SVCXPRT *xprt)
 	if (svc_xprt_init_failure())
 		return;
 
+	/* xprt lock ensures only one active thread here */
 	if (opr_rbtree_node_valid(&REC_XPRT(xprt)->fd_node)) {
 		t = rbtx_partition_of_scalar(&svc_xprt_fd.xt, xprt->xp_fd);
 
+		/* if another thread passes test during svc_xprt_shutdown(),
+		 * this lock (and generation test) prevents repeats.
+		 */
 		rwlock_wrlock(&t->lock);
 		opr_rbtree_remove(&t->t, &REC_XPRT(xprt)->fd_node);
 		rwlock_unlock(&t->lock);
@@ -338,17 +342,18 @@ svc_xprt_shutdown()
 		t = &svc_xprt_fd.xt.tree[p_ix];
 
 		rwlock_wrlock(&t->lock);	/* t WLOCKED */
-		n = opr_rbtree_first(&t->t);
-		while (n != NULL) {
+		while ((n = opr_rbtree_first(&t->t))) {
 			rec = opr_containerof(n, struct rpc_dplx_rec, fd_node);
-			n = opr_rbtree_next(n);
 
 			/* prevent repeats, see svc_xprt_clear() */
-			rpc_dplx_rli(rec);
 			opr_rbtree_remove(&t->t, &rec->fd_node);
-			rpc_dplx_rui(rec);
 
+			/* fd_node is counted by initial xp_refs = 1,
+			 * SVC_DESTROY() decrements that reference.
+			 */
+			rwlock_unlock(&t->lock);
 			SVC_DESTROY(&rec->xprt);
+			rwlock_wrlock(&t->lock);
 		}		/* curr partition */
 		rwlock_unlock(&t->lock);	/* t !LOCKED */
 		rwlock_destroy(&t->lock);
