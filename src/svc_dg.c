@@ -410,6 +410,7 @@ svc_dg_destroy_task(struct work_pool_entry *wpe)
 {
 	struct rpc_dplx_rec *rec =
 			opr_containerof(wpe, struct rpc_dplx_rec, ioq.ioq_wpe);
+	uint16_t xp_flags;
 
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 		"%s() %p fd %d xp_refs %" PRIu32,
@@ -421,7 +422,9 @@ svc_dg_destroy_task(struct work_pool_entry *wpe)
 		return;
 	}
 
-	if ((rec->xprt.xp_flags & SVC_XPRT_FLAG_CLOSE)
+	xp_flags = atomic_postclear_uint16_t_bits(&rec->xprt.xp_flags,
+						  SVC_XPRT_FLAG_CLOSE);
+	if ((xp_flags & SVC_XPRT_FLAG_CLOSE)
 	    && rec->xprt.xp_fd != RPC_ANYFD) {
 		(void)close(rec->xprt.xp_fd);
 		rec->xprt.xp_fd = RPC_ANYFD;
