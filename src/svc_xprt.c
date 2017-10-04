@@ -145,6 +145,7 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 	struct rbtree_x_part *t;
 	struct opr_rbtree_node *nv;
 	SVCXPRT *xprt = NULL;
+	uint16_t xp_flags;
 
 	if (svc_xprt_init_failure())
 		return (NULL);
@@ -184,19 +185,27 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 	rec = opr_containerof(nv, struct rpc_dplx_rec, fd_node);
 	xprt = &rec->xprt;
 
+	/* lookup reference before unlock ensures shutdown cannot release */
 	SVC_REF(xprt, SVC_REF_FLAG_NONE);
-	rpc_dplx_rli(rec);
 	rwlock_unlock(&t->lock);
 
-	if (unlikely(xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
+	/* unlocked window here permits shutdown to destroy without release;
+	 * then duplex lock is required to match allocation return,
+	 * ensuring SVC_XPRT_FLAG_INITIAL cleared in this thread only
+	 * (obviating extra atomic fetch).
+	 */
+	rpc_dplx_rli(rec);
+	xp_flags = atomic_clear_uint16_t_bits(&xprt->xp_flags,
+					      SVC_XPRT_FLAG_INITIAL);
+	if (!(xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
 		/* do not return destroyed xprts */
-		rpc_dplx_rui(rec);
-		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-		return (NULL);
+		return (xprt);
 	}
 
-	atomic_clear_uint16_t_bits(&xprt->xp_flags, SVC_XPRT_FLAG_INITIAL);
-	return (xprt);
+	/* unlock before release permits releasing here after destroy */
+	rpc_dplx_rui(rec);
+	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+	return (NULL);
 }
 
 /**
