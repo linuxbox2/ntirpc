@@ -109,12 +109,22 @@ static inline void
 rpc_dplx_rec_init(struct rpc_dplx_rec *rec)
 {
 	rpc_dplx_lock_init(&rec->recv.lock);
+	opr_rbtree_init(&rec->call_replies, clnt_req_xid_cmpf);
+	mutex_init(&rec->xprt.xp_lock, NULL);
+
+	rec->xprt.xp_refs = 1;
 }
 
 static inline void
 rpc_dplx_rec_destroy(struct rpc_dplx_rec *rec)
 {
 	rpc_dplx_lock_destroy(&rec->recv.lock);
+	mutex_destroy(&rec->xprt.xp_lock);
+
+#if defined(HAVE_BLKIN)
+	if (rec->xprt.blkin.svc_name)
+		mem_free(rec->xprt.blkin.svc_name, 2*INET6_ADDRSTRLEN);
+#endif
 }
 
 /* rlt: recv lock trace */

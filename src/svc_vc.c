@@ -118,12 +118,6 @@ svc_vc_xprt_free(struct svc_vc_xprt *xd)
 {
 	XDR_DESTROY(xd->sx_dr.ioq.xdrs);
 	rpc_dplx_rec_destroy(&xd->sx_dr);
-	mutex_destroy(&xd->sx_dr.xprt.xp_lock);
-
-#if defined(HAVE_BLKIN)
-	if (xd->sx_dr.xprt.blkin.svc_name)
-		mem_free(xd->sx_dr.xprt.blkin.svc_name, 2*INET6_ADDRSTRLEN);
-#endif
 	mem_free(xd, sizeof(struct svc_vc_xprt));
 }
 
@@ -133,11 +127,8 @@ svc_vc_xprt_zalloc(void)
 	struct svc_vc_xprt *xd = mem_zalloc(sizeof(struct svc_vc_xprt));
 
 	/* Init SVCXPRT locks, etc */
-	mutex_init(&xd->sx_dr.xprt.xp_lock, NULL);
 	rpc_dplx_rec_init(&xd->sx_dr);
 	xdr_ioq_setup(&xd->sx_dr.ioq);
-
-	xd->sx_dr.xprt.xp_refs = 1;
 	return (xd);
 }
 
@@ -206,8 +197,6 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 			__func__, fd);
 		return (NULL);
 	}
-
-	opr_rbtree_init(&rec->call_replies, clnt_req_xid_cmpf);
 
 	/*
 	 * Find the receive and the send size
@@ -331,8 +320,6 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 			__func__, fd);
 		return (NULL);
 	}
-
-	opr_rbtree_init(&rec->call_replies, clnt_req_xid_cmpf);
 
 	/*
 	 * Find the receive and the send size

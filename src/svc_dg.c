@@ -84,12 +84,6 @@ svc_dg_xprt_free(struct svc_dg_xprt *su)
 {
 	XDR_DESTROY(su->su_dr.ioq.xdrs);
 	rpc_dplx_rec_destroy(&su->su_dr);
-	mutex_destroy(&su->su_dr.xprt.xp_lock);
-
-#if defined(HAVE_BLKIN)
-	if (su->su_dr.xprt.blkin.svc_name)
-		mem_free(su->su_dr.xprt.blkin.svc_name, 2*INET6_ADDRSTRLEN);
-#endif
 	mem_free(su, sizeof(struct svc_dg_xprt) + su->su_dr.maxrec);
 }
 
@@ -99,11 +93,8 @@ svc_dg_xprt_zalloc(size_t iosz)
 	struct svc_dg_xprt *su = mem_zalloc(sizeof(struct svc_dg_xprt) + iosz);
 
 	/* Init SVCXPRT locks, etc */
-	mutex_init(&su->su_dr.xprt.xp_lock, NULL);
 	rpc_dplx_rec_init(&su->su_dr);
 	xdr_ioq_setup(&su->su_dr.ioq);
-
-	su->su_dr.xprt.xp_refs = 1;
 	return (su);
 }
 
