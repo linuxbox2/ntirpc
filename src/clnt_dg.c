@@ -143,8 +143,6 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 	cu->cu_wait.tv_usec = 0;
 	cu->cu_total.tv_sec = -1;
 	cu->cu_total.tv_usec = -1;
-	cu->cu_connect = false;
-	cu->cu_connected = false;
 
 	/*
 	 * initialize call message
@@ -242,23 +240,8 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	total_time = timeout.tv_sec * 1000 + timeout.tv_usec / 1000;
 	nextsend_time = cu->cu_wait.tv_sec * 1000 + cu->cu_wait.tv_usec / 1000;
 
-	if (cu->cu_connect && !cu->cu_connected) {
-		if (connect
-		    (xp_fd, (struct sockaddr *)&cu->cu_raddr,
-		     cu->cu_rlen) < 0) {
-			cx->cx_error.re_errno = errno;
-			cx->cx_error.re_status = RPC_CANTSEND;
-			goto out;
-		}
-		cu->cu_connected = 1;
-	}
-	if (cu->cu_connected) {
-		sa = NULL;
-		salen = 0;
-	} else {
-		sa = (struct sockaddr *)&cu->cu_raddr;
-		salen = cu->cu_rlen;
-	}
+	sa = (struct sockaddr *)&cu->cu_raddr;
+	salen = cu->cu_rlen;
 
 	/* Clean up in case the last call ended in a longjmp(3) call. */
  call_again:
@@ -633,9 +616,6 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 	case CLSET_PROG:
 		*(u_int32_t *) (void *)(cu->cu_outbuf + 3 * BYTES_PER_XDR_UNIT)
 		    = htonl(*(u_int32_t *) info);
-		break;
-	case CLSET_CONNECT:
-		cu->cu_connect = *(int *)info;
 		break;
 	default:
 		break;
