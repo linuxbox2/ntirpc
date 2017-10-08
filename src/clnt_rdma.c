@@ -96,16 +96,6 @@ clnt_rdma_data_zalloc(void)
 }
 
 /*
- * Make sure that the time is not garbage.  -1 value is allowed.
- */
-static bool
-time_not_ok(struct timeval *t)
-{
-	return (t->tv_sec < -1 || t->tv_sec > 100000000 ||
-		t->tv_usec < -1 || t->tv_usec > 1000000);
-}
-
-/*
  * client mooshika create
  */
 CLIENT *

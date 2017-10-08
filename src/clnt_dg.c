@@ -73,7 +73,6 @@
 #define MAX_DEFAULT_FDS                 20000
 
 static struct clnt_ops *clnt_dg_ops(void);
-static bool time_not_ok(struct timeval *);
 
 struct cu_data {
 	struct cx_data cu_cx;
@@ -695,14 +694,4 @@ clnt_dg_ops(void)
 	mutex_unlock(&ops_lock);
 	thr_sigsetmask(SIG_SETMASK, &mask, NULL);
 	return (&ops);
-}
-
-/*
- * Make sure that the time is not garbage.  -1 value is allowed.
- */
-static bool
-time_not_ok(struct timeval *t)
-{
-	return (t->tv_sec < -1 || t->tv_sec > 100000000 || t->tv_usec < -1
-		|| t->tv_usec > 1000000);
 }

@@ -65,4 +65,22 @@ clnt_data_destroy(struct cx_data *cx)
 		mem_free(cx->cx_c.cl_tp, strlen(cx->cx_c.cl_tp) + 1);
 }
 
+/*
+ * Make sure that the time is not garbage.  0 or - value is *NOT* allowed.
+ */
+static inline bool
+time_not_ok_trace(struct timeval *t, const char *func, int line)
+{
+	if (t->tv_usec < 0 || t->tv_usec > 999999
+	 || t->tv_sec < 0 || !(t->tv_sec + t->tv_usec))
+		return (false);
+	if (t->tv_sec > 10)
+		__warnx(TIRPC_DEBUG_FLAG_WARN,
+			"%s:%d tv_sec %ld > 10",
+			func, line, t->tv_sec);
+	return (true);
+}
+#define time_not_ok(t) \
+	time_not_ok_trace(t, __func__, __LINE__)
+
 #endif				/* _CLNT_INTERNAL_H */

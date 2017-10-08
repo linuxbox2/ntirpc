@@ -55,8 +55,6 @@ int __rpc_raise_fd(int);
 #define NETIDLEN 32
 #endif
 
-#define tv_to_ms(tv) (1000 * ((tv)->tv_sec) + (tv)->tv_usec/1000)
-
 /*
  * Generic client creation with version checking the value of
  * vers_out is set to the highest server supported value
@@ -453,9 +451,8 @@ clnt_req_alloc(CLIENT *clnt, struct timeval timeout)
 	/* some of this looks like overkill;  it's here to support future,
 	 * fully async calls */
 	ctx->clnt = clnt;
-	ctx->timeout.tv_sec = 0;
-	ctx->timeout.tv_nsec = 0;
-	timespec_addms(&ctx->timeout, tv_to_ms(&timeout));
+	ctx->timeout.tv_sec = timeout.tv_sec;
+	ctx->timeout.tv_nsec = timeout.tv_usec * 1000;
 
 	/* this lock protects both xid and rbtree */
 	rpc_dplx_rli(rec);
@@ -464,8 +461,17 @@ clnt_req_alloc(CLIENT *clnt, struct timeval timeout)
 	rpc_dplx_rui(rec);
 	if (nv) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: %p fd %d call ctx insert failed xid %" PRIu32,
+			"%s: %p fd %d insert failed xid %" PRIu32,
 			__func__, &rec->xprt, rec->xprt.xp_fd, ctx->xid);
+		clnt_req_release(ctx);
+		return (NULL);
+	}
+
+	if (time_not_ok(&timeout)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d bad timeout (%ld.%06ld)",
+			__func__, &rec->xprt, rec->xprt.xp_fd,
+			timeout.tv_sec, timeout.tv_usec);
 		clnt_req_release(ctx);
 		return (NULL);
 	}
@@ -490,7 +496,7 @@ clnt_req_xfer_replymsg(struct svc_req *req)
 	rpc_dplx_rui(rec);
 	if (!nv) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: %p fd %d call ctx lookup failed xid %" PRIu32,
+			"%s: %p fd %d lookup failed xid %" PRIu32,
 			__func__, &rec->xprt, rec->xprt.xp_fd, ctx_k.xid);
 		return SVC_STAT(xprt);
 	}
@@ -522,7 +528,7 @@ clnt_req_xfer_replymsg(struct svc_req *req)
 		rpc_dplx_rui(rec);
 		if (nv) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
-				"%s: %p fd %d call ctx insert failed xid %" PRIu32,
+				"%s: %p fd %d insert failed xid %" PRIu32,
 				__func__, xprt, xprt->xp_fd, ctx->xid);
 			ctx->error.re_status = RPC_TLIERROR;
 			ctx->refreshes = 0;
@@ -535,7 +541,7 @@ clnt_req_xfer_replymsg(struct svc_req *req)
 	mutex_unlock(&ctx->we.mtx);
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_REQ,
-		"%s: %p fd %d call ctx acknowledged xid %" PRIu32,
+		"%s: %p fd %d acknowledged xid %" PRIu32,
 		__func__, xprt, xprt->xp_fd, ctx->xid);
 
 	return SVC_STAT(xprt);
@@ -555,7 +561,7 @@ clnt_req_wait_reply(struct clnt_req *ctx)
 
 	/* no loop, signaled directly */
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_REQ,
-		"%s: %p fd %d call ctx xid %" PRIu32,
+		"%s: %p fd %d xid %" PRIu32,
 		__func__, &rec->xprt, rec->xprt.xp_fd, ctx->xid);
 
 	(void)clock_gettime(CLOCK_REALTIME_FAST, &ts);
@@ -563,7 +569,7 @@ clnt_req_wait_reply(struct clnt_req *ctx)
 	code = cond_timedwait(&ctx->we.cv, &ctx->we.mtx, &ts);
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_REQ,
-		"%s: %p fd %d call ctx replied xid %" PRIu32,
+		"%s: %p fd %d replied xid %" PRIu32,
 		__func__, &rec->xprt, rec->xprt.xp_fd, ctx->xid);
 
 	if (!(atomic_fetch_uint16_t(&ctx->flags) & CLNT_REQ_FLAG_ACKSYNC)
