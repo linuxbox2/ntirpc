@@ -72,11 +72,33 @@
 #include <rpc/svc_rqst.h>
 #include <rpc/xdr_ioq.h>
 #include "svc_ioq.h"
+#include "clnt_internal.h"
+#include "svc_internal.h"
 
 static struct clnt_ops *clnt_vc_ops(void);
 
-#include "clnt_internal.h"
-#include "svc_internal.h"
+struct ct_data {
+	struct cx_data ct_cx;
+	struct sockaddr_storage ct_raddr;	/* remote addr */
+	int ct_rlen;
+};
+#define CT_DATA(p) (opr_containerof((p), struct ct_data, ct_cx))
+
+static void
+clnt_vc_data_free(struct ct_data *ct)
+{
+	clnt_data_destroy(&ct->ct_cx);
+	mem_free(ct, sizeof(struct ct_data));
+}
+
+static struct ct_data *
+clnt_vc_data_zalloc(void)
+{
+	struct ct_data *ct = mem_zalloc(sizeof(struct ct_data));
+
+	clnt_data_init(&ct->ct_cx);
+	return (ct);
+}
 
 /*
  *      This machinery implements per-fd locks for MT-safety.  It is not
@@ -122,16 +144,29 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 		 const u_int recvsz,	/* buffer recv size */
 		 const uint32_t flags)
 {
-	CLIENT *clnt = NULL;
 	SVCXPRT *xprt = NULL;
-	struct cx_data *cx = NULL;
-	struct ct_data *cs;
+	struct ct_data *ct = NULL;
+	CLIENT *clnt;		/* client handle */
 	struct svc_vc_xprt *xd;
 	struct rpc_msg call_msg;
 	sigset_t mask, newmask;
 	struct sockaddr_storage ss;
 	XDR ct_xdrs[1];		/* temp XDR stream */
 	socklen_t slen;
+
+	if (raddr == NULL) {
+		rpc_createerr.cf_stat = RPC_UNKNOWNADDR;
+		return (NULL);
+	}
+	if (sizeof(struct sockaddr_storage) < raddr->len) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d called with invalid address length"
+			" (max %z < %u len)",
+			__func__, fd,
+			sizeof(struct sockaddr_storage),
+			raddr->len);
+		return (NULL);
+	}
 
 	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
@@ -168,21 +203,11 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 	xd = VC_DR(REC_XPRT(xprt));
 
 	/* buffer sizes should match svc side */
-	cx = alloc_cx_data(CX_VC_DATA, xd->sx_dr.sendsz, xd->sx_dr.recvsz);
-	cx->cx_rec = &xd->sx_dr;
-	cs = CT_DATA(cx);
+	ct = clnt_vc_data_zalloc();
+	ct->ct_cx.cx_rec = &xd->sx_dr;
 
-	if (sizeof(struct sockaddr_storage) < raddr->len) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: fd %d called with invalid address length"
-			" (max %z < %u len)",
-			__func__, fd,
-			sizeof(struct sockaddr_storage),
-			raddr->len);
-		goto err;
-	}
-	memcpy(&cs->ct_raddr, raddr->buf, raddr->len);
-	cs->ct_rlen = raddr->len;
+	memcpy(&ct->ct_raddr, raddr->buf, raddr->len);
+	ct->ct_rlen = raddr->len;
 
 	/*
 	 * initialize call message
@@ -196,17 +221,18 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 	/*
 	 * pre-serialize the static part of the call msg and stash it away
 	 */
-	xdrmem_create(ct_xdrs, cs->ct_u.ct_mcallc, MCALL_MSG_SIZE, XDR_ENCODE);
+	xdrmem_create(ct_xdrs, ct->ct_cx.cx_u.cx_mcallc, MCALL_MSG_SIZE,
+		      XDR_ENCODE);
 	if (!xdr_callhdr(ct_xdrs, &call_msg)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d xdr_callhdr failed",
 			__func__, fd);
 		goto err;
 	}
-	cs->ct_mpos = XDR_GETPOS(ct_xdrs);
+	ct->ct_cx.cx_mpos = XDR_GETPOS(ct_xdrs);
 	XDR_DESTROY(ct_xdrs);
 
-	clnt = &cx->cx_c;
+	clnt = &ct->ct_cx.cx_c;
 	clnt->cl_ops = clnt_vc_ops();
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
@@ -216,8 +242,8 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 	return (clnt);
 
  err:
-	if (cx) {
-		free_cx_data(cx);
+	if (ct) {
+		clnt_vc_data_free(ct);
 	}
 
 	if (xprt) {
@@ -261,7 +287,6 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	     struct timeval timeout)
 {
 	struct cx_data *cx = CX_DATA(clnt);
-	struct ct_data *cs = CT_DATA(cx);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
 	SVCXPRT *xprt = &rec->xprt;
 	struct xdr_ioq *xioq;
@@ -310,20 +335,18 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	xdrs = xioq->xdrs;
 	ctx->error.re_status = RPC_SUCCESS;
 
-	/* Need lock for ct_mcallc.
-	 */
 	mutex_lock(&clnt->cl_lock);
-	cs->ct_u.ct_mcalli = ntohl(ctx->xid);
+	cx->cx_u.cx_mcalli = ntohl(ctx->xid);
 
-	if ((!XDR_PUTBYTES(xdrs, cs->ct_u.ct_mcallc, cs->ct_mpos))
+	if ((!XDR_PUTBYTES(xdrs, cx->cx_u.cx_mcallc, cx->cx_mpos))
 	    || (!XDR_PUTINT32(xdrs, (int32_t *) &proc))
 	    || (!AUTH_MARSHALL(auth, xdrs))
 	    || (!AUTH_WRAP(auth, xdrs, xdr_args, args_ptr))) {
 		/* error case */
 		mutex_unlock(&clnt->cl_lock);
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
-			"%s: fd %d failed @ %s:%d",
-			__func__, xprt->xp_fd, __func__, __LINE__);
+			"%s: fd %d failed",
+			__func__, xprt->xp_fd);
 		clnt_req_release(ctx);
 		return (RPC_CANTENCODEARGS);
 	}
@@ -391,7 +414,7 @@ static bool
 clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 {
 	struct cx_data *cx = CX_DATA(clnt);
-	struct ct_data *cs = CT_DATA(cx);
+	struct ct_data *ct = CT_DATA(cx);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
 	struct netbuf *addr;
 	bool rslt = true;
@@ -427,7 +450,7 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 	switch (request) {
 	case CLGET_SERVER_ADDR:
 		/* Now obsolete. Only for backward compatibility */
-		(void)memcpy(info, &cs->ct_raddr, (size_t) cs->ct_rlen);
+		(void)memcpy(info, &ct->ct_raddr, (size_t) ct->ct_rlen);
 		break;
 	case CLGET_FD:
 		*(int *)info = rec->xprt.xp_fd;
@@ -435,9 +458,9 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 	case CLGET_SVC_ADDR:
 		/* The caller should not free this memory area */
 		addr = (struct netbuf *)info;
-		addr->buf = &cs->ct_raddr;
-		addr->len = cs->ct_rlen;
-		addr->maxlen = sizeof(cs->ct_raddr);
+		addr->buf = &ct->ct_raddr;
+		addr->len = ct->ct_rlen;
+		addr->maxlen = sizeof(ct->ct_raddr);
 		break;
 	case CLSET_SVC_ADDR:	/* set to new address */
 		rslt = false;
@@ -449,11 +472,11 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 		 * This will get the xid of the PREVIOUS call
 		 */
 		*(u_int32_t *) info =
-		    ntohl(*(u_int32_t *) (void *)&cs->ct_u.ct_mcalli);
+		    ntohl(*(u_int32_t *) (void *)&cx->cx_u.cx_mcalli);
 		break;
 	case CLSET_XID:
 		/* This will set the xid of the NEXT call */
-		*(u_int32_t *) (void *)&cs->ct_u.ct_mcalli =
+		*(u_int32_t *) (void *)&cx->cx_u.cx_mcalli =
 		    htonl(*((u_int32_t *) info) + 1);
 		/* increment by 1 as clnt_vc_call() decrements once */
 		break;
@@ -466,7 +489,7 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 		 */
 		{
 			u_int32_t *tmp =
-			    (u_int32_t *) (cs->ct_u.ct_mcallc +
+			    (u_int32_t *) (cx->cx_u.cx_mcallc +
 					   4 * BYTES_PER_XDR_UNIT);
 			*(u_int32_t *) info = ntohl(*tmp);
 		}
@@ -475,7 +498,7 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 	case CLSET_VERS:
 		{
 			u_int32_t tmp = htonl(*(u_int32_t *) info);
-			*(cs->ct_u.ct_mcallc + 4 * BYTES_PER_XDR_UNIT) = tmp;
+			*(cx->cx_u.cx_mcallc + 4 * BYTES_PER_XDR_UNIT) = tmp;
 		}
 		break;
 
@@ -488,7 +511,7 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 		 */
 		{
 			u_int32_t *tmp =
-			    (u_int32_t *) (cs->ct_u.ct_mcallc +
+			    (u_int32_t *) (cx->cx_u.cx_mcallc +
 					   3 * BYTES_PER_XDR_UNIT);
 			*(u_int32_t *) info = ntohl(*tmp);
 		}
@@ -497,7 +520,7 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 	case CLSET_PROG:
 		{
 			u_int32_t tmp = htonl(*(u_int32_t *) info);
-			*(cs->ct_u.ct_mcallc + 3 * BYTES_PER_XDR_UNIT) = tmp;
+			*(cx->cx_u.cx_mcallc + 3 * BYTES_PER_XDR_UNIT) = tmp;
 		}
 		break;
 
@@ -556,7 +579,7 @@ clnt_vc_release(CLIENT *clnt, u_int flags)
 
 		/* client handles are now freed directly */
 		SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
-		free_cx_data(cx);
+		clnt_vc_data_free(CT_DATA(cx));
 	} else
 		mutex_unlock(&clnt->cl_lock);
 }
@@ -576,7 +599,8 @@ clnt_vc_destroy(CLIENT *clnt)
 	cl_refcnt = --(clnt->cl_refcnt);
 	mutex_unlock(&clnt->cl_lock);
 
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: cl_destroy %p cl_refcnt %u",
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
+		"%s: %p cl_refcnt %u",
 		__func__, clnt, cl_refcnt);
 
 	/* conditional destroy */
@@ -585,7 +609,7 @@ clnt_vc_destroy(CLIENT *clnt)
 
 		/* client handles are now freed directly */
 		SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
-		free_cx_data(cx);
+		clnt_vc_data_free(CT_DATA(cx));
 	}
 }
 

@@ -72,13 +72,6 @@
 				 ((s) == RPC_PROGVERSMISMATCH) ||       \
 				 ((s) == RPC_CANTDECODEARGS))
 
-enum CX_TYPE
-{
-	CX_DG_DATA,
-	CX_VC_DATA,
-	CX_MSK_DATA,
-};
-
 /*
  * Client rpc handle.
  * Created by individual implementations
@@ -122,7 +115,6 @@ typedef struct rpc_client {
 	mutex_t cl_lock;	/* serialize private data */
 	uint32_t cl_refcnt;	/* handle refcnt */
 	uint32_t cl_flags;	/* state flags */
-	enum CX_TYPE cl_type;
 
 } CLIENT;
 

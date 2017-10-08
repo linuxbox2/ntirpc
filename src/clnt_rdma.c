@@ -66,6 +66,35 @@
 
 static struct clnt_ops *clnt_rdma_ops(void);
 
+struct cm_data {
+	struct cx_data cm_cx;
+	XDR cm_xdrs;
+	char *buffers;
+	struct timeval cm_wait; /* wait interval in milliseconds */
+	struct timeval cm_total; /* total time for the call */
+	struct rpc_msg call_msg;
+	//add a lastreceive?
+	u_int cm_xdrpos;
+	bool cm_closeit; /* close it on destroy */
+};
+#define CM_DATA(p) (opr_containerof((p), struct cm_data, cm_cx))
+
+static void
+clnt_rdma_data_free(struct cm_data *cm)
+{
+	clnt_data_destroy(&cm->cm_cx);
+	mem_free(cm, sizeof(struct cm_data));
+}
+
+static struct cm_data *
+clnt_rdma_data_zalloc(void)
+{
+	struct cm_data *cm = mem_zalloc(sizeof(struct cm_data));
+
+	clnt_data_init(&cm->cm_cx);
+	return (cm);
+}
+
 /*
  * Make sure that the time is not garbage.  -1 value is allowed.
  */
@@ -87,7 +116,6 @@ clnt_rdma_create(RDMAXPRT *xprt,		/* init but NOT connect()ed descriptor */
 {
 	CLIENT *cl;		/* client handle */
 	struct cm_data *cm;
-	struct cx_data *cx;
 	struct timeval now;
 
 	if (!xprt || xprt->state != RDMAXS_INITIAL) {
@@ -96,18 +124,8 @@ clnt_rdma_create(RDMAXPRT *xprt,		/* init but NOT connect()ed descriptor */
 		return (NULL);
 	}
 
-	/*
-	 * Find the receive and the send size
-	 */
-//	u_int sendsz = 8*1024;
-//	u_int recvsz = 4*8*1024;
-	u_int sendsz = 1024;
-	u_int recvsz = 1024;
-	/*
-	 * Should be multiple of 4 for XDR.
-	 */
-	cx = alloc_cx_data(CX_MSK_DATA, sendsz, recvsz);
-	cm = CM_DATA(cx);
+	/* buffer sizes should match svc side */
+	cm = clnt_rdma_data_zalloc();
 	/* Other values can also be set through clnt_control() */
 	cm->cm_xdrs.x_lib[1] = (void *)xprt;
 	cm->cm_wait.tv_sec = 15; /* heuristically chosen */
@@ -131,7 +149,7 @@ clnt_rdma_create(RDMAXPRT *xprt,		/* init but NOT connect()ed descriptor */
 	 * to let clnt_destroy do it for him/her.
 	 */
 	cm->cm_closeit = FALSE;
-	cl = &cx->cx_c;
+	cl = &cm->cm_cx.cx_c;
 	cl->cl_ops = clnt_rdma_ops();
 	//	cl->cl_auth = authnone_create();
 
@@ -389,11 +407,32 @@ unlock:
 }
 
 static void
-clnt_rdma_destroy(CLIENT *cl)
+clnt_rdma_destroy(CLIENT *clnt)
 {
-//	struct cx_data *cx = (struct cx_data *)cl->cl_private;
+	uint32_t cl_refcnt;
 
-//FIXME
+	mutex_lock(&clnt->cl_lock);
+	if (clnt->cl_flags & CLNT_FLAG_DESTROYED) {
+		mutex_unlock(&clnt->cl_lock);
+		return;
+	}
+
+	clnt->cl_flags |= CLNT_FLAG_DESTROYED;
+	cl_refcnt = --(clnt->cl_refcnt);
+	mutex_unlock(&clnt->cl_lock);
+
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
+		"%s: %p cl_refcnt %u",
+		__func__, clnt, cl_refcnt);
+
+	/* conditional destroy */
+	if (cl_refcnt == 0) {
+		struct cx_data *cx = CX_DATA(clnt);
+
+		/* client handles are now freed directly */
+		SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
+		clnt_rdma_data_free(CM_DATA(cx));
+	}
 }
 
 static struct clnt_ops *

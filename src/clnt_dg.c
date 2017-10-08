@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -73,15 +74,40 @@
 
 static struct clnt_ops *clnt_dg_ops(void);
 static bool time_not_ok(struct timeval *);
-static enum clnt_stat clnt_dg_call(CLIENT *, AUTH *, rpcproc_t, xdrproc_t,
-				   void *, xdrproc_t, void *, struct timeval);
-static void clnt_dg_geterr(CLIENT *, struct rpc_err *);
-static bool clnt_dg_freeres(CLIENT *, xdrproc_t, void *);
-static bool clnt_dg_ref(CLIENT *, u_int);
-static void clnt_dg_release(CLIENT *, u_int flags);
-static void clnt_dg_abort(CLIENT *);
-static bool clnt_dg_control(CLIENT *, u_int, void *);
-static void clnt_dg_destroy(CLIENT *);
+
+struct cu_data {
+	struct cx_data cu_cx;
+	XDR cu_outxdrs;
+	struct sockaddr_storage cu_raddr;	/* remote address */
+	int cu_rlen;
+	struct timeval cu_wait;	/* retransmit interval */
+	struct timeval cu_total;	/* total time for the call */
+	u_int cu_xdrpos;
+	u_int cu_sendsz;	/* send size */
+	u_int cu_recvsz;	/* recv size */
+	/* formerly, buffers were tacked onto the end */
+	char *cu_inbuf;
+	char *cu_outbuf;
+};
+#define CU_DATA(p) (opr_containerof((p), struct cu_data, cu_cx))
+
+static void
+clnt_dg_data_free(struct cu_data *cu)
+{
+	clnt_data_destroy(&cu->cu_cx);
+	mem_free(cu->cu_inbuf, cu->cu_recvsz);
+	mem_free(cu->cu_outbuf, cu->cu_sendsz);
+	mem_free(cu, sizeof(struct cu_data));
+}
+
+static struct cu_data *
+clnt_dg_data_zalloc(void)
+{
+	struct cu_data *cu = mem_zalloc(sizeof(struct cu_data));
+
+	clnt_data_init(&cu->cu_cx);
+	return (cu);
+}
 
 /*
  * Connection less client creation returns with client handle parameters.
@@ -105,7 +131,6 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 		 const uint32_t flags)
 {
 	CLIENT *clnt;		/* client handle */
-	struct cx_data *cx;
 	struct cu_data *cu;
 	SVCXPRT *xprt;
 	struct svc_dg_xprt *su;
@@ -131,9 +156,12 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 	su = su_data(xprt);
 
 	/* buffer sizes should match svc side */
-	cx = alloc_cx_data(CX_DG_DATA, su->su_dr.sendsz, su->su_dr.recvsz);
-	cx->cx_rec = &su->su_dr;
-	cu = CU_DATA(cx);
+	cu = clnt_dg_data_zalloc();
+	cu->cu_cx.cx_rec = &su->su_dr;
+	cu->cu_recvsz = su->su_dr.recvsz;
+	cu->cu_sendsz = su->su_dr.sendsz;
+	cu->cu_inbuf = mem_alloc(cu->cu_recvsz);
+	cu->cu_outbuf = mem_alloc(cu->cu_sendsz);
 
 	(void)memcpy(&cu->cu_raddr, svcaddr->buf, (size_t) svcaddr->len);
 	cu->cu_rlen = svcaddr->len;
@@ -161,7 +189,7 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 		rpc_createerr.cf_stat = RPC_CANTENCODEARGS;	/* XXX */
 		rpc_createerr.cf_error.re_errno = 0;
 		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-		free_cx_data(cx);
+		clnt_dg_data_free(cu);
 		return (NULL);
 	}
 	cu->cu_xdrpos = XDR_GETPOS(&(cu->cu_outxdrs));
@@ -178,7 +206,7 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 #endif
 	ioctl(fd, FIONBIO, (char *)(void *)&one);
 
-	clnt = &cx->cx_c;
+	clnt = &cu->cu_cx.cx_c;
 	clnt->cl_ops = clnt_dg_ops();
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_DG,
@@ -639,7 +667,7 @@ clnt_dg_destroy(CLIENT *clnt)
 
 	/* release */
 	SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
-	free_cx_data(cx);
+	clnt_dg_data_free(cu);
 }
 
 static struct clnt_ops *
