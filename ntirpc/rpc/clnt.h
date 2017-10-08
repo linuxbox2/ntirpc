@@ -298,7 +298,6 @@ struct rpc_timers {
  */
 #define CLSET_RETRY_TIMEOUT 4	/* set retry timeout (timeval) */
 #define CLGET_RETRY_TIMEOUT 5	/* get retry timeout (timeval) */
-#define CLSET_ASYNC  19
 #define CLSET_CONNECT  20	/* Use connect() for UDP. (int) */
 
 /*

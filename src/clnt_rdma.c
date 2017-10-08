@@ -378,9 +378,6 @@ clnt_rdma_control(CLIENT *cl, u_int request, void *info)
 		cm->call_msg.cb_prog = *(u_int32_t *)info;
 		break;
 
-	case CLSET_ASYNC:
-		//FIXME cm->cm_async = *(int *)info;
-		break;
 	case CLSET_CONNECT:
 		//FIXMEcm->cm_connect = *(int *)info;
 		break;

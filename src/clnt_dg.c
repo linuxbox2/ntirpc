@@ -143,7 +143,6 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 	cu->cu_wait.tv_usec = 0;
 	cu->cu_total.tv_sec = -1;
 	cu->cu_total.tv_usec = -1;
-	cu->cu_async = false;
 	cu->cu_connect = false;
 	cu->cu_connected = false;
 
@@ -268,11 +267,6 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 		mutex_lock(&clnt->cl_lock);
 	}
 	xdrs = &(cu->cu_outxdrs);
-	if (cu->cu_async == true && xargs == NULL) {
-		mutex_unlock(&clnt->cl_lock);
-		slocked = false;
-		goto get_reply;
-	}
 	xdrs->x_op = XDR_ENCODE;
 	XDR_SETPOS(xdrs, cu->cu_xdrpos);
 	/*
@@ -302,7 +296,6 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 		goto out;
 	}
 
- get_reply:
 	/*
 	 * sub-optimal code appears here because we have
 	 * some clock time to spare while the packets are in flight.
@@ -406,19 +399,15 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 		goto send_again;
 	}
 
-	if (cu->cu_async == true)
-		inlen = (socklen_t) recvlen;
-	else {
-		memcpy(&inval, cu->cu_inbuf, sizeof(u_int32_t));
-		memcpy(&outval, cu->cu_outbuf, sizeof(u_int32_t));
-		if (inval != outval) {
-			total_time -= tv;
-			rpc_dplx_rui(rec);
-			rlocked = false;
-			goto send_again;
-		}
-		inlen = (socklen_t) recvlen;
+	memcpy(&inval, cu->cu_inbuf, sizeof(u_int32_t));
+	memcpy(&outval, cu->cu_outbuf, sizeof(u_int32_t));
+	if (inval != outval) {
+		total_time -= tv;
+		rpc_dplx_rui(rec);
+		rlocked = false;
+		goto send_again;
 	}
+	inlen = (socklen_t) recvlen;
 
 	/*
 	 * now decode and validate the response
@@ -644,9 +633,6 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 	case CLSET_PROG:
 		*(u_int32_t *) (void *)(cu->cu_outbuf + 3 * BYTES_PER_XDR_UNIT)
 		    = htonl(*(u_int32_t *) info);
-		break;
-	case CLSET_ASYNC:
-		cu->cu_async = *(int *)info;
 		break;
 	case CLSET_CONNECT:
 		cu->cu_connect = *(int *)info;

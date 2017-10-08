@@ -52,7 +52,6 @@ struct cu_data {
 	u_int cu_xdrpos;
 	u_int cu_sendsz;	/* send size */
 	u_int cu_recvsz;	/* recv size */
-	int cu_async;
 	int cu_connect;		/* Use connect(). */
 	int cu_connected;	/* Have done connect(). */
 	/* formerly, buffers were tacked onto the end */
