@@ -482,10 +482,9 @@ clnt_req_alloc(CLIENT *clnt, struct timeval timeout)
  * unlocked
  */
 enum xprt_stat
-clnt_req_xfer_replymsg(struct svc_req *req)
+clnt_req_process_reply(SVCXPRT *xprt, struct svc_req *req)
 {
 	XDR *xdrs = req->rq_xdrs;
-	SVCXPRT *xprt = req->rq_xprt;
 	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
 	struct clnt_req ctx_k, *ctx;
 	struct opr_rbtree_node *nv;
@@ -519,6 +518,7 @@ clnt_req_xfer_replymsg(struct svc_req *req)
 		}
 		ctx->refreshes = 0;
 	} else if (ctx->refreshes-- > 0
+		   && ctx->error.re_status == RPC_AUTHERROR
 		   && AUTH_REFRESH(ctx->cc_auth, &(ctx->cc_msg))) {
 		/* maybe our credentials need to be refreshed ... */
 		rpc_dplx_rli(rec);

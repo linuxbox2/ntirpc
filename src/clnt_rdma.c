@@ -52,13 +52,6 @@
 #include <unistd.h>
 #include <err.h>
 #include "rpc_com.h"
-
-#ifdef IP_RECVERR
-#include <asm/types.h>
-#include <linux/errqueue.h>
-#include <sys/uio.h>
-#endif
-
 #include "clnt_internal.h"
 #include "rpc_rdma.h"
 

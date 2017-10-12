@@ -522,8 +522,8 @@ int clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
 		      const struct opr_rbtree_node *rhs);
 
 struct clnt_req *clnt_req_alloc(CLIENT *, struct timeval);
+enum xprt_stat clnt_req_process_reply(SVCXPRT *, struct svc_req *);
 int clnt_req_wait_reply(struct clnt_req *);
-enum xprt_stat clnt_req_xfer_replymsg(struct svc_req *);
 void clnt_req_release(struct clnt_req *);
 
 __END_DECLS

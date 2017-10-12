@@ -814,7 +814,7 @@ svc_vc_decode(struct svc_req *req)
 
 	if (req->rq_msg.rm_direction == REPLY) {
 		/* reply header (xprt OK) */
-		return clnt_req_xfer_replymsg(req);
+		return clnt_req_process_reply(xprt, req);
 	}
 
 	__warnx(TIRPC_DEBUG_FLAG_WARN,
