@@ -576,7 +576,7 @@ static inline bool
 xdr_bytes_decode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 {
 	char *sp = *cpp;	/* sp is the actual string pointer */
-	u_long size;
+	long size;
 	bool ret;
 
 	/*
@@ -618,7 +618,7 @@ static inline bool
 xdr_bytes_encode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 {
 	char *sp = *cpp;	/* sp is the actual string pointer */
-	u_long size = *sizep;
+	long size = *sizep;
 	u_int nodesize;
 
 	if (size > maxsize) {
@@ -745,7 +745,7 @@ static inline bool
 xdr_string_decode(XDR *xdrs, char **cpp, u_int maxsize)
 {
 	char *sp = *cpp;	/* sp is the actual string pointer */
-	u_long size;
+	long size;
 	u_int nodesize;
 	bool ret;
 
@@ -796,7 +796,7 @@ xdr_string_decode(XDR *xdrs, char **cpp, u_int maxsize)
 static inline bool
 xdr_string_encode(XDR *xdrs, char **cpp, u_int maxsize)
 {
-	u_long size;
+	long size;
 	u_int nodesize;
 
 	if (!(*cpp)) {
