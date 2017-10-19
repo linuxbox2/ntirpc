@@ -247,7 +247,15 @@ svc_init(svc_init_params *params)
 	mutex_unlock(&__svc_params->mtx);
 
 #if defined(_SC_IOV_MAX) /* IRIX, MacOS X, FreeBSD, Solaris, ... */
-	__svc_maxiov = sysconf(_SC_IOV_MAX);
+	{
+		/*
+		 * some glibc (e.g. 2.26 in Fedora 27 beta) always
+		 * return -1
+		 */
+		int i = sysconf(_SC_IOV_MAX);
+		if (i != -1 && i > __svc_maxiov)
+			__svc_maxiov = i;
+	}
 #endif
 	return true;
 }
