@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012 Linux Box Corporation.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -9,9 +10,6 @@
  * - Redistributions in binary form must reproduce the above copyright notice,
  *   this list of conditions and the following disclaimer in the documentation
  *   and/or other materials provided with the distribution.
- * - Neither the name of Sun Microsystems, Inc. nor the names of its
- *   contributors may be used to endorse or promote products derived
- *   from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -25,63 +23,14 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-/*
- * Copyright (c) 1986 - 1991 by Sun Microsystems, Inc.
- */
-
-/*
- * clnt_internal.h  Internal client structures needed by some async
- * svc routines
- */
 
 #ifndef _CLNT_INTERNAL_H
 #define _CLNT_INTERNAL_H
 
+#include <rpc/clnt.h>
 #include "rpc_dplx_internal.h"
 
 #define MCALL_MSG_SIZE 24
-
-/* unify client private data  */
-
-struct cu_data {
-	XDR cu_outxdrs;
-	struct sockaddr_storage cu_raddr;	/* remote address */
-	int cu_rlen;
-	struct timeval cu_wait;	/* retransmit interval */
-	struct timeval cu_total;	/* total time for the call */
-	u_int cu_xdrpos;
-	u_int cu_sendsz;	/* send size */
-	u_int cu_recvsz;	/* recv size */
-	int cu_async;
-	int cu_connect;		/* Use connect(). */
-	int cu_connected;	/* Have done connect(). */
-	/* formerly, buffers were tacked onto the end */
-	char *cu_inbuf;
-	char *cu_outbuf;
-};
-
-struct ct_data {
-	struct sockaddr_storage ct_raddr;	/* remote addr */
-	union {
-		char ct_mcallc[MCALL_MSG_SIZE];	/* marshalled callmsg */
-		u_int32_t ct_mcalli;
-	} ct_u;
-	u_int ct_mpos;		/* pos after marshal */
-	int ct_rlen;
-};
-
-#ifdef USE_RPC_RDMA
-struct cm_data {
-	XDR cm_xdrs;
-	char *buffers;
-	struct timeval cm_wait; /* wait interval in milliseconds */
-	struct timeval cm_total; /* total time for the call */
-	struct rpc_msg call_msg;
-	//add a lastreceive?
-	u_int cm_xdrpos;
-	bool cm_closeit; /* close it on destroy */
-};
-#endif
 
 struct cx_data {
 	struct rpc_client cx_c;		/**< Transport Independent handle */
@@ -89,49 +38,23 @@ struct cx_data {
 	struct rpc_err cx_error;
 
 	union {
-		struct cu_data cu;
-		struct ct_data ct;
-#ifdef USE_RPC_RDMA
-		struct cm_data cm;
-#endif
-	} c_u;
+		char cx_mcallc[MCALL_MSG_SIZE];	/* marshalled callmsg */
+		u_int32_t cx_mcalli;
+	} cx_u;
+	u_int cx_mpos;		/* pos after marshal */
 };
 #define CX_DATA(p) (opr_containerof((p), struct cx_data, cx_c))
-#define CU_DATA(cx) (&(cx)->c_u.cu)
-#define CT_DATA(cx) (&(cx)->c_u.ct)
-#define CM_DATA(cx) (&(cx)->c_u.cm)
 
 /* compartmentalize a bit */
-static inline struct cx_data *
-alloc_cx_data(enum CX_TYPE type, uint32_t sendsz, uint32_t recvsz)
+static inline void
+clnt_data_init(struct cx_data *cx)
 {
-	struct cx_data *cx = mem_zalloc(sizeof(struct cx_data));
-
 	mutex_init(&cx->cx_c.cl_lock, NULL);
 	cx->cx_c.cl_refcnt = 1;
-
-	cx->cx_c.cl_type = type;
-	switch (type) {
-	case CX_DG_DATA:
-		cx->c_u.cu.cu_recvsz = recvsz;
-		cx->c_u.cu.cu_sendsz = sendsz;
-		cx->c_u.cu.cu_inbuf = mem_alloc(recvsz);
-		cx->c_u.cu.cu_outbuf = mem_alloc(sendsz);
-	case CX_VC_DATA:
-	case CX_MSK_DATA:
-		break;
-	default:
-		/* err */
-		__warnx(TIRPC_DEBUG_FLAG_MEM,
-			"%s: asked to allocate cx_data of unknown type (BUG)",
-			__func__);
-		break;
-	};
-	return (cx);
 }
 
 static inline void
-free_cx_data(struct cx_data *cx)
+clnt_data_destroy(struct cx_data *cx)
 {
 	mutex_destroy(&cx->cx_c.cl_lock);
 
@@ -140,22 +63,24 @@ free_cx_data(struct cx_data *cx)
 		mem_free(cx->cx_c.cl_netid, strlen(cx->cx_c.cl_netid) + 1);
 	if (cx->cx_c.cl_tp && cx->cx_c.cl_tp[0])
 		mem_free(cx->cx_c.cl_tp, strlen(cx->cx_c.cl_tp) + 1);
-
-	switch (cx->cx_c.cl_type) {
-	case CX_DG_DATA:
-		mem_free(cx->c_u.cu.cu_inbuf, cx->c_u.cu.cu_recvsz);
-		mem_free(cx->c_u.cu.cu_outbuf, cx->c_u.cu.cu_sendsz);
-	case CX_VC_DATA:
-	case CX_MSK_DATA:
-		break;
-	default:
-		/* err */
-		__warnx(TIRPC_DEBUG_FLAG_MEM,
-			"%s: asked to free cx_data of unknown type (BUG)",
-			__func__);
-		break;
-	};
-	mem_free(cx, sizeof(struct cx_data));
 }
+
+/*
+ * Make sure that the time is not garbage.  0 or - value is *NOT* allowed.
+ */
+static inline bool
+time_not_ok_trace(struct timeval *t, const char *func, int line)
+{
+	if (t->tv_usec < 0 || t->tv_usec > 999999
+	 || t->tv_sec < 0 || !(t->tv_sec + t->tv_usec))
+		return (false);
+	if (t->tv_sec > 10)
+		__warnx(TIRPC_DEBUG_FLAG_WARN,
+			"%s:%d tv_sec %ld > 10",
+			func, line, t->tv_sec);
+	return (true);
+}
+#define time_not_ok(t) \
+	time_not_ok_trace(t, __func__, __LINE__)
 
 #endif				/* _CLNT_INTERNAL_H */

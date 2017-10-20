@@ -84,12 +84,6 @@ svc_dg_xprt_free(struct svc_dg_xprt *su)
 {
 	XDR_DESTROY(su->su_dr.ioq.xdrs);
 	rpc_dplx_rec_destroy(&su->su_dr);
-	mutex_destroy(&su->su_dr.xprt.xp_lock);
-
-#if defined(HAVE_BLKIN)
-	if (su->su_dr.xprt.blkin.svc_name)
-		mem_free(su->su_dr.xprt.blkin.svc_name, 2*INET6_ADDRSTRLEN);
-#endif
 	mem_free(su, sizeof(struct svc_dg_xprt) + su->su_dr.maxrec);
 }
 
@@ -99,11 +93,8 @@ svc_dg_xprt_zalloc(size_t iosz)
 	struct svc_dg_xprt *su = mem_zalloc(sizeof(struct svc_dg_xprt) + iosz);
 
 	/* Init SVCXPRT locks, etc */
-	mutex_init(&su->su_dr.xprt.xp_lock, NULL);
 	rpc_dplx_rec_init(&su->su_dr);
 	xdr_ioq_setup(&su->su_dr.ioq);
-
-	su->su_dr.xprt.xp_refs = 1;
 	return (su);
 }
 
@@ -237,12 +228,15 @@ svc_dg_rendezvous(SVCXPRT *xprt)
 	SVCXPRT *newxprt = &su->su_dr.xprt;
 	struct sockaddr *sp = (struct sockaddr *)&newxprt->xp_remote.ss;
 	struct msghdr *mesgp;
+	struct timespec now;
 	struct iovec iov;
 	ssize_t rlen;
 
 	newxprt->xp_fd = xprt->xp_fd;
 	newxprt->xp_flags = SVC_XPRT_FLAG_INITIAL | SVC_XPRT_FLAG_INITIALIZED;
 
+	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &now);
+	su->su_dr.call_xid = __RPC_GETXID(&now);
 	su->su_dr.sendsz = req_su->su_dr.sendsz;
 	su->su_dr.recvsz = req_su->su_dr.recvsz;
 	su->su_dr.maxrec = req_su->su_dr.maxrec;
@@ -313,6 +307,7 @@ svc_dg_recv(SVCXPRT *xprt)
 {
 	/* Stolen reference! Callee must take a reference to rq_xprt. */
 	xprt->xp_refs--;
+	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
 
 	/* pass the xdrs to user to store in struct svc_req, as most of
 	 * the work has already been done on rendezvous
@@ -324,6 +319,7 @@ static enum xprt_stat
 svc_dg_decode(struct svc_req *req)
 {
 	XDR *xdrs = req->rq_xdrs;
+	SVCXPRT *xprt = req->rq_xprt;
 
 	xdrs->x_op = XDR_DECODE;
 	XDR_SETPOS(xdrs, 0);
@@ -332,10 +328,27 @@ svc_dg_decode(struct svc_req *req)
 	if (!xdr_dplx_decode(xdrs, &req->rq_msg)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d failed (will set dead)",
-			__func__, req->rq_xprt, req->rq_xprt->xp_fd);
+			__func__, xprt, xprt->xp_fd);
 		return (XPRT_DIED);
 	}
-	return (req->rq_xprt->xp_dispatch.process_cb(req));
+
+	/* in order of likelihood */
+	if (req->rq_msg.rm_direction == CALL) {
+		/* an ordinary call header */
+		return xprt->xp_dispatch.process_cb(req);
+	}
+
+	if (req->rq_msg.rm_direction == REPLY) {
+		/* reply header (xprt OK) */
+		return clnt_req_process_reply(xprt->xp_parent, req);
+	}
+
+	__warnx(TIRPC_DEBUG_FLAG_WARN,
+		"%s: %p fd %d failed direction %" PRIu32
+		" (will set dead)",
+		__func__, __func__, xprt, xprt->xp_fd,
+		req->rq_msg.rm_direction);
+	return (XPRT_DIED);
 }
 
 static void
