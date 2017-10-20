@@ -54,8 +54,13 @@
 
 typedef struct svc_xprt SVCXPRT;
 
-typedef enum xprt_stat (*svc_xprt_fun_t) (SVCXPRT *);
-typedef enum xprt_stat (*svc_xprt_xdr_fun_t) (SVCXPRT *, XDR *);
+enum xprt_stat {
+	XPRT_IDLE = 0,
+	XPRT_MOREREQS,
+	/* always last in this order for comparisons */
+	XPRT_DIED,
+	XPRT_DESTROYED
+};
 
 /*
  * This interface must manage two items concerning remote procedure calling:
@@ -108,6 +113,9 @@ typedef enum xprt_stat (*svc_xprt_xdr_fun_t) (SVCXPRT *, XDR *);
 #define RPC_SVC_XPRTS_SET       3
 #define RPC_SVC_FDSET_GET       4
 #define RPC_SVC_FDSET_SET       5
+
+typedef enum xprt_stat (*svc_xprt_fun_t) (SVCXPRT *);
+typedef enum xprt_stat (*svc_xprt_xdr_fun_t) (SVCXPRT *, XDR *);
 
 typedef struct svc_init_params {
 	svc_xprt_fun_t disconnect_cb;
@@ -182,14 +190,6 @@ typedef enum xprt_type {
 	XPRT_VSOCK,
 	XPRT_VSOCK_RENDEZVOUS
 } xprt_type_t;
-
-enum xprt_stat {
-	XPRT_IDLE = 0,
-	XPRT_MOREREQS,
-	/* always last in this order for comparisons */
-	XPRT_DIED,
-	XPRT_DESTROYED
-};
 
 struct SVCAUTH;			/* forward decl. */
 struct svc_req;			/* forward decl. */
