@@ -60,9 +60,17 @@
 #define WORK_POOL_STACK_SIZE MAX(64 * 1024, PTHREAD_STACK_MIN)
 #define WORK_POOL_TIMEOUT_MS (31 /* seconds (prime) */ * 1000)
 
+__thread char worker_name[16];
+
 /* forward declaration in lieu of moving code, was inline */
 
 static int work_pool_spawn(struct work_pool *pool);
+
+char *
+work_pool_worker_name(void)
+{
+	return worker_name;
+}
 
 int
 work_pool_init(struct work_pool *pool, const char *name,
@@ -150,6 +158,10 @@ work_pool_thread(void *arg)
 	TAILQ_INSERT_TAIL(&pool->wptqh, wpt, wptq);
 	pool->n_threads++;
 
+	wpt->worker_index = atomic_inc_uint32_t(&pool->worker_index);
+	snprintf(worker_name, sizeof(worker_name), "%.5s%" PRIu32,
+		 pool->name, wpt->worker_index);
+
 	do {
 		/* testing at top of loop allows pre-specification of work,
 		 * and thread termination after timeout with no work (below).
@@ -167,7 +179,7 @@ work_pool_thread(void *arg)
 
 			__warnx(TIRPC_DEBUG_FLAG_WORKER,
 				"%s() %s task %p",
-				__func__, pool->name, wpt->work);
+				__func__, worker_name, wpt->work);
 			wpt->work->fun(wpt->work);
 			wpt->work = NULL;
 			pthread_mutex_lock(&pool->pqh.qmutex);
@@ -189,8 +201,8 @@ work_pool_thread(void *arg)
 		TAILQ_INSERT_TAIL(&pool->pqh.qh, &wpt->pqe, q);
 
 		__warnx(TIRPC_DEBUG_FLAG_WORKER,
-			"%s() %s waiting for task",
-			__func__, pool->name);
+			"%s() %s waiting",
+			__func__, worker_name);
 
 		clock_gettime(CLOCK_REALTIME_FAST, &ts);
 		timespec_addms(&ts, WORK_POOL_TIMEOUT_MS);
@@ -226,8 +238,8 @@ work_pool_thread(void *arg)
 	pthread_mutex_unlock(&pool->pqh.qmutex);
 
 	__warnx(TIRPC_DEBUG_FLAG_WORKER,
-		"%s() %s terminate thread",
-		__func__, pool->name);
+		"%s() %s terminating",
+		__func__, worker_name);
 	cond_destroy(&wpt->pqcond);
 	mem_free(wpt, sizeof(*wpt));
 
@@ -306,7 +318,7 @@ work_pool_shutdown(struct work_pool *pool)
 
 	while (pool->n_threads > 0) {
 		__warnx(TIRPC_DEBUG_FLAG_WORKER,
-			"%s() %s %" PRIu32,
+			"%s() \"%s\" %" PRIu32,
 			__func__, pool->name, pool->n_threads);
 		pthread_mutex_lock(&pool->pqh.qmutex);
 		wpt = TAILQ_FIRST(&pool->wptqh);
