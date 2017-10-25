@@ -130,7 +130,7 @@ svc_work_pool_init()
 		.thrd_min = SVC_WORK_POOL_THRD_MIN,
 	};
 
-	return work_pool_init(&svc_work_pool, "svc_work_pool", &params);
+	return work_pool_init(&svc_work_pool, "svc_", &params);
 }
 
 /* Package init function.
