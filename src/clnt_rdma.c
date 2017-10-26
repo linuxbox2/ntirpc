@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2012-2014 CEA
  * Dominique Martinet <dominique.martinet@cea.fr>
+ * Copyright (c) 2015-2017 Red Hat, Inc. and/or its affiliates.
  * contributeur : William Allen Simpson <bill@cohortfs.com>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -136,120 +137,60 @@ clnt_rdma_create(RDMAXPRT *xprt,		/* init but NOT connect()ed descriptor */
 }
 
 static enum clnt_stat
-clnt_rdma_call(CLIENT *cl,		/* client handle */
-	       AUTH *auth,
-	       rpcproc_t proc,		/* procedure number */
-	       xdrproc_t xargs,		/* xdr routine for args */
-	       void *argsp,		/* pointer to args */
-	       xdrproc_t xresults,	/* xdr routine for results */
-	       void *resultsp,		/* pointer to results */
-	       struct timeval utimeout	/* seconds to wait before giving up */)
+clnt_rdma_call(struct clnt_req *cc)
 {
+	CLIENT *cl = cc->cc_clnt;
 	struct cx_data *cx = CX_DATA(cl);
 	struct cm_data *cm = CM_DATA(cx);
+	struct rpc_dplx_rec *rec = cx->cx_rec;
+	SVCXPRT *xprt = &rec->xprt;
 	XDR *xdrs;
-	struct rpc_msg reply_msg;
-	bool ok;
-#if 0
-	struct timeval timeout;
-	int total_time;
-#endif
-//	sigset_t mask;
-	socklen_t  __attribute__((unused)) inlen, salen;
-	int nrefreshes = 2;		/* number of times to refresh cred */
+	enum clnt_stat result;
+	int code;
 
-//	thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
-//	vc_fd_lock_c(cl, &mask); //What does that do?
-
-	/* Clean up in case the last call ended in a longjmp(3) call. */
 call_again:
 	xdrs = &(cm->cm_xdrs);
+	cc->cc_error.re_status = RPC_SUCCESS;
+	cm->call_msg.rm_xid = cc->cc_xid;
 
-	if (0) //FIXME check for async
-		goto get_reply;
-
-	if (! xdr_rdma_clnt_call(&cm->cm_xdrs, cm->call_msg.rm_xid) ||
-	    ! xdr_callhdr(&(cm->cm_xdrs), &cm->call_msg)) {
-		rpc_createerr.cf_stat = RPC_CANTENCODEARGS;  /* XXX */
-		rpc_createerr.cf_error.re_errno = 0;
-		goto out;
-	}
-
-	if ((! XDR_PUTINT32(xdrs, (int32_t *)&proc)) ||
-	    (! AUTH_MARSHALL(auth, xdrs)) ||
-	    (! AUTH_WRAP(auth, xdrs, xargs, argsp))) {
+	if (!xdr_rdma_clnt_call(&cm->cm_xdrs, cm->call_msg.rm_xid)
+	 || !xdr_callhdr(&(cm->cm_xdrs), &cm->call_msg)
+	 || !XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc)
+	 || !AUTH_MARSHALL(cc->cc_auth, xdrs)
+	 || !AUTH_WRAP(cc->cc_auth, xdrs, cc->cc_xdr.proc, cc->cc_xdr.where)) {
+		__warnx(TIRPC_DEBUG_FLAG_CLNT_RDMA,
+			"%s: fd %d failed",
+			__func__, xprt->xp_fd);
+		XDR_DESTROY(xdrs);
 		cx->cx_error.re_status = RPC_CANTENCODEARGS;
-		goto out;
+		return (RPC_CANTENCODEARGS);
 	}
 
 	if (! xdr_rdma_clnt_flushout(&cm->cm_xdrs)) {
 		cx->cx_error.re_errno = errno;
 		cx->cx_error.re_status = RPC_CANTSEND;
-		goto out;
+		return (RPC_CANTSEND);
 	}
 
-get_reply:
+	code = clnt_req_wait_reply(cc);
 
-	/*
-	 * sub-optimal code appears here because we have
-	 * some clock time to spare while the packets are in flight.
-	 * (We assume that this is actually only executed once.)
-	 */
-	reply_msg.RPCM_ack.ar_verf = _null_auth;
-	reply_msg.RPCM_ack.ar_results.where = NULL;
-	reply_msg.RPCM_ack.ar_results.proc = (xdrproc_t)xdr_void;
-
-	if (! xdr_rdma_clnt_reply(&cm->cm_xdrs, cm->call_msg.rm_xid)) {
-		//FIXME add timeout
-		cx->cx_error.re_status = RPC_TIMEDOUT;
-		goto out;
+	if (cc->cc_refreshes > 0) {
+		cc->cc_flags = CLNT_REQ_FLAG_NONE;
+		goto call_again;
+	}
+	if (code == ETIMEDOUT) {
+		/* UL can retry, we dont.  This CAN indicate xprt
+		 * destroyed (error status already set). */
+		__warnx(TIRPC_DEBUG_FLAG_CLNT_RDMA,
+			"%s: fd %d ETIMEDOUT",
+			__func__, xprt->xp_fd);
 	}
 
-	/*
-	 * now decode and validate the response
-	 */
-
-	ok = xdr_replymsg(&cm->cm_xdrs, &reply_msg);
-	if (ok) {
-		if ((reply_msg.rm_reply.rp_stat == MSG_ACCEPTED) &&
-			(reply_msg.RPCM_ack.ar_stat == SUCCESS))
-			cx->cx_error.re_status = RPC_SUCCESS;
-		else
-			_seterr_reply(&reply_msg, &(cx->cx_error));
-
-		if (cx->cx_error.re_status == RPC_SUCCESS) {
-			if (! AUTH_VALIDATE(auth,
-					    &(reply_msg.RPCM_ack.ar_verf))) {
-				cx->cx_error.re_status = RPC_AUTHERROR;
-				cx->cx_error.re_why = AUTH_INVALIDRESP;
-			} else if (! AUTH_UNWRAP(auth, &cm->cm_xdrs,
-						 xresults, resultsp)) {
-				if (cx->cx_error.re_status == RPC_SUCCESS)
-				     cx->cx_error.re_status = RPC_CANTDECODERES;
-			}
-		}	/* end successful completion */
-		/*
-		 * If unsuccesful AND error is an authentication error
-		 * then refresh credentials and try again, else break
-		 */
-		else if (cx->cx_error.re_status == RPC_AUTHERROR)
-			/* maybe our credentials need to be refreshed ... */
-			if (nrefreshes > 0 &&
-			    AUTH_REFRESH(auth, &reply_msg)) {
-				nrefreshes--;
-				goto call_again;
-			}
-		/* end of unsuccessful completion */
-	}	/* end of valid reply message */
-	else {
-		cx->cx_error.re_status = RPC_CANTDECODERES;
-
-	}
-out:
-	cm->call_msg.rm_xid++;
-
-//	vc_fd_unlock_c(cl, &mask);
-	return (cx->cx_error.re_status);
+	result = cc->cc_error.re_status;
+	__warnx(TIRPC_DEBUG_FLAG_CLNT_RDMA,
+		"%s: fd %d result=%d",
+		__func__, xprt->xp_fd, result);
+	return (result);
 }
 
 static void

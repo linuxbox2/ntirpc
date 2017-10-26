@@ -146,7 +146,8 @@ struct rpc_gss_data {
 
 #define AUTH_PRIVATE(auth) ((struct rpc_gss_data *)auth->ah_private)
 
-static struct timeval AUTH_TIMEOUT = { 25, 0 };
+/* retry timeout default to the moon and back */
+static const struct timespec to = { 3, 0 };
 
 AUTH *
 authgss_ncreate(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
@@ -460,6 +461,8 @@ authgss_refresh(AUTH *auth, void *arg)
 			break;
 		}
 		if (send_token.length != 0) {
+			struct clnt_req *cc = mem_alloc(sizeof(*cc));
+
 			memset(&gr, 0, sizeof(gr));
 
 #ifdef DEBUG
@@ -470,12 +473,15 @@ authgss_refresh(AUTH *auth, void *arg)
 			gss_log_hexdump(send_token.value, send_token.length, 0);
 #endif
 
-			call_stat =
-			    clnt_call(gd->clnt, auth, NULLPROC,
+			clnt_req_fill(cc, gd->clnt, auth, NULLPROC,
 				      (xdrproc_t) xdr_rpc_gss_init_args,
 				      &send_token,
-				      (xdrproc_t) xdr_rpc_gss_init_res,
-				      (caddr_t) &gr, AUTH_TIMEOUT);
+				      (xdrproc_t) xdr_rpc_gss_init_res, &gr);
+			call_stat = RPC_TLIERROR;
+			if (clnt_req_setup(cc, to)) {
+				call_stat = CLNT_CALL(cc);
+			}
+			clnt_req_release(cc);
 
 			gss_release_buffer(&min_stat, &send_token);
 
@@ -576,10 +582,17 @@ authgss_destroy_context(AUTH *auth)
 
 	if (gd->gc.gc_ctx.length != 0) {
 		if (gd->established) {
+			struct clnt_req *cc = mem_alloc(sizeof(*cc));
+
 			gd->gc.gc_proc = RPCSEC_GSS_DESTROY;
-			clnt_call(gd->clnt, auth, NULLPROC,
-				  (xdrproc_t) xdr_void, NULL,
-				  (xdrproc_t) xdr_void, NULL, AUTH_TIMEOUT);
+
+			clnt_req_fill(cc, gd->clnt, auth, NULLPROC,
+				      (xdrproc_t) xdr_void, NULL,
+				      (xdrproc_t) xdr_void, NULL);
+			if (clnt_req_setup(cc, to)) {
+				CLNT_CALL(cc);
+			}
+			clnt_req_release(cc);
 		}
 		gss_release_buffer(&min_stat, &gd->gc.gc_ctx);
 		/* XXX ANDROS check size of context  - should be 8 */

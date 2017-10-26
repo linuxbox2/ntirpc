@@ -200,34 +200,18 @@ clnt_dg_rendezvous(SVCXPRT *xprt)
 }
 
 static enum clnt_stat
-clnt_dg_call(CLIENT *clnt,	/* client handle */
-	     AUTH *auth,	/* auth handle */
-	     rpcproc_t proc,	/* procedure number */
-	     xdrproc_t xargs,	/* xdr routine for args */
-	     void *argsp,	/* pointer to args */
-	     xdrproc_t xresults,	/* xdr routine for results */
-	     void *resultsp,	/* pointer to results */
-	     struct timeval utimeout
-	     /* seconds to wait before giving up */)
+clnt_dg_call(struct clnt_req *cc)
 {
+	CLIENT *clnt = cc->cc_clnt;
 	struct cx_data *cx = CX_DATA(clnt);
 	struct cu_data *cu = CU_DATA(cx);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
 	SVCXPRT *xprt = &rec->xprt;
 	struct xdr_ioq *xioq;
 	XDR *xdrs;
-	struct clnt_req *ctx;
 	size_t outlen;
 	enum clnt_stat result;
 	int code;
-
-	ctx = clnt_req_alloc(clnt, utimeout);
-	if (!ctx)
-		return (RPC_TLIERROR);
-
-	ctx->cc_auth = auth;
-	ctx->cc_xdr.proc = xresults;
-	ctx->cc_xdr.where = resultsp;
 
  call_again:
 	/* XXX Until gss_get_mic and gss_wrap can be replaced with
@@ -239,28 +223,27 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	 */
 	xioq = xdr_ioq_create(RPC_MAXDATA_DEFAULT,
 			      __svc_params->ioq.send_max + RPC_MAXDATA_DEFAULT,
-			      (auth->ah_cred.oa_flavor == RPCSEC_GSS)
+			      (cc->cc_auth->ah_cred.oa_flavor == RPCSEC_GSS)
 			      ? UIO_FLAG_REALLOC | UIO_FLAG_FREE
 			      : UIO_FLAG_FREE);
 
 	xdrs = xioq->xdrs;
-	ctx->error.re_status = RPC_SUCCESS;
+	cc->cc_error.re_status = RPC_SUCCESS;
 
 	mutex_lock(&clnt->cl_lock);
-	cx->cx_u.cx_mcalli = ntohl(ctx->xid);
+	cx->cx_u.cx_mcalli = ntohl(cc->cc_xid);
 
 	if ((!XDR_PUTBYTES(xdrs, cx->cx_u.cx_mcallc, cx->cx_mpos))
-	    || (!XDR_PUTINT32(xdrs, (int32_t *) &proc))
-	    || (!AUTH_MARSHALL(auth, xdrs))
-	    || (!AUTH_WRAP(auth, xdrs, xargs, argsp))) {
+	    || (!XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc))
+	    || (!AUTH_MARSHALL(cc->cc_auth, xdrs))
+	    || (!AUTH_WRAP(cc->cc_auth, xdrs,
+			   cc->cc_xdr.proc, cc->cc_xdr.where))) {
 		/* error case */
 		mutex_unlock(&clnt->cl_lock);
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_DG,
 			"%s: fd %d failed",
 			__func__, xprt->xp_fd);
 		XDR_DESTROY(xdrs);
-		clnt_req_release(ctx);
-		cx->cx_error.re_status = RPC_CANTENCODEARGS;
 		return (RPC_CANTENCODEARGS);
 	}
 	outlen = (size_t) XDR_GETPOS(xdrs);
@@ -273,7 +256,6 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 			"%s: fd %d sendto failed (%d)\n",
 			__func__, xprt->xp_fd, cx->cx_error.re_errno);
 		XDR_DESTROY(xdrs);
-		clnt_req_release(ctx);
 		cx->cx_error.re_status = RPC_CANTSEND;
 		return (RPC_CANTSEND);
 	}
@@ -285,10 +267,10 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 				    SVC_RQST_FLAG_LOCKED |
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
 	}
-	code = clnt_req_wait_reply(ctx);
+	code = clnt_req_wait_reply(cc);
 
-	if (ctx->refreshes > 0) {
-		ctx->flags = CLNT_REQ_FLAG_NONE;
+	if (cc->cc_refreshes > 0) {
+		cc->cc_flags = CLNT_REQ_FLAG_NONE;
 		XDR_DESTROY(xdrs);
 		goto call_again;
 	}
@@ -300,8 +282,7 @@ clnt_dg_call(CLIENT *clnt,	/* client handle */
 	}
 	XDR_DESTROY(xdrs);
 
-	result = ctx->error.re_status;
-	clnt_req_release(ctx);
+	result = cc->cc_error.re_status;
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_DG,
 		"%s: fd %d result=%d",
 		__func__, xprt->xp_fd, result);

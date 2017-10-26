@@ -55,6 +55,9 @@ int __rpc_raise_fd(int);
 #define NETIDLEN 32
 #endif
 
+/* retry timeout default to the moon and back */
+static const struct timespec to = { 3, 0 };
+
 /*
  * Generic client creation with version checking the value of
  * vers_out is set to the highest server supported value
@@ -87,23 +90,33 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
 			const struct timeval *tp)
 {
 	CLIENT *clnt;
-	struct timeval to;
-	enum clnt_stat rpc_stat;
+	struct clnt_req *cc;
+	AUTH *auth;
 	struct rpc_err rpcerr;
-	AUTH *auth = authnone_ncreate();	/* idempotent */
+	enum clnt_stat rpc_stat;
 
 	clnt = clnt_ncreate_timed(hostname, prog, vers_high, nettype, tp);
 	if (clnt == NULL)
 		return (NULL);
-	to.tv_sec = 10;
-	to.tv_usec = 0;
-	rpc_stat =
-	    clnt_call(clnt, auth, NULLPROC, (xdrproc_t) xdr_void, (char *)NULL,
-		      (xdrproc_t) xdr_void, (char *)NULL, to);
+
+	auth = authnone_ncreate();	/* idempotent */
+	cc = mem_alloc(sizeof(*cc));
+	clnt_req_fill(cc, clnt, auth, NULLPROC,
+		      (xdrproc_t) xdr_void, NULL,
+		      (xdrproc_t) xdr_void, NULL);
+	if (!clnt_req_setup(cc, to)) {
+		rpc_stat = RPC_TLIERROR;
+		clnt_req_release(cc);
+		goto geterror;
+	}
+
+	rpc_stat = CLNT_CALL(cc);
+	clnt_req_release(cc);
 	if (rpc_stat == RPC_SUCCESS) {
 		*vers_out = vers_high;
 		return (clnt);
 	}
+
 	while (rpc_stat == RPC_PROGVERSMISMATCH && vers_high > vers_low) {
 		unsigned int minvers, maxvers;
 
@@ -119,15 +132,25 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
 		if (vers_low > vers_high)
 			goto error;
 		CLNT_CONTROL(clnt, CLSET_VERS, (char *)&vers_high);
-		rpc_stat =
-		    clnt_call(clnt, auth, NULLPROC, (xdrproc_t) xdr_void,
-			      (char *)NULL, (xdrproc_t) xdr_void, (char *)NULL,
-			      to);
+
+		cc = mem_alloc(sizeof(*cc));
+		clnt_req_fill(cc, clnt, auth, NULLPROC,
+			      (xdrproc_t) xdr_void, NULL,
+			      (xdrproc_t) xdr_void, NULL);
+		if (!clnt_req_setup(cc, to)) {
+			rpc_stat = RPC_TLIERROR;
+			clnt_req_release(cc);
+			goto geterror;
+		}
+
+		rpc_stat = CLNT_CALL(cc);
+		clnt_req_release(cc);
 		if (rpc_stat == RPC_SUCCESS) {
 			*vers_out = vers_high;
 			return (clnt);
 		}
 	}
+ geterror:
 	clnt_geterr(clnt, &rpcerr);
 
  error:
@@ -418,64 +441,67 @@ clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
 {
 	struct clnt_req *lk, *rk;
 
-	lk = opr_containerof(lhs, struct clnt_req, node_k);
-	rk = opr_containerof(rhs, struct clnt_req, node_k);
+	lk = opr_containerof(lhs, struct clnt_req, cc_node);
+	rk = opr_containerof(rhs, struct clnt_req, cc_node);
 
-	if (lk->xid < rk->xid)
+	if (lk->cc_xid < rk->cc_xid)
 		return (-1);
 
-	if (lk->xid == rk->xid)
+	if (lk->cc_xid == rk->cc_xid)
 		return (0);
 
 	return (1);
 }
 
-struct clnt_req *
-clnt_req_alloc(CLIENT *clnt, struct timeval timeout)
+bool
+clnt_req_setup(struct clnt_req *cc, struct timespec timeout)
 {
+	CLIENT *clnt = cc->cc_clnt;
 	struct cx_data *cx = CX_DATA(clnt);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
-	struct clnt_req *ctx = mem_alloc(sizeof(struct clnt_req));
 	struct opr_rbtree_node *nv;
 
-	rpc_msg_init(&ctx->cc_msg);
+	rpc_msg_init(&cc->cc_msg);
 
 	/* protects this */
-	mutex_init(&ctx->we.mtx, NULL);
-	mutex_lock(&ctx->we.mtx);
-	cond_init(&ctx->we.cv, 0, NULL);
-	ctx->flags = CLNT_REQ_FLAG_NONE;
-	ctx->refcount = 1;
-	ctx->refreshes = 2;
+	mutex_init(&cc->cc_we.mtx, NULL);
+	mutex_lock(&cc->cc_we.mtx);
+	cond_init(&cc->cc_we.cv, 0, NULL);
 
-	/* some of this looks like overkill;  it's here to support future,
-	 * fully async calls */
-	ctx->clnt = clnt;
-	ctx->timeout.tv_sec = timeout.tv_sec;
-	ctx->timeout.tv_nsec = timeout.tv_usec * 1000;
+	cc->cc_error.re_errno = 0;
+	cc->cc_error.re_status = RPC_SUCCESS;
+	cc->cc_flags = CLNT_REQ_FLAG_NONE;
+	cc->cc_refcount = 1;
+	cc->cc_refreshes = 2;
+	cc->cc_timeout = timeout;
+
+	if (timeout.tv_nsec < 0 || timeout.tv_nsec > 999999999
+	 || timeout.tv_sec < 0) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d bad timeout (%ld.%09ld)",
+			__func__, &rec->xprt, rec->xprt.xp_fd,
+			timeout.tv_sec, timeout.tv_nsec);
+		return (false);
+	}
+	if (timeout.tv_sec > 10) {
+		__warnx(TIRPC_DEBUG_FLAG_WARN,
+			"%s: tv_sec %ld > 10",
+			__func__, timeout.tv_sec);
+	}
 
 	/* this lock protects both xid and rbtree */
 	rpc_dplx_rli(rec);
-	ctx->xid = ++(rec->call_xid);
-	nv = opr_rbtree_insert(&rec->call_replies, &ctx->node_k);
+	cc->cc_xid = ++(rec->call_xid);
+	nv = opr_rbtree_insert(&rec->call_replies, &cc->cc_node);
 	rpc_dplx_rui(rec);
 	if (nv) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d insert failed xid %" PRIu32,
-			__func__, &rec->xprt, rec->xprt.xp_fd, ctx->xid);
-		clnt_req_release(ctx);
-		return (NULL);
+			__func__, &rec->xprt, rec->xprt.xp_fd, cc->cc_xid);
+		return (false);
 	}
 
-	if (time_not_ok(&timeout)) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: %p fd %d bad timeout (%ld.%06ld)",
-			__func__, &rec->xprt, rec->xprt.xp_fd,
-			timeout.tv_sec, timeout.tv_usec);
-		clnt_req_release(ctx);
-		return (NULL);
-	}
-	return (ctx);
+	return (true);
 }
 
 /*
@@ -486,98 +512,101 @@ clnt_req_process_reply(SVCXPRT *xprt, struct svc_req *req)
 {
 	XDR *xdrs = req->rq_xdrs;
 	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
-	struct clnt_req ctx_k, *ctx;
 	struct opr_rbtree_node *nv;
+	struct clnt_req *cc;
+	struct clnt_req cc_k;
 
 	rpc_dplx_rli(rec);
-	ctx_k.xid = req->rq_msg.rm_xid;
-	nv = opr_rbtree_lookup(&rec->call_replies, &ctx_k.node_k);
+	cc_k.cc_xid = req->rq_msg.rm_xid;
+	nv = opr_rbtree_lookup(&rec->call_replies, &cc_k.cc_node);
 	rpc_dplx_rui(rec);
 	if (!nv) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d lookup failed xid %" PRIu32,
-			__func__, &rec->xprt, rec->xprt.xp_fd, ctx_k.xid);
+			__func__, &rec->xprt, rec->xprt.xp_fd, cc_k.cc_xid);
 		return SVC_STAT(xprt);
 	}
 
-	ctx = opr_containerof(nv, struct clnt_req, node_k);
-	atomic_set_uint16_t_bits(&ctx->flags, CLNT_REQ_FLAG_ACKSYNC);
+	cc = opr_containerof(nv, struct clnt_req, cc_node);
+	atomic_set_uint16_t_bits(&cc->cc_flags, CLNT_REQ_FLAG_ACKSYNC);
 
-	_seterr_reply(&req->rq_msg, &(ctx->error));
-	if (ctx->error.re_status == RPC_SUCCESS) {
-		if (!AUTH_VALIDATE(ctx->cc_auth,
-				   &(ctx->cc_msg.RPCM_ack.ar_verf))) {
-			ctx->error.re_status = RPC_AUTHERROR;
-			ctx->error.re_why = AUTH_INVALIDRESP;
-		} else if (ctx->cc_xdr.proc
-			   && !AUTH_UNWRAP(ctx->cc_auth, xdrs,
-					   ctx->cc_xdr.proc,
-					   ctx->cc_xdr.where)) {
-			if (ctx->error.re_status == RPC_SUCCESS)
-				ctx->error.re_status = RPC_CANTDECODERES;
+	_seterr_reply(&req->rq_msg, &(cc->cc_error));
+	if (cc->cc_error.re_status == RPC_SUCCESS) {
+		if (!AUTH_VALIDATE(cc->cc_auth,
+				   &(cc->cc_msg.RPCM_ack.ar_verf))) {
+			cc->cc_error.re_status = RPC_AUTHERROR;
+			cc->cc_error.re_why = AUTH_INVALIDRESP;
+		} else if (cc->cc_msg.rm_xdr.proc
+			   && !AUTH_UNWRAP(cc->cc_auth, xdrs,
+					   cc->cc_msg.rm_xdr.proc,
+					   cc->cc_msg.rm_xdr.where)) {
+			if (cc->cc_error.re_status == RPC_SUCCESS)
+				cc->cc_error.re_status = RPC_CANTDECODERES;
 		}
-		ctx->refreshes = 0;
-	} else if (ctx->refreshes-- > 0
-		   && ctx->error.re_status == RPC_AUTHERROR
-		   && AUTH_REFRESH(ctx->cc_auth, &(ctx->cc_msg))) {
+		cc->cc_refreshes = 0;
+	} else if (cc->cc_refreshes-- > 0
+		   && cc->cc_error.re_status == RPC_AUTHERROR
+		   && AUTH_REFRESH(cc->cc_auth, &(cc->cc_msg))) {
 		/* maybe our credentials need to be refreshed ... */
 		rpc_dplx_rli(rec);
-		opr_rbtree_remove(&rec->call_replies, &ctx->node_k);
-		ctx->xid = ++(rec->call_xid);
-		nv = opr_rbtree_insert(&rec->call_replies, &ctx->node_k);
+		opr_rbtree_remove(&rec->call_replies, &cc->cc_node);
+		cc->cc_xid = ++(rec->call_xid);
+		nv = opr_rbtree_insert(&rec->call_replies, &cc->cc_node);
 		rpc_dplx_rui(rec);
 		if (nv) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s: %p fd %d insert failed xid %" PRIu32,
-				__func__, xprt, xprt->xp_fd, ctx->xid);
-			ctx->error.re_status = RPC_TLIERROR;
-			ctx->refreshes = 0;
+				__func__, xprt, xprt->xp_fd, cc->cc_xid);
+			cc->cc_error.re_status = RPC_TLIERROR;
+			cc->cc_refreshes = 0;
 		}
 	}
 
-	/* signal the specific ctx  */
-	mutex_lock(&ctx->we.mtx);
-	cond_signal(&ctx->we.cv);
-	mutex_unlock(&ctx->we.mtx);
+	mutex_lock(&cc->cc_we.mtx);
+	cond_signal(&cc->cc_we.cv);
+	mutex_unlock(&cc->cc_we.mtx);
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_REQ,
 		"%s: %p fd %d acknowledged xid %" PRIu32,
-		__func__, xprt, xprt->xp_fd, ctx->xid);
+		__func__, xprt, xprt->xp_fd, cc->cc_xid);
 
 	return SVC_STAT(xprt);
 }
 
 /*
- * waitq_entry is locked in clnt_req_alloc()
+ * waitq_entry is locked in clnt_req_setup()
  */
 int
-clnt_req_wait_reply(struct clnt_req *ctx)
+clnt_req_wait_reply(struct clnt_req *cc)
 {
-	CLIENT *clnt = ctx->clnt;
-	struct cx_data *cx = CX_DATA(clnt);
+	struct cx_data *cx = CX_DATA(cc->cc_clnt);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
 	struct timespec ts;
 	int code;
 
-	/* no loop, signaled directly */
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_REQ,
-		"%s: %p fd %d xid %" PRIu32,
-		__func__, &rec->xprt, rec->xprt.xp_fd, ctx->xid);
+		"%s: %p fd %d xid %" PRIu32 " (%ld.%09ld)",
+		__func__, &rec->xprt, rec->xprt.xp_fd, cc->cc_xid,
+		cc->cc_timeout.tv_sec, cc->cc_timeout.tv_nsec);
+
+	if (!(cc->cc_timeout.tv_sec + cc->cc_timeout.tv_nsec)) {
+		return (RPC_SUCCESS);
+	}
 
 	(void)clock_gettime(CLOCK_REALTIME_FAST, &ts);
-	timespecadd(&ts, &ctx->timeout);
-	code = cond_timedwait(&ctx->we.cv, &ctx->we.mtx, &ts);
+	timespecadd(&ts, &cc->cc_timeout);
+	code = cond_timedwait(&cc->cc_we.cv, &cc->cc_we.mtx, &ts);
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_REQ,
 		"%s: %p fd %d replied xid %" PRIu32,
-		__func__, &rec->xprt, rec->xprt.xp_fd, ctx->xid);
+		__func__, &rec->xprt, rec->xprt.xp_fd, cc->cc_xid);
 
-	if (!(atomic_fetch_uint16_t(&ctx->flags) & CLNT_REQ_FLAG_ACKSYNC)
+	if (!(atomic_fetch_uint16_t(&cc->cc_flags) & CLNT_REQ_FLAG_ACKSYNC)
 	 && (code == ETIMEDOUT)) {
 		if (rec->xprt.xp_flags & SVC_XPRT_FLAG_DESTROYED) {
 			/* XXX should also set error.re_why, but the
 			 * facility is not well developed. */
-			ctx->error.re_status = RPC_TIMEDOUT;
+			cc->cc_error.re_status = RPC_TIMEDOUT;
 		}
 	}
 
@@ -585,21 +614,20 @@ clnt_req_wait_reply(struct clnt_req *ctx)
 }
 
 void
-clnt_req_release(struct clnt_req *ctx)
+clnt_req_release(struct clnt_req *cc)
 {
-	CLIENT *clnt = ctx->clnt;
-	struct cx_data *cx = CX_DATA(clnt);
+	struct cx_data *cx = CX_DATA(cc->cc_clnt);
 
-	if (atomic_dec_uint32_t(&ctx->refcount))
+	if (atomic_dec_uint32_t(&cc->cc_refcount))
 		return;
 
 	rpc_dplx_rli(cx->cx_rec);
-	opr_rbtree_remove(&cx->cx_rec->call_replies, &ctx->node_k);
+	opr_rbtree_remove(&cx->cx_rec->call_replies, &cc->cc_node);
 	rpc_dplx_rui(cx->cx_rec);
-	mutex_unlock(&ctx->we.mtx);
-	mutex_destroy(&ctx->we.mtx);
-	cond_destroy(&ctx->we.cv);
-	mem_free(ctx, sizeof(*ctx));
+	mutex_unlock(&cc->cc_we.mtx);
+	mutex_destroy(&cc->cc_we.mtx);
+	cond_destroy(&cc->cc_we.cv);
+	mem_free(cc, sizeof(*cc));
 }
 
 /*

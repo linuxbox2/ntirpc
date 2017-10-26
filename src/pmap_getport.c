@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +48,7 @@
 #include <rpc/pmap_clnt.h>
 
 static const struct timeval timeout = { 5, 0 };
-static const struct timeval tottimeout = { 60, 0 };
+static const struct timespec to = { 3, 0 };
 
 /*
  * Find the mapped port for program,version.
@@ -57,11 +58,10 @@ static const struct timeval tottimeout = { 60, 0 };
 u_short pmap_getport(struct sockaddr_in *address, u_long program,
 		     u_long version, u_int protocol)
 {
-	struct pmap parms;
-	u_short port = 0;
-	int sock = -1;
 	CLIENT *client;
-	AUTH *auth;
+	struct pmap parms;
+	int sock = -1;
+	u_short port = 0;
 
 	assert(address != NULL);
 
@@ -70,20 +70,27 @@ u_short pmap_getport(struct sockaddr_in *address, u_long program,
 	    clntudp_nbufcreate(address, PMAPPROG, PMAPVERS, timeout, &sock,
 			       RPCSMALLMSGSIZE, RPCSMALLMSGSIZE);
 	if (client != NULL) {
-		auth = authnone_create();	/* idempotent */
+		struct clnt_req *cc = mem_alloc(sizeof(*cc));
+
 		parms.pm_prog = program;
 		parms.pm_vers = version;
 		parms.pm_prot = protocol;
 		parms.pm_port = 0;	/* not needed or used */
-		if (CLNT_CALL
-		    (client, auth, (rpcproc_t) PMAPPROC_GETPORT,
-		     (xdrproc_t) xdr_pmap, &parms, (xdrproc_t) xdr_u_short,
-		     &port, tottimeout) != RPC_SUCCESS) {
-			rpc_createerr.cf_stat = RPC_PMAPFAILURE;
-			clnt_geterr(client, &rpc_createerr.cf_error);
-		} else if (port == 0) {
-			rpc_createerr.cf_stat = RPC_PROGNOTREGISTERED;
+
+		clnt_req_fill(cc, client, authnone_create(), PMAPPROC_GETPORT,
+			      (xdrproc_t) xdr_pmap, &parms,
+			      (xdrproc_t) xdr_u_short, &port);
+		if (clnt_req_setup(cc, to)) {
+			enum clnt_stat clnt_stat = CLNT_CALL(cc);
+
+			if (clnt_stat != RPC_SUCCESS) {
+				rpc_createerr.cf_stat = RPC_PMAPFAILURE;
+				clnt_geterr(client, &rpc_createerr.cf_error);
+			} else if (port == 0) {
+				rpc_createerr.cf_stat = RPC_PROGNOTREGISTERED;
+			}
 		}
+		clnt_req_release(cc);
 		CLNT_DESTROY(client);
 	}
 	address->sin_port = 0;
