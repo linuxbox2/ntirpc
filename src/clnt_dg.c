@@ -66,8 +66,6 @@ struct cu_data {
 	struct cx_data cu_cx;
 	struct sockaddr_storage cu_raddr;	/* remote address */
 	int cu_rlen;
-	struct timeval cu_wait;	/* retransmit interval */
-	struct timeval cu_total;	/* total time for the call */
 };
 #define CU_DATA(p) (opr_containerof((p), struct cu_data, cu_cx))
 
@@ -377,29 +375,9 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 		goto unlock;
 	}
 	switch (request) {
-	case CLSET_TIMEOUT:
-		if (time_not_ok((struct timeval *)info)) {
-			rslt = false;
-			goto unlock;
-		}
-		cu->cu_total = *(struct timeval *)info;
-		break;
-	case CLGET_TIMEOUT:
-		*(struct timeval *)info = cu->cu_total;
-		break;
 	case CLGET_SERVER_ADDR:	/* Give him the fd address */
 		/* Now obsolete. Only for backward compatibility */
 		(void)memcpy(info, &cu->cu_raddr, (size_t) cu->cu_rlen);
-		break;
-	case CLSET_RETRY_TIMEOUT:
-		if (time_not_ok((struct timeval *)info)) {
-			rslt = false;
-			goto unlock;
-		}
-		cu->cu_wait = *(struct timeval *)info;
-		break;
-	case CLGET_RETRY_TIMEOUT:
-		*(struct timeval *)info = cu->cu_wait;
 		break;
 	case CLGET_FD:
 		*(int *)info = rec->xprt.xp_fd;

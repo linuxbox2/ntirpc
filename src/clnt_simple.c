@@ -100,7 +100,7 @@ rpc_call(const char *host,	/* host name */
 {
 	struct rpc_call_private *rcp = (struct rpc_call_private *)0;
 	enum clnt_stat clnt_stat;
-	struct timeval timeout, tottimeout;
+	struct timeval tottimeout;
 	extern thread_key_t rpc_call_key;
 	extern mutex_t tsd_lock;
 
@@ -138,15 +138,6 @@ rpc_call(const char *host,	/* host name */
 		/* Create null auth handle--idempotent */
 		rcp->auth = authnone_create();
 
-		/*
-		 * Set time outs for connectionless case.  Do it
-		 * unconditionally.  Faster than doing a t_getinfo()
-		 * and then doing the right thing.
-		 */
-		timeout.tv_usec = 0;
-		timeout.tv_sec = 5;
-		(void)CLNT_CONTROL(rcp->client, CLSET_RETRY_TIMEOUT,
-				   (char *)(void *)&timeout);
 		if (CLNT_CONTROL(rcp->client, CLGET_FD, (char *)(void *)&fd))
 			fcntl(fd, F_SETFD, 1);	/* make it "close on exec" */
 		rcp->prognum = prognum;

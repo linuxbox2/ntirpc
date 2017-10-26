@@ -267,11 +267,13 @@ struct rpc_timers {
 	((*(cl)->cl_ops->cl_control)(cl, rq, in))
 
 /*
- * control operations that apply to both udp and tcp transports
+ * control operations that apply to all transports
  */
-#define CLSET_TIMEOUT  1	/* set timeout (timeval) */
-#define CLGET_TIMEOUT  2	/* get timeout (timeval) */
+/* reserved 1 */
+/* reserved 2 */
 #define CLGET_SERVER_ADDR 3	/* get server's address (sockaddr) */
+/* reserved 4 */
+/* reserved 5 */
 #define CLGET_FD  6		/* get connections file descriptor */
 #define CLGET_SVC_ADDR  7	/* get server's address (netbuf) */
 #define CLSET_FD_CLOSE  8	/* close fd while clnt_destroy */
@@ -285,11 +287,6 @@ struct rpc_timers {
 #define CLSET_SVC_ADDR  16	/* get server's address (netbuf) */
 #define CLSET_PUSH_TIMOD 17	/* push timod if not already present */
 #define CLSET_POP_TIMOD  18	/* pop timod */
-/*
- * Connectionless only control operations
- */
-#define CLSET_RETRY_TIMEOUT 4	/* set retry timeout (timeval) */
-#define CLGET_RETRY_TIMEOUT 5	/* get retry timeout (timeval) */
 
 /*
  * void

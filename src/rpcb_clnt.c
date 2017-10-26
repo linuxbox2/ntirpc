@@ -58,8 +58,6 @@
 #include "rpc_com.h"
 
 static struct timeval tottimeout = { 60, 0 };
-static const struct timeval rmttimeout = { 3, 0 };
-static struct timeval rpcbrmttime = { 15, 0 };
 
 extern bool xdr_wrapstring(XDR *, char **);
 
@@ -657,10 +655,6 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		if (client == NULL)
 			return (NULL);
 
-		/*
-		 * Set version and retry timeout.
-		 */
-		CLNT_CONTROL(client, CLSET_RETRY_TIMEOUT, (char *)&rpcbrmttime);
 		CLNT_CONTROL(client, CLSET_VERS, (char *)&pmapvers);
 
 		pmapparms.pm_prog = program;
@@ -735,7 +729,6 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 
 	/* First try from start_vers(4) and then version 3 (RPCBVERS) */
 
-	CLNT_CONTROL(client, CLSET_RETRY_TIMEOUT, (char *)&rpcbrmttime);
 	for (vers = start_vers; vers >= RPCBVERS; vers--) {
 		/* Set the version */
 		CLNT_CONTROL(client, CLSET_VERS, (char *)(void *)&vers);
@@ -947,7 +940,6 @@ rpcb_rmtcall(const struct netconfig *nconf, /* Netconfig structure */
 	auth = authnone_ncreate();	/* idempotent */
 
 	/*LINTED const castaway */
-	CLNT_CONTROL(client, CLSET_RETRY_TIMEOUT, (char *)(void *)&rmttimeout);
 	a.prog = prog;
 	a.vers = vers;
 	a.proc = proc;

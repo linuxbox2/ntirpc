@@ -63,8 +63,6 @@ struct cm_data {
 	struct cx_data cm_cx;
 	XDR cm_xdrs;
 	char *buffers;
-	struct timeval cm_wait; /* wait interval in milliseconds */
-	struct timeval cm_total; /* total time for the call */
 	struct rpc_msg call_msg;
 	//add a lastreceive?
 	u_int cm_xdrpos;
@@ -111,8 +109,6 @@ clnt_rdma_create(RDMAXPRT *xprt,		/* init but NOT connect()ed descriptor */
 	cm = clnt_rdma_data_zalloc();
 	/* Other values can also be set through clnt_control() */
 	cm->cm_xdrs.x_lib[1] = (void *)xprt;
-	cm->cm_wait.tv_sec = 15; /* heuristically chosen */
-	cm->cm_wait.tv_usec = 0;
 
 	(void) gettimeofday(&now, NULL);
 	//	cm->call_msg.rm_xid = __RPC_GETXID(&now);
@@ -164,14 +160,6 @@ clnt_rdma_call(CLIENT *cl,		/* client handle */
 
 //	thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
 //	vc_fd_lock_c(cl, &mask); //What does that do?
-#if 0
-	if (cm->cm_total.tv_usec == -1) {
-		timeout = utimeout;	/* use supplied timeout */
-	} else {
-		timeout = cm->cm_total;	/* use default timeout */
-	}
-	total_time = timeout.tv_sec * 1000 + timeout.tv_usec / 1000;
-#endif
 
 	/* Clean up in case the last call ended in a longjmp(3) call. */
 call_again:
@@ -326,26 +314,6 @@ clnt_rdma_control(CLIENT *cl, u_int request, void *info)
 	    goto unlock;
 	}
 	switch (request) {
-	case CLSET_TIMEOUT:
-		if (time_not_ok((struct timeval *)info)) {
-			result = FALSE;
-			goto unlock;
-		}
-		cm->cm_total = *(struct timeval *)info;
-		break;
-	case CLGET_TIMEOUT:
-		*(struct timeval *)info = cm->cm_total;
-		break;
-	case CLSET_RETRY_TIMEOUT:
-		if (time_not_ok((struct timeval *)info)) {
-			result = FALSE;
-			goto unlock;
-		}
-		cm->cm_wait = *(struct timeval *)info;
-		break;
-	case CLGET_RETRY_TIMEOUT:
-		*(struct timeval *)info = cm->cm_wait;
-		break;
 	case CLGET_FD:
 		*(RDMAXPRT **)info = cm->cm_xdrs.x_lib[1];
 		break;

@@ -175,9 +175,6 @@ __libc_clntudp_nbufcreate(struct sockaddr_in *raddr, u_long prog,
 
 	cl = clnt_com_ncreate(raddr, (rpcprog_t) prog, (rpcvers_t) vers, sockp,
 			      sendsz, recvsz, "udp", flags);
-	if (cl == NULL)
-		return (NULL);
-	(void)CLNT_CONTROL(cl, CLSET_RETRY_TIMEOUT, &wait);
 	return (cl);
 }
 
@@ -190,9 +187,6 @@ clntudp_nbufcreate(struct sockaddr_in *raddr, u_long prog, u_long vers,
 
 	cl = clnt_com_ncreate(raddr, (rpcprog_t) prog, (rpcvers_t) vers, sockp,
 			      sendsz, recvsz, "udp", 0);
-	if (cl == NULL)
-		return (NULL);
-	(void)CLNT_CONTROL(cl, CLSET_RETRY_TIMEOUT, &wait);
 	return (cl);
 }
 
@@ -225,9 +219,6 @@ clntudp6_nbufcreate(struct sockaddr_in6 *raddr, u_long prog,
 
 	cl = clnt_com_ncreate(raddr, (rpcprog_t) prog, (rpcvers_t) vers, sockp,
 			      sendsz, recvsz, "udp6", 0);
-	if (cl == NULL)
-		return (NULL);
-	(void)CLNT_CONTROL(cl, CLSET_RETRY_TIMEOUT, &wait);
 	return (cl);
 }
 
