@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,8 +69,6 @@ struct rpc_call_private {
 	char nettype[NETIDLEN];	/* Network type */
 };
 
-static void rpc_call_destroy(void *);
-
 static void rpc_call_destroy(void *vp)
 {
 	struct rpc_call_private *rcp = (struct rpc_call_private *)vp;
@@ -81,12 +80,14 @@ static void rpc_call_destroy(void *vp)
 	}
 }
 
+static const struct timespec to = { 3, 0 };
+
 /*
  * This is the simplified interface to the client rpc layer.
  * The client handle is not destroyed here and is reused for
  * the future calls to same prog, vers, host and nettype combination.
  *
- * The total time available is 25 seconds.
+ * The total time available is 9 seconds.
  */
 enum clnt_stat
 rpc_call(const char *host,	/* host name */
@@ -94,13 +95,14 @@ rpc_call(const char *host,	/* host name */
 	 rpcvers_t versnum,	/* version number */
 	 rpcproc_t procnum,	/* procedure number */
 	 xdrproc_t inproc,	/* in XDR procedure */
-	 const char *in, xdrproc_t outproc,	/* out XDR procedure */
+	 const char *in,
+	 xdrproc_t outproc,	/* out XDR procedure */
 	 char *out,	/* recv/send data */
 	 const char *nettype /* nettype */)
 {
-	struct rpc_call_private *rcp = (struct rpc_call_private *)0;
+	struct rpc_call_private *rcp;
+	struct clnt_req *cc;
 	enum clnt_stat clnt_stat;
-	struct timeval timeout, tottimeout;
 	extern thread_key_t rpc_call_key;
 	extern mutex_t tsd_lock;
 
@@ -138,15 +140,6 @@ rpc_call(const char *host,	/* host name */
 		/* Create null auth handle--idempotent */
 		rcp->auth = authnone_create();
 
-		/*
-		 * Set time outs for connectionless case.  Do it
-		 * unconditionally.  Faster than doing a t_getinfo()
-		 * and then doing the right thing.
-		 */
-		timeout.tv_usec = 0;
-		timeout.tv_sec = 5;
-		(void)CLNT_CONTROL(rcp->client, CLSET_RETRY_TIMEOUT,
-				   (char *)(void *)&timeout);
 		if (CLNT_CONTROL(rcp->client, CLGET_FD, (char *)(void *)&fd))
 			fcntl(fd, F_SETFD, 1);	/* make it "close on exec" */
 		rcp->prognum = prognum;
@@ -160,13 +153,16 @@ rpc_call(const char *host,	/* host name */
 			rcp->valid = 0;
 		}
 	}			/* else reuse old client */
-	tottimeout.tv_sec = 25;
-	tottimeout.tv_usec = 0;
 
+	cc = mem_alloc(sizeof(*cc));
 	/* LINTED const castaway */
-	clnt_stat =
-	    CLNT_CALL(rcp->client, rcp->auth, procnum, inproc, (char *)in,
-		      outproc, out, tottimeout);
+	clnt_req_fill(cc, rcp->client, rcp->auth, procnum,
+		      inproc, (void *)in, outproc, out);
+	clnt_stat = RPC_TLIERROR;
+	if (clnt_req_setup(cc, to)) {
+		clnt_stat = CLNT_CALL(cc);
+	}
+	clnt_req_release(cc);
 	/*
 	 * if call failed, empty cache
 	 */

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -59,7 +60,7 @@
 /* For the clnttcp_create function
  * #include <clnt_soc.h> */
 
-static const struct timeval timeout = { 3, 0 };
+static const struct timeval timeout = { 5, 0 };
 
 /*
  * pmapper remote-call-service interface.
@@ -74,12 +75,12 @@ pmap_rmtcall(struct sockaddr_in *addr, u_long prog, u_long vers,
 	     xdrproc_t xdrres, caddr_t resp, struct timeval tout,
 	     u_long *port_ptr)
 {
-	int sock = -1;
 	CLIENT *client;
-	AUTH *auth;
 	struct rmtcallargs a;
 	struct rmtcallres r;
-	enum clnt_stat stat;
+	struct timespec tv;
+	int sock = -1;
+	enum clnt_stat stat = RPC_FAILED;
 
 	assert(addr != NULL);
 	assert(port_ptr != NULL);
@@ -87,7 +88,8 @@ pmap_rmtcall(struct sockaddr_in *addr, u_long prog, u_long vers,
 	addr->sin_port = htons(PMAPPORT);
 	client = clntudp_ncreate(addr, PMAPPROG, PMAPVERS, timeout, &sock);
 	if (client != NULL) {
-		auth = authnone_create();
+		struct clnt_req *cc = mem_alloc(sizeof(*cc));
+
 		a.prog = prog;
 		a.vers = vers;
 		a.proc = proc;
@@ -96,13 +98,17 @@ pmap_rmtcall(struct sockaddr_in *addr, u_long prog, u_long vers,
 		r.port_ptr = port_ptr;
 		r.results_ptr = resp;
 		r.xdr_results = xdrres;
-		stat =
-		    CLNT_CALL(client, auth, (rpcproc_t) PMAPPROC_CALLIT,
+		tv.tv_sec = tout.tv_sec;
+		tv.tv_nsec = tout.tv_usec * 1000;
+
+		clnt_req_fill(cc, client, authnone_create(), PMAPPROC_CALLIT,
 			      (xdrproc_t) xdr_rmtcall_args, &a,
-			      (xdrproc_t) xdr_rmtcallres, &r, tout);
+			      (xdrproc_t) xdr_rmtcallres, &r);
+		if (clnt_req_setup(cc, tv)) {
+			stat = CLNT_CALL(cc);
+		}
+		clnt_req_release(cc);
 		CLNT_DESTROY(client);
-	} else {
-		stat = RPC_FAILED;
 	}
 	addr->sin_port = 0;
 	return (stat);

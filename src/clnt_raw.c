@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -65,13 +66,6 @@ static struct clntraw_private {
 	u_int mcnt;
 } *clntraw_private;
 
-static enum clnt_stat clnt_raw_call(CLIENT *, AUTH *, rpcproc_t, xdrproc_t,
-				    void *, xdrproc_t, void *, struct timeval);
-static void clnt_raw_geterr(CLIENT *, struct rpc_err *);
-static bool clnt_raw_freeres(CLIENT *, xdrproc_t, void *);
-static void clnt_raw_abort(CLIENT *);
-static bool clnt_raw_control(CLIENT *, u_int, void *);
-static void clnt_raw_destroy(CLIENT *);
 static struct clnt_ops *clnt_raw_ops(void);
 
 /*
@@ -126,18 +120,13 @@ clnt_raw_ncreate(rpcprog_t prog, rpcvers_t vers)
 
 /* ARGSUSED */
 static enum clnt_stat
-clnt_raw_call(CLIENT *h, AUTH *auth, rpcproc_t proc,
-	      xdrproc_t xargs, void *argsp,
-	      xdrproc_t xresults, void *resultsp,
-	      struct timeval timeout)
+clnt_raw_call(struct clnt_req *cc)
 {
 	struct clntraw_private *clp = clntraw_private;
 	XDR *xdrs = &clp->xdr_stream;
 	struct rpc_msg msg;
 	enum clnt_stat status;
 	struct rpc_err error;
-
-	assert(h != NULL);
 
 	mutex_lock(&clntraw_lock);
 	if (clp == NULL) {
@@ -154,8 +143,9 @@ clnt_raw_call(CLIENT *h, AUTH *auth, rpcproc_t proc,
 	XDR_SETPOS(xdrs, 0);
 	clp->u.mashl_rpcmsg.rm_xid++;
 	if ((!XDR_PUTBYTES(xdrs, clp->u.mashl_callmsg, clp->mcnt))
-	    || (!XDR_PUTINT32(xdrs, (int32_t *) &proc))
-	    || (!AUTH_MARSHALL(auth, xdrs)) || (!(*xargs) (xdrs, argsp))) {
+	    || (!XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc))
+	    || (!AUTH_MARSHALL(cc->cc_auth, xdrs))
+	    || (!(*cc->cc_xdr.proc) (xdrs, cc->cc_xdr.where))) {
 		return (RPC_CANTENCODEARGS);
 	}
 	(void)XDR_GETPOS(xdrs);	/* called just to cause overhead */
@@ -173,8 +163,8 @@ clnt_raw_call(CLIENT *h, AUTH *auth, rpcproc_t proc,
 	xdrs->x_op = XDR_DECODE;
 	XDR_SETPOS(xdrs, 0);
 	msg.RPCM_ack.ar_verf = _null_auth;
-	msg.RPCM_ack.ar_results.where = resultsp;
-	msg.RPCM_ack.ar_results.proc = xresults;
+	msg.RPCM_ack.ar_results.proc = cc->cc_msg.rm_xdr.proc;
+	msg.RPCM_ack.ar_results.where = cc->cc_msg.rm_xdr.where;
 	if (!xdr_replymsg(xdrs, &msg)) {
 		/*
 		 * It's possible for xdr_replymsg() to fail partway
@@ -196,16 +186,16 @@ clnt_raw_call(CLIENT *h, AUTH *auth, rpcproc_t proc,
 	status = error.re_status;
 
 	if (status == RPC_SUCCESS) {
-		if (!AUTH_VALIDATE(auth, &msg.RPCM_ack.ar_verf))
+		if (!AUTH_VALIDATE(cc->cc_auth, &msg.RPCM_ack.ar_verf))
 			status = RPC_AUTHERROR;
 	} /* end successful completion */
 	else {
-		if (AUTH_REFRESH(auth, &msg))
+		if (AUTH_REFRESH(cc->cc_auth, &msg))
 			goto call_again;
 	}			/* end of unsuccessful completion */
 
 	if (status == RPC_SUCCESS) {
-		if (!AUTH_VALIDATE(auth, &msg.RPCM_ack.ar_verf))
+		if (!AUTH_VALIDATE(cc->cc_auth, &msg.RPCM_ack.ar_verf))
 			status = RPC_AUTHERROR;
 	}
 

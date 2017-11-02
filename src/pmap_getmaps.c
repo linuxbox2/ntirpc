@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,32 +58,36 @@
 #define NAMELEN 255
 #define MAX_BROADCAST_SIZE 1400
 
+static const struct timespec to = { 3, 0 };
+
 /*
  * Get a copy of the current port maps.
  * Calls the pmap service remotely to do get the maps.
  */
 struct pmaplist *pmap_getmaps(struct sockaddr_in *address)
 {
+	CLIENT *client;
 	struct pmaplist *head = NULL;
 	int sock = -1;
-	struct timeval minutetimeout;
-	CLIENT *client;
-	AUTH *auth;
 
 	assert(address != NULL);
 
-	minutetimeout.tv_sec = 60;
-	minutetimeout.tv_usec = 0;
 	address->sin_port = htons(PMAPPORT);
 	client = clnttcp_ncreate(address, PMAPPROG, PMAPVERS, &sock, 50, 500);
 	if (client != NULL) {
-		auth = authnone_create();	/* idempotent */
-		if (CLNT_CALL
-		    (client, auth, (rpcproc_t) PMAPPROC_DUMP,
-		     (xdrproc_t) xdr_void, NULL, (xdrproc_t) xdr_pmaplist,
-		     &head, minutetimeout) != RPC_SUCCESS) {
-			clnt_perror(client, "pmap_getmaps rpc problem");
+		struct clnt_req *cc = mem_alloc(sizeof(*cc));
+
+		clnt_req_fill(cc, client, authnone_create(), PMAPPROC_DUMP,
+			      (xdrproc_t) xdr_void, NULL,
+			      (xdrproc_t) xdr_pmaplist, &head);
+		if (clnt_req_setup(cc, to)) {
+			enum clnt_stat clnt_stat = CLNT_CALL(cc);
+
+			if (clnt_stat != RPC_SUCCESS) {
+				clnt_perror(client, "pmap_getmaps rpc problem");
+			}
 		}
+		clnt_req_release(cc);
 		CLNT_DESTROY(client);
 	}
 	address->sin_port = 0;

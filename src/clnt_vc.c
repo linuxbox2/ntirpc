@@ -281,42 +281,16 @@ clnt_vc_process(struct svc_req *req)
 }
 
 static enum clnt_stat
-clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
-	     xdrproc_t xdr_args, void *args_ptr,
-	     xdrproc_t xdr_results, void *results_ptr,
-	     struct timeval timeout)
+clnt_vc_call(struct clnt_req *cc)
 {
+	CLIENT *clnt = cc->cc_clnt;
 	struct cx_data *cx = CX_DATA(clnt);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
 	SVCXPRT *xprt = &rec->xprt;
 	struct xdr_ioq *xioq;
 	XDR *xdrs;
-	struct clnt_req *ctx;
 	enum clnt_stat result;
 	int code;
-
-	/* Create a call context.  A lot of TI-RPC decisions need to be
-	 * looked at, including:
-	 *
-	 * 1. the client has a serialized call.  This looks harmless, so long
-	 * as the xid is adjusted.
-	 *
-	 * 2. the last xid used is now saved in handle shared private
-	 * data.  There's no more reason to use the old time-dependent
-	 * xid logic.  It should be preferable to count atomically from 1.
-	 *
-	 * 3. the server has the XDR structure.  There is only one
-	 * physical byte stream.  The main issue that will arise is the
-	 * need to transition the stream between calls.  We'll keep the
-	 * call parameters, control transfer machinery, etc, in clnt_req.
-	 */
-	ctx = clnt_req_alloc(clnt, timeout);
-	if (!ctx)
-		return (RPC_TLIERROR);
-
-	ctx->cc_auth = auth;
-	ctx->cc_xdr.proc = xdr_results;
-	ctx->cc_xdr.where = results_ptr;
 
  call_again:
 	/* XXX Until gss_get_mic and gss_wrap can be replaced with
@@ -328,26 +302,27 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 	 */
 	xioq = xdr_ioq_create(RPC_MAXDATA_DEFAULT,
 			      __svc_params->ioq.send_max + RPC_MAXDATA_DEFAULT,
-			      (auth->ah_cred.oa_flavor == RPCSEC_GSS)
+			      (cc->cc_auth->ah_cred.oa_flavor == RPCSEC_GSS)
 			      ? UIO_FLAG_REALLOC | UIO_FLAG_FREE
 			      : UIO_FLAG_FREE);
 
 	xdrs = xioq->xdrs;
-	ctx->error.re_status = RPC_SUCCESS;
+	cc->cc_error.re_status = RPC_SUCCESS;
 
 	mutex_lock(&clnt->cl_lock);
-	cx->cx_u.cx_mcalli = ntohl(ctx->xid);
+	cx->cx_u.cx_mcalli = ntohl(cc->cc_xid);
 
 	if ((!XDR_PUTBYTES(xdrs, cx->cx_u.cx_mcallc, cx->cx_mpos))
-	    || (!XDR_PUTINT32(xdrs, (int32_t *) &proc))
-	    || (!AUTH_MARSHALL(auth, xdrs))
-	    || (!AUTH_WRAP(auth, xdrs, xdr_args, args_ptr))) {
+	    || (!XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc))
+	    || (!AUTH_MARSHALL(cc->cc_auth, xdrs))
+	    || (!AUTH_WRAP(cc->cc_auth, xdrs,
+			   cc->cc_xdr.proc, cc->cc_xdr.where))) {
 		/* error case */
 		mutex_unlock(&clnt->cl_lock);
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
 			"%s: fd %d failed",
 			__func__, xprt->xp_fd);
-		clnt_req_release(ctx);
+		XDR_DESTROY(xdrs);
 		return (RPC_CANTENCODEARGS);
 	}
 	mutex_unlock(&clnt->cl_lock);
@@ -361,10 +336,10 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
 	}
-	code = clnt_req_wait_reply(ctx);
+	code = clnt_req_wait_reply(cc);
 
-	if (ctx->refreshes > 0) {
-		ctx->flags = CLNT_REQ_FLAG_NONE;
+	if (cc->cc_refreshes > 0) {
+		cc->cc_flags = CLNT_REQ_FLAG_NONE;
 		goto call_again;
 	}
 	if (code == ETIMEDOUT) {
@@ -375,8 +350,7 @@ clnt_vc_call(CLIENT *clnt, AUTH *auth, rpcproc_t proc,
 			__func__, xprt->xp_fd);
 	}
 
-	result = ctx->error.re_status;
-	clnt_req_release(ctx);
+	result = cc->cc_error.re_status;
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
 		"%s: fd %d result=%d",
 		__func__, xprt->xp_fd, result);
@@ -390,8 +364,8 @@ clnt_vc_geterr(CLIENT *clnt, struct rpc_err *errp)
 	XDR *xdrs = cx->cx_rec->ioq.xdrs;
 
 	if (xdrs->x_lib[0]) {
-		struct clnt_req *ctx = (struct clnt_req *) xdrs->x_lib[0];
-		*errp = ctx->error;
+		struct clnt_req *cc = (struct clnt_req *) xdrs->x_lib[0];
+		*errp = cc->cc_error;
 	} else {
 		/* always zero */
 		*errp = CX_DATA(clnt)->cx_error;

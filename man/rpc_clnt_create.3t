@@ -83,24 +83,6 @@ For both connectionless and connection-oriented transports,
 the supported values of
 .Fa req
 and their argument types and what they do are:
-.Bl -column "CLSET_FD_NCLOSE" "struct timeval *" "set total timeout"
-.It Dv CLSET_TIMEOUT Ta "struct timeval *" Ta "set total timeout"
-.It Dv CLGET_TIMEOUT Ta "struct timeval *" Ta "get total timeout"
-.El
-.Pp
-Note:
-if you set the timeout using
-.Fn clnt_control ,
-the timeout argument passed by
-.Fn clnt_call
-is ignored in all subsequent calls.
-.Pp
-Note:
-If you set the timeout value to 0,
-.Fn clnt_control
-immediately returns an error
-.Pq Dv RPC_TIMEDOUT .
-Set the timeout argument to 0 for batching calls.
 .Bl -column CLSET_FD_NCLOSE "struct timeval *" "do not close fd on destroy"
 .It Dv CLGET_SVC_ADDR Ta "struct netbuf *" Ta "get servers address"
 .It Dv CLGET_FD Ta "int *" Ta "get fd from handle"
@@ -111,23 +93,6 @@ Set the timeout argument to 0 for batching calls.
 .It Dv CLGET_XID Ta "u_int32_t *" Ta "get XID of previous call"
 .It Dv CLSET_XID Ta "u_int32_t *" Ta "set XID of next call"
 .El
-.Pp
-The following operations are valid for connectionless transports only:
-.Bl -column CLSET_RETRY_TIMEOUT "struct timeval *" "set total timeout"
-.It Dv CLSET_RETRY_TIMEOUT Ta "struct timeval *" Ta "set the retry timeout"
-.It Dv CLGET_RETRY_TIMEOUT Ta "struct timeval *" Ta "get the retry timeout"
-.El
-.Pp
-The retry timeout is the time that RPC
-waits for the server to reply before retransmitting the request.
-The
-.Fn clnt_control
-function
-returns
-.Dv TRUE
-on success and
-.Dv FALSE
-on failure.
 .It Fn clnt_create
 Generic client creation routine for program
 .Fa prognum
@@ -155,8 +120,6 @@ class available from the
 .Ev NETPATH
 environment variable and the netconfig database,
 and chooses the first successful one.
-A default timeout is set and can be modified using
-.Fn clnt_control .
 This routine returns
 .Dv NULL
 if it fails.
@@ -224,8 +187,6 @@ and
 .Fa vers_high
 is supported by the server then the routine fails and returns
 .Dv NULL .
-A default timeout is set and can be modified using
-.Fn clnt_control .
 This routine returns
 .Dv NULL
 if it fails.

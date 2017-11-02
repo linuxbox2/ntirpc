@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -549,6 +550,8 @@ __rpc_endconf(void *vhandle)
 	mem_free(handle, sizeof(*handle));
 }
 
+static const struct timespec to = { 3, 0 };
+
 /*
  * Used to ping the NULL procedure for clnt handle.
  * Returns NULL if fails, else a non-NULL pointer.
@@ -556,13 +559,18 @@ __rpc_endconf(void *vhandle)
 void *
 rpc_nullproc(CLIENT *clnt)
 {
-	struct timeval TIMEOUT = { 25, 0 };
-	AUTH *auth;
+	struct clnt_req *cc = mem_alloc(sizeof(*cc));
+	enum clnt_stat clnt_stat = RPC_TLIERROR;
 
-	auth = authnone_create();	/* idempotent */
-	if (clnt_call
-	    (clnt, auth, NULLPROC, (xdrproc_t) xdr_void, NULL,
-	     (xdrproc_t) xdr_void, NULL, TIMEOUT) != RPC_SUCCESS) {
+	clnt_req_fill(cc, clnt, authnone_create(), NULLPROC,
+		      (xdrproc_t) xdr_void, NULL,
+		      (xdrproc_t) xdr_void, NULL);
+	if (clnt_req_setup(cc, to)) {
+		clnt_stat = CLNT_CALL(cc);
+	}
+	clnt_req_release(cc);
+
+	if (clnt_stat != RPC_SUCCESS) {
 		return (NULL);
 	}
 

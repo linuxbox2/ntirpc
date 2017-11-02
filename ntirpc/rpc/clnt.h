@@ -72,6 +72,8 @@
 				 ((s) == RPC_PROGVERSMISMATCH) ||       \
 				 ((s) == RPC_CANTDECODEARGS))
 
+struct clnt_req;
+
 /*
  * Client rpc handle.
  * Created by individual implementations
@@ -81,9 +83,8 @@ typedef struct rpc_client {
 
 	struct clnt_ops {
 		/* call remote procedure */
-		enum clnt_stat (*cl_call) (struct rpc_client *, AUTH *,
-					   rpcproc_t, xdrproc_t, void *,
-					   xdrproc_t, void *, struct timeval);
+		enum clnt_stat (*cl_call) (struct clnt_req *);
+
 		/* abort a call */
 		void (*cl_abort) (struct rpc_client *);
 
@@ -126,21 +127,21 @@ typedef struct rpc_client {
  * and replies sharing a common channel.
  */
 struct clnt_req {
-	struct opr_rbtree_node node_k;
-	struct waitq_entry we;
-	struct rpc_err error;
+	struct opr_rbtree_node cc_node;
+	struct waitq_entry cc_we;
 	struct rpc_msg cc_msg;
 	struct xdrpair cc_xdr;
 
 	AUTH *cc_auth;
-	CLIENT *clnt;
-	struct timespec timeout;
-	int refreshes;
-	uint32_t xid;
-	uint32_t refcount;
-	uint16_t flags;
+	CLIENT *cc_clnt;
+	struct timespec cc_timeout;
+	struct rpc_err cc_error;
+	int cc_refreshes;
+	rpcproc_t cc_proc;
+	uint32_t cc_xid;
+	uint32_t cc_refcount;
+	uint16_t cc_flags;
 };
-#define CTX_MSG(p) (opr_containerof((p), struct clnt_req, cc_msg))
 
 /*
  * Timers used for the pseudo-transport protocol when using datagrams
@@ -194,21 +195,11 @@ struct rpc_timers {
 
 /*
  * enum clnt_stat
- * CLNT_CALL(rh, proc, xargs, argsp, xres, resp, timeout)
- *  CLIENT *rh;
- * AUTH * auth;
- * rpcproc_t proc;
- * xdrproc_t xargs;
- * void *argsp;
- * xdrproc_t xres;
- * void *resp;
- * struct timeval timeout;
+ * CLNT_CALL(cc)
+ *  struct clnt_req *cc;
  */
-#define CLNT_CALL(rh, ah, proc, xargs, argsp, xres, resp, secs) \
-	((*(rh)->cl_ops->cl_call)(rh, ah, proc, xargs, argsp, xres, resp, secs))
-
-#define clnt_call(rh, ah, proc, xargs, argsp, xres, resp, secs) \
-	((*(rh)->cl_ops->cl_call)(rh, ah, proc, xargs, argsp, xres, resp, secs))
+#define CLNT_CALL(cc) \
+	((*(cc)->cc_clnt->cl_ops->cl_call)(cc))
 
 /*
  * void
@@ -267,11 +258,13 @@ struct rpc_timers {
 	((*(cl)->cl_ops->cl_control)(cl, rq, in))
 
 /*
- * control operations that apply to both udp and tcp transports
+ * control operations that apply to all transports
  */
-#define CLSET_TIMEOUT  1	/* set timeout (timeval) */
-#define CLGET_TIMEOUT  2	/* get timeout (timeval) */
+/* reserved 1 */
+/* reserved 2 */
 #define CLGET_SERVER_ADDR 3	/* get server's address (sockaddr) */
+/* reserved 4 */
+/* reserved 5 */
 #define CLGET_FD  6		/* get connections file descriptor */
 #define CLGET_SVC_ADDR  7	/* get server's address (netbuf) */
 #define CLSET_FD_CLOSE  8	/* close fd while clnt_destroy */
@@ -285,11 +278,6 @@ struct rpc_timers {
 #define CLSET_SVC_ADDR  16	/* get server's address (netbuf) */
 #define CLSET_PUSH_TIMOD 17	/* push timod if not already present */
 #define CLSET_POP_TIMOD  18	/* pop timod */
-/*
- * Connectionless only control operations
- */
-#define CLSET_RETRY_TIMEOUT 4	/* set retry timeout (timeval) */
-#define CLGET_RETRY_TIMEOUT 5	/* get retry timeout (timeval) */
 
 /*
  * void
@@ -518,10 +506,27 @@ clnt_dg_ncreate(const int fd, const struct netbuf *raddr,
  */
 extern CLIENT *clnt_raw_ncreate(rpcprog_t, rpcvers_t);
 
+/*
+ * Client request processing
+ */
 int clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
 		      const struct opr_rbtree_node *rhs);
 
-struct clnt_req *clnt_req_alloc(CLIENT *, struct timeval);
+static inline void clnt_req_fill(struct clnt_req *cc, struct rpc_client *clnt,
+				 AUTH *auth, rpcproc_t proc,
+				 xdrproc_t xargs, void *argsp,
+				 xdrproc_t xresults, void *resultsp)
+{
+	cc->cc_clnt = clnt;
+	cc->cc_auth = auth;
+	cc->cc_proc = proc;
+	cc->cc_xdr.proc = xargs;
+	cc->cc_xdr.where = argsp;
+	cc->cc_msg.rm_xdr.proc = xresults;
+	cc->cc_msg.rm_xdr.where = resultsp;
+}
+
+bool clnt_req_setup(struct clnt_req *, struct timespec);
 enum xprt_stat clnt_req_process_reply(SVCXPRT *, struct svc_req *);
 int clnt_req_wait_reply(struct clnt_req *);
 void clnt_req_release(struct clnt_req *);
