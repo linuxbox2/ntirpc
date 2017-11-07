@@ -60,17 +60,9 @@
 #define WORK_POOL_STACK_SIZE MAX(64 * 1024, PTHREAD_STACK_MIN)
 #define WORK_POOL_TIMEOUT_MS (31 /* seconds (prime) */ * 1000)
 
-__thread char worker_name[16];
-
 /* forward declaration in lieu of moving code, was inline */
 
 static int work_pool_spawn(struct work_pool *pool);
-
-char *
-work_pool_worker_name(void)
-{
-	return worker_name;
-}
 
 int
 work_pool_init(struct work_pool *pool, const char *name,
@@ -159,8 +151,9 @@ work_pool_thread(void *arg)
 	pool->n_threads++;
 
 	wpt->worker_index = atomic_inc_uint32_t(&pool->worker_index);
-	snprintf(worker_name, sizeof(worker_name), "%.5s%" PRIu32,
+	snprintf(wpt->worker_name, sizeof(wpt->worker_name), "%.5s%" PRIu32,
 		 pool->name, wpt->worker_index);
+	__ntirpc_pkg_params.thread_name_(wpt->worker_name);
 
 	do {
 		/* testing at top of loop allows pre-specification of work,
@@ -179,7 +172,7 @@ work_pool_thread(void *arg)
 
 			__warnx(TIRPC_DEBUG_FLAG_WORKER,
 				"%s() %s task %p",
-				__func__, worker_name, wpt->work);
+				__func__, wpt->worker_name, wpt->work);
 			wpt->work->fun(wpt->work);
 			wpt->work = NULL;
 			pthread_mutex_lock(&pool->pqh.qmutex);
@@ -202,7 +195,7 @@ work_pool_thread(void *arg)
 
 		__warnx(TIRPC_DEBUG_FLAG_WORKER,
 			"%s() %s waiting",
-			__func__, worker_name);
+			__func__, wpt->worker_name);
 
 		clock_gettime(CLOCK_REALTIME_FAST, &ts);
 		timespec_addms(&ts, WORK_POOL_TIMEOUT_MS);
@@ -239,7 +232,7 @@ work_pool_thread(void *arg)
 
 	__warnx(TIRPC_DEBUG_FLAG_WORKER,
 		"%s() %s terminating",
-		__func__, worker_name);
+		__func__, wpt->worker_name);
 	cond_destroy(&wpt->pqcond);
 	mem_free(wpt, sizeof(*wpt));
 

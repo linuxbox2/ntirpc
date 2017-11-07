@@ -200,9 +200,6 @@ NTIRPC_${NTIRPC_VERSION} {
     # u*
     uaddr2taddr;
 
-    # w*
-    work_pool_worker_name;
-
     # x*
     xdr_array;
     xdr_authunix_parms;

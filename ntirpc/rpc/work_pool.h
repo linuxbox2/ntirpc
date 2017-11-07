@@ -67,6 +67,7 @@ struct work_pool_thread {
 
 	struct work_pool *pool;
 	struct work_pool_entry *work;
+	char worker_name[16];
 	pthread_t pt;
 	uint32_t worker_index;
 };
@@ -83,6 +84,5 @@ struct work_pool_entry {
 int work_pool_init(struct work_pool *, const char *, struct work_pool_params *);
 int work_pool_submit(struct work_pool *, struct work_pool_entry *);
 int work_pool_shutdown(struct work_pool *);
-char *work_pool_worker_name(void);
 
 #endif				/* WORK_POOL_H */
