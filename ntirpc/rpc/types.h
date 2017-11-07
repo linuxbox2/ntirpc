@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -167,6 +168,7 @@ typedef void *(*mem_p_size_t) (void *, size_t,
 	     const char *file, int line, const char *function);
 typedef void (*mem_free_size_t) (void *, size_t);
 typedef void (*mem_format_t) (const char *fmt, ...);
+typedef void (*mem_char_t) (const char *);
 
 /*
  * Package params support
@@ -174,6 +176,7 @@ typedef void (*mem_format_t) (const char *fmt, ...);
 typedef struct tirpc_pkg_params {
 	uint32_t debug_flags;
 	uint32_t other_flags;
+	mem_char_t	thread_name_;
 	mem_format_t	warnx_;
 	mem_free_size_t	free_size_;
 	mem_1_size_t	malloc_;

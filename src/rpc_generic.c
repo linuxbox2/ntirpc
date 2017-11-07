@@ -71,6 +71,12 @@ thr_keyfree(void *k)
 }
 
 static void
+tirpc_thread_name(const char *p)
+{
+	/* do nothing */
+}
+
+static void
 tirpc_free(void *p, size_t unused)
 {
 	free(p);
@@ -123,6 +129,7 @@ tirpc_realloc(void *p, size_t size, const char *file, int line,
 tirpc_pkg_params __ntirpc_pkg_params = {
 	TIRPC_FLAG_NONE,
 	TIRPC_DEBUG_FLAG_NONE,
+	tirpc_thread_name,
 	warnx,
 	tirpc_free,
 	tirpc_malloc,
