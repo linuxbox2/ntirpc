@@ -160,7 +160,7 @@ rpc_call(const char *host,	/* host name */
 		      inproc, (void *)in, outproc, out);
 	clnt_stat = RPC_TLIERROR;
 	if (clnt_req_setup(cc, to)) {
-		clnt_stat = CLNT_CALL(cc);
+		clnt_stat = CLNT_CALL_WAIT(cc);
 	}
 	clnt_req_release(cc);
 	/*

@@ -125,8 +125,9 @@ clnt_raw_call(struct clnt_req *cc)
 	struct clntraw_private *clp = clntraw_private;
 	XDR *xdrs = &clp->xdr_stream;
 	struct rpc_msg msg;
-	enum clnt_stat status;
 	struct rpc_err error;
+
+	cc->cc_error.re_status = RPC_SUCCESS;
 
 	mutex_lock(&clntraw_lock);
 	if (clp == NULL) {
@@ -135,7 +136,6 @@ clnt_raw_call(struct clnt_req *cc)
 	}
 	mutex_unlock(&clntraw_lock);
 
- call_again:
 	/*
 	 * send request
 	 */
@@ -156,7 +156,7 @@ clnt_raw_call(struct clnt_req *cc)
 	 * all going on in one process. Yuk.
 	 */
 	svc_getreq_common(FD_SETSIZE);
-#endif
+
 	/*
 	 * get results
 	 */
@@ -182,24 +182,10 @@ clnt_raw_call(struct clnt_req *cc)
 		xdrs->x_op = op;
 		return (RPC_CANTDECODERES);
 	}
+#endif
 	_seterr_reply(&msg, &error);
-	status = error.re_status;
 
-	if (status == RPC_SUCCESS) {
-		if (!AUTH_VALIDATE(cc->cc_auth, &msg.RPCM_ack.ar_verf))
-			status = RPC_AUTHERROR;
-	} /* end successful completion */
-	else {
-		if (AUTH_REFRESH(cc->cc_auth, &msg))
-			goto call_again;
-	}			/* end of unsuccessful completion */
-
-	if (status == RPC_SUCCESS) {
-		if (!AUTH_VALIDATE(cc->cc_auth, &msg.RPCM_ack.ar_verf))
-			status = RPC_AUTHERROR;
-	}
-
-	return (status);
+	return (error.re_status);
 }
 
  /*ARGSUSED*/

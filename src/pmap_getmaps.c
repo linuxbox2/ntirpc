@@ -81,9 +81,7 @@ struct pmaplist *pmap_getmaps(struct sockaddr_in *address)
 			      (xdrproc_t) xdr_void, NULL,
 			      (xdrproc_t) xdr_pmaplist, &head);
 		if (clnt_req_setup(cc, to)) {
-			enum clnt_stat clnt_stat = CLNT_CALL(cc);
-
-			if (clnt_stat != RPC_SUCCESS) {
+			if (CLNT_CALL_WAIT(cc) != RPC_SUCCESS) {
 				clnt_perror(client, "pmap_getmaps rpc problem");
 			}
 		}

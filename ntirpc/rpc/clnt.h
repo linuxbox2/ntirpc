@@ -134,6 +134,7 @@ struct clnt_req {
 
 	AUTH *cc_auth;
 	CLIENT *cc_clnt;
+	void (*cc_process_cb)(struct clnt_req *);
 	struct timespec cc_timeout;
 	struct rpc_err cc_error;
 	int cc_refreshes;
@@ -195,11 +196,12 @@ struct rpc_timers {
 
 /*
  * enum clnt_stat
- * CLNT_CALL(cc)
+ * CLNT_CALL_ONCE(cc)
+ * CLNT_CALL_WAIT(cc)
  *  struct clnt_req *cc;
  */
-#define CLNT_CALL(cc) \
-	((*(cc)->cc_clnt->cl_ops->cl_call)(cc))
+#define CLNT_CALL_ONCE(cc) ((*(cc)->cc_clnt->cl_ops->cl_call)(cc))
+#define CLNT_CALL_WAIT(cc) clnt_req_wait_reply(cc)
 
 /*
  * void
@@ -516,11 +518,26 @@ static inline void clnt_req_fill(struct clnt_req *cc, struct rpc_client *clnt,
 	cc->cc_xdr.where = argsp;
 	cc->cc_msg.rm_xdr.proc = xresults;
 	cc->cc_msg.rm_xdr.where = resultsp;
+
+	rpc_msg_init(&cc->cc_msg);
+
+	/* protects this */
+	pthread_mutex_init(&cc->cc_we.mtx, NULL);
+	pthread_mutex_lock(&cc->cc_we.mtx);
+	pthread_cond_init(&cc->cc_we.cv, 0);
 }
 
+static inline void clnt_req_fini(struct clnt_req *cc)
+{
+	pthread_cond_destroy(&cc->cc_we.cv);
+	pthread_mutex_unlock(&cc->cc_we.mtx);
+	pthread_mutex_destroy(&cc->cc_we.mtx);
+}
+
+void clnt_req_reset(struct clnt_req *);
 bool clnt_req_setup(struct clnt_req *, struct timespec);
 enum xprt_stat clnt_req_process_reply(SVCXPRT *, struct svc_req *);
-int clnt_req_wait_reply(struct clnt_req *);
+enum clnt_stat clnt_req_wait_reply(struct clnt_req *);
 void clnt_req_release(struct clnt_req *);
 
 __END_DECLS
