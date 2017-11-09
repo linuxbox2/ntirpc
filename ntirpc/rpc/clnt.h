@@ -309,25 +309,11 @@ struct rpc_timers {
  * implementations of client side rpc.  They can return NULL if a
  * creation failure occurs.
  */
+__BEGIN_DECLS
 
 /*
  * Generic client creation routine. Supported protocols are those that
  * belong to the nettype namespace (/etc/netconfig).
- */
-__BEGIN_DECLS
-extern CLIENT * clnt_ncreate(const char *, const rpcprog_t,
-			     const rpcvers_t, const char *);
-/*
- *
- * const char *hostname;   -- hostname
- * const rpcprog_t prog;   -- program number
- * const rpcvers_t vers;   -- version number
- * const char *nettype;    -- network type
- */
-
-/*
- * Generic client creation routine. Just like clnt_create(), except
- * it takes an additional timeout parameter.
  */
 extern CLIENT *clnt_ncreate_timed(const char *, const rpcprog_t,
 				  const rpcvers_t, const char *,
@@ -337,28 +323,23 @@ extern CLIENT *clnt_ncreate_timed(const char *, const rpcprog_t,
  * const char *hostname;   -- hostname
  * const rpcprog_t prog;   -- program number
  * const rpcvers_t vers;   -- version number
- * const char *nettype;   -- network type
+ * const char *nettype;    -- network type
  * const struct timeval *tp;  -- timeout
  */
 
 /*
- * Generic client creation routine. Supported protocols are which belong
- * to the nettype name space.
+ * Calls clnt_ncreate_timed() with a NULL value for the timeout
+ * pointer, indicating that the default timeout should be used.
  */
-extern CLIENT *clnt_ncreate_vers(const char *, const rpcprog_t, rpcvers_t *,
-				 const rpcvers_t, const rpcvers_t,
-				 const char *);
-/*
- * const char *host;  -- hostname
- * const rpcprog_t prog;  -- program number
- * rpcvers_t *vers_out;  -- servers highest available version
- * const rpcvers_t vers_low; -- low version number
- * const rpcvers_t vers_high; -- high version number
- * const char *nettype;  -- network type
- */
+static inline CLIENT *
+clnt_ncreate(const char *hostname, rpcprog_t prog, rpcvers_t vers,
+	     const char *nettype)
+{
+	return (clnt_ncreate_timed(hostname, prog, vers, nettype, NULL));
+}
 
 /*
- * Generic client creation routine. Supported protocols are which belong
+ * Generic client creation routine. Supported protocols belong
  * to the nettype name space.
  */
 extern CLIENT *clnt_ncreate_vers_timed(const char *, const rpcprog_t,
@@ -376,21 +357,21 @@ extern CLIENT *clnt_ncreate_vers_timed(const char *, const rpcprog_t,
  */
 
 /*
- * Generic client creation routine. It takes a netconfig structure
- * instead of nettype
+ * Calls clnt_create_vers_timed() with a NULL value for the timeout
+ * pointer, indicating that the default timeout should be used.
  */
-extern CLIENT *clnt_tp_ncreate(const char *, const rpcprog_t, const rpcvers_t,
-			       const struct netconfig *);
-/*
- * const char *hostname;   -- hostname
- * const rpcprog_t prog;   -- program number
- * const rpcvers_t vers;   -- version number
- * const struct netconfig *netconf;  -- network config structure
- */
+static inline CLIENT *
+clnt_ncreate_vers(const char *hostname, rpcprog_t prog,
+		  rpcvers_t *vers_out, rpcvers_t vers_low,
+		  rpcvers_t vers_high, const char *nettype)
+{
+	return (clnt_ncreate_vers_timed
+		(hostname, prog, vers_out, vers_low, vers_high, nettype, NULL));
+}
 
 /*
- * Generic client creation routine. Just like clnt_tp_create(), except
- * it takes an additional timeout parameter.
+ * Generic client creation routine. It takes a netconfig structure
+ * instead of nettype
  */
 extern CLIENT *clnt_tp_ncreate_timed(const char *, const rpcprog_t,
 				     const rpcvers_t, const struct netconfig *,
@@ -402,6 +383,17 @@ extern CLIENT *clnt_tp_ncreate_timed(const char *, const rpcprog_t,
  * const struct netconfig *netconf;  -- network config structure
  * const struct timeval *tp  -- timeout
  */
+
+/*
+ * Calls clnt_tp_create_timed() with a NULL value for the timeout
+ * pointer, indicating that the default timeout should be used.
+ */
+static inline CLIENT *
+clnt_tp_ncreate(const char *hostname, rpcprog_t prog, rpcvers_t vers,
+		const struct netconfig *nconf)
+{
+	return (clnt_tp_ncreate_timed(hostname, prog, vers, nconf, NULL));
+}
 
 /*
  * Generic TLI create routine. Only provided for compatibility.

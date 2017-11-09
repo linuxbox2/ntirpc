@@ -64,21 +64,7 @@ static const struct timespec to = { 3, 0 };
  * vers_low <= vers_out <= vers_high  AND an error results
  * if this can not be done.
  *
- * It calls clnt_create_vers_timed() with a NULL value for the timeout
- * pointer, which indicates that the default timeout should be used.
- */
-CLIENT *
-clnt_ncreate_vers(const char *hostname, rpcprog_t prog,
-		  rpcvers_t *vers_out, rpcvers_t vers_low,
-		  rpcvers_t vers_high, const char *nettype)
-{
-
-	return (clnt_ncreate_vers_timed
-		(hostname, prog, vers_out, vers_low, vers_high, nettype, NULL));
-}
-
-/*
- * This the routine has the same definition as clnt_create_vers(),
+ * This routine has the same definition as clnt_create_vers(),
  * except it takes an additional timeout parameter - a pointer to
  * a timeval structure.  A NULL value for the pointer indicates
  * that the default timeout value should be used.
@@ -171,18 +157,7 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
  * XXX The error message in the case of failure will be the one
  * pertaining to the last create error.
  *
- * It calls clnt_ncreate_timed() with the default timeout.
- */
-CLIENT *
-clnt_ncreate(const char *hostname, rpcprog_t prog, rpcvers_t vers,
-	     const char *nettype)
-{
-
-	return (clnt_ncreate_timed(hostname, prog, vers, nettype, NULL));
-}
-
-/*
- * This the routine has the same definition as clnt_create(),
+ * This routine has the same definition as clnt_create(),
  * except it takes an additional timeout parameter - a pointer to
  * a timeval structure.  A NULL value for the pointer indicates
  * that the default timeout value should be used.
@@ -277,16 +252,6 @@ clnt_ncreate_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
  * change using the rpc equivalent of _ioctl()'s : clnt_control()
  * It finds out the server address from rpcbind and calls clnt_tli_create().
  *
- * It calls clnt_tp_create_timed() with the default timeout.
- */
-CLIENT *
-clnt_tp_ncreate(const char *hostname, rpcprog_t prog, rpcvers_t vers,
-		const struct netconfig *nconf)
-{
-	return (clnt_tp_ncreate_timed(hostname, prog, vers, nconf, NULL));
-}
-
-/*
  * This has the same definition as clnt_tp_ncreate(), except it
  * takes an additional parameter - a pointer to a timeval structure.
  * A NULL value for the timeout pointer indicates that the default
