@@ -81,9 +81,7 @@ u_short pmap_getport(struct sockaddr_in *address, u_long program,
 			      (xdrproc_t) xdr_pmap, &parms,
 			      (xdrproc_t) xdr_u_short, &port);
 		if (clnt_req_setup(cc, to)) {
-			enum clnt_stat clnt_stat = CLNT_CALL(cc);
-
-			if (clnt_stat != RPC_SUCCESS) {
+			if (CLNT_CALL_WAIT(cc) != RPC_SUCCESS) {
 				rpc_createerr.cf_stat = RPC_PMAPFAILURE;
 				clnt_geterr(client, &rpc_createerr.cf_error);
 			} else if (port == 0) {

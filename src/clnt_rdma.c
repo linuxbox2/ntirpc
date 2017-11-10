@@ -145,10 +145,7 @@ clnt_rdma_call(struct clnt_req *cc)
 	struct rpc_dplx_rec *rec = cx->cx_rec;
 	SVCXPRT *xprt = &rec->xprt;
 	XDR *xdrs;
-	enum clnt_stat result;
-	int code;
 
-call_again:
 	xdrs = &(cm->cm_xdrs);
 	cc->cc_error.re_status = RPC_SUCCESS;
 	cm->call_msg.rm_xid = cc->cc_xid;
@@ -162,7 +159,6 @@ call_again:
 			"%s: fd %d failed",
 			__func__, xprt->xp_fd);
 		XDR_DESTROY(xdrs);
-		cx->cx_error.re_status = RPC_CANTENCODEARGS;
 		return (RPC_CANTENCODEARGS);
 	}
 
@@ -172,25 +168,7 @@ call_again:
 		return (RPC_CANTSEND);
 	}
 
-	code = clnt_req_wait_reply(cc);
-
-	if (cc->cc_refreshes > 0) {
-		cc->cc_flags = CLNT_REQ_FLAG_NONE;
-		goto call_again;
-	}
-	if (code == ETIMEDOUT) {
-		/* UL can retry, we dont.  This CAN indicate xprt
-		 * destroyed (error status already set). */
-		__warnx(TIRPC_DEBUG_FLAG_CLNT_RDMA,
-			"%s: fd %d ETIMEDOUT",
-			__func__, xprt->xp_fd);
-	}
-
-	result = cc->cc_error.re_status;
-	__warnx(TIRPC_DEBUG_FLAG_CLNT_RDMA,
-		"%s: fd %d result=%d",
-		__func__, xprt->xp_fd, result);
-	return (result);
+	return (RPC_SUCCESS);
 }
 
 static void

@@ -289,10 +289,7 @@ clnt_vc_call(struct clnt_req *cc)
 	SVCXPRT *xprt = &rec->xprt;
 	struct xdr_ioq *xioq;
 	XDR *xdrs;
-	enum clnt_stat result;
-	int code;
 
- call_again:
 	/* XXX Until gss_get_mic and gss_wrap can be replaced with
 	 * iov equivalents, replies with RPCSEC_GSS security must be
 	 * encoded in a contiguous buffer.
@@ -327,34 +324,16 @@ clnt_vc_call(struct clnt_req *cc)
 	}
 	mutex_unlock(&clnt->cl_lock);
 
-	xdrs->x_lib[1] = (void *)xprt;
-	svc_ioq_write_submit(xprt, xioq);
-
-	/* reply */
 	if (!rec->ev_p) {
 		xprt->xp_dispatch.process_cb = clnt_vc_process;
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
 	}
-	code = clnt_req_wait_reply(cc);
 
-	if (cc->cc_refreshes > 0) {
-		cc->cc_flags = CLNT_REQ_FLAG_NONE;
-		goto call_again;
-	}
-	if (code == ETIMEDOUT) {
-		/* UL can retry, we dont.  This CAN indicate xprt
-		 * destroyed (error status already set). */
-		__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
-			"%s: fd %d ETIMEDOUT",
-			__func__, xprt->xp_fd);
-	}
+	xdrs->x_lib[1] = (void *)xprt;
+	svc_ioq_write_submit(xprt, xioq);
 
-	result = cc->cc_error.re_status;
-	__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
-		"%s: fd %d result=%d",
-		__func__, xprt->xp_fd, result);
-	return (result);
+	return (RPC_SUCCESS);
 }
 
 static void

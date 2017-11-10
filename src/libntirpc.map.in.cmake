@@ -56,9 +56,7 @@ NTIRPC_${NTIRPC_VERSION} {
     callrpc;
     cbc_crypt;
     clnt_broadcast;
-    clnt_ncreate;
     clnt_ncreate_timed;
-    clnt_ncreate_vers;
     clnt_ncreate_vers_timed;
     clnt_dg_ncreatef;
     clnt_pcreateerror;
@@ -66,12 +64,13 @@ NTIRPC_${NTIRPC_VERSION} {
     clnt_perror;
     clnt_raw_ncreate;
     clnt_req_release;
+    clnt_req_reset;
     clnt_req_setup;
+    clnt_req_wait_reply;
     clnt_spcreateerror;
     clnt_sperrno;
     clnt_sperror;
     clnt_tli_create;
-    clnt_tp_ncreate;
     clnt_tp_ncreate_timed;
     clnt_vc_ncreatef;
     clnt_vc_ncreate_svc;

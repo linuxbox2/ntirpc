@@ -479,7 +479,7 @@ authgss_refresh(AUTH *auth, void *arg)
 				      (xdrproc_t) xdr_rpc_gss_init_res, &gr);
 			call_stat = RPC_TLIERROR;
 			if (clnt_req_setup(cc, to)) {
-				call_stat = CLNT_CALL(cc);
+				call_stat = CLNT_CALL_WAIT(cc);
 			}
 			clnt_req_release(cc);
 
@@ -590,7 +590,7 @@ authgss_destroy_context(AUTH *auth)
 				      (xdrproc_t) xdr_void, NULL,
 				      (xdrproc_t) xdr_void, NULL);
 			if (clnt_req_setup(cc, to)) {
-				CLNT_CALL(cc);
+				CLNT_CALL_WAIT(cc);
 			}
 			clnt_req_release(cc);
 		}

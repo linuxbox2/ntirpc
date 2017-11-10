@@ -210,10 +210,7 @@ clnt_dg_call(struct clnt_req *cc)
 	struct xdr_ioq *xioq;
 	XDR *xdrs;
 	size_t outlen;
-	enum clnt_stat result;
-	int code;
 
- call_again:
 	/* XXX Until gss_get_mic and gss_wrap can be replaced with
 	 * iov equivalents, replies with RPCSEC_GSS security must be
 	 * encoded in a contiguous buffer.
@@ -249,6 +246,12 @@ clnt_dg_call(struct clnt_req *cc)
 	outlen = (size_t) XDR_GETPOS(xdrs);
 	mutex_unlock(&clnt->cl_lock);
 
+	if (!rec->ev_p) {
+		xprt->xp_dispatch.rendezvous_cb = clnt_dg_rendezvous;
+		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+				    SVC_RQST_FLAG_CHAN_AFFINITY);
+	}
+
 	if (sendto(xprt->xp_fd, xdrs->x_v.vio_head, outlen, 0,
 		   (struct sockaddr *)&cu->cu_raddr, cu->cu_rlen) != outlen) {
 		cx->cx_error.re_errno = errno;
@@ -256,37 +259,13 @@ clnt_dg_call(struct clnt_req *cc)
 			"%s: fd %d sendto failed (%d)\n",
 			__func__, xprt->xp_fd, cx->cx_error.re_errno);
 		XDR_DESTROY(xdrs);
+		cx->cx_error.re_errno = errno;
 		cx->cx_error.re_status = RPC_CANTSEND;
 		return (RPC_CANTSEND);
 	}
-
-	/* reply */
-	if (!rec->ev_p) {
-		xprt->xp_dispatch.rendezvous_cb = clnt_dg_rendezvous;
-		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
-				    SVC_RQST_FLAG_LOCKED |
-				    SVC_RQST_FLAG_CHAN_AFFINITY);
-	}
-	code = clnt_req_wait_reply(cc);
-
-	if (cc->cc_refreshes > 0) {
-		cc->cc_flags = CLNT_REQ_FLAG_NONE;
-		XDR_DESTROY(xdrs);
-		goto call_again;
-	}
-	if (code == ETIMEDOUT) {
-		/* We have refreshed/retried, just log it */
-		__warnx(TIRPC_DEBUG_FLAG_CLNT_DG,
-			"%s: fd %d ETIMEDOUT",
-			__func__, xprt->xp_fd);
-	}
 	XDR_DESTROY(xdrs);
 
-	result = cc->cc_error.re_status;
-	__warnx(TIRPC_DEBUG_FLAG_CLNT_DG,
-		"%s: fd %d result=%d",
-		__func__, xprt->xp_fd, result);
-	return (result);
+	return (RPC_SUCCESS);
 }
 
 static void

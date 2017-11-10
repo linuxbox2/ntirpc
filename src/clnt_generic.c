@@ -64,21 +64,7 @@ static const struct timespec to = { 3, 0 };
  * vers_low <= vers_out <= vers_high  AND an error results
  * if this can not be done.
  *
- * It calls clnt_create_vers_timed() with a NULL value for the timeout
- * pointer, which indicates that the default timeout should be used.
- */
-CLIENT *
-clnt_ncreate_vers(const char *hostname, rpcprog_t prog,
-		  rpcvers_t *vers_out, rpcvers_t vers_low,
-		  rpcvers_t vers_high, const char *nettype)
-{
-
-	return (clnt_ncreate_vers_timed
-		(hostname, prog, vers_out, vers_low, vers_high, nettype, NULL));
-}
-
-/*
- * This the routine has the same definition as clnt_create_vers(),
+ * This routine has the same definition as clnt_create_vers(),
  * except it takes an additional timeout parameter - a pointer to
  * a timeval structure.  A NULL value for the pointer indicates
  * that the default timeout value should be used.
@@ -110,7 +96,7 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
 		goto geterror;
 	}
 
-	rpc_stat = CLNT_CALL(cc);
+	rpc_stat = CLNT_CALL_WAIT(cc);
 	clnt_req_release(cc);
 	if (rpc_stat == RPC_SUCCESS) {
 		*vers_out = vers_high;
@@ -143,7 +129,7 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
 			goto geterror;
 		}
 
-		rpc_stat = CLNT_CALL(cc);
+		rpc_stat = CLNT_CALL_WAIT(cc);
 		clnt_req_release(cc);
 		if (rpc_stat == RPC_SUCCESS) {
 			*vers_out = vers_high;
@@ -171,18 +157,7 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
  * XXX The error message in the case of failure will be the one
  * pertaining to the last create error.
  *
- * It calls clnt_ncreate_timed() with the default timeout.
- */
-CLIENT *
-clnt_ncreate(const char *hostname, rpcprog_t prog, rpcvers_t vers,
-	     const char *nettype)
-{
-
-	return (clnt_ncreate_timed(hostname, prog, vers, nettype, NULL));
-}
-
-/*
- * This the routine has the same definition as clnt_create(),
+ * This routine has the same definition as clnt_create(),
  * except it takes an additional timeout parameter - a pointer to
  * a timeval structure.  A NULL value for the pointer indicates
  * that the default timeout value should be used.
@@ -277,16 +252,6 @@ clnt_ncreate_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
  * change using the rpc equivalent of _ioctl()'s : clnt_control()
  * It finds out the server address from rpcbind and calls clnt_tli_create().
  *
- * It calls clnt_tp_create_timed() with the default timeout.
- */
-CLIENT *
-clnt_tp_ncreate(const char *hostname, rpcprog_t prog, rpcvers_t vers,
-		const struct netconfig *nconf)
-{
-	return (clnt_tp_ncreate_timed(hostname, prog, vers, nconf, NULL));
-}
-
-/*
  * This has the same definition as clnt_tp_ncreate(), except it
  * takes an additional parameter - a pointer to a timeval structure.
  * A NULL value for the timeout pointer indicates that the default
@@ -453,6 +418,28 @@ clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
 	return (1);
 }
 
+/*
+ * waitq_entry is locked in clnt_req_setup()
+ */
+void
+clnt_req_callback_default(struct clnt_req *cc)
+{
+	atomic_set_uint16_t_bits(&cc->cc_flags, CLNT_REQ_FLAG_ACKSYNC);
+	mutex_lock(&cc->cc_we.mtx);
+	cond_signal(&cc->cc_we.cv);
+	mutex_unlock(&cc->cc_we.mtx);
+}
+
+void
+clnt_req_reset(struct clnt_req *cc)
+{
+	struct cx_data *cx = CX_DATA(cc->cc_clnt);
+
+	rpc_dplx_rli(cx->cx_rec);
+	opr_rbtree_remove(&cx->cx_rec->call_replies, &cc->cc_node);
+	rpc_dplx_rui(cx->cx_rec);
+}
+
 bool
 clnt_req_setup(struct clnt_req *cc, struct timespec timeout)
 {
@@ -461,16 +448,10 @@ clnt_req_setup(struct clnt_req *cc, struct timespec timeout)
 	struct rpc_dplx_rec *rec = cx->cx_rec;
 	struct opr_rbtree_node *nv;
 
-	rpc_msg_init(&cc->cc_msg);
-
-	/* protects this */
-	mutex_init(&cc->cc_we.mtx, NULL);
-	mutex_lock(&cc->cc_we.mtx);
-	cond_init(&cc->cc_we.cv, 0, NULL);
-
 	cc->cc_error.re_errno = 0;
 	cc->cc_error.re_status = RPC_SUCCESS;
 	cc->cc_flags = CLNT_REQ_FLAG_NONE;
+	cc->cc_process_cb = clnt_req_callback_default;
 	cc->cc_refcount = 1;
 	cc->cc_refreshes = 2;
 	cc->cc_timeout = timeout;
@@ -526,9 +507,7 @@ clnt_req_process_reply(SVCXPRT *xprt, struct svc_req *req)
 			__func__, &rec->xprt, rec->xprt.xp_fd, cc_k.cc_xid);
 		return SVC_STAT(xprt);
 	}
-
 	cc = opr_containerof(nv, struct clnt_req, cc_node);
-	atomic_set_uint16_t_bits(&cc->cc_flags, CLNT_REQ_FLAG_ACKSYNC);
 
 	_seterr_reply(&req->rq_msg, &(cc->cc_error));
 	if (cc->cc_error.re_status == RPC_SUCCESS) {
@@ -544,50 +523,37 @@ clnt_req_process_reply(SVCXPRT *xprt, struct svc_req *req)
 				cc->cc_error.re_status = RPC_CANTDECODERES;
 		}
 		cc->cc_refreshes = 0;
-	} else if (cc->cc_refreshes-- > 0
-		   && cc->cc_error.re_status == RPC_AUTHERROR
-		   && AUTH_REFRESH(cc->cc_auth, &(cc->cc_msg))) {
-		/* maybe our credentials need to be refreshed ... */
-		rpc_dplx_rli(rec);
-		opr_rbtree_remove(&rec->call_replies, &cc->cc_node);
-		cc->cc_xid = ++(rec->call_xid);
-		nv = opr_rbtree_insert(&rec->call_replies, &cc->cc_node);
-		rpc_dplx_rui(rec);
-		if (nv) {
-			__warnx(TIRPC_DEBUG_FLAG_ERROR,
-				"%s: %p fd %d insert failed xid %" PRIu32,
-				__func__, xprt, xprt->xp_fd, cc->cc_xid);
-			cc->cc_error.re_status = RPC_TLIERROR;
-			cc->cc_refreshes = 0;
-		}
 	}
 
-	mutex_lock(&cc->cc_we.mtx);
-	cond_signal(&cc->cc_we.cv);
-	mutex_unlock(&cc->cc_we.mtx);
-
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_REQ,
-		"%s: %p fd %d acknowledged xid %" PRIu32,
-		__func__, xprt, xprt->xp_fd, cc->cc_xid);
+		"%s: %p fd %d xid %" PRIu32 " result=%d",
+		__func__, xprt, xprt->xp_fd, cc->cc_xid,
+		cc->cc_error.re_status);
 
+	(*cc->cc_process_cb)(cc);
 	return SVC_STAT(xprt);
 }
 
-/*
- * waitq_entry is locked in clnt_req_setup()
- */
-int
+enum clnt_stat
 clnt_req_wait_reply(struct clnt_req *cc)
 {
 	struct cx_data *cx = CX_DATA(cc->cc_clnt);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
+	struct opr_rbtree_node *nv;
 	struct timespec ts;
+	enum clnt_stat result;
 	int code;
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_REQ,
 		"%s: %p fd %d xid %" PRIu32 " (%ld.%09ld)",
 		__func__, &rec->xprt, rec->xprt.xp_fd, cc->cc_xid,
 		cc->cc_timeout.tv_sec, cc->cc_timeout.tv_nsec);
+
+ call_again:
+	result = CLNT_CALL_ONCE(cc);
+	if (result != RPC_SUCCESS) {
+		return (result);
+	}
 
 	if (!(cc->cc_timeout.tv_sec + cc->cc_timeout.tv_nsec)) {
 		return (RPC_SUCCESS);
@@ -610,23 +576,51 @@ clnt_req_wait_reply(struct clnt_req *cc)
 		}
 	}
 
-	return (code);
+	if (cc->cc_refreshes-- > 0) {
+		if (cc->cc_error.re_status == RPC_AUTHERROR
+		 && AUTH_REFRESH(cc->cc_auth, &(cc->cc_msg))) {
+			/* maybe our credentials need to be refreshed ... */
+			rpc_dplx_rli(rec);
+			opr_rbtree_remove(&rec->call_replies, &cc->cc_node);
+			cc->cc_xid = ++(rec->call_xid);
+			nv = opr_rbtree_insert(&rec->call_replies,
+					       &cc->cc_node);
+			rpc_dplx_rui(rec);
+			if (nv) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s: %p fd %d insert failed xid %" PRIu32,
+					__func__, &rec->xprt, rec->xprt.xp_fd,
+					cc->cc_xid);
+				cc->cc_error.re_status = RPC_TLIERROR;
+				return (RPC_TLIERROR);
+			}
+		}
+		atomic_clear_uint16_t_bits(&cc->cc_flags,
+					   CLNT_REQ_FLAG_ACKSYNC);
+		goto call_again;
+	}
+	if (code == ETIMEDOUT) {
+		/* We have refreshed/retried, just log it */
+		__warnx(TIRPC_DEBUG_FLAG_CLNT_DG,
+			"%s: %p fd %d ETIMEDOUT",
+			__func__, &rec->xprt, rec->xprt.xp_fd);
+	}
+
+	__warnx(TIRPC_DEBUG_FLAG_CLNT_DG,
+		"%s: %p fd %d result=%d",
+		__func__, &rec->xprt, rec->xprt.xp_fd, cc->cc_error.re_status);
+
+	return (cc->cc_error.re_status);
 }
 
 void
 clnt_req_release(struct clnt_req *cc)
 {
-	struct cx_data *cx = CX_DATA(cc->cc_clnt);
-
 	if (atomic_dec_uint32_t(&cc->cc_refcount))
 		return;
 
-	rpc_dplx_rli(cx->cx_rec);
-	opr_rbtree_remove(&cx->cx_rec->call_replies, &cc->cc_node);
-	rpc_dplx_rui(cx->cx_rec);
-	mutex_unlock(&cc->cc_we.mtx);
-	mutex_destroy(&cc->cc_we.mtx);
-	cond_destroy(&cc->cc_we.cv);
+	clnt_req_reset(cc);
+	clnt_req_fini(cc);
 	mem_free(cc, sizeof(*cc));
 }
 

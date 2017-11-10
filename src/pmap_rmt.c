@@ -105,7 +105,7 @@ pmap_rmtcall(struct sockaddr_in *addr, u_long prog, u_long vers,
 			      (xdrproc_t) xdr_rmtcall_args, &a,
 			      (xdrproc_t) xdr_rmtcallres, &r);
 		if (clnt_req_setup(cc, tv)) {
-			stat = CLNT_CALL(cc);
+			stat = CLNT_CALL_WAIT(cc);
 		}
 		clnt_req_release(cc);
 		CLNT_DESTROY(client);

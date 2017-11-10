@@ -455,7 +455,7 @@ rpcb_set(rpcprog_t program, rpcvers_t version, const struct netconfig *nconf,
 		rpc_createerr.cf_stat = RPC_TLIERROR;
 		goto error;
 	}
-	CLNT_CALL(cc);
+	CLNT_CALL_WAIT(cc);
 
  error:
 	clnt_req_release(cc);
@@ -505,7 +505,7 @@ rpcb_unset(rpcprog_t program, rpcvers_t version,
 		rpc_createerr.cf_stat = RPC_TLIERROR;
 		goto error;
 	}
-	CLNT_CALL(cc);
+	CLNT_CALL_WAIT(cc);
 
  error:
 	clnt_req_release(cc);
@@ -692,7 +692,7 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 			goto error;
 		}
 
-		clnt_st = CLNT_CALL(cc);
+		clnt_st = CLNT_CALL_WAIT(cc);
 		clnt_req_release(cc);
 		if (clnt_st != RPC_SUCCESS) {
 			if ((clnt_st == RPC_PROGVERSMISMATCH)
@@ -769,7 +769,7 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 			goto error;
 		}
 
-		clnt_st = CLNT_CALL(cc);
+		clnt_st = CLNT_CALL_WAIT(cc);
 		clnt_req_release(cc);
 		if (clnt_st == RPC_SUCCESS) {
 			if ((ua == NULL) || (ua[0] == 0)) {
@@ -914,12 +914,10 @@ rpcb_getmaps(const struct netconfig *nconf, const char *host)
 		      (xdrproc_t) xdr_void, NULL,
 		      (xdrproc_t) xdr_rpcblist_ptr, &head);
 	if (!clnt_req_setup(cc, to)) {
-		clnt_req_release(cc);
 		goto error;
 	}
 
-	clnt_st = CLNT_CALL(cc);
-	clnt_req_release(cc);
+	clnt_st = CLNT_CALL_WAIT(cc);
 	if (clnt_st == RPC_SUCCESS)
 		goto done;
 
@@ -933,17 +931,12 @@ rpcb_getmaps(const struct netconfig *nconf, const char *host)
 		vers = RPCBVERS;
 		CLNT_CONTROL(client, CLSET_VERS, (char *)(void *)&vers);
 
-		cc = mem_alloc(sizeof(*cc));
-		clnt_req_fill(cc, client, auth, RPCBPROC_DUMP,
-			      (xdrproc_t) xdr_void, NULL,
-			      (xdrproc_t) xdr_rpcblist_ptr, &head);
+		clnt_req_reset(cc);
 		if (!clnt_req_setup(cc, to)) {
-			clnt_req_release(cc);
 			goto error;
 		}
 
-		clnt_st = CLNT_CALL(cc);
-		clnt_req_release(cc);
+		clnt_st = CLNT_CALL_WAIT(cc);
 		if (clnt_st == RPC_SUCCESS)
 			goto done;
 	}
@@ -953,6 +946,7 @@ rpcb_getmaps(const struct netconfig *nconf, const char *host)
 	clnt_geterr(client, &rpc_createerr.cf_error);
 
  done:
+	clnt_req_release(cc);
 	CLNT_DESTROY(client);
 	return (head);
 }
@@ -1002,18 +996,18 @@ rpcb_rmtcall(const struct netconfig *nconf, /* Netconfig structure */
 	tv.tv_sec = tout.tv_sec;
 	tv.tv_nsec = tout.tv_usec * 1000;
 
+	cc = mem_alloc(sizeof(*cc));
+	clnt_req_fill(cc, client, auth, RPCBPROC_CALLIT,
+		      (xdrproc_t) xdr_rpcb_rmtcallargs, &a,
+		      (xdrproc_t) xdr_rpcb_rmtcallres, &r);
+
 	for (rpcb_vers = RPCBVERS4; rpcb_vers >= RPCBVERS; rpcb_vers--) {
 		CLNT_CONTROL(client, CLSET_VERS, (char *)(void *)&rpcb_vers);
 
-		cc = mem_alloc(sizeof(*cc));
-		clnt_req_fill(cc, client, auth, RPCBPROC_CALLIT,
-			      (xdrproc_t) xdr_rpcb_rmtcallargs, &a,
-			      (xdrproc_t) xdr_rpcb_rmtcallres, &r);
 		stat = RPC_TLIERROR;
 		if (clnt_req_setup(cc, tv)) {
-			stat = CLNT_CALL(cc);
+			stat = CLNT_CALL_WAIT(cc);
 		}
-		clnt_req_release(cc);
 
 		if ((stat == RPC_SUCCESS) && (addr_ptr != NULL)) {
 			struct netbuf *na;
@@ -1044,8 +1038,10 @@ rpcb_rmtcall(const struct netconfig *nconf, /* Netconfig structure */
 			   && (stat != RPC_PROGUNAVAIL)) {
 			goto error;
 		}
+		clnt_req_reset(cc);
 	}
  error:
+	clnt_req_release(cc);
 	CLNT_DESTROY(client);
 	if (r.addr)
 		xdr_free((xdrproc_t) xdr_wrapstring, (char *)(void *)&r.addr);
@@ -1100,12 +1096,10 @@ boolrpcb_gettime(const char *host, time_t *timep)
 		      (xdrproc_t) xdr_int, timep);
 	if (!clnt_req_setup(cc, to)) {
 		st = RPC_TLIERROR;
-		clnt_req_release(cc);
 		goto error;
 	}
 
-	st = CLNT_CALL(cc);
-	clnt_req_release(cc);
+	st = CLNT_CALL_WAIT(cc);
 	if ((st == RPC_PROGVERSMISMATCH) || (st == RPC_PROGUNAVAIL)) {
 		CLNT_CONTROL(client, CLGET_VERS, (char *)(void *)&vers);
 		if (vers == RPCBVERS4) {
@@ -1113,21 +1107,17 @@ boolrpcb_gettime(const char *host, time_t *timep)
 			vers = RPCBVERS;
 			CLNT_CONTROL(client, CLSET_VERS, (char *)(void *)&vers);
 
-			cc = mem_alloc(sizeof(*cc));
-			clnt_req_fill(cc, client, auth, RPCBPROC_GETTIME,
-				      (xdrproc_t) xdr_void, NULL,
-				      (xdrproc_t) xdr_int, timep);
+			clnt_req_reset(cc);
 			if (!clnt_req_setup(cc, to)) {
 				st = RPC_TLIERROR;
-				clnt_req_release(cc);
 				goto error;
 			}
 
-			st = CLNT_CALL(cc);
-			clnt_req_release(cc);
+			st = CLNT_CALL_WAIT(cc);
 		}
 	}
  error:
+	clnt_req_release(cc);
 	CLNT_DESTROY(client);
 	return (st == RPC_SUCCESS ? true : false);
 }
@@ -1163,7 +1153,7 @@ char *rpcb_taddr2uaddr(struct netconfig *nconf, struct netbuf *taddr)
 		rpc_createerr.cf_stat = RPC_TLIERROR;
 		goto error;
 	}
-	CLNT_CALL(cc);
+	CLNT_CALL_WAIT(cc);
 
  error:
 	clnt_req_release(cc);
@@ -1204,7 +1194,7 @@ struct netbuf *rpcb_uaddr2taddr(struct netconfig *nconf, char *uaddr)
 		goto error;
 	}
 
-	if (CLNT_CALL(cc) != RPC_SUCCESS) {
+	if (CLNT_CALL_WAIT(cc) != RPC_SUCCESS) {
 		mem_free(taddr, sizeof(*taddr));
 		taddr = NULL;
 	}
