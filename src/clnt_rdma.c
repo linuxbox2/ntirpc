@@ -154,7 +154,8 @@ clnt_rdma_call(struct clnt_req *cc)
 	 || !xdr_callhdr(&(cm->cm_xdrs), &cm->call_msg)
 	 || !XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc)
 	 || !AUTH_MARSHALL(cc->cc_auth, xdrs)
-	 || !AUTH_WRAP(cc->cc_auth, xdrs, cc->cc_xdr.proc, cc->cc_xdr.where)) {
+	 || !AUTH_WRAP(cc->cc_auth, xdrs,
+		       cc->cc_call.proc, cc->cc_call.where)) {
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_RDMA,
 			"%s: fd %d failed",
 			__func__, xprt->xp_fd);
@@ -164,7 +165,6 @@ clnt_rdma_call(struct clnt_req *cc)
 
 	if (! xdr_rdma_clnt_flushout(&cm->cm_xdrs)) {
 		cx->cx_error.re_errno = errno;
-		cx->cx_error.re_status = RPC_CANTSEND;
 		return (RPC_CANTSEND);
 	}
 

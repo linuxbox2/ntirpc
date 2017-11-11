@@ -60,6 +60,7 @@
 
 #define MAX_DEFAULT_FDS                 20000
 
+static enum xprt_stat clnt_dg_rendezvous(SVCXPRT *xprt);
 static struct clnt_ops *clnt_dg_ops(void);
 
 struct cu_data {
@@ -138,6 +139,12 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 		return (NULL);
 	}
 	su = su_data(xprt);
+
+	if (!su->su_dr.ev_p) {
+		xprt->xp_dispatch.rendezvous_cb = clnt_dg_rendezvous;
+		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+				    SVC_RQST_FLAG_CHAN_AFFINITY);
+	}
 
 	/* buffer sizes should match svc side */
 	cu = clnt_dg_data_zalloc();
@@ -234,7 +241,7 @@ clnt_dg_call(struct clnt_req *cc)
 	    || (!XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc))
 	    || (!AUTH_MARSHALL(cc->cc_auth, xdrs))
 	    || (!AUTH_WRAP(cc->cc_auth, xdrs,
-			   cc->cc_xdr.proc, cc->cc_xdr.where))) {
+			   cc->cc_call.proc, cc->cc_call.where))) {
 		/* error case */
 		mutex_unlock(&clnt->cl_lock);
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_DG,
@@ -246,12 +253,6 @@ clnt_dg_call(struct clnt_req *cc)
 	outlen = (size_t) XDR_GETPOS(xdrs);
 	mutex_unlock(&clnt->cl_lock);
 
-	if (!rec->ev_p) {
-		xprt->xp_dispatch.rendezvous_cb = clnt_dg_rendezvous;
-		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
-				    SVC_RQST_FLAG_CHAN_AFFINITY);
-	}
-
 	if (sendto(xprt->xp_fd, xdrs->x_v.vio_head, outlen, 0,
 		   (struct sockaddr *)&cu->cu_raddr, cu->cu_rlen) != outlen) {
 		cx->cx_error.re_errno = errno;
@@ -259,8 +260,6 @@ clnt_dg_call(struct clnt_req *cc)
 			"%s: fd %d sendto failed (%d)\n",
 			__func__, xprt->xp_fd, cx->cx_error.re_errno);
 		XDR_DESTROY(xdrs);
-		cx->cx_error.re_errno = errno;
-		cx->cx_error.re_status = RPC_CANTSEND;
 		return (RPC_CANTSEND);
 	}
 	XDR_DESTROY(xdrs);

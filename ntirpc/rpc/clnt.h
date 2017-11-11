@@ -114,6 +114,7 @@ typedef struct rpc_client {
 } CLIENT;
 
 #define CLNT_REQ_FLAG_NONE	0x0000
+#define CLNT_REQ_FLAG_CALLBACK	0x0001
 #define CLNT_REQ_FLAG_ACKSYNC	0x0008
 
 /*
@@ -121,16 +122,20 @@ typedef struct rpc_client {
  * and replies sharing a common channel.
  */
 struct clnt_req {
-	struct opr_rbtree_node cc_node;
+	struct work_pool_entry cc_wpe;
+	struct opr_rbtree_node cc_dplx;
+	struct opr_rbtree_node cc_rqst;
 	struct waitq_entry cc_we;
-	struct rpc_msg cc_msg;
-	struct xdrpair cc_xdr;
+	struct opaque_auth cc_verf;
 
 	AUTH *cc_auth;
 	CLIENT *cc_clnt;
+	struct xdrpair cc_call;
+	struct xdrpair cc_reply;
 	void (*cc_process_cb)(struct clnt_req *);
 	struct timespec cc_timeout;
 	struct rpc_err cc_error;
+	int cc_expire_ms;
 	int cc_refreshes;
 	rpcproc_t cc_proc;
 	uint32_t cc_xid;
@@ -192,10 +197,12 @@ struct rpc_timers {
 
 /*
  * enum clnt_stat
+ * CLNT_CALL_BACK(cc)
  * CLNT_CALL_ONCE(cc)
  * CLNT_CALL_WAIT(cc)
  *  struct clnt_req *cc;
  */
+#define CLNT_CALL_BACK(cc) clnt_req_callback(cc)
 #define CLNT_CALL_ONCE(cc) ((*(cc)->cc_clnt->cl_ops->cl_call)(cc))
 #define CLNT_CALL_WAIT(cc) clnt_req_wait_reply(cc)
 
@@ -549,9 +556,6 @@ extern CLIENT *clnt_raw_ncreate(rpcprog_t, rpcvers_t);
 /*
  * Client request processing
  */
-int clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
-		      const struct opr_rbtree_node *rhs);
-
 static inline void clnt_req_fill(struct clnt_req *cc, struct rpc_client *clnt,
 				 AUTH *auth, rpcproc_t proc,
 				 xdrproc_t xargs, void *argsp,
@@ -560,12 +564,11 @@ static inline void clnt_req_fill(struct clnt_req *cc, struct rpc_client *clnt,
 	cc->cc_clnt = clnt;
 	cc->cc_auth = auth;
 	cc->cc_proc = proc;
-	cc->cc_xdr.proc = xargs;
-	cc->cc_xdr.where = argsp;
-	cc->cc_msg.rm_xdr.proc = xresults;
-	cc->cc_msg.rm_xdr.where = resultsp;
-
-	rpc_msg_init(&cc->cc_msg);
+	cc->cc_call.proc = xargs;
+	cc->cc_call.where = argsp;
+	cc->cc_reply.proc = xresults;
+	cc->cc_reply.where = resultsp;
+	cc->cc_verf = _null_auth;
 
 	/* protects this */
 	pthread_mutex_init(&cc->cc_we.mtx, NULL);
@@ -578,11 +581,13 @@ static inline void clnt_req_fini(struct clnt_req *cc)
 	pthread_cond_destroy(&cc->cc_we.cv);
 	pthread_mutex_unlock(&cc->cc_we.mtx);
 	pthread_mutex_destroy(&cc->cc_we.mtx);
+	CLNT_RELEASE(cc->cc_clnt, CLNT_RELEASE_FLAG_NONE);
 }
 
+enum clnt_stat clnt_req_callback(struct clnt_req *);
+bool clnt_req_refresh(struct clnt_req *);
 void clnt_req_reset(struct clnt_req *);
 bool clnt_req_setup(struct clnt_req *, struct timespec);
-enum xprt_stat clnt_req_process_reply(SVCXPRT *, struct svc_req *);
 enum clnt_stat clnt_req_wait_reply(struct clnt_req *);
 void clnt_req_release(struct clnt_req *);
 

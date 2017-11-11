@@ -65,4 +65,9 @@ clnt_data_destroy(struct cx_data *cx)
 		mem_free(cx->cx_c.cl_tp, strlen(cx->cx_c.cl_tp) + 1);
 }
 
+/* in svc_rqst.c */
+void svc_rqst_expire_insert(struct clnt_req *);
+void svc_rqst_expire_refresh(struct clnt_req *);
+void svc_rqst_expire_remove(struct clnt_req *);
+
 #endif				/* _CLNT_INTERNAL_H */

@@ -75,6 +75,7 @@
 #include "clnt_internal.h"
 #include "svc_internal.h"
 
+static enum xprt_stat clnt_vc_process(struct svc_req *req);
 static struct clnt_ops *clnt_vc_ops(void);
 
 struct ct_data {
@@ -202,6 +203,12 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 	}
 	xd = VC_DR(REC_XPRT(xprt));
 
+	if (!xd->sx_dr.ev_p) {
+		xprt->xp_dispatch.process_cb = clnt_vc_process;
+		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+				    SVC_RQST_FLAG_CHAN_AFFINITY);
+	}
+
 	/* buffer sizes should match svc side */
 	ct = clnt_vc_data_zalloc();
 	ct->ct_cx.cx_rec = &xd->sx_dr;
@@ -313,7 +320,7 @@ clnt_vc_call(struct clnt_req *cc)
 	    || (!XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc))
 	    || (!AUTH_MARSHALL(cc->cc_auth, xdrs))
 	    || (!AUTH_WRAP(cc->cc_auth, xdrs,
-			   cc->cc_xdr.proc, cc->cc_xdr.where))) {
+			   cc->cc_call.proc, cc->cc_call.where))) {
 		/* error case */
 		mutex_unlock(&clnt->cl_lock);
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
@@ -323,12 +330,6 @@ clnt_vc_call(struct clnt_req *cc)
 		return (RPC_CANTENCODEARGS);
 	}
 	mutex_unlock(&clnt->cl_lock);
-
-	if (!rec->ev_p) {
-		xprt->xp_dispatch.process_cb = clnt_vc_process;
-		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
-				    SVC_RQST_FLAG_CHAN_AFFINITY);
-	}
 
 	xdrs->x_lib[1] = (void *)xprt;
 	svc_ioq_write_submit(xprt, xioq);

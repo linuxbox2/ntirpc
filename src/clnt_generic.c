@@ -406,8 +406,8 @@ clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
 {
 	struct clnt_req *lk, *rk;
 
-	lk = opr_containerof(lhs, struct clnt_req, cc_node);
-	rk = opr_containerof(rhs, struct clnt_req, cc_node);
+	lk = opr_containerof(lhs, struct clnt_req, cc_dplx);
+	rk = opr_containerof(rhs, struct clnt_req, cc_dplx);
 
 	if (lk->cc_xid < rk->cc_xid)
 		return (-1);
@@ -416,6 +416,15 @@ clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
 		return (0);
 
 	return (1);
+}
+
+enum clnt_stat
+clnt_req_callback(struct clnt_req *cc)
+{
+	atomic_set_uint16_t_bits(&cc->cc_flags, CLNT_REQ_FLAG_CALLBACK);
+	svc_rqst_expire_insert(cc);
+
+	return CLNT_CALL_ONCE(cc);
 }
 
 /*
@@ -430,14 +439,47 @@ clnt_req_callback_default(struct clnt_req *cc)
 	mutex_unlock(&cc->cc_we.mtx);
 }
 
+bool
+clnt_req_refresh(struct clnt_req *cc)
+{
+	struct cx_data *cx = CX_DATA(cc->cc_clnt);
+	struct rpc_dplx_rec *rec = cx->cx_rec;
+	struct opr_rbtree_node *nv;
+
+	/* this lock protects both xid and rbtree */
+	rpc_dplx_rli(rec);
+	opr_rbtree_remove(&rec->call_replies, &cc->cc_dplx);
+	cc->cc_xid = ++(rec->call_xid);
+	nv = opr_rbtree_insert(&rec->call_replies, &cc->cc_dplx);
+	rpc_dplx_rui(rec);
+	if (!nv) {
+		svc_rqst_expire_refresh(cc);
+		return (true);
+	}
+	__warnx(TIRPC_DEBUG_FLAG_ERROR,
+		"%s: %p fd %d insert failed xid %" PRIu32,
+		__func__, &rec->xprt, rec->xprt.xp_fd,
+		cc->cc_xid);
+
+	if (atomic_clear_uint16_t_bits(&cc->cc_flags, CLNT_REQ_FLAG_CALLBACK)
+	    & CLNT_REQ_FLAG_CALLBACK)
+		svc_rqst_expire_remove(cc);
+
+	return (false);
+}
+
 void
 clnt_req_reset(struct clnt_req *cc)
 {
 	struct cx_data *cx = CX_DATA(cc->cc_clnt);
 
 	rpc_dplx_rli(cx->cx_rec);
-	opr_rbtree_remove(&cx->cx_rec->call_replies, &cc->cc_node);
+	opr_rbtree_remove(&cx->cx_rec->call_replies, &cc->cc_dplx);
 	rpc_dplx_rui(cx->cx_rec);
+
+	if (atomic_clear_uint16_t_bits(&cc->cc_flags, CLNT_REQ_FLAG_CALLBACK)
+	    & CLNT_REQ_FLAG_CALLBACK)
+		svc_rqst_expire_remove(cc);
 }
 
 bool
@@ -473,7 +515,7 @@ clnt_req_setup(struct clnt_req *cc, struct timespec timeout)
 	/* this lock protects both xid and rbtree */
 	rpc_dplx_rli(rec);
 	cc->cc_xid = ++(rec->call_xid);
-	nv = opr_rbtree_insert(&rec->call_replies, &cc->cc_node);
+	nv = opr_rbtree_insert(&rec->call_replies, &cc->cc_dplx);
 	rpc_dplx_rui(rec);
 	if (nv) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -482,6 +524,7 @@ clnt_req_setup(struct clnt_req *cc, struct timespec timeout)
 		return (false);
 	}
 
+	CLNT_REF(clnt, CLNT_REF_FLAG_NONE);
 	return (true);
 }
 
@@ -499,7 +542,7 @@ clnt_req_process_reply(SVCXPRT *xprt, struct svc_req *req)
 
 	rpc_dplx_rli(rec);
 	cc_k.cc_xid = req->rq_msg.rm_xid;
-	nv = opr_rbtree_lookup(&rec->call_replies, &cc_k.cc_node);
+	nv = opr_rbtree_lookup(&rec->call_replies, &cc_k.cc_dplx);
 	rpc_dplx_rui(rec);
 	if (!nv) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -507,18 +550,17 @@ clnt_req_process_reply(SVCXPRT *xprt, struct svc_req *req)
 			__func__, &rec->xprt, rec->xprt.xp_fd, cc_k.cc_xid);
 		return SVC_STAT(xprt);
 	}
-	cc = opr_containerof(nv, struct clnt_req, cc_node);
+	cc = opr_containerof(nv, struct clnt_req, cc_dplx);
 
 	_seterr_reply(&req->rq_msg, &(cc->cc_error));
 	if (cc->cc_error.re_status == RPC_SUCCESS) {
-		if (!AUTH_VALIDATE(cc->cc_auth,
-				   &(cc->cc_msg.RPCM_ack.ar_verf))) {
+		if (!AUTH_VALIDATE(cc->cc_auth, &(cc->cc_verf))) {
 			cc->cc_error.re_status = RPC_AUTHERROR;
 			cc->cc_error.re_why = AUTH_INVALIDRESP;
-		} else if (cc->cc_msg.rm_xdr.proc
+		} else if (cc->cc_reply.proc
 			   && !AUTH_UNWRAP(cc->cc_auth, xdrs,
-					   cc->cc_msg.rm_xdr.proc,
-					   cc->cc_msg.rm_xdr.where)) {
+					   cc->cc_reply.proc,
+					   cc->cc_reply.where)) {
 			if (cc->cc_error.re_status == RPC_SUCCESS)
 				cc->cc_error.re_status = RPC_CANTDECODERES;
 		}
@@ -539,9 +581,7 @@ clnt_req_wait_reply(struct clnt_req *cc)
 {
 	struct cx_data *cx = CX_DATA(cc->cc_clnt);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
-	struct opr_rbtree_node *nv;
 	struct timespec ts;
-	enum clnt_stat result;
 	int code;
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_REQ,
@@ -550,9 +590,9 @@ clnt_req_wait_reply(struct clnt_req *cc)
 		cc->cc_timeout.tv_sec, cc->cc_timeout.tv_nsec);
 
  call_again:
-	result = CLNT_CALL_ONCE(cc);
-	if (result != RPC_SUCCESS) {
-		return (result);
+	cc->cc_error.re_status = CLNT_CALL_ONCE(cc);
+	if (cc->cc_error.re_status != RPC_SUCCESS) {
+		return (cc->cc_error.re_status);
 	}
 
 	if (!(cc->cc_timeout.tv_sec + cc->cc_timeout.tv_nsec)) {
@@ -573,24 +613,16 @@ clnt_req_wait_reply(struct clnt_req *cc)
 			/* XXX should also set error.re_why, but the
 			 * facility is not well developed. */
 			cc->cc_error.re_status = RPC_TIMEDOUT;
+			return (RPC_TIMEDOUT);
 		}
 	}
 
 	if (cc->cc_refreshes-- > 0) {
-		if (cc->cc_error.re_status == RPC_AUTHERROR
-		 && AUTH_REFRESH(cc->cc_auth, &(cc->cc_msg))) {
-			/* maybe our credentials need to be refreshed ... */
-			rpc_dplx_rli(rec);
-			opr_rbtree_remove(&rec->call_replies, &cc->cc_node);
-			cc->cc_xid = ++(rec->call_xid);
-			nv = opr_rbtree_insert(&rec->call_replies,
-					       &cc->cc_node);
-			rpc_dplx_rui(rec);
-			if (nv) {
-				__warnx(TIRPC_DEBUG_FLAG_ERROR,
-					"%s: %p fd %d insert failed xid %" PRIu32,
-					__func__, &rec->xprt, rec->xprt.xp_fd,
-					cc->cc_xid);
+		if (cc->cc_error.re_status == RPC_AUTHERROR) {
+			if (!AUTH_REFRESH(cc->cc_auth, NULL)) {
+				return (RPC_AUTHERROR);
+			}
+			if (!clnt_req_refresh(cc)) {
 				cc->cc_error.re_status = RPC_TLIERROR;
 				return (RPC_TLIERROR);
 			}
@@ -604,6 +636,8 @@ clnt_req_wait_reply(struct clnt_req *cc)
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_DG,
 			"%s: %p fd %d ETIMEDOUT",
 			__func__, &rec->xprt, rec->xprt.xp_fd);
+		cc->cc_error.re_status = RPC_TIMEDOUT;
+		return (RPC_TIMEDOUT);
 	}
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_DG,

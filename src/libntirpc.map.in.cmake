@@ -63,6 +63,8 @@ NTIRPC_${NTIRPC_VERSION} {
     clnt_perrno;
     clnt_perror;
     clnt_raw_ncreate;
+    clnt_req_callback;
+    clnt_req_refresh;
     clnt_req_release;
     clnt_req_reset;
     clnt_req_setup;
