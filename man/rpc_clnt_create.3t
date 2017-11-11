@@ -42,7 +42,7 @@ handles
 .Ft "CLIENT *"
 .Fn clnt_create_vers_timed "const char * host" "const rpcprog_t prognum" "rpcvers_t *vers_outp" "const rpcvers_t vers_low" "const rpcvers_t vers_high" "char *nettype" "const struct timeval *timeout"
 .Ft void
-.Fn clnt_destroy "CLIENT *clnt"
+.Fn CLNT_DESTROY "CLIENT *clnt"
 .Ft "CLIENT *"
 .Fn clnt_dg_create "const int fildes" "const struct netbuf *svcaddr" "const rpcprog_t prognum" "const rpcvers_t versnum" "const u_int sendsz" "const u_int recvsz"
 .Ft void
@@ -222,7 +222,7 @@ In all other respects, the
 call behaves exactly like the
 .Fn clnt_create_vers
 call.
-.It Fn clnt_destroy
+.It Fn CLNT_DESTROY
 A function macro that destroys the client's RPC handle.
 Destruction usually involves deallocation
 of private data structures, including
@@ -231,7 +231,7 @@ itself.
 Use of
 .Fa clnt
 is undefined after calling
-.Fn clnt_destroy .
+.Fn CLNT_DESTROY .
 If the RPC library opened the associated file descriptor, or
 .Dv CLSET_FD_CLOSE
 was set using
@@ -240,7 +240,7 @@ the file descriptor will be closed.
 The caller should call
 .Fn auth_destroy "clnt->cl_auth"
 (before calling
-.Fn clnt_destroy )
+.Fn CLNT_DESTROY )
 to destroy the associated
 .Vt AUTH
 structure (see

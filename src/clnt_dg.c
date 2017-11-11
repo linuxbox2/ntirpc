@@ -282,17 +282,6 @@ clnt_dg_freeres(CLIENT *clnt, xdrproc_t xdr_res, void *res_ptr)
 	return (xdr_free(xdr_res, res_ptr));
 }
 
-static bool
-clnt_dg_ref(CLIENT *clnt, u_int flags)
-{
-	return (true);
-}
-
-static void
-clnt_dg_release(CLIENT *clnt, u_int flags)
-{
-}
-
  /*ARGSUSED*/
 static void
 clnt_dg_abort(CLIENT *h)
@@ -433,12 +422,9 @@ static void
 clnt_dg_destroy(CLIENT *clnt)
 {
 	struct cx_data *cx = CX_DATA(clnt);
-	struct cu_data *cu = CU_DATA(cx);
-	struct rpc_dplx_rec *rec = cx->cx_rec;
 
-	/* release */
-	SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
-	clnt_dg_data_free(cu);
+	SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
+	clnt_dg_data_free(CU_DATA(cx));
 }
 
 static struct clnt_ops *
@@ -458,8 +444,6 @@ clnt_dg_ops(void)
 		ops.cl_abort = clnt_dg_abort;
 		ops.cl_geterr = clnt_dg_geterr;
 		ops.cl_freeres = clnt_dg_freeres;
-		ops.cl_ref = clnt_dg_ref;
-		ops.cl_release = clnt_dg_release;
 		ops.cl_destroy = clnt_dg_destroy;
 		ops.cl_control = clnt_dg_control;
 	}

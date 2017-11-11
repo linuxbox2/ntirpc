@@ -279,30 +279,10 @@ unlock:
 static void
 clnt_rdma_destroy(CLIENT *clnt)
 {
-	uint32_t cl_refcnt;
+	struct cx_data *cx = CX_DATA(clnt);
 
-	mutex_lock(&clnt->cl_lock);
-	if (clnt->cl_flags & CLNT_FLAG_DESTROYED) {
-		mutex_unlock(&clnt->cl_lock);
-		return;
-	}
-
-	clnt->cl_flags |= CLNT_FLAG_DESTROYED;
-	cl_refcnt = --(clnt->cl_refcnt);
-	mutex_unlock(&clnt->cl_lock);
-
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-		"%s: %p cl_refcnt %u",
-		__func__, clnt, cl_refcnt);
-
-	/* conditional destroy */
-	if (cl_refcnt == 0) {
-		struct cx_data *cx = CX_DATA(clnt);
-
-		/* client handles are now freed directly */
-		SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
-		clnt_rdma_data_free(CM_DATA(cx));
-	}
+	SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
+	clnt_rdma_data_free(CM_DATA(cx));
 }
 
 static struct clnt_ops *

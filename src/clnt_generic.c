@@ -142,7 +142,7 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
  error:
 	rpc_createerr.cf_stat = rpc_stat;
 	rpc_createerr.cf_error = rpcerr;
-	clnt_destroy(clnt);
+	CLNT_DESTROY(clnt);
 	return (NULL);
 }
 

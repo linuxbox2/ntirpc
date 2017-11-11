@@ -94,12 +94,6 @@ typedef struct rpc_client {
 		/* frees results */
 		 bool(*cl_freeres) (struct rpc_client *, xdrproc_t, void *);
 
-		/* take lifecycle ref */
-		 bool(*cl_ref) (struct rpc_client *, u_int flags);
-
-		/* release */
-		void (*cl_release) (struct rpc_client *, u_int flags);
-
 		/* release and mark destroyed */
 		void (*cl_destroy) (struct rpc_client *);
 
@@ -115,7 +109,7 @@ typedef struct rpc_client {
 
 	mutex_t cl_lock;	/* serialize private data */
 	uint32_t cl_refcnt;	/* handle refcnt */
-	uint32_t cl_flags;	/* state flags */
+	uint16_t cl_flags;	/* state flags */
 
 } CLIENT;
 
@@ -170,22 +164,24 @@ struct rpc_timers {
  * CLNT flags
  */
 
-#define CLNT_FLAG_NONE               0x0000
-#define CLNT_FLAG_DESTROYED          0x0001
+#define CLNT_FLAG_NONE			SVC_XPRT_FLAG_NONE
+#define CLNT_FLAG_DESTROYING		SVC_XPRT_FLAG_DESTROYING
+#define CLNT_FLAG_RELEASING		SVC_XPRT_FLAG_RELEASING
+#define CLNT_FLAG_DESTROYED		SVC_XPRT_FLAG_DESTROYED
 
 /*
  * CLNT_REF flags
  */
 
-#define CLNT_REF_FLAG_NONE            0x0000
-#define CLNT_REF_FLAG_LOCKED          0x0001
+#define CLNT_REF_FLAG_NONE		SVC_XPRT_FLAG_NONE
+#define CLNT_REF_FLAG_LOCKED		SVC_XPRT_FLAG_LOCKED
 
 /*
  * CLNT_RELEASE flags
  */
 
-#define CLNT_RELEASE_FLAG_NONE            0x0000
-#define CLNT_RELEASE_FLAG_LOCKED          0x0001
+#define CLNT_RELEASE_FLAG_NONE		SVC_XPRT_FLAG_NONE
+#define CLNT_RELEASE_FLAG_LOCKED	SVC_XPRT_FLAG_LOCKED
 
 /*
  * client side rpc interface ops
@@ -218,22 +214,6 @@ struct rpc_timers {
  */
 #define CLNT_GETERR(rh, errp) ((*(rh)->cl_ops->cl_geterr)(rh, errp))
 #define clnt_geterr(rh, errp) ((*(rh)->cl_ops->cl_geterr)(rh, errp))
-
-/*
- * uint32_t flags
- * CLNT_REF(rh);
- *  CLIENT *rh;
- */
-#define CLNT_REF(rh, flags) ((*(rh)->cl_ops->cl_ref)(rh, flags))
-#define clnt_ref(rh, flags) ((*(rh)->cl_ops->cl_ref)(rh, flags))
-
-/*
- * uint32_t flags
- * CLNT_RELEASE(rh);
- *  CLIENT *rh;
- */
-#define CLNT_RELEASE(rh, flags) ((*(rh)->cl_ops->cl_release)(rh, flags))
-#define clnt_release(rh, flags) ((*(rh)->cl_ops->cl_release)(rh, flags))
 
 /*
  * bool
@@ -281,13 +261,79 @@ struct rpc_timers {
 #define CLSET_PUSH_TIMOD 17	/* push timod if not already present */
 #define CLSET_POP_TIMOD  18	/* pop timod */
 
-/*
- * void
- * CLNT_DESTROY(rh);
- *  CLIENT *rh;
+/* Protect a CLIENT with a CLNT_REF for each call or request.
  */
-#define CLNT_DESTROY(rh) ((*(rh)->cl_ops->cl_destroy)(rh))
-#define clnt_destroy(rh) ((*(rh)->cl_ops->cl_destroy)(rh))
+static inline void clnt_ref_it(CLIENT *clnt, uint32_t flags,
+			       const char *tag, const int line)
+{
+	uint32_t refs = atomic_inc_uint32_t(&clnt->cl_refcnt);
+
+	if (flags & CLNT_REF_FLAG_LOCKED)  {
+		/* unlock before warning trace */
+		mutex_unlock(&clnt->cl_lock);
+	}
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: %p %" PRIu32 " @%s:%d",
+		__func__, clnt, refs, tag, line);
+}
+#define CLNT_REF(clnt, flags)						\
+	clnt_ref_it(clnt, flags, __func__, __LINE__)
+
+static inline void clnt_release_it(CLIENT *clnt, uint32_t flags,
+				   const char *tag, const int line)
+{
+	uint32_t refs = atomic_dec_uint32_t(&clnt->cl_refcnt);
+	uint16_t cl_flags;
+
+	if (flags & CLNT_RELEASE_FLAG_LOCKED) {
+		/* unlock before warning trace */
+		mutex_unlock(&clnt->cl_lock);
+	}
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: %p %" PRIu32 " @%s:%d",
+		__func__, clnt, refs, tag, line);
+
+	if (likely(refs > 0)) {
+		/* normal case */
+		return;
+	}
+
+	/* enforce once-only semantic, trace others */
+	cl_flags = atomic_postset_uint16_t_bits(&clnt->cl_flags,
+						CLNT_FLAG_RELEASING);
+
+	if (cl_flags & CLNT_FLAG_RELEASING) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p WARNING! already destroying! @%s:%d",
+			__func__, clnt, tag, line);
+		return;
+	}
+
+	/* Releasing last reference */
+	(*(clnt)->cl_ops->cl_destroy)(clnt);
+}
+#define CLNT_RELEASE(clnt, flags)					\
+	clnt_release_it(clnt, flags, __func__, __LINE__)
+
+/* CLNT_DESTROY is CLNT_RELEASE with once-only semantics.  Also, idempotent
+ * CLNT_FLAG_DESTROYED indicates that more references should not be taken.
+ */
+static inline void clnt_destroy_it(CLIENT *clnt,
+				   const char *tag, const int line)
+{
+	uint16_t flags = atomic_postset_uint16_t_bits(&clnt->cl_flags,
+						      CLNT_FLAG_DESTROYING);
+
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: %p %" PRIu32 " @%s:%d",
+		__func__, clnt, clnt->cl_refcnt, tag, line);
+
+	if (flags & CLNT_FLAG_DESTROYING) {
+		/* previously set, do nothing */
+		return;
+	}
+
+	clnt_release_it(clnt, CLNT_RELEASE_FLAG_NONE, tag, line);
+}
+#define CLNT_DESTROY(clnt)						\
+	clnt_destroy_it(clnt, __func__, __LINE__)
 
 /*
  * RPCTEST is a test program which is accessible on every rpc
