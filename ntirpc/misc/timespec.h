@@ -1,6 +1,7 @@
 /*-
  * Copyright (c) 1982, 1986, 1993
  *      The Regents of the University of California.  All rights reserved.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,6 +32,10 @@
  */
 
 #ifndef TIMESPEC_H
+
+/* Convert to coarse milliseconds with round up */
+#define timespec_ms(tsp) \
+	((tsp)->tv_sec * 1000 + ((tsp)->tv_nsec + 999999) % 1000000)
 
 /* Operations on timespecs */
 #define timespecclear(tvp)      ((tvp)->tv_sec = (tvp)->tv_nsec = 0)

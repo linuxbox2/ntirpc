@@ -50,6 +50,7 @@
 #include <rpc/svc.h>
 #include <misc/rbtree_x.h>
 #include <misc/opr_queue.h>
+#include <misc/timespec.h>
 #include "clnt_internal.h"
 #include "svc_internal.h"
 #include "svc_xprt.h"
@@ -76,6 +77,8 @@ static uint32_t round_robin;
 
 struct svc_rqst_rec {
 	struct work_pool_entry ev_wpe;
+	struct opr_rbtree call_expires;
+	mutex_t ev_lock;
 
 	int sv[2];
 	uint32_t id_k;		/* chan id */
@@ -114,6 +117,38 @@ static struct svc_rqst_set svc_rqst_set = {
 	0,
 	0,
 };
+
+/*
+ * Write 4-byte value to shared event-notification channel.  The
+ * value as presently implemented can be interpreted only by one consumer,
+ * so is not relied on.
+ */
+static inline void
+ev_sig(int fd, uint32_t sig)
+{
+	int code = write(fd, &sig, sizeof(uint32_t));
+
+	__warnx(TIRPC_DEBUG_FLAG_SVC_RQST, "%s: fd %d sig %d", __func__, fd,
+		sig);
+	if (code < 1)
+		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+			"%s: error writing to event socket [%d:%d]", __func__,
+			code, errno);
+}
+
+/*
+ * Read a single 4-byte value from the shared event-notification channel,
+ * the socket is in non-blocking mode.  The value read is returned.
+ */
+static inline uint32_t
+consume_ev_sig_nb(int fd)
+{
+	uint32_t sig = 0;
+	int code __attribute__ ((unused));
+
+	code = read(fd, &sig, sizeof(uint32_t));
+	return (sig);
+}
 
 static inline void
 SetNonBlock(int fd)
@@ -160,6 +195,103 @@ svc_rqst_lookup_chan(uint32_t chan_id)
 
 /* forward declaration in lieu of moving code {WAS} */
 static void svc_rqst_run_task(struct work_pool_entry *);
+
+static int
+svc_rqst_expire_cmpf(const struct opr_rbtree_node *lhs,
+		     const struct opr_rbtree_node *rhs)
+{
+	struct clnt_req *lk, *rk;
+
+	lk = opr_containerof(lhs, struct clnt_req, cc_rqst);
+	rk = opr_containerof(rhs, struct clnt_req, cc_rqst);
+
+	if (lk->cc_expire_ms < rk->cc_expire_ms)
+		return (-1);
+
+	if (lk->cc_expire_ms == rk->cc_expire_ms) {
+		return (0);
+	}
+
+	return (1);
+}
+
+static inline int
+svc_rqst_expire_ms(struct timespec *to)
+{
+	struct timespec ts;
+
+	/* coarse nsec, not system time */
+	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
+	timespecadd(&ts, to);
+	return timespec_ms(&ts);
+}
+
+void
+svc_rqst_expire_insert(struct clnt_req *cc)
+{
+	struct cx_data *cx = CX_DATA(cc->cc_clnt);
+	struct svc_rqst_rec *sr_rec = (struct svc_rqst_rec *)cx->cx_rec->ev_p;
+	struct opr_rbtree_node *nv;
+
+	cc->cc_expire_ms = svc_rqst_expire_ms(&cc->cc_timeout);
+
+	mutex_lock(&sr_rec->ev_lock);
+ repeat:
+	nv = opr_rbtree_insert(&sr_rec->call_expires, &cc->cc_rqst);
+	if (nv) {
+		/* add this slightly later */
+		cc->cc_expire_ms++;
+		goto repeat;
+	}
+	mutex_unlock(&sr_rec->ev_lock);
+
+	ev_sig(sr_rec->sv[0], 0);	/* send wakeup */
+}
+
+void
+svc_rqst_expire_refresh(struct clnt_req *cc)
+{
+	struct cx_data *cx = CX_DATA(cc->cc_clnt);
+	struct svc_rqst_rec *sr_rec = (struct svc_rqst_rec *)cx->cx_rec->ev_p;
+	struct opr_rbtree_node *nv;
+
+	cc->cc_expire_ms = svc_rqst_expire_ms(&cc->cc_timeout);
+
+	mutex_lock(&sr_rec->ev_lock);
+	opr_rbtree_remove(&sr_rec->call_expires, &cc->cc_rqst);
+repeat:
+	nv = opr_rbtree_insert(&sr_rec->call_expires, &cc->cc_rqst);
+	if (nv) {
+		/* add this slightly later */
+		cc->cc_expire_ms++;
+		goto repeat;
+	}
+	mutex_unlock(&sr_rec->ev_lock);
+
+	ev_sig(sr_rec->sv[0], 0);	/* send wakeup */
+}
+
+void
+svc_rqst_expire_remove(struct clnt_req *cc)
+{
+	struct cx_data *cx = CX_DATA(cc->cc_clnt);
+	struct svc_rqst_rec *sr_rec = cx->cx_rec->ev_p;
+
+	mutex_lock(&sr_rec->ev_lock);
+	opr_rbtree_remove(&sr_rec->call_expires, &cc->cc_rqst);
+	mutex_unlock(&sr_rec->ev_lock);
+
+	ev_sig(sr_rec->sv[0], 0);	/* send wakeup */
+}
+
+static void
+svc_rqst_expire_task(struct work_pool_entry *wpe)
+{
+	struct clnt_req *cc = opr_containerof(wpe, struct clnt_req, cc_wpe);
+
+	cc->cc_error.re_status = RPC_TIMEDOUT;
+	(*cc->cc_process_cb)(cc);
+}
 
 int
 svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
@@ -257,6 +389,8 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 	sr_rec->id_k = n_id;
 	sr_rec->refcnt = 1;	/* svc_rqst_set ref */
 	sr_rec->flags = flags & SVC_RQST_FLAG_MASK;
+	opr_rbtree_init(&sr_rec->call_expires, svc_rqst_expire_cmpf);
+	mutex_init(&sr_rec->ev_lock, NULL);
 
 	if (!code) {
 		sr_rec->refcnt = 2;
@@ -273,38 +407,6 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 	return (code);
 }
 
-/*
- * Write 4-byte value to shared event-notification channel.  The
- * value as presently implemented can be interpreted only by one consumer,
- * so is not relied on.
- */
-static inline void
-ev_sig(int fd, uint32_t sig)
-{
-	int code = write(fd, &sig, sizeof(uint32_t));
-
-	__warnx(TIRPC_DEBUG_FLAG_SVC_RQST, "%s: fd %d sig %d", __func__, fd,
-		sig);
-	if (code < 1)
-		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-			"%s: error writing to event socket [%d:%d]", __func__,
-			code, errno);
-}
-
-/*
- * Read a single 4-byte value from the shared event-notification channel,
- * the socket is in non-blocking mode.  The value read is returned.
- */
-static inline uint32_t
-consume_ev_sig_nb(int fd)
-{
-	uint32_t sig = 0;
-	int code __attribute__ ((unused));
-
-	code = read(fd, &sig, sizeof(uint32_t));
-	return (sig);
-}
-
 static inline void
 svc_rqst_release(struct svc_rqst_rec *sr_rec)
 {
@@ -315,6 +417,8 @@ svc_rqst_release(struct svc_rqst_rec *sr_rec)
 		"%s: remove evchan %d control fd pair (%d:%d)",
 		__func__, sr_rec->id_k,
 		sr_rec->sv[0], sr_rec->sv[1]);
+
+	mutex_destroy(&sr_rec->ev_lock);
 }
 
 /*
@@ -847,18 +951,48 @@ svc_rqst_epoll_events(struct svc_rqst_rec *sr_rec, int n_events)
 static inline bool
 svc_rqst_epoll_loop(struct svc_rqst_rec *sr_rec)
 {
+	struct clnt_req *cc;
+	struct opr_rbtree_node *n;
+	struct timespec ts;
+	int timeout_ms;
+	int expire_ms;
 	int n_events;
 
 	for (;;) {
+		timeout_ms = SVC_RQST_TIMEOUT_MS;
+
+		/* coarse nsec, not system time */
+		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
+		expire_ms = timespec_ms(&ts);
+
+		/* before epoll_wait will accumulate events during scan */
+		mutex_lock(&sr_rec->ev_lock);
+		while ((n = opr_rbtree_first(&sr_rec->call_expires))) {
+			cc = opr_containerof(n, struct clnt_req, cc_rqst);
+
+			if (cc->cc_expire_ms > expire_ms) {
+				timeout_ms = cc->cc_expire_ms - expire_ms;
+				break;
+			}
+			atomic_clear_uint16_t_bits(&cc->cc_flags,
+						   CLNT_REQ_FLAG_CALLBACK);
+			opr_rbtree_remove(&sr_rec->call_expires, &cc->cc_rqst);
+			cc->cc_wpe.fun = svc_rqst_expire_task;
+			cc->cc_wpe.arg = NULL;
+			work_pool_submit(&svc_work_pool, &cc->cc_wpe);
+		}
+		mutex_unlock(&sr_rec->ev_lock);
+
 		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-			"%s: epoll_fd %d before epoll_wait",
+			"%s: epoll_fd %d before epoll_wait (%d)",
 			__func__,
-			sr_rec->ev_u.epoll.epoll_fd);
+			sr_rec->ev_u.epoll.epoll_fd,
+			timeout_ms);
 
 		n_events = epoll_wait(sr_rec->ev_u.epoll.epoll_fd,
 				      sr_rec->ev_u.epoll.events,
 				      sr_rec->ev_u.epoll.max_events,
-				      SVC_RQST_TIMEOUT_MS);
+				      timeout_ms);
 
 		if (unlikely(sr_rec->flags & SVC_RQST_FLAG_SHUTDOWN)) {
 			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,

@@ -94,12 +94,6 @@ typedef struct rpc_client {
 		/* frees results */
 		 bool(*cl_freeres) (struct rpc_client *, xdrproc_t, void *);
 
-		/* take lifecycle ref */
-		 bool(*cl_ref) (struct rpc_client *, u_int flags);
-
-		/* release */
-		void (*cl_release) (struct rpc_client *, u_int flags);
-
 		/* release and mark destroyed */
 		void (*cl_destroy) (struct rpc_client *);
 
@@ -115,11 +109,12 @@ typedef struct rpc_client {
 
 	mutex_t cl_lock;	/* serialize private data */
 	uint32_t cl_refcnt;	/* handle refcnt */
-	uint32_t cl_flags;	/* state flags */
+	uint16_t cl_flags;	/* state flags */
 
 } CLIENT;
 
 #define CLNT_REQ_FLAG_NONE	0x0000
+#define CLNT_REQ_FLAG_CALLBACK	0x0001
 #define CLNT_REQ_FLAG_ACKSYNC	0x0008
 
 /*
@@ -127,16 +122,20 @@ typedef struct rpc_client {
  * and replies sharing a common channel.
  */
 struct clnt_req {
-	struct opr_rbtree_node cc_node;
+	struct work_pool_entry cc_wpe;
+	struct opr_rbtree_node cc_dplx;
+	struct opr_rbtree_node cc_rqst;
 	struct waitq_entry cc_we;
-	struct rpc_msg cc_msg;
-	struct xdrpair cc_xdr;
+	struct opaque_auth cc_verf;
 
 	AUTH *cc_auth;
 	CLIENT *cc_clnt;
+	struct xdrpair cc_call;
+	struct xdrpair cc_reply;
 	void (*cc_process_cb)(struct clnt_req *);
 	struct timespec cc_timeout;
 	struct rpc_err cc_error;
+	int cc_expire_ms;
 	int cc_refreshes;
 	rpcproc_t cc_proc;
 	uint32_t cc_xid;
@@ -170,22 +169,24 @@ struct rpc_timers {
  * CLNT flags
  */
 
-#define CLNT_FLAG_NONE               0x0000
-#define CLNT_FLAG_DESTROYED          0x0001
+#define CLNT_FLAG_NONE			SVC_XPRT_FLAG_NONE
+#define CLNT_FLAG_DESTROYING		SVC_XPRT_FLAG_DESTROYING
+#define CLNT_FLAG_RELEASING		SVC_XPRT_FLAG_RELEASING
+#define CLNT_FLAG_DESTROYED		SVC_XPRT_FLAG_DESTROYED
 
 /*
  * CLNT_REF flags
  */
 
-#define CLNT_REF_FLAG_NONE            0x0000
-#define CLNT_REF_FLAG_LOCKED          0x0001
+#define CLNT_REF_FLAG_NONE		SVC_XPRT_FLAG_NONE
+#define CLNT_REF_FLAG_LOCKED		SVC_XPRT_FLAG_LOCKED
 
 /*
  * CLNT_RELEASE flags
  */
 
-#define CLNT_RELEASE_FLAG_NONE            0x0000
-#define CLNT_RELEASE_FLAG_LOCKED          0x0001
+#define CLNT_RELEASE_FLAG_NONE		SVC_XPRT_FLAG_NONE
+#define CLNT_RELEASE_FLAG_LOCKED	SVC_XPRT_FLAG_LOCKED
 
 /*
  * client side rpc interface ops
@@ -196,10 +197,12 @@ struct rpc_timers {
 
 /*
  * enum clnt_stat
+ * CLNT_CALL_BACK(cc)
  * CLNT_CALL_ONCE(cc)
  * CLNT_CALL_WAIT(cc)
  *  struct clnt_req *cc;
  */
+#define CLNT_CALL_BACK(cc) clnt_req_callback(cc)
 #define CLNT_CALL_ONCE(cc) ((*(cc)->cc_clnt->cl_ops->cl_call)(cc))
 #define CLNT_CALL_WAIT(cc) clnt_req_wait_reply(cc)
 
@@ -218,22 +221,6 @@ struct rpc_timers {
  */
 #define CLNT_GETERR(rh, errp) ((*(rh)->cl_ops->cl_geterr)(rh, errp))
 #define clnt_geterr(rh, errp) ((*(rh)->cl_ops->cl_geterr)(rh, errp))
-
-/*
- * uint32_t flags
- * CLNT_REF(rh);
- *  CLIENT *rh;
- */
-#define CLNT_REF(rh, flags) ((*(rh)->cl_ops->cl_ref)(rh, flags))
-#define clnt_ref(rh, flags) ((*(rh)->cl_ops->cl_ref)(rh, flags))
-
-/*
- * uint32_t flags
- * CLNT_RELEASE(rh);
- *  CLIENT *rh;
- */
-#define CLNT_RELEASE(rh, flags) ((*(rh)->cl_ops->cl_release)(rh, flags))
-#define clnt_release(rh, flags) ((*(rh)->cl_ops->cl_release)(rh, flags))
 
 /*
  * bool
@@ -281,13 +268,79 @@ struct rpc_timers {
 #define CLSET_PUSH_TIMOD 17	/* push timod if not already present */
 #define CLSET_POP_TIMOD  18	/* pop timod */
 
-/*
- * void
- * CLNT_DESTROY(rh);
- *  CLIENT *rh;
+/* Protect a CLIENT with a CLNT_REF for each call or request.
  */
-#define CLNT_DESTROY(rh) ((*(rh)->cl_ops->cl_destroy)(rh))
-#define clnt_destroy(rh) ((*(rh)->cl_ops->cl_destroy)(rh))
+static inline void clnt_ref_it(CLIENT *clnt, uint32_t flags,
+			       const char *tag, const int line)
+{
+	uint32_t refs = atomic_inc_uint32_t(&clnt->cl_refcnt);
+
+	if (flags & CLNT_REF_FLAG_LOCKED)  {
+		/* unlock before warning trace */
+		mutex_unlock(&clnt->cl_lock);
+	}
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: %p %" PRIu32 " @%s:%d",
+		__func__, clnt, refs, tag, line);
+}
+#define CLNT_REF(clnt, flags)						\
+	clnt_ref_it(clnt, flags, __func__, __LINE__)
+
+static inline void clnt_release_it(CLIENT *clnt, uint32_t flags,
+				   const char *tag, const int line)
+{
+	uint32_t refs = atomic_dec_uint32_t(&clnt->cl_refcnt);
+	uint16_t cl_flags;
+
+	if (flags & CLNT_RELEASE_FLAG_LOCKED) {
+		/* unlock before warning trace */
+		mutex_unlock(&clnt->cl_lock);
+	}
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: %p %" PRIu32 " @%s:%d",
+		__func__, clnt, refs, tag, line);
+
+	if (likely(refs > 0)) {
+		/* normal case */
+		return;
+	}
+
+	/* enforce once-only semantic, trace others */
+	cl_flags = atomic_postset_uint16_t_bits(&clnt->cl_flags,
+						CLNT_FLAG_RELEASING);
+
+	if (cl_flags & CLNT_FLAG_RELEASING) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p WARNING! already destroying! @%s:%d",
+			__func__, clnt, tag, line);
+		return;
+	}
+
+	/* Releasing last reference */
+	(*(clnt)->cl_ops->cl_destroy)(clnt);
+}
+#define CLNT_RELEASE(clnt, flags)					\
+	clnt_release_it(clnt, flags, __func__, __LINE__)
+
+/* CLNT_DESTROY is CLNT_RELEASE with once-only semantics.  Also, idempotent
+ * CLNT_FLAG_DESTROYED indicates that more references should not be taken.
+ */
+static inline void clnt_destroy_it(CLIENT *clnt,
+				   const char *tag, const int line)
+{
+	uint16_t flags = atomic_postset_uint16_t_bits(&clnt->cl_flags,
+						      CLNT_FLAG_DESTROYING);
+
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: %p %" PRIu32 " @%s:%d",
+		__func__, clnt, clnt->cl_refcnt, tag, line);
+
+	if (flags & CLNT_FLAG_DESTROYING) {
+		/* previously set, do nothing */
+		return;
+	}
+
+	clnt_release_it(clnt, CLNT_RELEASE_FLAG_NONE, tag, line);
+}
+#define CLNT_DESTROY(clnt)						\
+	clnt_destroy_it(clnt, __func__, __LINE__)
 
 /*
  * RPCTEST is a test program which is accessible on every rpc
@@ -503,9 +556,6 @@ extern CLIENT *clnt_raw_ncreate(rpcprog_t, rpcvers_t);
 /*
  * Client request processing
  */
-int clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
-		      const struct opr_rbtree_node *rhs);
-
 static inline void clnt_req_fill(struct clnt_req *cc, struct rpc_client *clnt,
 				 AUTH *auth, rpcproc_t proc,
 				 xdrproc_t xargs, void *argsp,
@@ -514,12 +564,11 @@ static inline void clnt_req_fill(struct clnt_req *cc, struct rpc_client *clnt,
 	cc->cc_clnt = clnt;
 	cc->cc_auth = auth;
 	cc->cc_proc = proc;
-	cc->cc_xdr.proc = xargs;
-	cc->cc_xdr.where = argsp;
-	cc->cc_msg.rm_xdr.proc = xresults;
-	cc->cc_msg.rm_xdr.where = resultsp;
-
-	rpc_msg_init(&cc->cc_msg);
+	cc->cc_call.proc = xargs;
+	cc->cc_call.where = argsp;
+	cc->cc_reply.proc = xresults;
+	cc->cc_reply.where = resultsp;
+	cc->cc_verf = _null_auth;
 
 	/* protects this */
 	pthread_mutex_init(&cc->cc_we.mtx, NULL);
@@ -532,11 +581,13 @@ static inline void clnt_req_fini(struct clnt_req *cc)
 	pthread_cond_destroy(&cc->cc_we.cv);
 	pthread_mutex_unlock(&cc->cc_we.mtx);
 	pthread_mutex_destroy(&cc->cc_we.mtx);
+	CLNT_RELEASE(cc->cc_clnt, CLNT_RELEASE_FLAG_NONE);
 }
 
+enum clnt_stat clnt_req_callback(struct clnt_req *);
+bool clnt_req_refresh(struct clnt_req *);
 void clnt_req_reset(struct clnt_req *);
 bool clnt_req_setup(struct clnt_req *, struct timespec);
-enum xprt_stat clnt_req_process_reply(SVCXPRT *, struct svc_req *);
 enum clnt_stat clnt_req_wait_reply(struct clnt_req *);
 void clnt_req_release(struct clnt_req *);
 

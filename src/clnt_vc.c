@@ -75,6 +75,7 @@
 #include "clnt_internal.h"
 #include "svc_internal.h"
 
+static enum xprt_stat clnt_vc_process(struct svc_req *req);
 static struct clnt_ops *clnt_vc_ops(void);
 
 struct ct_data {
@@ -202,6 +203,12 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 	}
 	xd = VC_DR(REC_XPRT(xprt));
 
+	if (!xd->sx_dr.ev_p) {
+		xprt->xp_dispatch.process_cb = clnt_vc_process;
+		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
+				    SVC_RQST_FLAG_CHAN_AFFINITY);
+	}
+
 	/* buffer sizes should match svc side */
 	ct = clnt_vc_data_zalloc();
 	ct->ct_cx.cx_rec = &xd->sx_dr;
@@ -313,7 +320,7 @@ clnt_vc_call(struct clnt_req *cc)
 	    || (!XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc))
 	    || (!AUTH_MARSHALL(cc->cc_auth, xdrs))
 	    || (!AUTH_WRAP(cc->cc_auth, xdrs,
-			   cc->cc_xdr.proc, cc->cc_xdr.where))) {
+			   cc->cc_call.proc, cc->cc_call.where))) {
 		/* error case */
 		mutex_unlock(&clnt->cl_lock);
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
@@ -323,12 +330,6 @@ clnt_vc_call(struct clnt_req *cc)
 		return (RPC_CANTENCODEARGS);
 	}
 	mutex_unlock(&clnt->cl_lock);
-
-	if (!rec->ev_p) {
-		xprt->xp_dispatch.process_cb = clnt_vc_process;
-		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
-				    SVC_RQST_FLAG_CHAN_AFFINITY);
-	}
 
 	xdrs->x_lib[1] = (void *)xprt;
 	svc_ioq_write_submit(xprt, xioq);
@@ -490,80 +491,13 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 	return (rslt);
 }
 
-static bool
-clnt_vc_ref(CLIENT *clnt, u_int flags)
-{
-	uint32_t refcnt;
-
-	if (!(flags & CLNT_REF_FLAG_LOCKED))
-		mutex_lock(&clnt->cl_lock);
-
-	if (clnt->cl_flags & CLNT_FLAG_DESTROYED) {
-		mutex_unlock(&clnt->cl_lock);
-		return (false);
-	}
-	refcnt = ++(clnt->cl_refcnt);
-	mutex_unlock(&clnt->cl_lock);
-
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: postref %p %u", __func__, clnt,
-		refcnt);
-
-	return (true);
-}
-
-static void
-clnt_vc_release(CLIENT *clnt, u_int flags)
-{
-	uint32_t cl_refcnt;
-
-	if (!(flags & CLNT_RELEASE_FLAG_LOCKED))
-		mutex_lock(&clnt->cl_lock);
-
-	cl_refcnt = --(clnt->cl_refcnt);
-
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: postunref %p cl_refcnt %u",
-		__func__, clnt, cl_refcnt);
-
-	/* conditional destroy */
-	if ((clnt->cl_flags & CLNT_FLAG_DESTROYED) && (cl_refcnt == 0)) {
-		struct cx_data *cx = CX_DATA(clnt);
-
-		mutex_unlock(&clnt->cl_lock);
-
-		/* client handles are now freed directly */
-		SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
-		clnt_vc_data_free(CT_DATA(cx));
-	} else
-		mutex_unlock(&clnt->cl_lock);
-}
-
 static void
 clnt_vc_destroy(CLIENT *clnt)
 {
-	uint32_t cl_refcnt;
+	struct cx_data *cx = CX_DATA(clnt);
 
-	mutex_lock(&clnt->cl_lock);
-	if (clnt->cl_flags & CLNT_FLAG_DESTROYED) {
-		mutex_unlock(&clnt->cl_lock);
-		return;
-	}
-
-	clnt->cl_flags |= CLNT_FLAG_DESTROYED;
-	cl_refcnt = --(clnt->cl_refcnt);
-	mutex_unlock(&clnt->cl_lock);
-
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-		"%s: %p cl_refcnt %u",
-		__func__, clnt, cl_refcnt);
-
-	/* conditional destroy */
-	if (cl_refcnt == 0) {
-		struct cx_data *cx = CX_DATA(clnt);
-
-		/* client handles are now freed directly */
-		SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
-		clnt_vc_data_free(CT_DATA(cx));
-	}
+	SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
+	clnt_vc_data_free(CT_DATA(cx));
 }
 
 static struct clnt_ops *
@@ -583,8 +517,6 @@ clnt_vc_ops(void)
 		ops.cl_abort = clnt_vc_abort;
 		ops.cl_geterr = clnt_vc_geterr;
 		ops.cl_freeres = clnt_vc_freeres;
-		ops.cl_ref = clnt_vc_ref;
-		ops.cl_release = clnt_vc_release;
 		ops.cl_destroy = clnt_vc_destroy;
 		ops.cl_control = clnt_vc_control;
 	}

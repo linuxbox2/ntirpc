@@ -91,6 +91,11 @@ extern size_t strlcat(char *, const char *, size_t);
 extern size_t strlcpy(char *, const char *src, size_t);
 #endif
 
+/* in clnt_generic.c */
+enum xprt_stat clnt_req_process_reply(SVCXPRT *, struct svc_req *);
+int clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
+		      const struct opr_rbtree_node *rhs);
+
 static inline void
 rpc_dplx_lock_init(struct rpc_dplx_lock *lock)
 {

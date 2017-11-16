@@ -309,7 +309,7 @@ is the time allowed for results to come back.
 .Pp
 .It Xo
 .Ft void
-.Fn clnt_destroy "CLIENT *clnt"
+.Fn CLNT_DESTROY "CLIENT *clnt"
 .Xc
 .Pp
 A macro that destroys the client's
@@ -322,7 +322,7 @@ itself.
 Use of
 .Fa clnt
 is undefined after calling
-.Fn clnt_destroy .
+.Fn CLNT_DESTROY .
 If the
 .Tn RPC
 library opened the associated socket, it will close it also.

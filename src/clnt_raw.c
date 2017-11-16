@@ -145,7 +145,7 @@ clnt_raw_call(struct clnt_req *cc)
 	if ((!XDR_PUTBYTES(xdrs, clp->u.mashl_callmsg, clp->mcnt))
 	    || (!XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc))
 	    || (!AUTH_MARSHALL(cc->cc_auth, xdrs))
-	    || (!(*cc->cc_xdr.proc) (xdrs, cc->cc_xdr.where))) {
+	    || (!(*cc->cc_call.proc) (xdrs, cc->cc_call.where))) {
 		return (RPC_CANTENCODEARGS);
 	}
 	(void)XDR_GETPOS(xdrs);	/* called just to cause overhead */

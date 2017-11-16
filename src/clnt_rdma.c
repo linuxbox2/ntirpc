@@ -154,7 +154,8 @@ clnt_rdma_call(struct clnt_req *cc)
 	 || !xdr_callhdr(&(cm->cm_xdrs), &cm->call_msg)
 	 || !XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc)
 	 || !AUTH_MARSHALL(cc->cc_auth, xdrs)
-	 || !AUTH_WRAP(cc->cc_auth, xdrs, cc->cc_xdr.proc, cc->cc_xdr.where)) {
+	 || !AUTH_WRAP(cc->cc_auth, xdrs,
+		       cc->cc_call.proc, cc->cc_call.where)) {
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_RDMA,
 			"%s: fd %d failed",
 			__func__, xprt->xp_fd);
@@ -164,7 +165,6 @@ clnt_rdma_call(struct clnt_req *cc)
 
 	if (! xdr_rdma_clnt_flushout(&cm->cm_xdrs)) {
 		cx->cx_error.re_errno = errno;
-		cx->cx_error.re_status = RPC_CANTSEND;
 		return (RPC_CANTSEND);
 	}
 
@@ -279,30 +279,10 @@ unlock:
 static void
 clnt_rdma_destroy(CLIENT *clnt)
 {
-	uint32_t cl_refcnt;
+	struct cx_data *cx = CX_DATA(clnt);
 
-	mutex_lock(&clnt->cl_lock);
-	if (clnt->cl_flags & CLNT_FLAG_DESTROYED) {
-		mutex_unlock(&clnt->cl_lock);
-		return;
-	}
-
-	clnt->cl_flags |= CLNT_FLAG_DESTROYED;
-	cl_refcnt = --(clnt->cl_refcnt);
-	mutex_unlock(&clnt->cl_lock);
-
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-		"%s: %p cl_refcnt %u",
-		__func__, clnt, cl_refcnt);
-
-	/* conditional destroy */
-	if (cl_refcnt == 0) {
-		struct cx_data *cx = CX_DATA(clnt);
-
-		/* client handles are now freed directly */
-		SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
-		clnt_rdma_data_free(CM_DATA(cx));
-	}
+	SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
+	clnt_rdma_data_free(CM_DATA(cx));
 }
 
 static struct clnt_ops *
