@@ -10,7 +10,6 @@
 #cmakedefine _MSPAC_SUPPORT 1
 #cmakedefine HAVE_STDBOOL_H 1
 #cmakedefine HAVE_KRB5 1
-#cmakedefine KRB5_VERSION @KRB5_VERSION@
 #cmakedefine LINUX 1
 #cmakedefine FREEBSD 1
 #cmakedefine _HAVE_GSSAPI 1

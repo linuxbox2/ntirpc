@@ -60,6 +60,15 @@ set(NTIRPC_BASE_DIR ${PROJECT_SOURCE_DIR} CACHE
 # Build configure options
 
 option (USE_GSS "enable RPCSEC_GSS support" ON)
+if (USE_GSS)
+  find_package(Krb5 REQUIRED gssapi)
+  if(KRB5_FOUND)
+    set(HAVE_KRB5 ON)
+    set(_HAVE_GSSAPI ON)
+  else(KRB5_FOUND)
+    set(USE_GSS OFF)
+  endif(KRB5_FOUND)
+endif (USE_GSS)
 
 option(USE_RPC_RDMA "platform supports RDMA" OFF)
 if (USE_RPC_RDMA)
@@ -114,16 +123,9 @@ else()
 endif(${BIGENDIAN})
 
 find_package(Threads REQUIRED)
-find_package(Krb5 REQUIRED gssapi)
 find_package(EPOLL REQUIRED)
 set(TIRPC_EPOLL ${EPOLL_FOUND})
 find_package(Sanitizers)
-
-if(KRB5_FOUND)
-  set(HAVE_KRB5 ON)
-  set(KRB5_VERSION 194)  # hand code until we do krb5-config --version magic
-  set(_HAVE_GSSAPI ON)
-endif(KRB5_FOUND)
 
 if(_MSPAC_SUPPORT)
   find_package(WBclient REQUIRED)
@@ -176,6 +178,7 @@ message(STATUS)
 message(STATUS "-------------------------------------------------------")
 message(STATUS "TIRPC_EPOLL = ${TIRPC_EPOLL}")
 message(STATUS "USE_RPC_RDMA = ${USE_RPC_RDMA}")
+message(STATUS "USE_GSS = ${USE_GSS}")
 
 #force command line options to be stored in cache
 set(_MSPAC_SUPPORT ${_MSPAC_SUPPORT}
