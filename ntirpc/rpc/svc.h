@@ -313,6 +313,7 @@ struct svc_req {
 	/* blkin tracing */
 	struct blkin_trace bl_trace;
 #endif
+	uint32_t rq_refs;
 };
 
 /*

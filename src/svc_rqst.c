@@ -236,30 +236,8 @@ svc_rqst_expire_insert(struct clnt_req *cc)
 	cc->cc_expire_ms = svc_rqst_expire_ms(&cc->cc_timeout);
 
 	mutex_lock(&sr_rec->ev_lock);
+	cc->cc_flags = CLNT_REQ_FLAG_EXPIRING;
  repeat:
-	nv = opr_rbtree_insert(&sr_rec->call_expires, &cc->cc_rqst);
-	if (nv) {
-		/* add this slightly later */
-		cc->cc_expire_ms++;
-		goto repeat;
-	}
-	mutex_unlock(&sr_rec->ev_lock);
-
-	ev_sig(sr_rec->sv[0], 0);	/* send wakeup */
-}
-
-void
-svc_rqst_expire_refresh(struct clnt_req *cc)
-{
-	struct cx_data *cx = CX_DATA(cc->cc_clnt);
-	struct svc_rqst_rec *sr_rec = (struct svc_rqst_rec *)cx->cx_rec->ev_p;
-	struct opr_rbtree_node *nv;
-
-	cc->cc_expire_ms = svc_rqst_expire_ms(&cc->cc_timeout);
-
-	mutex_lock(&sr_rec->ev_lock);
-	opr_rbtree_remove(&sr_rec->call_expires, &cc->cc_rqst);
-repeat:
 	nv = opr_rbtree_insert(&sr_rec->call_expires, &cc->cc_rqst);
 	if (nv) {
 		/* add this slightly later */
@@ -289,8 +267,15 @@ svc_rqst_expire_task(struct work_pool_entry *wpe)
 {
 	struct clnt_req *cc = opr_containerof(wpe, struct clnt_req, cc_wpe);
 
-	cc->cc_error.re_status = RPC_TIMEDOUT;
-	(*cc->cc_process_cb)(cc);
+	if (!(atomic_postset_uint16_t_bits(&cc->cc_flags,
+					   CLNT_REQ_FLAG_BACKSYNC)
+	      & (CLNT_REQ_FLAG_ACKSYNC | CLNT_REQ_FLAG_BACKSYNC))) {
+		/* task switch takes time, response wasn't previously queued */
+		cc->cc_error.re_status = RPC_TIMEDOUT;
+		(*cc->cc_process_cb)(cc);
+	}
+
+	clnt_req_release(cc);
 }
 
 int
@@ -974,9 +959,14 @@ svc_rqst_epoll_loop(struct svc_rqst_rec *sr_rec)
 				timeout_ms = cc->cc_expire_ms - expire_ms;
 				break;
 			}
+
+			/* order dependent */
 			atomic_clear_uint16_t_bits(&cc->cc_flags,
-						   CLNT_REQ_FLAG_CALLBACK);
+						   CLNT_REQ_FLAG_EXPIRING);
 			opr_rbtree_remove(&sr_rec->call_expires, &cc->cc_rqst);
+			cc->cc_expire_ms = 0;	/* atomic barrier(s) */
+
+			atomic_inc_uint32_t(&cc->cc_refs);
 			cc->cc_wpe.fun = svc_rqst_expire_task;
 			cc->cc_wpe.arg = NULL;
 			work_pool_submit(&svc_work_pool, &cc->cc_wpe);
