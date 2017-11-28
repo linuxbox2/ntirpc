@@ -73,6 +73,7 @@
 				 ((s) == RPC_CANTDECODEARGS))
 
 struct clnt_req;
+typedef void (*clnt_req_freer)(struct clnt_req *, size_t);
 
 /*
  * Client rpc handle.
@@ -114,7 +115,8 @@ typedef struct rpc_client {
 } CLIENT;
 
 #define CLNT_REQ_FLAG_NONE	0x0000
-#define CLNT_REQ_FLAG_CALLBACK	0x0001
+#define CLNT_REQ_FLAG_EXPIRING	0x0001
+#define CLNT_REQ_FLAG_BACKSYNC	0x0004
 #define CLNT_REQ_FLAG_ACKSYNC	0x0008
 
 /*
@@ -133,13 +135,15 @@ struct clnt_req {
 	struct xdrpair cc_call;
 	struct xdrpair cc_reply;
 	void (*cc_process_cb)(struct clnt_req *);
+	clnt_req_freer cc_free_cb;
 	struct timespec cc_timeout;
 	struct rpc_err cc_error;
+	size_t cc_size;
 	int cc_expire_ms;
 	int cc_refreshes;
 	rpcproc_t cc_proc;
 	uint32_t cc_xid;
-	uint32_t cc_refcount;
+	uint32_t cc_refs;
 	uint16_t cc_flags;
 };
 
@@ -570,6 +574,10 @@ static inline void clnt_req_fill(struct clnt_req *cc, struct rpc_client *clnt,
 	cc->cc_reply.where = resultsp;
 	cc->cc_verf = _null_auth;
 
+	cc->cc_free_cb = (clnt_req_freer)__ntirpc_pkg_params.free_size_;
+	cc->cc_size = sizeof(*cc);
+	cc->cc_refs = 1;
+
 	/* protects this */
 	pthread_mutex_init(&cc->cc_we.mtx, NULL);
 	pthread_mutex_lock(&cc->cc_we.mtx);
@@ -589,7 +597,7 @@ bool clnt_req_refresh(struct clnt_req *);
 void clnt_req_reset(struct clnt_req *);
 bool clnt_req_setup(struct clnt_req *, struct timespec);
 enum clnt_stat clnt_req_wait_reply(struct clnt_req *);
-void clnt_req_release(struct clnt_req *);
+int clnt_req_release(struct clnt_req *);
 
 __END_DECLS
 /*

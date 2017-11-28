@@ -421,7 +421,6 @@ clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,
 enum clnt_stat
 clnt_req_callback(struct clnt_req *cc)
 {
-	atomic_set_uint16_t_bits(&cc->cc_flags, CLNT_REQ_FLAG_CALLBACK);
 	svc_rqst_expire_insert(cc);
 
 	return CLNT_CALL_ONCE(cc);
@@ -433,7 +432,6 @@ clnt_req_callback(struct clnt_req *cc)
 void
 clnt_req_callback_default(struct clnt_req *cc)
 {
-	atomic_set_uint16_t_bits(&cc->cc_flags, CLNT_REQ_FLAG_ACKSYNC);
 	mutex_lock(&cc->cc_we.mtx);
 	cond_signal(&cc->cc_we.cv);
 	mutex_unlock(&cc->cc_we.mtx);
@@ -452,20 +450,15 @@ clnt_req_refresh(struct clnt_req *cc)
 	cc->cc_xid = ++(rec->call_xid);
 	nv = opr_rbtree_insert(&rec->call_replies, &cc->cc_dplx);
 	rpc_dplx_rui(rec);
-	if (!nv) {
-		svc_rqst_expire_refresh(cc);
-		return (true);
+	if (nv) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p fd %d insert failed xid %" PRIu32,
+			__func__, &rec->xprt, rec->xprt.xp_fd,
+			cc->cc_xid);
+		return (false);
 	}
-	__warnx(TIRPC_DEBUG_FLAG_ERROR,
-		"%s: %p fd %d insert failed xid %" PRIu32,
-		__func__, &rec->xprt, rec->xprt.xp_fd,
-		cc->cc_xid);
 
-	if (atomic_clear_uint16_t_bits(&cc->cc_flags, CLNT_REQ_FLAG_CALLBACK)
-	    & CLNT_REQ_FLAG_CALLBACK)
-		svc_rqst_expire_remove(cc);
-
-	return (false);
+	return (true);
 }
 
 void
@@ -477,9 +470,13 @@ clnt_req_reset(struct clnt_req *cc)
 	opr_rbtree_remove(&cx->cx_rec->call_replies, &cc->cc_dplx);
 	rpc_dplx_rui(cx->cx_rec);
 
-	if (atomic_clear_uint16_t_bits(&cc->cc_flags, CLNT_REQ_FLAG_CALLBACK)
-	    & CLNT_REQ_FLAG_CALLBACK)
+	if (atomic_postclear_uint16_t_bits(&cc->cc_flags,
+					   CLNT_REQ_FLAG_ACKSYNC |
+					   CLNT_REQ_FLAG_EXPIRING)
+	    & CLNT_REQ_FLAG_EXPIRING) {
 		svc_rqst_expire_remove(cc);
+		cc->cc_expire_ms = 0;	/* atomic barrier(s) */
+	}
 }
 
 bool
@@ -494,7 +491,6 @@ clnt_req_setup(struct clnt_req *cc, struct timespec timeout)
 	cc->cc_error.re_status = RPC_SUCCESS;
 	cc->cc_flags = CLNT_REQ_FLAG_NONE;
 	cc->cc_process_cb = clnt_req_callback_default;
-	cc->cc_refcount = 1;
 	cc->cc_refreshes = 2;
 	cc->cc_timeout = timeout;
 
@@ -551,6 +547,24 @@ clnt_req_process_reply(SVCXPRT *xprt, struct svc_req *req)
 		return SVC_STAT(xprt);
 	}
 	cc = opr_containerof(nv, struct clnt_req, cc_dplx);
+
+	/* order dependent */
+	if (atomic_postclear_uint16_t_bits(&cc->cc_flags,
+					   CLNT_REQ_FLAG_EXPIRING)
+	    & CLNT_REQ_FLAG_EXPIRING) {
+		svc_rqst_expire_remove(cc);
+		cc->cc_expire_ms = 0;	/* atomic barrier(s) */
+	}
+
+	if (atomic_postset_uint16_t_bits(&cc->cc_flags, CLNT_REQ_FLAG_ACKSYNC)
+	    & (CLNT_REQ_FLAG_ACKSYNC | CLNT_REQ_FLAG_BACKSYNC)) {
+		__warnx(TIRPC_DEBUG_FLAG_CLNT_REQ,
+			"%s: %p fd %d xid %" PRIu32 " ignored=%d",
+			__func__, xprt, xprt->xp_fd, cc->cc_xid,
+			cc->cc_error.re_status);
+		cc->cc_refreshes = 0;
+		return SVC_STAT(xprt);
+	}
 
 	_seterr_reply(&req->rq_msg, &(cc->cc_error));
 	if (cc->cc_error.re_status == RPC_SUCCESS) {
@@ -647,15 +661,18 @@ clnt_req_wait_reply(struct clnt_req *cc)
 	return (cc->cc_error.re_status);
 }
 
-void
+int
 clnt_req_release(struct clnt_req *cc)
 {
-	if (atomic_dec_uint32_t(&cc->cc_refcount))
-		return;
+	uint32_t refs = atomic_dec_uint32_t(&cc->cc_refs);
+
+	if (refs)
+		return (refs);
 
 	clnt_req_reset(cc);
 	clnt_req_fini(cc);
-	mem_free(cc, sizeof(*cc));
+	(*cc->cc_free_cb)(cc, cc->cc_size);
+	return (0);
 }
 
 /*
