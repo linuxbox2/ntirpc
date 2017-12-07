@@ -784,9 +784,6 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 				fprintf(stderr,
 					"\tCouldn't resolve remote address!\n");
 #endif
-			xdr_free((xdrproc_t) xdr_wrapstring,
-				 (char *)(void *)&ua);
-
 			if (!address) {
 				/* We don't know about your universal address */
 				rpc_createerr.cf_stat = RPC_N2AXLATEFAILURE;
@@ -819,7 +816,10 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		CLNT_DESTROY(client);
 		client = NULL;
 	}
+
  done:
+	if (ua)
+		xdr_free((xdrproc_t) xdr_wrapstring, (char *)(void *)&ua);
 	if (nconf->nc_semantics != NC_TPI_CLTS) {
 		/* This client is the connectionless one */
 		if (client) {
