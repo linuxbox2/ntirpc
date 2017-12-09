@@ -507,14 +507,6 @@ extern CLIENT *clnt_vc_ncreate_svc(const SVCXPRT *, const rpcprog_t,
  *      const uint32_t flags;                   -- flags
  */
 
-#if !defined(_WIN32)
-/*
- * Added for compatibility to old rpc 4.0. Obsoleted by clnt_vc_create().
- */
-extern CLIENT *clntunix_ncreate(struct sockaddr_un *, u_long, u_long, int *,
-				u_int, u_int);
-#endif
-
 /*
  * const int fd;    -- open file descriptor
  * const struct netbuf *svcaddr;  -- servers address
@@ -714,6 +706,5 @@ extern enum clnt_stat rpc_broadcast_exp(const rpcprog_t, const rpcvers_t,
 					const int, const char *);
 __END_DECLS
 /* For backward compatibility */
-#include <rpc/clnt_soc.h>
 #include <rpc/tirpc_compat.h>
 #endif				/* !_TIRPC_CLNT_H_ */

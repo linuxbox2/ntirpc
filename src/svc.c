@@ -60,9 +60,6 @@
 #include <rpc/types.h>
 #include <misc/portable.h>
 #include <rpc/rpc.h>
-#ifdef PORTMAP
-#include <rpc/pmap_clnt.h>
-#endif				/* PORTMAP */
 
 #include "rpc_com.h"
 
@@ -411,68 +408,6 @@ svc_unreg(const rpcprog_t prog, const rpcvers_t vers)
 }
 
 /* ********************** CALLOUT list related stuff ************* */
-
-#ifdef PORTMAP
-/*
- * Add a service program to the callout list.
- * The dispatch routine will be called when a rpc request for this
- * program number comes in.
- */
-bool
-svc_register(SVCXPRT *xprt, u_long prog, u_long vers,
-	     void (*dispatch) (struct svc_req *req),
-	     int protocol)
-{
-	struct svc_callout *prev;
-	struct svc_callout *s;
-
-	assert(xprt != NULL);
-	assert(dispatch != NULL);
-
-	s = svc_find((rpcprog_t) prog, (rpcvers_t) vers, &prev, NULL);
-	if (s) {
-		if (s->rec.sc_dispatch == dispatch)
-			goto pmap_it;	/* he is registering another xprt */
-		return (false);
-	}
-	s = mem_alloc(sizeof(struct svc_callout));
-	s->rec.sc_prog = (rpcprog_t) prog;
-	s->rec.sc_vers = (rpcvers_t) vers;
-	s->rec.sc_dispatch = dispatch;
-	s->sc_next = svc_head;
-	svc_head = s;
-
- pmap_it:
-	/* now register the information with the local binder service */
-	if (protocol)
-		return (pmap_set(prog, vers, protocol,
-				 __rpc_address_port(&xprt->xp_local)));
-
-	return (true);
-}
-
-/*
- * Remove a service program from the callout list.
- */
-void
-svc_unregister(u_long prog, u_long vers)
-{
-	struct svc_callout *prev;
-	struct svc_callout *s;
-
-	s = svc_find((rpcprog_t) prog, (rpcvers_t) vers, &prev, NULL);
-	if (!s)
-		return;
-	if (prev == NULL)
-		svc_head = s->sc_next;
-	else
-		prev->sc_next = s->sc_next;
-	s->sc_next = NULL;
-	mem_free(s, sizeof(struct svc_callout));
-	/* now unregister the information with the local binder service */
-	(void)pmap_unset(prog, vers);
-}
-#endif				/* PORTMAP */
 
 /*
  * Search the callout list for a program number, return the callout

@@ -29,7 +29,6 @@
 
 /*
  * pmap_rmt.c
- * Client interface to pmap rpc service.
  * remote call and broadcast service
  *
  * Copyright (C) 1984, Sun Microsystems, Inc.
@@ -54,65 +53,7 @@
 
 #include <rpc/rpc.h>
 #include <rpc/pmap_prot.h>
-#include <rpc/pmap_clnt.h>
 #include <rpc/pmap_rmt.h>
-
-/* For the clnttcp_create function
- * #include <clnt_soc.h> */
-
-static const struct timeval timeout = { 5, 0 };
-
-/*
- * pmapper remote-call-service interface.
- * This routine is used to call the pmapper remote call service
- * which will look up a service program in the port maps, and then
- * remotely call that routine with the given parameters.  This allows
- * programs to do a lookup and call in one step.
- */
-enum clnt_stat
-pmap_rmtcall(struct sockaddr_in *addr, u_long prog, u_long vers,
-	     u_long proc, xdrproc_t xdrargs, caddr_t argsp,
-	     xdrproc_t xdrres, caddr_t resp, struct timeval tout,
-	     u_long *port_ptr)
-{
-	CLIENT *client;
-	struct rmtcallargs a;
-	struct rmtcallres r;
-	struct timespec tv;
-	int sock = -1;
-	enum clnt_stat stat = RPC_FAILED;
-
-	assert(addr != NULL);
-	assert(port_ptr != NULL);
-
-	addr->sin_port = htons(PMAPPORT);
-	client = clntudp_ncreate(addr, PMAPPROG, PMAPVERS, timeout, &sock);
-	if (client != NULL) {
-		struct clnt_req *cc = mem_alloc(sizeof(*cc));
-
-		a.prog = prog;
-		a.vers = vers;
-		a.proc = proc;
-		a.args_ptr = argsp;
-		a.xdr_args = xdrargs;
-		r.port_ptr = port_ptr;
-		r.results_ptr = resp;
-		r.xdr_results = xdrres;
-		tv.tv_sec = tout.tv_sec;
-		tv.tv_nsec = tout.tv_usec * 1000;
-
-		clnt_req_fill(cc, client, authnone_create(), PMAPPROC_CALLIT,
-			      (xdrproc_t) xdr_rmtcall_args, &a,
-			      (xdrproc_t) xdr_rmtcallres, &r);
-		if (clnt_req_setup(cc, tv)) {
-			stat = CLNT_CALL_WAIT(cc);
-		}
-		clnt_req_release(cc);
-		CLNT_DESTROY(client);
-	}
-	addr->sin_port = 0;
-	return (stat);
-}
 
 /*
  * XDR remote call arguments

@@ -53,9 +53,7 @@ NTIRPC_${NTIRPC_VERSION} {
     bindresvport_sa;
 
     # c*
-    callrpc;
     cbc_crypt;
-    clnt_broadcast;
     clnt_ncreate_timed;
     clnt_ncreate_vers_timed;
     clnt_dg_ncreatef;
@@ -76,11 +74,6 @@ NTIRPC_${NTIRPC_VERSION} {
     clnt_tp_ncreate_timed;
     clnt_vc_ncreatef;
     clnt_vc_ncreate_svc;
-    clntraw_ncreate;
-    clnttcp_ncreate;
-    clntudp_nbufcreate;
-    clntudp_ncreate;
-    clntunix_ncreate;
 
     # e*
     endnetconfig;
@@ -91,14 +84,12 @@ NTIRPC_${NTIRPC_VERSION} {
     freenetconfigent;
 
     # g*
-    get_myaddress;
     getnetconfig;
     getnetconfigent;
     getnetpath;
     getrpcent;
     getrpcbynumber;
     getrpcbyname;
-    getrpcport;
 
     # n*
     nc_perror;
@@ -116,16 +107,8 @@ NTIRPC_${NTIRPC_VERSION} {
     opr_rbtree_remove;
     opr_rbtree_replace;
 
-    # p*
-    pmap_getmaps;
-    pmap_getport;
-    pmap_rmtcall;
-    pmap_set;
-    pmap_unset;
-
     # r*
     rbtx_init;
-    registerrpc;
     rpc_broadcast;
     rpc_broadcast_exp;
     rpc_call;
@@ -156,7 +139,6 @@ NTIRPC_${NTIRPC_VERSION} {
     svc_ncreate;
     svc_raw_ncreate;
     svc_reg;
-    svc_register;
     svc_rqst_new_evchan;
     svc_rqst_evchan_reg;
     svc_rqst_evchan_unreg;
@@ -168,7 +150,6 @@ NTIRPC_${NTIRPC_VERSION} {
     svc_tli_ncreate;
     svc_tp_ncreate;
     svc_unreg;
-    svc_unregister;
     svc_validate_xprt_list;
     svc_vc_ncreatef;
     svc_xprt_trace;
@@ -186,13 +167,6 @@ NTIRPC_${NTIRPC_VERSION} {
     svcerr_progvers;
     svcerr_systemerr;
     svcerr_weakauth;
-    svcfd_ncreate;
-    svcraw_ncreate;
-    svctcp_ncreate;
-    svcudp_nbufcreate;
-    svcudp_ncreate;
-    svcunix_ncreate;
-    svcunixfd_ncreate;
 
     # t*
     taddr2uaddr;

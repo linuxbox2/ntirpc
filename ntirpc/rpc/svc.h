@@ -75,7 +75,7 @@ enum xprt_stat {
  * indicates whether or not the exported program should be registered with a
  * local binder service;  if true the program's number and version and the
  * port number from the transport handle are registered with the binder.
- * These data are registered with the rpc svc system via svc_register.
+ * These data are registered with the rpc svc system via svc_reg.
  *
  * A service's dispatch function is called whenever an rpc request comes in
  * on a transport.  The request's program and version numbers must match
@@ -319,6 +319,8 @@ struct svc_req {
 /*
  *  Approved way of getting addresses
  */
+#define svc_getcaller_netbuf(x) (&(x)->xp_remote.nb)
+#define svc_getlocal_netbuf(x) (&(x)->xp_local.nb)
 #define svc_getrpccaller(x) (&(x)->xp_remote.ss)
 #define svc_getrpclocal(x) (&(x)->xp_local.ss)
 
@@ -629,11 +631,6 @@ svc_vc_ncreate(const int fd, const u_int sendsize, const u_int recvsize)
 	return (svc_vc_ncreatef(fd, sendsize, recvsize, SVC_CREATE_FLAG_CLOSE));
 }
 
-/*
- * Added for compatibility to old rpc 4.0. Obsoleted by svc_vc_create().
- */
-extern SVCXPRT *svcunix_ncreate(int, u_int, u_int, char *);
-
 extern SVCXPRT *svc_dg_ncreatef(const int, const u_int, const u_int,
 				const uint32_t);
 /*
@@ -666,11 +663,6 @@ svc_fd_ncreate(const int fd, const u_int sendsize, const u_int recvsize)
 {
 	return (svc_fd_ncreatef(fd, sendsize, recvsize, SVC_CREATE_FLAG_NONE));
 }
-
-/*
- * Added for compatibility to old rpc 4.0. Obsoleted by svc_fd_create().
- */
-extern SVCXPRT *svcunixfd_ncreate(int, u_int, u_int);
 
 /*
  * Memory based rpc (for speed check and testing)
@@ -723,6 +715,5 @@ int __rpc_get_local_uid(SVCXPRT *, uid_t *);
 
 __END_DECLS
 /* for backward compatibility */
-#include <rpc/svc_soc.h>
 #include <rpc/tirpc_compat.h>
 #endif				/* !_TIRPC_SVC_H */

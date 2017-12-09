@@ -28,11 +28,7 @@ SET(ntirpc_common_SRCS
   getnetpath.c
   getpeereid.c
   getrpcent.c
-  getrpcport.c
   mt_misc.c
-  pmap_clnt.c
-  pmap_getmaps.c
-  pmap_getport.c
   pmap_prot.c
   pmap_prot2.c
   pmap_rmt.c
@@ -45,7 +41,6 @@ SET(ntirpc_common_SRCS
   rpc_dplx_msg.c
   rpc_dtablesize.c
   rpc_generic.c
-  rpc_soc.c
   rpcb_clnt.c
   rpcb_prot.c
   rpcb_st_xdr.c
