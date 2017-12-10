@@ -26,9 +26,6 @@ pthread_mutex_t svcauthkerbstats_lock = MUTEX_INITIALIZER;
 /* protects the Auths list (svc_auth.c) */
 pthread_mutex_t authsvc_lock = MUTEX_INITIALIZER;
 
-/* clnt_raw.c serialization */
-pthread_mutex_t clntraw_lock = MUTEX_INITIALIZER;
-
 /* domainname and domain_fd (getdname.c) and default_domain (rpcdname.c) */
 pthread_mutex_t dname_lock = MUTEX_INITIALIZER;
 

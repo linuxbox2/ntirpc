@@ -17,7 +17,6 @@ NTIRPC_${NTIRPC_VERSION} {
     __rpc_nconf2fd;
     __rpc_nconf2fd_flags;
     __rpc_nconf2sockinfo;
-    __rpc_rawcombuf;
     __rpc_seman2socktype;
     __rpc_setconf;
     __rpc_sockinfo2netid;
