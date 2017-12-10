@@ -35,7 +35,6 @@
 struct cx_data {
 	struct rpc_client cx_c;		/**< Transport Independent handle */
 	struct rpc_dplx_rec *cx_rec;	/* unified sync */
-	struct rpc_err cx_error;
 
 	union {
 		char cx_mcallc[MCALL_MSG_SIZE];	/* marshalled callmsg */

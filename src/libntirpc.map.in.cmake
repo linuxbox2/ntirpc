@@ -56,9 +56,7 @@ NTIRPC_${NTIRPC_VERSION} {
     clnt_ncreate_timed;
     clnt_ncreate_vers_timed;
     clnt_dg_ncreatef;
-    clnt_pcreateerror;
     clnt_perrno;
-    clnt_perror;
     clnt_raw_ncreate;
     clnt_req_callback;
     clnt_req_refresh;
@@ -66,9 +64,7 @@ NTIRPC_${NTIRPC_VERSION} {
     clnt_req_reset;
     clnt_req_setup;
     clnt_req_wait_reply;
-    clnt_spcreateerror;
     clnt_sperrno;
-    clnt_sperror;
     clnt_tli_create;
     clnt_tp_ncreate_timed;
     clnt_vc_ncreatef;
@@ -113,9 +109,11 @@ NTIRPC_${NTIRPC_VERSION} {
     rpc_call;
     rpc_control;
     rpc_createerr;
+    rpc_perror;
     rpc_nullproc;
     rpc_rdma_ncreatef;
     rpc_reg;
+    rpc_sperror;
     rpcb_find_mapped_addr;
     rpcb_getaddr;
     rpcb_getmaps;

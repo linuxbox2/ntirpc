@@ -16,14 +16,11 @@
 .Nm clnt_create ,
 .Nm clnt_destroy ,
 .Nm clnt_freeres ,
-.Nm clnt_geterr ,
-.Nm clnt_pcreateerror ,
 .Nm clnt_perrno ,
-.Nm clnt_perror ,
-.Nm clnt_spcreateerror ,
 .Nm clnt_sperrno ,
-.Nm clnt_sperror ,
 .Nm rpc_createerr ,
+.Nm rpc_perror ,
+.Nm rpc_sperror ,
 .Nm SVC_DESTROY ,
 .Nm svc_sendreply ,
 .Nm svcerr_auth ,
@@ -299,41 +296,6 @@ and zero otherwise.
 .Ft void
 .Xc
 .It Xo
-.Fn clnt_geterr "CLIENT *clnt" "struct rpc_err *errp"
-.Xc
-.Pp
-A macro that copies the error structure out of the client
-handle
-to the structure at address
-.Fa errp .
-.Pp
-.It Xo
-.Ft void
-.Xc
-.It Xo
-.Fn clnt_pcreateerror "char *s"
-.Xc
-.Pp
-prints a message to standard error indicating
-why a client
-.Tn RPC
-handle could not be created.
-The message is prepended with string
-.Fa s
-and a colon.
-A newline is appended at the end of the message.
-Used when a
-.Fn clnt_create ,
-.Fn clntraw_create ,
-.Fn clnttcp_create ,
-or
-.Fn clntudp_create
-call fails.
-.Pp
-.It Xo
-.Ft void
-.Xc
-.It Xo
 .Fn clnt_perrno "enum clnt_stat stat"
 .Xc
 .Pp
@@ -341,38 +303,6 @@ Print a message to standard error corresponding
 to the condition indicated by
 .Fa stat .
 A newline is appended at the end of the message.
-.Pp
-.It Xo
-.Ft void
-.Fn clnt_perror "CLIENT *clnt" "char *s"
-.Xc
-.Pp
-Print a message to standard error indicating why an
-.Tn RPC
-call failed;
-.Fa clnt
-is the handle used to do the call.
-The message is prepended with string
-.Fa s
-and a colon.
-A newline is appended at the end of the message.
-Used after
-.Fn clnt_call .
-.Pp
-.It Xo
-.Ft "char *"
-.Xc
-.It Xo
-.Fn clnt_spcreateerror "char *s"
-.Xc
-.Pp
-Like
-.Fn clnt_pcreateerror ,
-except that it returns a string
-instead of printing to the standard error.
-.Pp
-Bugs: returns pointer to static data that is overwritten
-on each call.
 .Pp
 .It Xo
 .Ft "char *"
@@ -403,29 +333,10 @@ or if a message format different from that supported by
 .Fn clnt_perrno
 is to be used.
 .Pp
-Note: unlike
-.Fn clnt_sperror
-and
-.Fn clnt_spcreateerror ,
+Note:
 .Fn clnt_sperrno
 returns pointer to static data, but the
 result will not get overwritten on each call.
-.Pp
-.It Xo
-.Ft "char *"
-.Xc
-.It Xo
-.Fn clnt_sperror "CLIENT *rpch" "char *s"
-.Xc
-.Pp
-Like
-.Fn clnt_perror ,
-except that (like
-.Fn clnt_sperrno )
-it returns a string instead of printing to standard error.
-.Pp
-Bugs: returns pointer to static data that is overwritten
-on each call.
 .Pp
 .It Xo
 .Vt "struct rpc_createerr" rpc_createerr ;
@@ -436,8 +347,38 @@ A global variable whose value is set by any
 client creation routine
 that does not succeed.
 Use the routine
-.Fn clnt_pcreateerror
+.Fn rpc_perror
 to print the reason why.
+.Pp
+.It Xo
+.Ft void
+.Fn rpc_perror "const struct rpc_err *e" "const char *s"
+.Xc
+.Pp
+Print a message to standard error indicating why an
+.Tn RPC
+call failed;
+.Tn struct rpc_err
+.Fa e
+is the error value.
+The message is prepended with string
+.Fa s
+and a colon.
+A newline is appended at the end of the message.
+.Pp
+.It Xo
+.Ft "char *"
+.Xc
+.It Xo
+.Fn rpc_sperror "const struct rpc_err *e" "const char *s"
+.Xc
+.Pp
+Like
+.Fn rpc_perror ,
+except that (like
+.Fn clnt_sperrno )
+it returns a string instead of printing to standard error.
+This string must be freed after use.
 .Pp
 .It Xo
 .Ft bool_t

@@ -67,6 +67,14 @@ struct rpc_err {
 	enum clnt_stat re_status;
 };
 
+/*
+ * Print an error message, given the rpc error code
+ */
+#define RPC_SPERROR_BUFLEN 256
+
+extern void rpc_perror(const struct rpc_err *, const char *); /* stderr */
+extern char *rpc_sperror(const struct rpc_err *, const char *); /* string */
+
 #ifdef __cplusplus
 }
 #endif

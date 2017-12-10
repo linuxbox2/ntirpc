@@ -10,11 +10,8 @@
 .Nm rpc_clnt_calls ,
 .Nm clnt_call ,
 .Nm clnt_freeres ,
-.Nm clnt_geterr ,
 .Nm clnt_perrno ,
-.Nm clnt_perror ,
 .Nm clnt_sperrno ,
-.Nm clnt_sperror ,
 .Nm rpc_broadcast ,
 .Nm rpc_broadcast_exp ,
 .Nm rpc_call
@@ -28,15 +25,9 @@
 .Ft bool_t
 .Fn clnt_freeres "CLIENT *clnt" "const xdrproc_t outproc" "caddr_t out"
 .Ft void
-.Fn clnt_geterr "const CLIENT * clnt" "struct rpc_err * errp"
-.Ft void
 .Fn clnt_perrno "const enum clnt_stat stat"
-.Ft void
-.Fn clnt_perror "CLIENT *clnt" "const char *s"
 .Ft "char *"
 .Fn clnt_sperrno "const enum clnt_stat stat"
-.Ft "char *"
-.Fn clnt_sperror "CLIENT *clnt" "const char * s"
 .Ft "enum clnt_stat"
 .Fo rpc_broadcast
 .Fa "const rpcprog_t prognum" "const rpcvers_t versnum"
@@ -139,10 +130,6 @@ is the address of the results, and
 is the XDR routine describing the results.
 This routine returns 1 if the results were successfully freed,
 and 0 otherwise.
-.It Fn clnt_geterr
-A function macro that copies the error structure out of the client
-handle to the structure at address
-.Fa errp .
 .It Fn clnt_perrno
 Print a message to standard error corresponding
 to the condition indicated by
@@ -151,19 +138,6 @@ A newline is appended.
 Normally used after a procedure call fails for a routine
 for which a client handle is not needed, for instance
 .Fn rpc_call .
-.It Fn clnt_perror
-Print a message to the standard error indicating why an
-RPC call failed;
-.Fa clnt
-is the handle used to do the call.
-The message is prepended with string
-.Fa s
-and a colon.
-A newline is appended.
-Normally used after a remote procedure call fails
-for a routine which requires a client handle,
-for instance
-.Fn clnt_call .
 .It Fn clnt_sperrno
 Take the same arguments as
 .Fn clnt_perrno ,
@@ -185,27 +159,9 @@ or if a message format different than that supported by
 .Fn clnt_perrno
 is to be used.
 Note:
-unlike
-.Fn clnt_sperror
-and
-.Fn clnt_spcreateerror
-(see
-.Xr rpc_clnt_create 3 ) ,
 .Fn clnt_sperrno
-does not return pointer to static data so the
+returns pointer to static data, but the
 result will not get overwritten on each call.
-.It Fn clnt_sperror
-Like
-.Fn clnt_perror ,
-except that (like
-.Fn clnt_sperrno )
-it returns a string instead of printing to standard error.
-However,
-.Fn clnt_sperror
-does not append a newline at the end of the message.
-Warning:
-returns pointer to a buffer that is overwritten
-on each call.
 .It Fn rpc_broadcast
 Like
 .Fn rpc_call ,

@@ -255,24 +255,16 @@ clnt_dg_call(struct clnt_req *cc)
 
 	if (sendto(xprt->xp_fd, xdrs->x_v.vio_head, outlen, 0,
 		   (struct sockaddr *)&cu->cu_raddr, cu->cu_rlen) != outlen) {
-		cx->cx_error.re_errno = errno;
+		clnt->cl_error.re_errno = errno;
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d sendto failed (%d)\n",
-			__func__, xprt->xp_fd, cx->cx_error.re_errno);
+			__func__, xprt->xp_fd, clnt->cl_error.re_errno);
 		XDR_DESTROY(xdrs);
 		return (RPC_CANTSEND);
 	}
 	XDR_DESTROY(xdrs);
 
 	return (RPC_SUCCESS);
-}
-
-static void
-clnt_dg_geterr(CLIENT *clnt, struct rpc_err *errp)
-{
-	struct cx_data *cx = CX_DATA(clnt);
-
-	*errp = cx->cx_error;
 }
 
 static bool
@@ -441,7 +433,6 @@ clnt_dg_ops(void)
 	if (ops.cl_call == NULL) {
 		ops.cl_call = clnt_dg_call;
 		ops.cl_abort = clnt_dg_abort;
-		ops.cl_geterr = clnt_dg_geterr;
 		ops.cl_freeres = clnt_dg_freeres;
 		ops.cl_destroy = clnt_dg_destroy;
 		ops.cl_control = clnt_dg_control;

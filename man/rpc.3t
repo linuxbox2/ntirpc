@@ -163,18 +163,19 @@ typedef struct {
  */
 
 typedef struct {
-    AUTH    *cl_auth;    /* authenticator */
     struct clnt_ops {
         enum clnt_stat    (*cl_call)();    /* call remote procedure */
         void    (*cl_abort)();        /* abort a call */
-        void    (*cl_geterr)();        /* get specific error code */
         bool_t    (*cl_freeres)();    /* frees results */
         void    (*cl_destroy)();    /* destroy this structure */
         bool_t    (*cl_control)();    /* the ioctl() of rpc */
     } *cl_ops;
-    caddr_t    cl_private;    /* private stuff */
+
     char    *cl_netid;    /* network identifier */
     char    *cl_tp;        /* device name */
+    void *cl_u1;           /* client user data */
+    void *cl_u2;           /* client user data */
+    struct rpc_err cl_error; /* specific error code */
 } CLIENT;
 .Ed
 .Sh "The SVCXPRT structure"
@@ -340,21 +341,11 @@ pages on which they are described:
 .Xr rpc_clnt_create 3
 .It Fn clnt_freeres
 .Xr rpc_clnt_calls 3
-.It Fn clnt_geterr
-.Xr rpc_clnt_calls 3
-.It Fn clnt_pcreateerror
-.Xr rpc_clnt_create 3
 .It Fn clnt_perrno
-.Xr rpc_clnt_calls 3
-.It Fn clnt_perror
 .Xr rpc_clnt_calls 3
 .It Fn clnt_raw_create
 .Xr rpc_clnt_create 3
-.It Fn clnt_spcreateerror
-.Xr rpc_clnt_create 3
 .It Fn clnt_sperrno
-.Xr rpc_clnt_calls 3
-.It Fn clnt_sperror
 .Xr rpc_clnt_calls 3
 .It Fn clnt_tli_create
 .Xr rpc_clnt_create 3
@@ -372,6 +363,10 @@ pages on which they are described:
 .Xr rpc_clnt_calls 3
 .It Fn rpc_call
 .Xr rpc_clnt_calls 3
+.It Fn rpc_perror
+.Xr rpc_soc 3
+.It Fn rpc_sperror
+.Xr rpc_soc 3
 .It Fn rpc_reg
 .Xr rpc_svc_calls 3
 .It Fn svc_create

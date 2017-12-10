@@ -194,11 +194,6 @@ clnt_raw_call(struct clnt_req *cc)
 	return (error.re_status);
 }
 
- /*ARGSUSED*/
-static void clnt_raw_geterr(CLIENT *cl, struct rpc_err *err)
-{
-}
-
 /* ARGSUSED */
 static bool
 clnt_raw_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
@@ -242,7 +237,6 @@ clnt_raw_ops(void)
 	if (ops.cl_call == NULL) {
 		ops.cl_call = clnt_raw_call;
 		ops.cl_abort = clnt_raw_abort;
-		ops.cl_geterr = clnt_raw_geterr;
 		ops.cl_freeres = clnt_raw_freeres;
 		ops.cl_destroy = clnt_raw_destroy;
 		ops.cl_control = clnt_raw_control;

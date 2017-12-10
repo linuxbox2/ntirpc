@@ -158,8 +158,8 @@ rpc_call(const char *host,	/* host name */
 	/* LINTED const castaway */
 	clnt_req_fill(cc, rcp->client, rcp->auth, procnum,
 		      inproc, (void *)in, outproc, out);
-	clnt_stat = RPC_TLIERROR;
-	if (clnt_req_setup(cc, to)) {
+	clnt_stat = clnt_req_setup(cc, to);
+	if (clnt_stat == RPC_SUCCESS) {
 		clnt_stat = CLNT_CALL_WAIT(cc);
 	}
 	clnt_req_release(cc);

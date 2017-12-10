@@ -136,9 +136,9 @@ typedef int32_t rpc_inline_t;
 #define TIRPC_DEBUG_FLAG_CLNT_SCTP      0x0000400
 #define TIRPC_DEBUG_FLAG_CLNT_VC        0x0000800
 #define TIRPC_DEBUG_FLAG_CLNT_BCAST     0x0001000
-#define TIRPC_DEBUG_FLAG_CLNT_GEN       0x0002000
-#define TIRPC_DEBUG_FLAG_CLNT_RAW       0x0004000
-#define TIRPC_DEBUG_FLAG_CLNT_REQ       0x0008000
+#define TIRPC_DEBUG_FLAG_CLNT_RAW       0x0002000
+#define TIRPC_DEBUG_FLAG_CLNT_REQ       0x0004000
+#define TIRPC_DEBUG_FLAG_CLNT           0x0008000
 #define TIRPC_DEBUG_FLAG_SVC_DG         0x0010000
 #define TIRPC_DEBUG_FLAG_SVC_RDMA       0x0020000
 #define TIRPC_DEBUG_FLAG_SVC_SCTP       0x0040000
@@ -158,7 +158,7 @@ typedef int32_t rpc_inline_t;
 	 TIRPC_DEBUG_FLAG_EVENT | \
 	 TIRPC_DEBUG_FLAG_WARN)
 
-#define TIRPC_DEBUG_FLAG_MEM            (TIRPC_DEBUG_FLAG_ERROR)
+#define TIRPC_DEBUG_FLAG_CLNT_RPCB      (TIRPC_DEBUG_FLAG_CLNT)
 
 typedef void *(*mem_1_size_t) (size_t,
 	     const char *file, int line, const char *function);

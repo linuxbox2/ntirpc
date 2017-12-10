@@ -35,6 +35,14 @@
 
 /*
  * clnt.h - Client side remote procedure call interface.
+ *
+ * (1) There is only one SVCXPRT (service transport) per connection.
+ * (2) There can be several CLIENT per SVCXPRT.
+ * (3) Each CLIENT rpc_err cl_error is idempotent, initially
+ *     RPC_SUCCESS (0). Once set to anything else, it should never be
+ *     modified, and CLNT_DESTROY() should be invoked.
+ * (4) There can be many asynchronous clnt_req per CLIENT.
+ * (5) Each clnt_req has its own idempotent rpc_err cc_error.
  */
 
 #ifndef _TIRPC_CLNT_H_
@@ -89,9 +97,6 @@ typedef struct rpc_client {
 		/* abort a call */
 		void (*cl_abort) (struct rpc_client *);
 
-		/* get specific error code */
-		void (*cl_geterr) (struct rpc_client *, struct rpc_err *);
-
 		/* frees results */
 		 bool(*cl_freeres) (struct rpc_client *, xdrproc_t, void *);
 
@@ -102,13 +107,13 @@ typedef struct rpc_client {
 		 bool(*cl_control) (struct rpc_client *, u_int, void *);
 	} *cl_ops;
 
-	void *cl_p1;		/* private data */
-	void *cl_p2;
-	void *cl_p3;
 	char *cl_netid;		/* network token */
 	char *cl_tp;		/* device name */
+	void *cl_u1;		/* client user data */
+	void *cl_u2;		/* client user data */
 
 	mutex_t cl_lock;	/* serialize private data */
+	struct rpc_err cl_error; /* specific error code */
 	uint32_t cl_refcnt;	/* handle refcnt */
 	uint16_t cl_flags;	/* state flags */
 
@@ -217,14 +222,6 @@ struct rpc_timers {
  */
 #define CLNT_ABORT(rh) ((*(rh)->cl_ops->cl_abort)(rh))
 #define clnt_abort(rh) ((*(rh)->cl_ops->cl_abort)(rh))
-
-/*
- * struct rpc_err
- * CLNT_GETERR(rh);
- *  CLIENT *rh;
- */
-#define CLNT_GETERR(rh, errp) ((*(rh)->cl_ops->cl_geterr)(rh, errp))
-#define clnt_geterr(rh, errp) ((*(rh)->cl_ops->cl_geterr)(rh, errp))
 
 /*
  * bool
@@ -585,33 +582,19 @@ static inline void clnt_req_fini(struct clnt_req *cc)
 }
 
 enum clnt_stat clnt_req_callback(struct clnt_req *);
-bool clnt_req_refresh(struct clnt_req *);
+enum clnt_stat clnt_req_refresh(struct clnt_req *);
 void clnt_req_reset(struct clnt_req *);
-bool clnt_req_setup(struct clnt_req *, struct timespec);
+enum clnt_stat clnt_req_setup(struct clnt_req *, struct timespec);
 enum clnt_stat clnt_req_wait_reply(struct clnt_req *);
 int clnt_req_release(struct clnt_req *);
 
 __END_DECLS
 /*
- * Print why creation failed
- */
-__BEGIN_DECLS
-extern void clnt_pcreateerror(const char *);	/* stderr */
-extern char *clnt_spcreateerror(const char *);	/* string */
-__END_DECLS
-/*
- * Like clnt_perror(), but is more verbose in its output
+ * Used by rpc_perror() and rpc_sperror()
  */
 __BEGIN_DECLS
 extern void clnt_perrno(enum clnt_stat);	/* stderr */
 extern char *clnt_sperrno(enum clnt_stat);	/* string */
-__END_DECLS
-/*
- * Print an English error message, given the client error code
- */
-__BEGIN_DECLS
-extern void clnt_perror(CLIENT *, const char *);	/* stderr */
-extern char *clnt_sperror(CLIENT *, const char *);	/* string */
 __END_DECLS
 /*
  * If a creation fails, the following allows the user to figure out why.

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,42 +46,25 @@
 #include <rpc/auth.h>
 #include <rpc/clnt.h>
 
-static char *buf;
-
-static char *_buf(void);
 static char *auth_errmsg(enum auth_stat);
-#define CLNT_PERROR_BUFLEN 256
-
-static char *
-_buf(void)
-{
-
-	if (!buf)
-		buf = (char *)mem_alloc(CLNT_PERROR_BUFLEN);
-	return (buf);
-}
 
 /*
  * Print reply error info
  */
 char *
-clnt_sperror(CLIENT *rpch, const char *s)
+rpc_sperror(const struct rpc_err *e, const char *s)
 {
-	struct rpc_err e;
 	char *err;
 	char *str;
 	char *strstart;
 	size_t len, i;
 
-	if (rpch == NULL || s == NULL)
+	if (e == NULL || s == NULL)
 		return (0);
 
-	str = _buf();		/* side effect: sets CLNT_PERROR_BUFLEN */
-	if (str == 0)
-		return (0);
-	len = CLNT_PERROR_BUFLEN;
+	str = (char *)mem_alloc(RPC_SPERROR_BUFLEN);
+	len = RPC_SPERROR_BUFLEN;
 	strstart = str;
-	CLNT_GETERR(rpch, &e);
 
 	if (snprintf(str, len, "%s: ", s) > 0) {
 		i = strlen(str);
@@ -88,12 +72,12 @@ clnt_sperror(CLIENT *rpch, const char *s)
 		len -= i;
 	}
 
-	(void)strncpy(str, clnt_sperrno(e.re_status), len - 1);
+	(void)strncpy(str, clnt_sperrno(e->re_status), len - 1);
 	i = strlen(str);
 	str += i;
 	len -= i;
 
-	switch (e.re_status) {
+	switch (e->re_status) {
 	case RPC_SUCCESS:
 	case RPC_CANTENCODEARGS:
 	case RPC_CANTDECODERES:
@@ -101,17 +85,28 @@ clnt_sperror(CLIENT *rpch, const char *s)
 	case RPC_PROGUNAVAIL:
 	case RPC_PROCUNAVAIL:
 	case RPC_CANTDECODEARGS:
-	case RPC_SYSTEMERROR:
 	case RPC_UNKNOWNHOST:
 	case RPC_UNKNOWNPROTO:
 	case RPC_PMAPFAILURE:
 	case RPC_PROGNOTREGISTERED:
 	case RPC_FAILED:
+	case RPC_INTR:
+	case RPC_UNKNOWNADDR:
+	case RPC_TLIERROR:
+	case RPC_NOBROADCAST:
+	case RPC_N2AXLATEFAILURE:
+	case RPC_UDERROR:
+	case RPC_INPROGRESS:
+	case RPC_STALERACHANDLE:
+	case RPC_CANTCONNECT:
+	case RPC_XPRTFAILED:
+	case RPC_CANTCREATESTREAM:
 		break;
 
 	case RPC_CANTSEND:
 	case RPC_CANTRECV:
-		snprintf(str, len, "; errno = %s", strerror(e.re_errno));
+	case RPC_SYSTEMERROR:
+		snprintf(str, len, "; errno = %s", strerror(e->re_errno));
 		i = strlen(str);
 		if (i > 0) {
 			str += i;
@@ -121,7 +116,7 @@ clnt_sperror(CLIENT *rpch, const char *s)
 
 	case RPC_VERSMISMATCH:
 		snprintf(str, len, "; low version = %u, high version = %u",
-			 e.re_vers.low, e.re_vers.high);
+			 e->re_vers.low, e->re_vers.high);
 		i = strlen(str);
 		if (i > 0) {
 			str += i;
@@ -130,7 +125,7 @@ clnt_sperror(CLIENT *rpch, const char *s)
 		break;
 
 	case RPC_AUTHERROR:
-		err = auth_errmsg(e.re_why);
+		err = auth_errmsg(e->re_why);
 		snprintf(str, len, "; why = ");
 		i = strlen(str);
 		if (i > 0) {
@@ -142,7 +137,7 @@ clnt_sperror(CLIENT *rpch, const char *s)
 		} else {
 			snprintf(str, len,
 				 "(unknown authentication error - %d)",
-				 (int)e.re_why);
+				 (int)e->re_why);
 		}
 		i = strlen(str);
 		if (i > 0) {
@@ -153,7 +148,7 @@ clnt_sperror(CLIENT *rpch, const char *s)
 
 	case RPC_PROGVERSMISMATCH:
 		snprintf(str, len, "; low version = %u, high version = %u",
-			 e.re_vers.low, e.re_vers.high);
+			 e->re_vers.low, e->re_vers.high);
 		i = strlen(str);
 		if (i > 0) {
 			str += i;
@@ -162,8 +157,8 @@ clnt_sperror(CLIENT *rpch, const char *s)
 		break;
 
 	default:		/* unknown */
-		snprintf(str, len, "; s1 = %u, s2 = %u", e.re_lb.s1,
-			 e.re_lb.s2);
+		snprintf(str, len, "; s1 = %u, s2 = %u",
+			 e->re_lb.s1, e->re_lb.s2);
 		i = strlen(str);
 		if (i > 0) {
 			str += i;
@@ -171,18 +166,21 @@ clnt_sperror(CLIENT *rpch, const char *s)
 		}
 		break;
 	}
-	strstart[CLNT_PERROR_BUFLEN - 1] = '\0';
+	strstart[RPC_SPERROR_BUFLEN - 1] = '\0';
 	return (strstart);
 }
 
 void
-clnt_perror(CLIENT *rpch, const char *s)
+rpc_perror(const struct rpc_err *e, const char *s)
 {
+	char *t;
 
-	if (rpch == NULL || s == NULL)
+	if (e == NULL || s == NULL)
 		return;
 
-	(void)fprintf(stderr, "%s\n", clnt_sperror(rpch, s));
+	t = rpc_sperror(e, s);
+	(void)fprintf(stderr, "%s\n", t);
+	mem_free(t, RPC_SPERROR_BUFLEN);
 }
 
 static const char *const rpc_errlist[] = {
@@ -204,6 +202,17 @@ static const char *const rpc_errlist[] = {
 	"RPC: Program not registered",	/* 15 - RPC_PROGNOTREGISTERED */
 	"RPC: Failed (unspecified error)",	/* 16 - RPC_FAILED */
 	"RPC: Unknown protocol"	/* 17 - RPC_UNKNOWNPROTO */
+	"RPC: Interrupted"	/* 18 - RPC_INTR */
+	"RPC: Unknown remote address"	/* 19 - RPC_UNKNOWNADDR */
+	"RPC_TLIERROR"	/* 20 - RPC_TLIERROR */
+	"RPC: Broadcasting not supported"	/* 21 - RPC_NOBROADCAST */
+	"RPC: Name to address translation failed"/* 22 - RPC_N2AXLATEFAILURE */
+	"RPC_UDERROR"	/* 23 - RPC_UDERROR */
+	"RPC_INPROGRESS"	/* 24 - RPC_INPROGRESS */
+	"RPC_STALERACHANDLE"	/* 25 - RPC_STALERACHANDLE */
+	"RPC_CANTCONNECT"	/* 26 - RPC_CANTCONNECT */
+	"RPC_XPRTFAILED"	/* 27 - RPC_XPRTFAILED */
+	"RPC_CANTCREATESTREAM"	/* 28 - RPC_CANTCREATESTREAM */
 };
 
 /*
@@ -225,83 +234,6 @@ void
 clnt_perrno(enum clnt_stat num)
 {
 	(void)fprintf(stderr, "%s\n", clnt_sperrno(num));
-}
-
-char *
-clnt_spcreateerror(const char *s)
-{
-	char *str, *err;
-	size_t len, i;
-
-	if (s == NULL)
-		return (0);
-
-	str = _buf();		/* side effect: sets CLNT_PERROR_BUFLEN */
-	if (str == 0)
-		return (0);
-	len = CLNT_PERROR_BUFLEN;
-	snprintf(str, len, "%s: ", s);
-	i = strlen(str);
-	if (i > 0)
-		len -= i;
-	(void)strncat(str, clnt_sperrno(rpc_createerr.cf_stat), len - 1);
-	switch (rpc_createerr.cf_stat) {
-	case RPC_PMAPFAILURE:
-		(void)strncat(str, " - ", len - 1);
-		err = clnt_sperrno(rpc_createerr.cf_error.re_status);
-		if (err)
-			(void)strncat(str, err + 5, len - 5);
-		switch (rpc_createerr.cf_error.re_status) {
-		case RPC_CANTSEND:
-		case RPC_CANTRECV:
-			i = strlen(str);
-			len -= i;
-			snprintf(str + i, len, ": errno %d (%s)",
-				 rpc_createerr.cf_error.re_errno,
-				 strerror(rpc_createerr.cf_error.re_errno));
-			break;
-		default:
-			break;
-		}
-		break;
-
-	case RPC_SYSTEMERROR:
-		(void)strncat(str, " - ", len - 1);
-		(void)strncat(str, strerror(rpc_createerr.cf_error.re_errno),
-			      len - 4);
-		break;
-
-	case RPC_CANTSEND:
-	case RPC_CANTDECODERES:
-	case RPC_CANTENCODEARGS:
-	case RPC_SUCCESS:
-	case RPC_UNKNOWNPROTO:
-	case RPC_PROGNOTREGISTERED:
-	case RPC_FAILED:
-	case RPC_UNKNOWNHOST:
-	case RPC_CANTDECODEARGS:
-	case RPC_PROCUNAVAIL:
-	case RPC_PROGVERSMISMATCH:
-	case RPC_PROGUNAVAIL:
-	case RPC_AUTHERROR:
-	case RPC_VERSMISMATCH:
-	case RPC_TIMEDOUT:
-	case RPC_CANTRECV:
-	default:
-		break;
-	}
-	str[CLNT_PERROR_BUFLEN - 1] = '\0';
-	return (str);
-}
-
-void
-clnt_pcreateerror(const char *s)
-{
-
-	if (s == NULL)
-		return;
-
-	(void)fprintf(stderr, "%s\n", clnt_spcreateerror(s));
 }
 
 static const char *const auth_errlist[] = {
