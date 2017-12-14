@@ -57,7 +57,7 @@
 
 #include <rpc/work_pool.h>
 
-#define WORK_POOL_STACK_SIZE MAX(64 * 1024, PTHREAD_STACK_MIN)
+#define WORK_POOL_STACK_SIZE MAX(1 * 1024 * 1024, PTHREAD_STACK_MIN)
 #define WORK_POOL_TIMEOUT_MS (31 /* seconds (prime) */ * 1000)
 
 /* forward declaration in lieu of moving code, was inline */
