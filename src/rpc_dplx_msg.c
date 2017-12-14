@@ -141,22 +141,66 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 				break;
 			};
 			return (true);
-		} else {
-			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
-				"%s:%u ACCEPTED non-INLINE",
-				__func__, __LINE__);
-			return (inline_xdr_union(xdrs,
-				(enum_t *) &(dmsg->rm_reply.rp_stat),
-				(caddr_t)(void *)&(dmsg->rm_reply.ru),
-				reply_dscrm, NULL_xdrproc_t));
 		}
-		/* never arrives here */
-		break;
+
+		__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
+			"%s:%u ACCEPTED non-INLINE",
+			__func__, __LINE__);
+		if (!xdr_putuint32(xdrs, &(dmsg->rm_xid))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_xid %u",
+				__func__, __LINE__,
+				dmsg->rm_xid);
+			return (false);
+		}
+		if (!xdr_putenum(xdrs, dmsg->rm_direction)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_direction %u",
+				__func__, __LINE__,
+				dmsg->rm_direction);
+			return (false);
+		}
+		if (!inline_xdr_union(xdrs,
+				      (enum_t *) &(dmsg->rm_reply.rp_stat),
+				      (caddr_t)(void *)&(dmsg->rm_reply.ru),
+				      reply_dscrm, NULL_xdrproc_t)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR inline_xdr_union",
+				__func__, __LINE__);
+			return (false);
+		}
+		return (true);
 	}
 	case MSG_DENIED:
 	{
 		struct rejected_reply *rr = (struct rejected_reply *)
 						&(dmsg->rm_reply.ru);
+
+		buf = XDR_INLINE(xdrs, 3 * BYTES_PER_XDR_UNIT);
+		if (buf != NULL) {
+			IXDR_PUT_INT32(buf, dmsg->rm_xid);
+			IXDR_PUT_ENUM(buf, dmsg->rm_direction);
+			IXDR_PUT_ENUM(buf, dmsg->rm_reply.rp_stat);
+		} else if (!xdr_putuint32(xdrs, &(dmsg->rm_xid))) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_xid %u",
+				__func__, __LINE__,
+				dmsg->rm_xid);
+			return (false);
+		} else if (!xdr_putenum(xdrs, dmsg->rm_direction)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rm_direction %u",
+				__func__, __LINE__,
+				dmsg->rm_direction);
+			return (false);
+		} else if (!xdr_putenum(xdrs, dmsg->rm_reply.rp_stat)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s:%u ERROR rp_stat %u",
+				__func__, __LINE__,
+				dmsg->rm_reply.rp_stat);
+			return (false);
+		}
+
 		switch (rr->rj_stat) {
 		case RPC_MISMATCH:
 			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
