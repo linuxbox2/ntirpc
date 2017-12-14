@@ -337,21 +337,6 @@ clnt_vc_call(struct clnt_req *cc)
 	return (RPC_SUCCESS);
 }
 
-static void
-clnt_vc_geterr(CLIENT *clnt, struct rpc_err *errp)
-{
-	struct cx_data *cx = CX_DATA(clnt);
-	XDR *xdrs = cx->cx_rec->ioq.xdrs;
-
-	if (xdrs->x_lib[0]) {
-		struct clnt_req *cc = (struct clnt_req *) xdrs->x_lib[0];
-		*errp = cc->cc_error;
-	} else {
-		/* always zero */
-		*errp = CX_DATA(clnt)->cx_error;
-	}
-}
-
 static bool
 clnt_vc_freeres(CLIENT *clnt, xdrproc_t xdr_res, void *res_ptr)
 {
@@ -515,7 +500,6 @@ clnt_vc_ops(void)
 	if (ops.cl_call == NULL) {
 		ops.cl_call = clnt_vc_call;
 		ops.cl_abort = clnt_vc_abort;
-		ops.cl_geterr = clnt_vc_geterr;
 		ops.cl_freeres = clnt_vc_freeres;
 		ops.cl_destroy = clnt_vc_destroy;
 		ops.cl_control = clnt_vc_control;

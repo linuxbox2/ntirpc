@@ -1,6 +1,6 @@
-
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,11 +40,12 @@
 #include <config.h>
 #include <pthread.h>
 #include <reentrant.h>
-#include <rpc/rpc.h>
 #include <sys/types.h>
-#include <rpc/raw.h>
 #include <stdlib.h>
+
+#include <rpc/rpc.h>
 #include <rpc/svc_rqst.h>
+#include "rpc_raw.h"
 #include "svc_internal.h"
 
 #ifndef UDPMSGSIZE
@@ -54,47 +55,69 @@
 /*
  * This is the "network" that we will be moving data over
  */
-static struct svc_raw_private {
-	char *raw_buf;		/* should be shared with the cl handle */
-	SVCXPRT server;
-	XDR xdr_stream;
-	char verf_body[MAX_AUTH_BYTES];
-} *svc_raw_private;
+static struct rpc_raw_xprt *svc_raw_private;
 
 extern mutex_t svcraw_lock;
 
 static void svc_raw_ops(SVCXPRT *);
 
-char *__rpc_rawcombuf = NULL;
+/*static*/ void
+svc_raw_xprt_free(struct rpc_raw_xprt *srp)
+{
+	XDR_DESTROY(srp->raw_dr.ioq.xdrs);
+	rpc_dplx_rec_destroy(&srp->raw_dr);
+	mem_free(srp, sizeof(struct rpc_raw_xprt) + srp->raw_dr.maxrec);
+}
+
+static struct rpc_raw_xprt *
+svc_raw_xprt_zalloc(size_t sz)
+{
+	struct rpc_raw_xprt *srp = mem_zalloc(sizeof(struct rpc_raw_xprt) + sz);
+
+	/* Init SVCXPRT locks, etc */
+	rpc_dplx_rec_init(&srp->raw_dr);
+	xdr_ioq_setup(&srp->raw_dr.ioq);
+	return (srp);
+}
 
 SVCXPRT *
 svc_raw_ncreate(void)
 {
-	struct svc_raw_private *srp;
+	SVCXPRT *xprt;
+	struct rpc_raw_xprt *srp;
 
 	/* VARIABLES PROTECTED BY svcraw_lock: svc_raw_private, srp */
 	mutex_lock(&svcraw_lock);
 	srp = svc_raw_private;
 	if (srp == NULL) {
-		srp = (struct svc_raw_private *)mem_alloc(sizeof(*srp));
-		if (__rpc_rawcombuf == NULL)
-			__rpc_rawcombuf = mem_alloc(UDPMSGSIZE * sizeof(char));
-		srp->raw_buf = __rpc_rawcombuf;	/* Share it with the client */
+		srp = svc_raw_xprt_zalloc(UDPMSGSIZE);
+		srp->raw_dr.xprt.xp_fd = FD_SETSIZE;
 		svc_raw_private = srp;
 	}
-	srp->server.xp_fd = FD_SETSIZE;
-	srp->server.xp_p3 = NULL;
-	svc_raw_ops(&srp->server);
+	xprt = &srp->raw_dr.xprt;
+
+	svc_raw_ops(xprt);
 /* XXX check and or fixme */
 #if 0
 	srp->server.xp_verf.oa_base = srp->verf_body;
 #endif
-	xdrmem_create(&srp->xdr_stream, srp->raw_buf, UDPMSGSIZE, XDR_DECODE);
-	svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, &srp->server,
+	srp->raw_dr.sendsz =
+	srp->raw_dr.recvsz =
+	srp->raw_dr.maxrec = UDPMSGSIZE;
+
+	xdrmem_create(srp->raw_dr.ioq.xdrs, srp->raw_buf, UDPMSGSIZE,
+		      XDR_DECODE);
+
+	svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
 			    SVC_RQST_FLAG_CHAN_AFFINITY);
 	mutex_unlock(&svcraw_lock);
+	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
 
-	return (&srp->server);
+#if defined(HAVE_BLKIN)
+	__rpc_set_blkin_endpoint(xprt, "svc_raw");
+#endif
+
+	return (xprt);
 }
 
  /*ARGSUSED*/
@@ -108,7 +131,7 @@ svc_raw_stat(SVCXPRT *xprt)
 static enum xprt_stat
 svc_raw_recv(SVCXPRT *xprt)
 {
-	struct svc_raw_private *srp;
+	struct rpc_raw_xprt *srp;
 
 	mutex_lock(&svcraw_lock);
 	srp = svc_raw_private;
@@ -118,7 +141,7 @@ svc_raw_recv(SVCXPRT *xprt)
 	}
 	mutex_unlock(&svcraw_lock);
 
-	return (__svc_params->request_cb(xprt, &srp->xdr_stream));
+	return (__svc_params->request_cb(xprt, srp->raw_dr.ioq.xdrs));
 }
 
 static enum xprt_stat
@@ -140,7 +163,7 @@ svc_raw_decode(struct svc_req *req)
 static enum xprt_stat
 svc_raw_reply(struct svc_req *req)
 {
-	struct svc_raw_private *srp;
+	struct rpc_raw_xprt *srp;
 	XDR *xdrs;
 
 	mutex_lock(&svcraw_lock);
@@ -151,7 +174,7 @@ svc_raw_reply(struct svc_req *req)
 	}
 	mutex_unlock(&svcraw_lock);
 
-	xdrs = &srp->xdr_stream;
+	xdrs = srp->raw_dr.ioq.xdrs;
 	xdrs->x_op = XDR_ENCODE;
 	(void)XDR_SETPOS(xdrs, 0);
 	if (!xdr_replymsg(xdrs, &req->rq_msg))

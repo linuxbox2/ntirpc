@@ -63,10 +63,6 @@
 /* Server side only remote procedure callee */
 #include <rpc/svc.h>		/* service manager and multiplexer */
 
-/* Portmapper client, server, and protocol headers */
-#include <rpc/pmap_clnt.h>
-#include <rpc/pmap_prot.h>
-
 #ifndef _KERNEL
 #include <rpc/rpcb_clnt.h>	/* rpcbind interface functions */
 #endif
@@ -77,13 +73,7 @@
 #endif
 
 __BEGIN_DECLS
-extern int get_myaddress(struct sockaddr_in *);
 extern int bindresvport(int, struct sockaddr_in *);
-extern int registerrpc(int, int, int, char *(*)(char[UDPMSGSIZE]), xdrproc_t,
-		       xdrproc_t);
-extern int callrpc(const char *, int, int, int, xdrproc_t, void *, xdrproc_t,
-		   void *);
-extern int getrpcport(char *, int, int, int);
 
 char *taddr2uaddr(const struct netconfig *, const struct netbuf *);
 struct netbuf *uaddr2taddr(const struct netconfig *, const char *);

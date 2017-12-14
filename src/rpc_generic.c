@@ -567,14 +567,22 @@ void *
 rpc_nullproc(CLIENT *clnt)
 {
 	struct clnt_req *cc = mem_alloc(sizeof(*cc));
+	enum clnt_stat stat;
 
-	clnt_req_fill(cc, clnt, authnone_create(), NULLPROC,
+	clnt_req_fill(cc, clnt, authnone_ncreate(), NULLPROC,
 		      (xdrproc_t) xdr_void, NULL,
 		      (xdrproc_t) xdr_void, NULL);
-	if (clnt_req_setup(cc, to)) {
-		if (CLNT_CALL_WAIT(cc) != RPC_SUCCESS) {
-			return (NULL);
-		}
+	stat = clnt_req_setup(cc, to);
+	if (stat == RPC_SUCCESS) {
+		stat = CLNT_CALL_WAIT(cc);
+	}
+	if (stat != RPC_SUCCESS) {
+		char *t = rpc_sperror(&cc->cc_error, __func__);
+
+		__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s", t);
+		mem_free(t, RPC_SPERROR_BUFLEN);
+		clnt_req_release(cc);
+		return (NULL);
 	}
 	clnt_req_release(cc);
 

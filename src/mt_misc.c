@@ -26,9 +26,6 @@ pthread_mutex_t svcauthkerbstats_lock = MUTEX_INITIALIZER;
 /* protects the Auths list (svc_auth.c) */
 pthread_mutex_t authsvc_lock = MUTEX_INITIALIZER;
 
-/* clnt_raw.c serialization */
-pthread_mutex_t clntraw_lock = MUTEX_INITIALIZER;
-
 /* domainname and domain_fd (getdname.c) and default_domain (rpcdname.c) */
 pthread_mutex_t dname_lock = MUTEX_INITIALIZER;
 
@@ -50,9 +47,6 @@ pthread_mutex_t portnum_lock = MUTEX_INITIALIZER;
 /* protects proglst list (svc_simple.c) */
 pthread_mutex_t proglst_lock = MUTEX_INITIALIZER;
 
-/* serializes clnt_com_create() (rpc_soc.c) */
-pthread_mutex_t rpcsoc_lock = MUTEX_INITIALIZER;
-
 /* svc_raw.c serialization */
 pthread_mutex_t svcraw_lock = MUTEX_INITIALIZER;
 
@@ -60,7 +54,6 @@ pthread_mutex_t svcraw_lock = MUTEX_INITIALIZER;
 pthread_mutex_t tsd_lock = MUTEX_INITIALIZER;
 
 /* Library global tsd keys */
-thread_key_t clnt_broadcast_key;
 thread_key_t rpc_call_key = -1;
 thread_key_t tcp_key = -1;
 thread_key_t udp_key = -1;
@@ -103,8 +96,6 @@ struct rpc_createerr *__rpc_createerr(void)
 
 void tsd_key_delete(void)
 {
-	if (clnt_broadcast_key != -1)
-		pthread_key_delete(clnt_broadcast_key);
 	if (rpc_call_key != -1)
 		pthread_key_delete(rpc_call_key);
 	if (tcp_key != -1)

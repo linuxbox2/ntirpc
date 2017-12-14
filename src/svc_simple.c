@@ -217,7 +217,7 @@ rpc_reg(rpcprog_t prognum, rpcvers_t versnum, rpcproc_t procnum,
 }
 
 /*
- * The universal handler for the services registered using registerrpc.
+ * The universal handler for the services registered using svc_reg.
  * It handles both the connectionless and the connection oriented cases.
  */
 

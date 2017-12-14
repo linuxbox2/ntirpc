@@ -77,38 +77,34 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
 {
 	CLIENT *clnt;
 	struct clnt_req *cc;
-	AUTH *auth;
-	struct rpc_err rpcerr;
 	enum clnt_stat rpc_stat;
 
 	clnt = clnt_ncreate_timed(hostname, prog, vers_high, nettype, tp);
 	if (clnt == NULL)
 		return (NULL);
 
-	auth = authnone_ncreate();	/* idempotent */
 	cc = mem_alloc(sizeof(*cc));
-	clnt_req_fill(cc, clnt, auth, NULLPROC,
+	clnt_req_fill(cc, clnt, authnone_ncreate(), NULLPROC,
 		      (xdrproc_t) xdr_void, NULL,
 		      (xdrproc_t) xdr_void, NULL);
-	if (!clnt_req_setup(cc, to)) {
-		rpc_stat = RPC_TLIERROR;
-		clnt_req_release(cc);
-		goto geterror;
+	rpc_stat = clnt_req_setup(cc, to);
+	if (rpc_stat != RPC_SUCCESS) {
+		goto error;
 	}
 
 	rpc_stat = CLNT_CALL_WAIT(cc);
-	clnt_req_release(cc);
 	if (rpc_stat == RPC_SUCCESS) {
+		clnt_req_release(cc);
 		*vers_out = vers_high;
 		return (clnt);
 	}
 
-	while (rpc_stat == RPC_PROGVERSMISMATCH && vers_high > vers_low) {
+	while (cc->cc_error.re_status == RPC_PROGVERSMISMATCH
+	    && vers_high > vers_low) {
 		unsigned int minvers, maxvers;
 
-		clnt_geterr(clnt, &rpcerr);
-		minvers = rpcerr.re_vers.low;
-		maxvers = rpcerr.re_vers.high;
+		minvers = cc->cc_error.re_vers.low;
+		maxvers = cc->cc_error.re_vers.high;
 		if (maxvers < vers_high)
 			vers_high = maxvers;
 		else
@@ -116,32 +112,26 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
 		if (minvers > vers_low)
 			vers_low = minvers;
 		if (vers_low > vers_high)
-			goto error;
+			break;
 		CLNT_CONTROL(clnt, CLSET_VERS, (char *)&vers_high);
 
-		cc = mem_alloc(sizeof(*cc));
-		clnt_req_fill(cc, clnt, auth, NULLPROC,
-			      (xdrproc_t) xdr_void, NULL,
-			      (xdrproc_t) xdr_void, NULL);
-		if (!clnt_req_setup(cc, to)) {
-			rpc_stat = RPC_TLIERROR;
-			clnt_req_release(cc);
-			goto geterror;
+		clnt_req_reset(cc);
+		rpc_stat = clnt_req_setup(cc, to);
+		if (rpc_stat != RPC_SUCCESS) {
+			break;
 		}
-
 		rpc_stat = CLNT_CALL_WAIT(cc);
-		clnt_req_release(cc);
 		if (rpc_stat == RPC_SUCCESS) {
+			clnt_req_release(cc);
 			*vers_out = vers_high;
 			return (clnt);
 		}
 	}
- geterror:
-	clnt_geterr(clnt, &rpcerr);
 
  error:
 	rpc_createerr.cf_stat = rpc_stat;
-	rpc_createerr.cf_error = rpcerr;
+	rpc_createerr.cf_error = cc->cc_error;
+	clnt_req_release(cc);
 	CLNT_DESTROY(clnt);
 	return (NULL);
 }
@@ -180,7 +170,11 @@ clnt_ncreate_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
 		nettype = NULL;
 	else {
 		size_t len = strlen(netclass);
+
 		if (len >= sizeof(nettype_array)) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: netclass too long %zu >= %zu",
+				__func__, len, sizeof(nettype_array));
 			rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
 			return (NULL);
 		}
@@ -200,10 +194,9 @@ clnt_ncreate_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
 				rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
 			break;
 		}
-#ifdef CLNT_DEBUG
-		__warnx(TIRPC_DEBUG_FLAG_CLNT_GEN, "%s: trying netid %s",
+		__warnx(TIRPC_DEBUG_FLAG_CLNT, "%s: trying netid %s",
 			__func__, nconf->nc_netid);
-#endif
+
 		clnt = clnt_tp_ncreate_timed(hostname, prog, vers, nconf, tp);
 		if (clnt)
 			break;
@@ -266,6 +259,8 @@ clnt_tp_ncreate_timed(const char *hostname, rpcprog_t prog,
 	CLIENT *cl = NULL;	/* client handle */
 
 	if (nconf == NULL) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s: %s",
+			__func__, clnt_sperrno(RPC_TLIERROR));
 		rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
 		return (NULL);
 	}
@@ -327,6 +322,8 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 
 	if (fd == RPC_ANYFD) {
 		if (nconf == NULL) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s: %s",
+				__func__, clnt_sperrno(RPC_TLIERROR));
 			rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
 			return (NULL);
 		}
@@ -347,12 +344,16 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 			goto err;
 		servtype = __rpc_socktype2seman(si.si_socktype);
 		if (servtype == -1) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s: %s",
+				__func__, clnt_sperrno(RPC_UNKNOWNPROTO));
 			rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
 			return (NULL);
 		}
 	}
 
 	if (si.si_af != ((struct sockaddr *)svcaddr->buf)->sa_family) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s: %s",
+			__func__, clnt_sperrno(RPC_UNKNOWNHOST));
 		rpc_createerr.cf_stat = RPC_UNKNOWNHOST;	/* XXX */
 		goto err1;
 	}
@@ -437,7 +438,7 @@ clnt_req_callback_default(struct clnt_req *cc)
 	mutex_unlock(&cc->cc_we.mtx);
 }
 
-bool
+enum clnt_stat
 clnt_req_refresh(struct clnt_req *cc)
 {
 	struct cx_data *cx = CX_DATA(cc->cc_clnt);
@@ -455,10 +456,12 @@ clnt_req_refresh(struct clnt_req *cc)
 			"%s: %p fd %d insert failed xid %" PRIu32,
 			__func__, &rec->xprt, rec->xprt.xp_fd,
 			cc->cc_xid);
-		return (false);
+		cc->cc_error.re_status = RPC_TLIERROR;
+		return (RPC_TLIERROR);
 	}
 
-	return (true);
+	cc->cc_error.re_status = RPC_SUCCESS;
+	return (RPC_SUCCESS);
 }
 
 void
@@ -479,7 +482,7 @@ clnt_req_reset(struct clnt_req *cc)
 	}
 }
 
-bool
+enum clnt_stat
 clnt_req_setup(struct clnt_req *cc, struct timespec timeout)
 {
 	CLIENT *clnt = cc->cc_clnt;
@@ -500,7 +503,8 @@ clnt_req_setup(struct clnt_req *cc, struct timespec timeout)
 			"%s: %p fd %d bad timeout (%ld.%09ld)",
 			__func__, &rec->xprt, rec->xprt.xp_fd,
 			timeout.tv_sec, timeout.tv_nsec);
-		return (false);
+		cc->cc_error.re_status = RPC_TLIERROR;
+		return (RPC_TLIERROR);
 	}
 	if (timeout.tv_sec > 10) {
 		__warnx(TIRPC_DEBUG_FLAG_WARN,
@@ -517,11 +521,12 @@ clnt_req_setup(struct clnt_req *cc, struct timespec timeout)
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d insert failed xid %" PRIu32,
 			__func__, &rec->xprt, rec->xprt.xp_fd, cc->cc_xid);
-		return (false);
+		cc->cc_error.re_status = RPC_TLIERROR;
+		return (RPC_TLIERROR);
 	}
 
 	CLNT_REF(clnt, CLNT_REF_FLAG_NONE);
-	return (true);
+	return (RPC_SUCCESS);
 }
 
 /*
@@ -636,9 +641,8 @@ clnt_req_wait_reply(struct clnt_req *cc)
 			if (!AUTH_REFRESH(cc->cc_auth, NULL)) {
 				return (RPC_AUTHERROR);
 			}
-			if (!clnt_req_refresh(cc)) {
-				cc->cc_error.re_status = RPC_TLIERROR;
-				return (RPC_TLIERROR);
+			if (clnt_req_refresh(cc) != RPC_SUCCESS) {
+				return (cc->cc_error.re_status);
 			}
 		}
 		atomic_clear_uint16_t_bits(&cc->cc_flags,
@@ -701,7 +705,7 @@ int __rpc_raise_fd(int fd)
 
 	if (close(fd) == -1) {
 		/* this is okay, we will log an error, then use the new fd */
-		__warnx(TIRPC_DEBUG_FLAG_CLNT_GEN,
+		__warnx(TIRPC_DEBUG_FLAG_WARN,
 			"could not close() fd %d; mem & fd leak", fd);
 	}
 

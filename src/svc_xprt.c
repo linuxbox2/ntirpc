@@ -38,9 +38,6 @@
 #include <rpc/types.h>
 #include <misc/portable.h>
 #include <rpc/rpc.h>
-#ifdef PORTMAP
-#include <rpc/pmap_clnt.h>
-#endif				/* PORTMAP */
 #include "rpc_com.h"
 #include "rpc_dplx_internal.h"
 #include "svc_xprt.h"

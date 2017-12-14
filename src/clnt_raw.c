@@ -46,27 +46,32 @@
 #include <stdlib.h>
 
 #include <rpc/rpc.h>
-#include <rpc/raw.h>
+#include "rpc_raw.h"
+#include "clnt_internal.h"
 
-extern mutex_t clntraw_lock; /* XXXX does it need to be extern? */
-
-#define MCALL_MSG_SIZE 24
-
-/*
- * This is the "network" we will be moving stuff over.
- */
-static struct clntraw_private {
-	CLIENT client_object;
+struct cm_data {
+	struct cx_data cm_cx;
 	XDR xdr_stream;
-	char *_raw_buf;
-	union {
-		struct rpc_msg mashl_rpcmsg;
-		char mashl_callmsg[MCALL_MSG_SIZE];
-	} u;
-	u_int mcnt;
-} *clntraw_private;
+};
+#define CM_DATA(p) (opr_containerof((p), struct cm_data, cm_cx))
 
 static struct clnt_ops *clnt_raw_ops(void);
+
+static void
+clnt_raw_data_free(struct cm_data *cm)
+{
+	clnt_data_destroy(&cm->cm_cx);
+	mem_free(cm, sizeof(struct cm_data));
+}
+
+static struct cm_data *
+clnt_raw_data_zalloc(void)
+{
+	struct cm_data *cm = mem_zalloc(sizeof(struct cm_data));
+
+	clnt_data_init(&cm->cm_cx);
+	return (cm);
+}
 
 /*
  * Create a client handle for memory based rpc.
@@ -74,23 +79,22 @@ static struct clnt_ops *clnt_raw_ops(void);
 CLIENT *
 clnt_raw_ncreate(rpcprog_t prog, rpcvers_t vers)
 {
-	struct clntraw_private *clp;
+	struct cm_data *cm = clnt_raw_data_zalloc();
+	CLIENT *client = &cm->cm_cx.cx_c;
+	SVCXPRT *xprt;
 	struct rpc_msg call_msg;
-	XDR *xdrs;
-	CLIENT *client;
+	XDR xdrs[1];		/* temp XDR stream */
 
-	mutex_lock(&clntraw_lock);
-	clp = clntraw_private;
-	if (clp == NULL) {
-		clp = (struct clntraw_private *)mem_zalloc(sizeof(*clp));
-		if (__rpc_rawcombuf == NULL)
-			__rpc_rawcombuf =
-			    (char *)mem_zalloc(UDPMSGSIZE);
-		clp->_raw_buf = __rpc_rawcombuf;
-		clntraw_private = clp;
+	/* find or create shared state; ref+1 */
+	xprt = svc_raw_ncreate();
+	if (!xprt) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: svc_raw_ncreatef failed",
+			__func__);
+		client->cl_error.re_status = RPC_TLIERROR;
+		return (client);
 	}
-	xdrs = &clp->xdr_stream;
-	client = &clp->client_object;
+
 	/*
 	 * pre-serialize the static part of the call msg and stash it away
 	 */
@@ -98,57 +102,59 @@ clnt_raw_ncreate(rpcprog_t prog, rpcvers_t vers)
 	call_msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
 	call_msg.cb_prog = prog;
 	call_msg.cb_vers = vers;
-	xdrmem_create(xdrs, clp->u.mashl_callmsg, MCALL_MSG_SIZE, XDR_ENCODE);
-	if (!xdr_callhdr(xdrs, &call_msg))
-		__warnx(TIRPC_DEBUG_FLAG_CLNT_RAW,
-			"clntraw_create - Fatal header serialization error.");
-	clp->mcnt = XDR_GETPOS(xdrs);
+	xdrmem_create(xdrs, cm->cm_cx.cx_u.cx_mcallc, MCALL_MSG_SIZE,
+		      XDR_ENCODE);
+	if (!xdr_callhdr(xdrs, &call_msg)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: xdr_callhdr failed",
+			__func__);
+		client->cl_error.re_status = RPC_CANTENCODEARGS;
+		XDR_DESTROY(xdrs);
+		return (client);
+	}
+	cm->cm_cx.cx_mpos = XDR_GETPOS(xdrs);
 	XDR_DESTROY(xdrs);
 
-	/*
-	 * Set xdrmem for client/server shared buffer
-	 */
-	xdrmem_create(xdrs, clp->_raw_buf, UDPMSGSIZE, XDR_FREE);
-
-	/*
-	 * create client handle
-	 */
 	client->cl_ops = clnt_raw_ops();
-	mutex_unlock(&clntraw_lock);
+
+	__warnx(TIRPC_DEBUG_FLAG_CLNT_RAW,
+		"%s: completed",
+		__func__);
 	return (client);
 }
 
-/* ARGSUSED */
 static enum clnt_stat
 clnt_raw_call(struct clnt_req *cc)
 {
-	struct clntraw_private *clp = clntraw_private;
-	XDR *xdrs = &clp->xdr_stream;
+	CLIENT *clnt = cc->cc_clnt;
+	struct cx_data *cx = CX_DATA(clnt);
+	struct cm_data *cm = CM_DATA(cx);
+	XDR *xdrs = &cm->xdr_stream;
 	struct rpc_msg msg;
 	struct rpc_err error;
 
 	cc->cc_error.re_status = RPC_SUCCESS;
 
-	mutex_lock(&clntraw_lock);
-	if (clp == NULL) {
-		mutex_unlock(&clntraw_lock);
-		return (RPC_FAILED);
-	}
-	mutex_unlock(&clntraw_lock);
+	mutex_lock(&clnt->cl_lock);
+	cx->cx_u.cx_mcalli = ntohl(cc->cc_xid);
 
 	/*
 	 * send request
 	 */
-	xdrs->x_op = XDR_ENCODE;
-	XDR_SETPOS(xdrs, 0);
-	clp->u.mashl_rpcmsg.rm_xid++;
-	if ((!XDR_PUTBYTES(xdrs, clp->u.mashl_callmsg, clp->mcnt))
+	if ((!XDR_PUTBYTES(xdrs, cx->cx_u.cx_mcallc, cx->cx_mpos))
 	    || (!XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc))
 	    || (!AUTH_MARSHALL(cc->cc_auth, xdrs))
 	    || (!(*cc->cc_call.proc) (xdrs, cc->cc_call.where))) {
+		/* error case */
+		mutex_unlock(&clnt->cl_lock);
+		__warnx(TIRPC_DEBUG_FLAG_CLNT_RAW,
+			"%s: failed",
+			__func__);
+		XDR_DESTROY(xdrs);
 		return (RPC_CANTENCODEARGS);
 	}
 	(void)XDR_GETPOS(xdrs);	/* called just to cause overhead */
+	mutex_unlock(&clnt->cl_lock);
 
 #if 0
 	/*
@@ -188,28 +194,11 @@ clnt_raw_call(struct clnt_req *cc)
 	return (error.re_status);
 }
 
- /*ARGSUSED*/
-static void clnt_raw_geterr(CLIENT *cl, struct rpc_err *err)
-{
-}
-
 /* ARGSUSED */
 static bool
 clnt_raw_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
 {
-	struct clntraw_private *clp = clntraw_private;
-	XDR *xdrs = &clp->xdr_stream;
-	bool rval;
-
-	mutex_lock(&clntraw_lock);
-	if (clp == NULL) {
-		rval = (bool) RPC_FAILED;
-		mutex_unlock(&clntraw_lock);
-		return (rval);
-	}
-	mutex_unlock(&clntraw_lock);
-	xdrs->x_op = XDR_FREE;
-	return ((*xdr_res) (xdrs, res_ptr));
+	return (xdr_free(xdr_res, res_ptr));
 }
 
 /*ARGSUSED*/
@@ -225,9 +214,15 @@ clnt_raw_control(CLIENT *cl, u_int ui, void *str)
 	return (false);
 }
 
-/*ARGSUSED*/
-static void clnt_raw_destroy(CLIENT *cl)
+static void
+clnt_raw_destroy(CLIENT *client)
 {
+	struct cx_data *cx = CX_DATA(client);
+
+	if (cx->cx_rec) {
+		SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
+	}
+	clnt_raw_data_free(CM_DATA(cx));
 }
 
 static struct clnt_ops *
@@ -242,7 +237,6 @@ clnt_raw_ops(void)
 	if (ops.cl_call == NULL) {
 		ops.cl_call = clnt_raw_call;
 		ops.cl_abort = clnt_raw_abort;
-		ops.cl_geterr = clnt_raw_geterr;
 		ops.cl_freeres = clnt_raw_freeres;
 		ops.cl_destroy = clnt_raw_destroy;
 		ops.cl_control = clnt_raw_control;

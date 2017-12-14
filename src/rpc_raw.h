@@ -4,6 +4,7 @@
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,6 +40,8 @@
 /*	from: @(#)raw.h	1.11	94/04/25 SMI */
 /*	from: @(#)raw.h 1.2 88/10/25 SMI	*/
 
+#include "rpc_dplx_internal.h"
+
 #ifdef	__cplusplus
 extern "C" {
 #endif
@@ -49,7 +52,12 @@ extern "C" {
  * Raw interface
  * The common memory area over which they will communicate
  */
-	extern char *__rpc_rawcombuf;
+struct rpc_raw_xprt {
+	struct rpc_dplx_rec raw_dr;
+	char raw_verf_body[MAX_AUTH_BYTES];
+	char raw_buf[0];
+};
+#define RAW_DR(p) (opr_containerof((p), struct rpc_raw_xprt, raw_dr))
 
 #ifdef	__cplusplus
 }

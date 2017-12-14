@@ -26,17 +26,6 @@
 #ifndef TIRPC_COMPAT_H
 #define TIRPC_COMPAT_H
 
-/* clnt_soc.h */
-#define clnttcp_create(a, b, c, d, e, f) clnttcp_ncreate(a, b, c, d, e, f)
-#define clntraw_create(a, b) clntraw_ncreate(a, b)
-#define clnttcp6_create(a, b, c, d, e, f) clnttcp6_ncreate(a, b, c, d, e, f)
-#define clntudp_create(a, b, c, d, e) clntudp_ncreate(a, b, c, d, e)
-#define clntudp_bufcreate(a, b, c, d, e, f, g) \
-	clntudp_nbufcreate(a, b, c, d, e, f, g)
-#define clntudp6_create(a, b, c, d, e) clntudp6_ncreate(a, b, c, d, e)
-#define clntudp6_bufcreate(a, b, c, d, e, f, g) \
-	clntudp6_nbufcreate(a, b, c, d, e, f, g)
-
 /* clnt.h */
 #define clnt_create(a, b, c, d) clnt_ncreate(a, b, c, d)
 #define clnt_create_time(a, b, c, d, e) clnt_ncreate_time(a, b, c, d, e)
@@ -49,28 +38,16 @@
 	clnt_tli_ncreate(a, b, c, d, e, f, g)
 #define clnt_vc_create(a, b, c, d, e, f) clnt_vc_ncreate(a, b, c, d, e, f)
 #define clnt_vc_create_svc(a, b, c, d) clnt_vc_ncreate_svc(a, b, c, d)
-#define clntunix_create(a, b, c, d, e) clntunix_ncreate(a, b, c, d, e)
 #define clnt_dg_create(a, b, c, d, e, f) clnt_dg_ncreate(a, b, c, d, e, f)
 #define clnt_raw_create(a, b) clnt_raw_ncreate(a, b)
-
-/* svc_soc.h */
-#define svcraw_create() svcraw_ncreate()
-#define svcudp_create(a) svcudp_ncreate(a)
-#define svcudp_bufcreate(a, b, c) svcudp_nbufcreate(a, b, c)
-#define svcudp6_create(a) svcudp6_ncreate(a)
-#define svcudp6_bufcreate(a, b, c) svcudp6_nbufcreate(a, b, c)
-#define svctcp_create(a, b, c) svctcp_ncreate(a, b, c)
-#define svctcp6_create(a, b, c) svctcp6_ncreate(a, b, c)
 
 /* svc.h */
 #define svc_create(a, b, c, d) svc_ncreate(a, b, c, d)
 #define svc_tp_create(a, b, c, d) svc_tp_ncreate(a, b, c, d)
 #define svc_tli_create(a, b, c, d, e) svc_tli_ncreate(a, b, c, d, e)
 #define svc_vc_create(a, b, c) svc_vc_ncreate(a, b, c)
-#define svcunix_create(a, b, c, d) svcunix_ncreate(a, b, c, d)
 #define svc_dg_create(a, b, c) svc_dg_ncreate(a, b, c)
 #define svc_fd_create(a, b, c) svc_fd_ncreate(a, b, c)
-#define svcunixfd_create(a, b, c) svcunixfd_ncreate(a, b, c)
 #define svc_raw_create() svc_raw_ncreate()
 #define svc_rdma_create(a, b, c) svc_rdma_ncreate(a, b, c)
 

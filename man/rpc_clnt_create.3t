@@ -16,14 +16,11 @@
 .Nm clnt_create_vers_timed ,
 .Nm clnt_destroy ,
 .Nm clnt_dg_create ,
-.Nm clnt_pcreateerror ,
 .Nm clnt_raw_create ,
-.Nm clnt_spcreateerror ,
 .Nm clnt_tli_create ,
 .Nm clnt_tp_create ,
 .Nm clnt_tp_create_timed ,
-.Nm clnt_vc_create ,
-.Nm rpc_createerr
+.Nm clnt_vc_create
 .Nd "library routines for dealing with creation and manipulation of"
 .Vt CLIENT
 handles
@@ -45,10 +42,6 @@ handles
 .Fn CLNT_DESTROY "CLIENT *clnt"
 .Ft "CLIENT *"
 .Fn clnt_dg_create "const int fildes" "const struct netbuf *svcaddr" "const rpcprog_t prognum" "const rpcvers_t versnum" "const u_int sendsz" "const u_int recvsz"
-.Ft void
-.Fn clnt_pcreateerror "const char *s"
-.Ft "char *"
-.Fn clnt_spcreateerror "const char *s"
 .Ft "CLIENT *"
 .Fn clnt_raw_create "const rpcprog_t prognum" "const rpcvers_t versnum"
 .Ft "CLIENT *"
@@ -124,7 +117,7 @@ This routine returns
 .Dv NULL
 if it fails.
 The
-.Fn clnt_pcreateerror
+.Fn rpc_perror
 routine can be used to print the reason for failure.
 .Pp
 Note:
@@ -191,7 +184,7 @@ This routine returns
 .Dv NULL
 if it fails.
 The
-.Fn clnt_pcreateerror
+.Fn rpc_perror
 routine can be used to print the reason for failure.
 Note:
 .Fn clnt_create
@@ -279,21 +272,6 @@ values of 0 choose suitable defaults.
 This routine returns
 .Dv NULL
 if it fails.
-.It Fn clnt_pcreateerror
-Print a message to standard error indicating
-why a client RPC handle could not be created.
-The message is prepended with the string
-.Fa s
-and a colon, and appended with a newline.
-.It Fn clnt_spcreateerror
-Like
-.Fn clnt_pcreateerror ,
-except that it returns a string
-instead of printing to the standard error.
-A newline is not appended to the message in this case.
-Warning:
-returns a pointer to a buffer that is overwritten
-on each call.
 .It Fn clnt_raw_create
 This routine creates an RPC
 client handle for the remote program
@@ -375,7 +353,7 @@ This routine returns
 .Dv NULL
 if it fails.
 The
-.Fn clnt_pcreateerror
+.Fn rpc_perror
 routine can be used to print the reason for failure.
 The remote rpcbind
 service (see
@@ -409,7 +387,7 @@ This routine returns
 .Dv NULL
 if it fails.
 The
-.Fn clnt_pcreateerror
+.Fn rpc_perror
 routine can be used to print the reason for failure.
 .It Fn clnt_tp_create_timed
 Like
@@ -457,15 +435,6 @@ The
 .Fn clnt_vc_create
 function
 does not consult the remote rpcbind service for this information.
-.It Xo
-.Vt "struct rpc_createerr" Va rpc_createerr ;
-.Xc
-A global variable whose value is set by any RPC
-client handle creation routine
-that fails.
-It is used by the routine
-.Fn clnt_pcreateerror
-to print the reason for the failure.
 .El
 .Sh SEE ALSO
 .Xr rpc 3 ,

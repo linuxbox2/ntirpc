@@ -53,7 +53,6 @@
 #include <rpc/rpc.h>
 #ifdef PORTMAP
 #include <rpc/pmap_prot.h>
-#include <rpc/pmap_clnt.h>
 #include <rpc/pmap_rmt.h>
 #endif				/* PORTMAP */
 #include <rpc/nettype.h>

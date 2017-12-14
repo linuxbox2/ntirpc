@@ -164,19 +164,11 @@ clnt_rdma_call(struct clnt_req *cc)
 	}
 
 	if (! xdr_rdma_clnt_flushout(&cm->cm_xdrs)) {
-		cx->cx_error.re_errno = errno;
+		cl->cl_error.re_errno = errno;
 		return (RPC_CANTSEND);
 	}
 
 	return (RPC_SUCCESS);
-}
-
-static void
-clnt_rdma_geterr(CLIENT *cl, struct rpc_err *errp)
-{
-	struct cx_data *cx = CX_DATA(cl);
-
-	*errp = cx->cx_error;
 }
 
 static bool
@@ -301,7 +293,6 @@ clnt_rdma_ops(void)
 	if (ops.cl_call == NULL) {
 		ops.cl_call = clnt_rdma_call;
 		ops.cl_abort = clnt_rdma_abort;
-		ops.cl_geterr = clnt_rdma_geterr;
 		ops.cl_freeres = clnt_rdma_freeres;
 		ops.cl_destroy = clnt_rdma_destroy;
 		ops.cl_control = clnt_rdma_control;

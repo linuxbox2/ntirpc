@@ -163,18 +163,19 @@ typedef struct {
  */
 
 typedef struct {
-    AUTH    *cl_auth;    /* authenticator */
     struct clnt_ops {
         enum clnt_stat    (*cl_call)();    /* call remote procedure */
         void    (*cl_abort)();        /* abort a call */
-        void    (*cl_geterr)();        /* get specific error code */
         bool_t    (*cl_freeres)();    /* frees results */
         void    (*cl_destroy)();    /* destroy this structure */
         bool_t    (*cl_control)();    /* the ioctl() of rpc */
     } *cl_ops;
-    caddr_t    cl_private;    /* private stuff */
+
     char    *cl_netid;    /* network identifier */
     char    *cl_tp;        /* device name */
+    void *cl_u1;           /* client user data */
+    void *cl_u2;           /* client user data */
+    struct rpc_err cl_error; /* specific error code */
 } CLIENT;
 .Ed
 .Sh "The SVCXPRT structure"
@@ -322,10 +323,6 @@ pages on which they are described:
 .Xr rpc_soc 3
 .It Fn authunix_create_default
 .Xr rpc_soc 3
-.It Fn callrpc
-.Xr rpc_soc 3
-.It Fn clnt_broadcast
-.Xr rpc_soc 3
 .It Fn clnt_call
 .Xr rpc_clnt_calls 3
 .It Fn clnt_control
@@ -344,21 +341,11 @@ pages on which they are described:
 .Xr rpc_clnt_create 3
 .It Fn clnt_freeres
 .Xr rpc_clnt_calls 3
-.It Fn clnt_geterr
-.Xr rpc_clnt_calls 3
-.It Fn clnt_pcreateerror
-.Xr rpc_clnt_create 3
 .It Fn clnt_perrno
-.Xr rpc_clnt_calls 3
-.It Fn clnt_perror
 .Xr rpc_clnt_calls 3
 .It Fn clnt_raw_create
 .Xr rpc_clnt_create 3
-.It Fn clnt_spcreateerror
-.Xr rpc_clnt_create 3
 .It Fn clnt_sperrno
-.Xr rpc_clnt_calls 3
-.It Fn clnt_sperror
 .Xr rpc_clnt_calls 3
 .It Fn clnt_tli_create
 .Xr rpc_clnt_create 3
@@ -370,32 +357,16 @@ pages on which they are described:
 .Xr rpc_soc 3
 .It Fn clnt_vc_create
 .Xr rpc_clnt_create 3
-.It Fn clntraw_create
-.Xr rpc_soc 3
-.It Fn clnttcp_create
-.Xr rpc_soc 3
-.It Fn clntudp_bufcreate
-.Xr rpc_soc 3
-.It Fn get_myaddress
-.Xr rpc_soc 3
-.It Fn pmap_getmaps
-.Xr rpc_soc 3
-.It Fn pmap_getport
-.Xr rpc_soc 3
-.It Fn pmap_rmtcall
-.Xr rpc_soc 3
-.It Fn pmap_set
-.Xr rpc_soc 3
-.It Fn pmap_unset
-.Xr rpc_soc 3
-.It Fn registerrpc
-.Xr rpc_soc 3
 .It Fn rpc_broadcast
 .Xr rpc_clnt_calls 3
 .It Fn rpc_broadcast_exp
 .Xr rpc_clnt_calls 3
 .It Fn rpc_call
 .Xr rpc_clnt_calls 3
+.It Fn rpc_perror
+.Xr rpc_soc 3
+.It Fn rpc_sperror
+.Xr rpc_soc 3
 .It Fn rpc_reg
 .Xr rpc_svc_calls 3
 .It Fn svc_create
@@ -406,8 +377,6 @@ pages on which they are described:
 .Xr rpc_svc_create 3
 .It Fn svc_fd_create
 .Xr rpc_svc_create 3
-.It Fn svc_getcaller
-.Xr rpc_soc 3
 .It Fn svc_getrpccaller
 .Xr rpc_svc_calls 3
 .It Fn svc_kerb_reg
@@ -416,8 +385,6 @@ pages on which they are described:
 .Xr rpc_svc_create 3
 .It Fn svc_reg
 .Xr rpc_svc_calls 3
-.It Fn svc_register
-.Xr rpc_soc 3
 .It Fn svc_sendreply
 .Xr rpc_svc_reg 3
 .It Fn svc_tli_create
@@ -426,8 +393,6 @@ pages on which they are described:
 .Xr rpc_svc_create 3
 .It Fn svc_unreg
 .Xr rpc_svc_calls 3
-.It Fn svc_unregister
-.Xr rpc_soc 3
 .It Fn svc_vc_create
 .Xr rpc_svc_create 3
 .It Fn svcerr_auth
@@ -444,16 +409,6 @@ pages on which they are described:
 .Xr rpc_svc_err 3
 .It Fn svcerr_weakauth
 .Xr rpc_svc_err 3
-.It Fn svcfd_create
-.Xr rpc_soc 3
-.It Fn svcraw_create
-.Xr rpc_soc 3
-.It Fn svctcp_create
-.Xr rpc_soc 3
-.It Fn svcudp_bufcreate
-.Xr rpc_soc 3
-.It Fn svcudp_create
-.Xr rpc_soc 3
 .It Fn xdr_accepted_reply
 .Xr rpc_xdr 3
 .It Fn xdr_authsys_parms

@@ -477,8 +477,8 @@ authgss_refresh(AUTH *auth, void *arg)
 				      (xdrproc_t) xdr_rpc_gss_init_args,
 				      &send_token,
 				      (xdrproc_t) xdr_rpc_gss_init_res, &gr);
-			call_stat = RPC_TLIERROR;
-			if (clnt_req_setup(cc, to)) {
+			call_stat = clnt_req_setup(cc, to);
+			if (call_stat == RPC_SUCCESS) {
 				call_stat = CLNT_CALL_WAIT(cc);
 			}
 			clnt_req_release(cc);
@@ -589,7 +589,7 @@ authgss_destroy_context(AUTH *auth)
 			clnt_req_fill(cc, gd->clnt, auth, NULLPROC,
 				      (xdrproc_t) xdr_void, NULL,
 				      (xdrproc_t) xdr_void, NULL);
-			if (clnt_req_setup(cc, to)) {
+			if (clnt_req_setup(cc, to) == RPC_SUCCESS) {
 				CLNT_CALL_WAIT(cc);
 			}
 			clnt_req_release(cc);
