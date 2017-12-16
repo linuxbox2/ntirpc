@@ -85,6 +85,8 @@ clnt_raw_ncreate(rpcprog_t prog, rpcvers_t vers)
 	struct rpc_msg call_msg;
 	XDR xdrs[1];		/* temp XDR stream */
 
+	client->cl_ops = clnt_raw_ops();
+
 	/* find or create shared state; ref+1 */
 	xprt = svc_raw_ncreate();
 	if (!xprt) {
@@ -114,8 +116,6 @@ clnt_raw_ncreate(rpcprog_t prog, rpcvers_t vers)
 	}
 	cm->cm_cx.cx_mpos = XDR_GETPOS(xdrs);
 	XDR_DESTROY(xdrs);
-
-	client->cl_ops = clnt_raw_ops();
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_RAW,
 		"%s: completed",

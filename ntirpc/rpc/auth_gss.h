@@ -128,6 +128,4 @@ void gss_log_status(char *m, OM_uint32 major, OM_uint32 minor);
 void gss_log_hexdump(const u_char *buf, int len, int offset);
 __END_DECLS
 
-/* for backward compatibility */
-#include <rpc/tirpc_compat.h>
 #endif				/* !_TIRPC_AUTH_GSS_H */

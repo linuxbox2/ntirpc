@@ -58,7 +58,6 @@ thread_key_t rpc_call_key = -1;
 thread_key_t tcp_key = -1;
 thread_key_t udp_key = -1;
 thread_key_t nc_key = -1;
-thread_key_t rce_key = -1;
 thread_key_t vsock_key = -1;
 
 /* xprtlist (svc_generic.c) */
@@ -66,33 +65,6 @@ pthread_mutex_t xprtlist_lock = MUTEX_INITIALIZER;
 
 /* serializes calls to public key routines */
 pthread_mutex_t serialize_pkey = MUTEX_INITIALIZER;
-
-#undef rpc_createerr
-
-struct rpc_createerr rpc_createerr;
-
-struct rpc_createerr *__rpc_createerr(void)
-{
-	struct rpc_createerr *rce_addr;
-
-	mutex_lock(&tsd_lock);
-	if (rce_key == -1)
-		thr_keycreate(&rce_key, thr_keyfree);
-	mutex_unlock(&tsd_lock);
-
-	rce_addr = (struct rpc_createerr *)thr_getspecific(rce_key);
-	if (!rce_addr) {
-		rce_addr = (struct rpc_createerr *)
-		    mem_alloc(sizeof(struct rpc_createerr));
-
-		if (thr_setspecific(rce_key, (void *)rce_addr) != 0) {
-			mem_free(rce_addr, sizeof(*rce_addr));
-			return (&rpc_createerr);
-		}
-		memset(rce_addr, 0, sizeof(*rce_addr));
-	}
-	return (rce_addr);
-}
 
 void tsd_key_delete(void)
 {
@@ -104,7 +76,5 @@ void tsd_key_delete(void)
 		pthread_key_delete(udp_key);
 	if (nc_key != -1)
 		pthread_key_delete(nc_key);
-	if (rce_key != -1)
-		pthread_key_delete(rce_key);
 	return;
 }

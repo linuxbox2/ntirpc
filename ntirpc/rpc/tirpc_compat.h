@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2012 Linux Box Corporation.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,21 +27,6 @@
 #ifndef TIRPC_COMPAT_H
 #define TIRPC_COMPAT_H
 
-/* clnt.h */
-#define clnt_create(a, b, c, d) clnt_ncreate(a, b, c, d)
-#define clnt_create_time(a, b, c, d, e) clnt_ncreate_time(a, b, c, d, e)
-#define clnt_create_vers(a, b, c, d, e, f) clnt_ncreate_vers(a, b, c, d, e, f)
-#define clnt_create_vers_timed(a, b, c, d, e, f, g) \
-	clnt_ncreate_vers_timed(a, b, c, d, e, f, g)
-#define clnt_tp_create(a, b, c, d) clnt_tp_ncreate(a, b, c, d)
-#define clnt_tp_create_timed(a, b, c, d, e) clnt_tp_ncreate_timed(a, b, c, d, e)
-#define clnt_tli_create(a, b, c, d, e, f, g) \
-	clnt_tli_ncreate(a, b, c, d, e, f, g)
-#define clnt_vc_create(a, b, c, d, e, f) clnt_vc_ncreate(a, b, c, d, e, f)
-#define clnt_vc_create_svc(a, b, c, d) clnt_vc_ncreate_svc(a, b, c, d)
-#define clnt_dg_create(a, b, c, d, e, f) clnt_dg_ncreate(a, b, c, d, e, f)
-#define clnt_raw_create(a, b) clnt_raw_ncreate(a, b)
-
 /* svc.h */
 #define svc_create(a, b, c, d) svc_ncreate(a, b, c, d)
 #define svc_tp_create(a, b, c, d) svc_tp_ncreate(a, b, c, d)
@@ -52,18 +38,10 @@
 #define svc_rdma_create(a, b, c) svc_rdma_ncreate(a, b, c)
 
 /* auth */
-#define authunix_create(a, b, c, d, e) authunix_ncreate(a, b, c, d, e)
-#define authunix_create_default() authunix_ncreate_default()
-#define authnone_create() authnone_ncreate()
-#define authsys_create(c, i1, i2, i3, ip) \
-	authunix_ncreate((c), (i1), (i2), (i3), (ip))
-#define authsys_create_default() authunix_ncreate_default()
 #define authkerb_seccreate(a, b, c, d, e, f) \
 	authkerb_nseccreate(a, b, c, d, e, f)
 #define authkerb_create(a, b, c, d, e, f, g, h, i) \
 	authkerb_ncreate(a, b, c, d, e, f, g, h, i)
-#define authgss_create(a, b, c) authgss_ncreate(a, b, c)
-#define authgss_create_default(a, b, c) authgss_ncreate_default(a, b, c)
 
 /* rpc_msg */
 #define xdr_callmsg xdr_ncallmsg

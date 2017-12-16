@@ -4,7 +4,6 @@ NTIRPC_${NTIRPC_VERSION} {
     __ntirpc_pkg_params;
     __rpc_address_port;
     __rpc_address_set_length;
-    __rpc_createerr;
     __rpc_dtbsize;
     __rpc_endconf;
     __rpc_fd2sockinfo;
@@ -108,7 +107,6 @@ NTIRPC_${NTIRPC_VERSION} {
     rpc_broadcast_exp;
     rpc_call;
     rpc_control;
-    rpc_createerr;
     rpc_perror;
     rpc_nullproc;
     rpc_rdma_ncreatef;

@@ -134,11 +134,14 @@ rpc_call(const char *host,	/* host name */
 		 */
 		rcp->client = clnt_ncreate(host, prognum, versnum, nettype);
 		rcp->pid = getpid();
-		if (rcp->client == NULL)
-			return (rpc_createerr.cf_stat);
+		clnt_stat = rcp->client->cl_error.re_status;
+		if (clnt_stat) {
+			CLNT_DESTROY(rcp->client);
+			rcp->client = NULL;
+			return (clnt_stat);
+		}
 
-		/* Create null auth handle--idempotent */
-		rcp->auth = authnone_create();
+		rcp->auth = authnone_ncreate();	/* idempotent */
 
 		if (CLNT_CONTROL(rcp->client, CLGET_FD, (char *)(void *)&fd))
 			fcntl(fd, F_SETFD, 1);	/* make it "close on exec" */

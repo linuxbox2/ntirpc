@@ -94,6 +94,7 @@ authnone_ncreate(void)
 			ap->no_client.ah_verf = _null_auth;
 			ap->no_client.ah_ops = authnone_ops();
 			ap->no_client.ah_private = NULL;
+			ap->no_client.ah_error.re_status = RPC_SUCCESS;
 
 			xdrmem_create(xdrs, ap->marshalled_client,
 				      (u_int) MAX_MARSHAL_SIZE, XDR_ENCODE);
@@ -117,6 +118,7 @@ authnone_ncreate_dummy(void)
 
 	ap->no_client.ah_ops = authnone_dummy();
 	ap->no_client.ah_private = NULL;
+	ap->no_client.ah_error.re_status = RPC_SUCCESS;
 	ap->no_client.ah_refcnt = 1;
 
 	return (&ap->no_client);

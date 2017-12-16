@@ -145,9 +145,9 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 		 const u_int recvsz,	/* buffer recv size */
 		 const uint32_t flags)
 {
-	SVCXPRT *xprt = NULL;
-	struct ct_data *ct = NULL;
-	CLIENT *clnt;		/* client handle */
+	struct ct_data *ct = clnt_vc_data_zalloc();
+	CLIENT *clnt = &ct->ct_cx.cx_c;
+	SVCXPRT *xprt;
 	struct svc_vc_xprt *xd;
 	struct rpc_msg call_msg;
 	sigset_t mask, newmask;
@@ -155,9 +155,14 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 	XDR ct_xdrs[1];		/* temp XDR stream */
 	socklen_t slen;
 
+	clnt->cl_ops = clnt_vc_ops();
+
 	if (raddr == NULL) {
-		rpc_createerr.cf_stat = RPC_UNKNOWNADDR;
-		return (NULL);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d called with missing servers address",
+			__func__, fd);
+		clnt->cl_error.re_status = RPC_UNKNOWNADDR;
+		return (clnt);
 	}
 	if (sizeof(struct sockaddr_storage) < raddr->len) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -166,7 +171,8 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 			__func__, fd,
 			sizeof(struct sockaddr_storage),
 			raddr->len);
-		return (NULL);
+		clnt->cl_error.re_status = RPC_UNKNOWNADDR;
+		return (clnt);
 	}
 
 	sigfillset(&newmask);
@@ -176,15 +182,15 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 		slen = sizeof(ss);
 		if (getpeername(fd, (struct sockaddr *)&ss, &slen) < 0) {
 			if (errno != ENOTCONN) {
-				rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-				rpc_createerr.cf_error.re_errno = errno;
+				clnt->cl_error.re_status = RPC_SYSTEMERROR;
+				clnt->cl_error.re_errno = errno;
 				goto err;
 			}
 			if (connect
 			    (fd, (struct sockaddr *)raddr->buf,
 			     raddr->len) < 0) {
-				rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-				rpc_createerr.cf_error.re_errno = errno;
+				clnt->cl_error.re_status = RPC_SYSTEMERROR;
+				clnt->cl_error.re_errno = errno;
 				goto err;
 			}
 			__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
@@ -208,9 +214,6 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
 	}
-
-	/* buffer sizes should match svc side */
-	ct = clnt_vc_data_zalloc();
 	ct->ct_cx.cx_rec = &xd->sx_dr;
 
 	memcpy(&ct->ct_raddr, raddr->buf, raddr->len);
@@ -234,31 +237,19 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d xdr_callhdr failed",
 			__func__, fd);
+		clnt->cl_error.re_status = RPC_CANTENCODEARGS;
+		XDR_DESTROY(ct_xdrs);
 		goto err;
 	}
 	ct->ct_cx.cx_mpos = XDR_GETPOS(ct_xdrs);
 	XDR_DESTROY(ct_xdrs);
 
-	clnt = &ct->ct_cx.cx_c;
-	clnt->cl_ops = clnt_vc_ops();
-
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_VC,
 		"%s: fd %d completed",
 		__func__, fd);
+ err:
 	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 	return (clnt);
-
- err:
-	if (ct) {
-		clnt_vc_data_free(ct);
-	}
-
-	if (xprt) {
-		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-	}
-
-	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
-	return (NULL);
 }
 
 /*
@@ -481,7 +472,9 @@ clnt_vc_destroy(CLIENT *clnt)
 {
 	struct cx_data *cx = CX_DATA(clnt);
 
-	SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
+	if (cx->cx_rec) {
+		SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
+	}
 	clnt_vc_data_free(CT_DATA(cx));
 }
 

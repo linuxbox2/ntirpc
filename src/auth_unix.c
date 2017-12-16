@@ -94,13 +94,12 @@ authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 	struct timespec now;
 	XDR xdrs;
 
-	memset(&rpc_createerr, 0, sizeof(rpc_createerr));
-
 	/*
 	 * Allocate and set up auth handle
 	 */
 	auth->ah_ops = authunix_ops();
 	auth->ah_private = NULL;
+	auth->ah_error.re_status = RPC_SUCCESS;
 	auth->ah_verf = au->au_shcred = _null_auth;
 	auth->ah_refcnt = 1;
 	au->au_shfaults = 0;
@@ -122,8 +121,10 @@ authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 	xdrmem_create(&xdrs, au->au_origcred.oa_body, MAX_AUTH_BYTES,
 		      XDR_ENCODE);
 	if (!xdr_authunix_parms(&xdrs, &aup)) {
-		rpc_createerr.cf_stat = RPC_CANTENCODEARGS;
-		goto cleanup_authunix_create;
+		__warnx(TIRPC_DEBUG_FLAG_AUTH, "%s: %s",
+			__func__, clnt_sperrno(RPC_CANTENCODEARGS));
+		auth->ah_error.re_status = RPC_CANTENCODEARGS;
+		return (auth);
 	}
 	au->au_origcred.oa_length = len = XDR_GETPOS(&xdrs);
 	au->au_origcred.oa_flavor = AUTH_UNIX;
@@ -136,10 +137,6 @@ authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 	marshal_new_auth(auth);
 	/* */
 	return (auth);
-
-cleanup_authunix_create:
-	mem_free(au, sizeof(*au));
-	return (NULL);
 }
 
 /*
@@ -151,15 +148,15 @@ authunix_ncreate_default(void)
 {
 	AUTH *result;
 	gid_t *gids;
+	char *t;
 	char machname[MAXHOSTNAMELEN + 1];
 	gid_t gid;
 	uid_t uid;
 	int len;
-
-	memset(&rpc_createerr, 0, sizeof(rpc_createerr));
+	int save_errno = 0;
 
 	if (gethostname(machname, sizeof(machname)) == -1) {
-		rpc_createerr.cf_error.re_errno = errno;
+		save_errno = errno;
 		goto out_err;
 	}
 	machname[sizeof(machname) - 1] = 0;
@@ -172,7 +169,7 @@ authunix_ncreate_default(void)
 retry:
 	len = getgroups(0, NULL);
 	if (len == -1) {
-		rpc_createerr.cf_error.re_errno = errno;
+		save_errno = errno;
 		goto out_err;
 	}
 
@@ -183,10 +180,10 @@ retry:
 
 	len = getgroups(len, gids);
 	if (len == -1) {
-		rpc_createerr.cf_error.re_errno = errno;
+		save_errno = errno;
 		mem_free(gids, (len + 1) * sizeof(gid_t));
-		if (rpc_createerr.cf_error.re_errno == EINVAL) {
-			rpc_createerr.cf_error.re_errno = 0;
+		if (save_errno == EINVAL) {
+			save_errno = 0;
 			goto retry;
 		}
 		goto out_err;
@@ -205,8 +202,13 @@ retry:
 	return result;
 
 out_err:
-	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-	return NULL;
+	result = authnone_ncreate_dummy();
+	result->ah_error.re_status = RPC_SYSTEMERROR;
+	result->ah_error.re_errno = save_errno;
+	t = rpc_sperror(&result->ah_error, __func__);
+	__warnx(TIRPC_DEBUG_FLAG_AUTH, "%s", t);
+	mem_free(t, 0);
+	return result;
 }
 
 /*

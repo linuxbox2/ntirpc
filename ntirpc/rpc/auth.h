@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,8 +48,7 @@
 #define  _TIRPC_AUTH_H
 
 #include <rpc/xdr.h>
-#include <rpc/clnt_stat.h>
-#include <rpc/auth_stat.h>
+#include <rpc/rpc_err.h>
 #include <misc/abstract_atomic.h>
 
 #include <sys/cdefs.h>
@@ -146,25 +146,34 @@ struct opaque_auth {
  * Auth handle, interface to client side authenticators.
  */
 typedef struct __auth {
-	struct opaque_auth ah_cred;
-	struct opaque_auth ah_verf;
-	union des_block ah_key;
 	struct auth_ops {
+		/* nextverf */
 		void (*ah_nextverf) (struct __auth *);
-		/* nextverf & serialize */
+
+		/* serialize */
 		 bool(*ah_marshal) (struct __auth *, XDR *);
+
 		/* validate verifier */
 		 bool(*ah_validate) (struct __auth *, struct opaque_auth *);
+
 		/* refresh credentials */
 		 bool(*ah_refresh) (struct __auth *, void *);
+
 		/* destroy this structure */
 		void (*ah_destroy) (struct __auth *);
+
 		/* encode data for wire */
 		 bool(*ah_wrap) (struct __auth *, XDR *, xdrproc_t, caddr_t);
+
 		/* decode data for wire */
 		 bool(*ah_unwrap) (struct __auth *, XDR *, xdrproc_t, caddr_t);
-
 	} *ah_ops;
+
+	union des_block ah_key;
+	struct rpc_err ah_error;
+	struct opaque_auth ah_cred;
+	struct opaque_auth ah_verf;
+
 	void *ah_private;
 	int ah_refcnt;
 } AUTH;
@@ -187,6 +196,9 @@ static inline int auth_put(AUTH *auth)
  * XDR *xdrs;
  * struct opaque_auth verf;
  */
+#define AUTH_FAILURE(auth) ((auth)->ah_error.re_status != RPC_SUCCESS)
+#define AUTH_SUCCESS(auth) ((auth)->ah_error.re_status == RPC_SUCCESS)
+
 #define AUTH_NEXTVERF(auth)                     \
 	((*((auth)->ah_ops->ah_nextverf))(auth))
 #define auth_nextverf(auth)                     \
@@ -252,6 +264,9 @@ int authany_wrap(void), authany_unwrap(void);
 
 /*
  * These are the various implementations of client side authenticators.
+ *
+ * Always returns AUTH. Must check ah_error.re_status,
+ * followed by AUTH_DESTROY() as necessary.
  */
 
 /*
@@ -352,6 +367,4 @@ __END_DECLS
 #define AUTH_KERB 4		/* kerberos style */
 #define RPCSEC_GSS 6		/* RPCSEC_GSS */
 
-/* for backward compatibility */
-#include <rpc/tirpc_compat.h>
 #endif				/* !_TIRPC_AUTH_H */

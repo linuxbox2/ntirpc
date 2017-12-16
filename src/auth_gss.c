@@ -159,9 +159,9 @@ authgss_ncreate(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 
 	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
 
-	memset(&rpc_createerr, 0, sizeof(rpc_createerr));
 	auth->ah_ops = &authgss_ops;
 	auth->ah_private = NULL;
+	auth->ah_error.re_status = RPC_SUCCESS;
 
 	/* XXX move to ctor */
 	mutex_init(&gd->lock, NULL);
@@ -170,10 +170,9 @@ authgss_ncreate(CLIENT *clnt, gss_name_t name, struct rpc_gss_sec *sec)
 	if (name != GSS_C_NO_NAME) {
 		maj_stat = gss_duplicate_name(&min_stat, name, &gd->name);
 		if (maj_stat != GSS_S_COMPLETE) {
-			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-			rpc_createerr.cf_error.re_errno = EINVAL;
-			mem_free(gd, sizeof(*gd));
-			return (NULL);
+			auth->ah_error.re_status = RPC_SYSTEMERROR;
+			auth->ah_error.re_errno = EINVAL;
+			return (auth);
 		}
 	} else
 		gd->name = name;
@@ -217,8 +216,9 @@ authgss_ncreate_default(CLIENT *clnt, char *service,
 
 	if (maj_stat != GSS_S_COMPLETE) {
 		gss_log_status("gss_import_name", maj_stat, min_stat);
-		rpc_createerr.cf_stat = RPC_AUTHERROR;
-		return (NULL);
+		auth = authnone_ncreate_dummy();
+		auth->ah_error.re_status = RPC_AUTHERROR;
+		return (auth);
 	}
 
 	auth = authgss_ncreate(clnt, name, sec);
@@ -533,10 +533,7 @@ authgss_refresh(AUTH *auth, void *arg)
 		if (gr.gr_token.length != 0)
 			gss_release_buffer(&min_stat, &gr.gr_token);
 
-		authgss_destroy(auth);
-		auth = NULL;
-		rpc_createerr.cf_stat = RPC_AUTHERROR;
-
+		auth->ah_error.re_status = RPC_AUTHERROR;
 		authgss_refresh_return(false);
 	}
 	authgss_refresh_return(true);
