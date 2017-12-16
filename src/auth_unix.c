@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -69,17 +70,15 @@ static void authunix_destroy(AUTH *);
 static void marshal_new_auth(AUTH *);
 static struct auth_ops *authunix_ops(void);
 
-/*
- * This struct is pointed to by the ah_private field of an auth_handle.
- */
 struct audata {
+	AUTH au_auth;
 	struct opaque_auth au_origcred;	/* original credentials */
 	struct opaque_auth au_shcred;	/* short hand cred */
-	u_long au_shfaults;	/* short hand cache faults */
 	char au_marshed[MAX_AUTH_BYTES];
+	u_long au_shfaults;	/* short hand cache faults */
 	u_int au_mpos;		/* xdr pos at end of marshed */
 };
-#define AUTH_PRIVATE(auth) ((struct audata *)auth->ah_private)
+#define AUTH_PRIVATE(p) (opr_containerof((p), struct audata, au_auth))
 
 /*
  * Create a unix style authenticator.
@@ -89,23 +88,19 @@ AUTH *
 authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 		 gid_t *aup_gids)
 {
+	struct audata *au = mem_alloc(sizeof(*au));
+	AUTH *auth = &au->au_auth;
 	struct authunix_parms aup;
-	char mymem[MAX_AUTH_BYTES];
 	struct timespec now;
 	XDR xdrs;
-	AUTH *auth;
-	struct audata *au;
 
 	memset(&rpc_createerr, 0, sizeof(rpc_createerr));
 
 	/*
 	 * Allocate and set up auth handle
 	 */
-	auth = mem_alloc(sizeof(*auth));
-	au = mem_alloc(sizeof(*au));
-
 	auth->ah_ops = authunix_ops();
-	auth->ah_private = (caddr_t) au;
+	auth->ah_private = NULL;
 	auth->ah_verf = au->au_shcred = _null_auth;
 	auth->ah_refcnt = 1;
 	au->au_shfaults = 0;
@@ -124,15 +119,14 @@ authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 	/*
 	 * Serialize the parameters into origcred
 	 */
-	xdrmem_create(&xdrs, mymem, MAX_AUTH_BYTES, XDR_ENCODE);
+	xdrmem_create(&xdrs, au->au_origcred.oa_body, MAX_AUTH_BYTES,
+		      XDR_ENCODE);
 	if (!xdr_authunix_parms(&xdrs, &aup)) {
 		rpc_createerr.cf_stat = RPC_CANTENCODEARGS;
 		goto cleanup_authunix_create;
 	}
 	au->au_origcred.oa_length = len = XDR_GETPOS(&xdrs);
 	au->au_origcred.oa_flavor = AUTH_UNIX;
-
-	memcpy(au->au_origcred.oa_body, mymem, (size_t) len);
 
 	/*
 	 * set auth handle to reflect new cred.
@@ -144,7 +138,6 @@ authunix_ncreate(char *machname, uid_t uid, gid_t gid, int len,
 	return (auth);
 
 cleanup_authunix_create:
-	mem_free(auth, sizeof(*auth));
 	mem_free(au, sizeof(*au));
 	return (NULL);
 }
@@ -156,11 +149,12 @@ cleanup_authunix_create:
 AUTH *
 authunix_ncreate_default(void)
 {
-	int len;
-	char machname[MAXHOSTNAMELEN + 1];
-	uid_t uid;
-	gid_t gid, *gids;
 	AUTH *result;
+	gid_t *gids;
+	char machname[MAXHOSTNAMELEN + 1];
+	gid_t gid;
+	uid_t uid;
+	int len;
 
 	memset(&rpc_createerr, 0, sizeof(rpc_createerr));
 
@@ -229,26 +223,24 @@ authunix_nextverf(AUTH *auth)
 static bool
 authunix_marshal(AUTH *auth, XDR *xdrs)
 {
-	struct audata *au;
+	struct audata *au = AUTH_PRIVATE(auth);
 
 	assert(auth != NULL);
 	assert(xdrs != NULL);
 
-	au = AUTH_PRIVATE(auth);
 	return (XDR_PUTBYTES(xdrs, au->au_marshed, au->au_mpos));
 }
 
 static bool
 authunix_validate(AUTH *auth, struct opaque_auth *verf)
 {
-	struct audata *au;
+	struct audata *au = AUTH_PRIVATE(auth);
 	XDR xdrs;
 
 	assert(auth != NULL);
 	assert(verf != NULL);
 
 	if (verf->oa_flavor == AUTH_SHORT) {
-		au = AUTH_PRIVATE(auth);
 		xdrmem_create(&xdrs, verf->oa_body, verf->oa_length,
 			      XDR_DECODE);
 
@@ -310,10 +302,11 @@ authunix_refresh(AUTH *auth, void *dummy)
 static void
 authunix_destroy(AUTH *auth)
 {
+	struct audata *au = AUTH_PRIVATE(auth);
+
 	assert(auth != NULL);
 
-	mem_free(auth->ah_private, sizeof(struct audata));
-	mem_free(auth, sizeof(*auth));
+	mem_free(au, sizeof(*au));
 }
 
 /*
@@ -323,13 +316,11 @@ authunix_destroy(AUTH *auth)
 static void
 marshal_new_auth(AUTH *auth)
 {
-	XDR xdr_stream;
-	XDR *xdrs = &xdr_stream;
-	struct audata *au;
+	XDR xdrs[1];
+	struct audata *au = AUTH_PRIVATE(auth);
 
 	assert(auth != NULL);
 
-	au = AUTH_PRIVATE(auth);
 	xdrmem_create(xdrs, au->au_marshed, MAX_AUTH_BYTES, XDR_ENCODE);
 	if ((!xdr_opaque_auth_encode(xdrs, &(auth->ah_cred)))
 	    || (!xdr_opaque_auth_encode(xdrs, &(auth->ah_verf))))
