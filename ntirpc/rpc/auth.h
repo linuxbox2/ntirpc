@@ -267,6 +267,7 @@ __BEGIN_DECLS
 extern AUTH *authunix_ncreate(char *, uid_t, uid_t, int, uid_t *);
 extern AUTH *authunix_ncreate_default(void);	/* takes no parameters */
 extern AUTH *authnone_ncreate(void);	/* takes no parameters */
+extern AUTH *authnone_ncreate_dummy(void);	/* takes no parameters */
 __END_DECLS
 /*
  * Netname manipulation routines.

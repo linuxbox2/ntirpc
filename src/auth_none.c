@@ -66,24 +66,25 @@ static bool authnone_validate(AUTH *, struct opaque_auth *);
 static bool authnone_refresh(AUTH *, void *);
 static void authnone_destroy(AUTH *);
 
+static struct auth_ops *authnone_dummy(void);
 static struct auth_ops *authnone_ops(void);
 
-struct authnone_private {
+struct andata {
 	AUTH no_client;
 	char marshalled_client[MAX_MARSHAL_SIZE];
 	u_int mcnt;
 };
+#define AUTH_PRIVATE(p) (opr_containerof((p), struct andata, no_client))
 
-static struct authnone_private auth_none_priv;
-static struct authnone_private *ap;
+static struct andata auth_none_priv;
+static struct andata *ap;
 
 static pthread_mutex_t init_lock = MUTEX_INITIALIZER;
 
 AUTH *
 authnone_ncreate(void)
 {
-	XDR xdr_stream;
-	XDR *xdrs;
+	XDR xdrs[1];
 
 	if (!ap) {
 		mutex_lock(&init_lock);
@@ -92,7 +93,8 @@ authnone_ncreate(void)
 			ap->no_client.ah_cred =
 			ap->no_client.ah_verf = _null_auth;
 			ap->no_client.ah_ops = authnone_ops();
-			xdrs = &xdr_stream;
+			ap->no_client.ah_private = NULL;
+
 			xdrmem_create(xdrs, ap->marshalled_client,
 				      (u_int) MAX_MARSHAL_SIZE, XDR_ENCODE);
 			(void)xdr_opaque_auth_encode(xdrs,
@@ -108,11 +110,22 @@ authnone_ncreate(void)
 	return (&ap->no_client);
 }
 
+AUTH *
+authnone_ncreate_dummy(void)
+{
+	struct andata *ap = mem_alloc(sizeof(*ap));
+
+	ap->no_client.ah_ops = authnone_dummy();
+	ap->no_client.ah_private = NULL;
+	ap->no_client.ah_refcnt = 1;
+
+	return (&ap->no_client);
+}
+
  /*ARGSUSED*/
 static bool authnone_marshal(AUTH *client, XDR *xdrs)
 {
-	struct authnone_private *ap =
-	    opr_containerof(client, struct authnone_private, no_client);
+	struct andata *ap = AUTH_PRIVATE(client);
 
 	return ((*xdrs->x_ops->x_putbytes)
 		(xdrs, ap->marshalled_client, ap->mcnt));
@@ -147,11 +160,41 @@ static void authnone_destroy(__attribute__ ((unused)) AUTH *client)
 	/* do nothing */
 }
 
+static void authnone_destroy_dummy(AUTH *auth)
+{
+	struct andata *ap = AUTH_PRIVATE(auth);
+
+	assert(auth != NULL);
+
+	mem_free(ap, sizeof(*ap));
+}
+
 static bool
 authnone_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xfunc,
 	      caddr_t xwhere)
 {
 	return ((*xfunc) (xdrs, xwhere));
+}
+
+static struct auth_ops *
+authnone_dummy(void)
+{
+	static struct auth_ops ops;
+	extern mutex_t ops_lock; /* XXXX does this need to be extern? */
+
+       /* VARIABLES PROTECTED BY ops_lock: ops */
+	mutex_lock(&ops_lock);
+	if (ops.ah_nextverf == NULL) {
+		ops.ah_nextverf = authnone_verf;
+		ops.ah_marshal = authnone_marshal;
+		ops.ah_validate = authnone_validate;
+		ops.ah_refresh = authnone_refresh;
+		ops.ah_destroy = authnone_destroy_dummy;
+		ops.ah_wrap = authnone_wrap;
+		ops.ah_unwrap = authnone_wrap;
+	}
+	mutex_unlock(&ops_lock);
+	return (&ops);
 }
 
 static struct auth_ops *
