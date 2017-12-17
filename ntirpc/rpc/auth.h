@@ -81,40 +81,6 @@ struct sec_data32 {
 #endif				/* _SYSCALL32_IMPL */
 
 /*
- * AUTH_DES flavor specific data from sec_data opaque data field.
- * AUTH_KERB has the same structure.
- */
-typedef struct des_clnt_data {
-	struct netbuf syncaddr;	/* time sync addr */
-	struct knetconfig *knconf;	/* knetconfig info that associated */
-	/* with the syncaddr. */
-	char *netname;		/* server's netname */
-	int netnamelen;		/* server's netname len */
-} dh_k4_clntdata_t;
-
-#ifdef _SYSCALL32_IMPL
-struct des_clnt_data32 {
-	struct netbuf32 syncaddr;	/* time sync addr */
-	caddr32_t knconf;	/* knetconfig info that associated */
-	/* with the syncaddr. */
-	caddr32_t netname;	/* server's netname */
-	int32_t netnamelen;	/* server's netname len */
-};
-#endif				/* _SYSCALL32_IMPL */
-
-#ifdef KERBEROS
-/*
- * flavor specific data to hold the data for AUTH_DES/AUTH_KERB(v4)
- * in sec_data->data opaque field.
- */
-typedef struct krb4_svc_data {
-	int window;		/* window option value */
-} krb4_svcdata_t;
-
-typedef struct krb4_svc_data des_svcdata_t;
-#endif				/* KERBEROS */
-
-/*
  * authentication/security specific flags
  */
 #define AUTH_F_RPCTIMESYNC 0x001	/* use RPC to do time sync */
@@ -316,38 +282,6 @@ extern int getpublickey(const char *, char *);
 extern int getpublicandprivatekey(char *, char *);
 extern int getsecretkey(char *, char *, char *);
 __END_DECLS
-#ifdef KERBEROS
-/*
- * Kerberos style authentication
- * AUTH *authkerb_seccreate(service, srv_inst, realm, window, timehost, status)
- * const char *service;   - service name
- * const char *srv_inst;   - server instance
- * const char *realm;   - server realm
- * const u_int window;   - time to live
- * const char *timehost;   - optional hostname to sync with
- * int *status;    - kerberos status returned
- */
-__BEGIN_DECLS
-extern AUTH *authkerb_nseccreate(const char *, const char *,
-				 const char *, const u_int,
-				 const char *, int *);
-__END_DECLS
-/*
- * Map a kerberos credential into a unix cred.
- *
- * authkerb_getucred(rqst, uid, gid, grouplen, groups)
- * const struct svc_req *rqst;  - request pointer
- * uid_t *uid;
- * gid_t *gid;
- * short *grouplen;
- * int *groups;
- *
- */
-__BEGIN_DECLS
-extern int authkerb_getucred(/* struct svc_req *, uid_t *, gid_t *,
-				short *, int * */);
-__END_DECLS
-#endif				/* KERBEROS */
 
 __BEGIN_DECLS
 struct svc_req;

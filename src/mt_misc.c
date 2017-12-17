@@ -16,13 +16,6 @@ pthread_rwlock_t svc_lock = RWLOCK_INITIALIZER;
 /* protects the RPCBIND address cache */
 pthread_rwlock_t rpcbaddr_cache_lock = RWLOCK_INITIALIZER;
 
-#ifdef KERBEROS
-/* auth_kerb.c serialization */
-pthread_mutex_t authkerb_lock = MUTEX_INITIALIZER;
-/* protects kerb stats list */
-pthread_mutex_t svcauthkerbstats_lock = MUTEX_INITIALIZER;
-#endif				/* KERBEROS */
-
 /* protects the Auths list (svc_auth.c) */
 pthread_mutex_t authsvc_lock = MUTEX_INITIALIZER;
 

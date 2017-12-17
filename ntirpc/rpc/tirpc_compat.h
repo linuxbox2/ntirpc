@@ -37,12 +37,6 @@
 #define svc_raw_create() svc_raw_ncreate()
 #define svc_rdma_create(a, b, c) svc_rdma_ncreate(a, b, c)
 
-/* auth */
-#define authkerb_seccreate(a, b, c, d, e, f) \
-	authkerb_nseccreate(a, b, c, d, e, f)
-#define authkerb_create(a, b, c, d, e, f, g, h, i) \
-	authkerb_ncreate(a, b, c, d, e, f, g, h, i)
-
 /* rpc_msg */
 #define xdr_callmsg xdr_ncallmsg
 #define xdr_callhdr xdr_ncallhdr
