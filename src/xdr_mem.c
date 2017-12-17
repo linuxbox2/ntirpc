@@ -163,40 +163,6 @@ xdrmem_setpos(XDR *xdrs, u_int pos)
 	return (true);
 }
 
-static int32_t *
-xdrmem_inline_aligned(XDR *xdrs, u_int len)
-{
-	int32_t *buf = (int32_t *)xdrs->x_data;
-	uint8_t *future = xdrs->x_data + len;
-
-	switch (xdrs->x_op) {
-	case XDR_ENCODE:
-		if (future <= xdrs->x_v.vio_wrap) {
-			xdrs->x_data = future;
-			xdr_tail_update(xdrs);
-			/* temporarily backward compatible */
-			xdrs->x_handy = xdrs->x_v.vio_wrap - xdrs->x_data;
-			return (buf);
-		}
-		break;
-	case XDR_DECODE:
-		/* re-consuming bytes in a stream
-		 * (after SETPOS/rewind) */
-		if (future <= xdrs->x_v.vio_tail) {
-			xdrs->x_data = future;
-			/* temporarily backward compatible */
-			xdrs->x_handy = xdrs->x_v.vio_tail - xdrs->x_data;
-			return (buf);
-		}
-		break;
-	default:
-		abort();
-		break;
-	};
-
-	return (NULL);
-}
-
 /* ARGSUSED */
 static void xdrmem_destroy(XDR *xdrs)
 {
@@ -215,7 +181,6 @@ static const struct xdr_ops xdrmem_ops_aligned = {
 	xdrmem_putbytes,
 	xdrmem_getpos,
 	xdrmem_setpos,
-	xdrmem_inline_aligned,
 	xdrmem_destroy,
 	(dummyfunc3) xdrmem_noop,	/* x_control */
 	(dummy_getbufs) xdrmem_noop,	/* x_getbufs */

@@ -685,42 +685,6 @@ xdr_ioq_setpos(XDR *xdrs, u_int pos)
 	return (false);
 }
 
-static int32_t *
-xdr_ioq_inline(XDR *xdrs, u_int len)
-{
-	/* bugfix:  return fill pointer, not head! */
-	int32_t *buf = (int32_t *)xdrs->x_data;
-	uint8_t *future = xdrs->x_data + len;
-
-	/* bugfix: do not move fill position beyond tail or wrap */
-	switch (xdrs->x_op) {
-	case XDR_ENCODE:
-		if (future <= xdrs->x_v.vio_wrap) {
-			/* bugfix:  do not move head! */
-			xdrs->x_data = future;
-			/* bugfix: do not move tail beyond pfoff or wrap! */
-			xdr_tail_update(xdrs);
-			return (buf);
-		}
-		break;
-	case XDR_DECODE:
-		/* re-consuming bytes in a stream
-		 * (after SETPOS/rewind) */
-		if (future <= xdrs->x_v.vio_tail) {
-			/* bugfix:  do not move head! */
-			xdrs->x_data = future;
-			/* bugfix:  do not move tail! */
-			return (buf);
-		}
-		break;
-	default:
-		abort();
-		break;
-	};
-
-	return (NULL);
-}
-
 void
 xdr_ioq_release(struct poolq_head *ioqh)
 {
@@ -807,7 +771,6 @@ const struct xdr_ops xdr_ioq_ops = {
 	xdr_ioq_putbytes,
 	xdr_ioq_getpos,
 	xdr_ioq_setpos,
-	xdr_ioq_inline,
 	xdr_ioq_destroy_internal,
 	xdr_ioq_control,
 	xdr_ioq_getbufs,

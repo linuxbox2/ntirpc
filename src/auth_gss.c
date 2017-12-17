@@ -306,7 +306,7 @@ authgss_marshal(AUTH *auth, XDR *xdrs)
 	/* Checksum serialized RPC header, up to and including credential. */
 	rpcbuf.length = XDR_GETPOS(xdrs);
 	XDR_SETPOS(xdrs, 0);
-	rpcbuf.value = XDR_INLINE(xdrs, rpcbuf.length);
+	rpcbuf.value = xdr_inline_encode(xdrs, rpcbuf.length);
 
 	maj_stat =
 	    gss_get_mic(&min_stat, gd->ctx, gd->sec.qop, &rpcbuf, &checksum);

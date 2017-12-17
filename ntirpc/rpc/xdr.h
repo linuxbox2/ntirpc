@@ -174,8 +174,6 @@ typedef struct rpc_xdr {
 		u_int (*x_getpostn)(struct rpc_xdr *);
 		/* lets you reposition the stream */
 		bool (*x_setpostn)(struct rpc_xdr *, u_int);
-		/* buf quick ptr to buffered data */
-		int32_t *(*x_inline)(struct rpc_xdr *, u_int);
 		/* free private resources of this xdr_stream */
 		void (*x_destroy)(struct rpc_xdr *);
 		bool (*x_control)(struct rpc_xdr *, int, void *);
@@ -313,11 +311,6 @@ xdr_putlong(XDR *xdrs, const long *lp)
 #define xdr_setpos(xdrs, pos)			\
 	(*(xdrs)->x_ops->x_setpostn)(xdrs, pos)
 
-#define XDR_INLINE(xdrs, len)			\
-	(*(xdrs)->x_ops->x_inline)(xdrs, len)
-#define xdr_inline(xdrs, len)			\
-	(*(xdrs)->x_ops->x_inline)(xdrs, len)
-
 #define XDR_DESTROY(xdrs)	     \
 	if ((xdrs)->x_ops->x_destroy)			\
 		(*(xdrs)->x_ops->x_destroy)(xdrs)
@@ -360,17 +353,49 @@ struct xdr_discrim {
  * In-line routines for fast encode/decode of primitive data types.
  * Caveat emptor: these use single memory cycles to get the
  * data from the underlying buffer, and will fail to operate
- * properly where the data is not aligned.  The standard way to use these
- * is to say:
- * if ((buf = XDR_INLINE(xdrs, count)) == NULL)
- *  return (false);
- * <<< macro calls >>>
+ * properly where the data is not aligned.  The standard way to use
+ * these is to say:
+ *      if ((buf = xdr_inline_decode(xdrs, count)) == NULL)
+ *              return (FALSE);
+ *      <<< IXDR_GET_* macro calls >>>
+ *      if ((buf = xdr_inline_encode(xdrs, count)) == NULL)
+ *              return (FALSE);
+ *      <<< IXDR_PUT_* macro calls >>>
  * where ``count'' is the number of bytes of data occupied
  * by the primitive data types.
  *
  * N.B. and frozen for all time: each data type here uses 4 bytes
  * of external representation.
  */
+static inline int32_t *
+xdr_inline_decode(XDR *xdrs, size_t count)
+{
+	int32_t *buf = (int32_t *)xdrs->x_data;
+	uint8_t *future = xdrs->x_data + count;
+
+	/* re-consuming bytes in a stream
+	 * (after SETPOS/rewind) */
+	if (future <= xdrs->x_v.vio_tail) {
+		xdrs->x_data = future;
+		return (buf);
+	}
+	return (NULL);
+}
+
+static inline int32_t *
+xdr_inline_encode(XDR *xdrs, size_t count)
+{
+	int32_t *buf = (int32_t *)xdrs->x_data;
+	uint8_t *future = xdrs->x_data + count;
+
+	if (future <= xdrs->x_v.vio_wrap) {
+		xdrs->x_data = future;
+		xdr_tail_update(xdrs);
+		return (buf);
+	}
+	return (NULL);
+}
+
 #define IXDR_GET_INT32(buf)  ((int32_t)ntohl((u_int32_t)*(buf)++))
 #define IXDR_PUT_INT32(buf, v)  (*(buf)++ = (int32_t)htonl((u_int32_t)v))
 #define IXDR_GET_U_INT32(buf)  ((u_int32_t)IXDR_GET_INT32(buf))

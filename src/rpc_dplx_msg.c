@@ -84,9 +84,8 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 				MAX_AUTH_BYTES);
 			return (false);
 		}
-		buf = XDR_INLINE(xdrs,
-				 6 * BYTES_PER_XDR_UNIT +
-				 RNDUP(oa->oa_length));
+		buf = xdr_inline_encode(xdrs, 6 * BYTES_PER_XDR_UNIT
+						+ RNDUP(oa->oa_length));
 
 		if (buf != NULL) {
 			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
@@ -114,8 +113,8 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 				__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
 					"%s:%u MISMATCH",
 					__func__, __LINE__);
-				buf = XDR_INLINE(xdrs,
-					2 * BYTES_PER_XDR_UNIT);
+				buf = xdr_inline_encode(xdrs,
+							2 * BYTES_PER_XDR_UNIT);
 				if (buf != NULL) {
 					IXDR_PUT_ENUM(buf, ar->ar_vers.low);
 					IXDR_PUT_ENUM(buf, ar->ar_vers.high);
@@ -177,7 +176,7 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 		struct rejected_reply *rr = (struct rejected_reply *)
 						&(dmsg->rm_reply.ru);
 
-		buf = XDR_INLINE(xdrs, 3 * BYTES_PER_XDR_UNIT);
+		buf = xdr_inline_encode(xdrs, 3 * BYTES_PER_XDR_UNIT);
 		if (buf != NULL) {
 			IXDR_PUT_INT32(buf, dmsg->rm_xid);
 			IXDR_PUT_ENUM(buf, dmsg->rm_direction);
@@ -207,7 +206,7 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
 				"%s:%u DENIED MISMATCH",
 				__func__, __LINE__);
-			buf = XDR_INLINE(xdrs, 3 * BYTES_PER_XDR_UNIT);
+			buf = xdr_inline_encode(xdrs, 3 * BYTES_PER_XDR_UNIT);
 
 			if (buf != NULL) {
 				IXDR_PUT_ENUM(buf, rr->rj_stat);
@@ -237,7 +236,7 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
 				"%s:%u DENIED AUTH",
 				__func__, __LINE__);
-			buf = XDR_INLINE(xdrs, 2 * BYTES_PER_XDR_UNIT);
+			buf = xdr_inline_encode(xdrs, 2 * BYTES_PER_XDR_UNIT);
 
 			if (buf != NULL) {
 				IXDR_PUT_ENUM(buf, rr->rj_stat);
@@ -435,7 +434,7 @@ xdr_dplx_decode(XDR *xdrs, struct rpc_msg *dmsg)
 	/*
 	 * NOTE: 5 here, 3 more in each _decode
 	 */
-	buf = XDR_INLINE(xdrs, 5 * BYTES_PER_XDR_UNIT);
+	buf = xdr_inline_decode(xdrs, 5 * BYTES_PER_XDR_UNIT);
 	if (buf != NULL) {
 		dmsg->rm_xid = IXDR_GET_U_INT32(buf);
 		dmsg->rm_direction = IXDR_GET_ENUM(buf, enum msg_type);
