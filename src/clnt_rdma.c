@@ -155,7 +155,7 @@ clnt_rdma_call(struct clnt_req *cc)
 
 	if (!xdr_rdma_clnt_call(&cm->cm_xdrs, cm->call_msg.rm_xid)
 	 || !xdr_callhdr(&(cm->cm_xdrs), &cm->call_msg)
-	 || !XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc)
+	 || !XDR_PUTUINT32(xdrs, cc->cc_proc)
 	 || !AUTH_MARSHALL(cc->cc_auth, xdrs)
 	 || !AUTH_WRAP(cc->cc_auth, xdrs,
 		       cc->cc_call.proc, cc->cc_call.where)) {

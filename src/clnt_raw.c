@@ -142,7 +142,7 @@ clnt_raw_call(struct clnt_req *cc)
 	 * send request
 	 */
 	if ((!XDR_PUTBYTES(xdrs, cx->cx_u.cx_mcallc, cx->cx_mpos))
-	    || (!XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc))
+	    || (!XDR_PUTUINT32(xdrs, cc->cc_proc))
 	    || (!AUTH_MARSHALL(cc->cc_auth, xdrs))
 	    || (!(*cc->cc_call.proc) (xdrs, cc->cc_call.where))) {
 		/* error case */

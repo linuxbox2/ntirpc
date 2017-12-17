@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -84,7 +85,7 @@ xdr_opaque_auth_encode(XDR *xdrs, struct opaque_auth *oa)
 			__func__, __LINE__);
 		return (false);
 	}
-	if (!xdr_putuint32(xdrs, &oa->oa_length)) {
+	if (!xdr_putuint32(xdrs, oa->oa_length)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR oa_length",
 			__func__, __LINE__);

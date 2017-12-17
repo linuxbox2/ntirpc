@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013 Linux Box Corporation.
+ * Copyright (c) 2013-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -391,7 +392,7 @@ xdr_ioq_uv_append(struct xdr_ioq *xioq, u_int ioq_flags)
 }
 
 static bool
-xdr_ioq_getlong(XDR *xdrs, long *lp)
+xdr_ioq_getunit(XDR *xdrs, uint32_t *p)
 {
 	struct xdr_ioq_uv *uv;
 	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
@@ -414,13 +415,13 @@ xdr_ioq_getlong(XDR *xdrs, long *lp)
 		future = xdrs->x_data + sizeof(uint32_t);
 	}
 
-	*lp = (long)ntohl(*((uint32_t *) (xdrs->x_data)));
+	*p = (uint32_t)ntohl(*((uint32_t *) (xdrs->x_data)));
 	xdrs->x_data = future;
 	return (true);
 }
 
 static bool
-xdr_ioq_putlong(XDR *xdrs, const long *lp)
+xdr_ioq_putunit(XDR *xdrs, const uint32_t v)
 {
 	struct xdr_ioq_uv *uv;
 	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
@@ -437,7 +438,7 @@ xdr_ioq_putlong(XDR *xdrs, const long *lp)
 		future = xdrs->x_data + sizeof(uint32_t);
 	}
 
-	*((int32_t *) (xdrs->x_data)) = (int32_t) htonl((int32_t) (*lp));
+	*((uint32_t *) (xdrs->x_data)) = (uint32_t) htonl(v);
 	xdrs->x_data = future;
 	return (true);
 }
@@ -800,8 +801,8 @@ xdr_ioq_noop(void)
 }
 
 const struct xdr_ops xdr_ioq_ops = {
-	xdr_ioq_getlong,
-	xdr_ioq_putlong,
+	xdr_ioq_getunit,
+	xdr_ioq_putunit,
 	xdr_ioq_getbytes,
 	xdr_ioq_putbytes,
 	xdr_ioq_getpos,

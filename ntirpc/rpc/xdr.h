@@ -161,12 +161,11 @@ typedef struct xdr_uio {
  * XXX: w/64-bit pointers, u_int not enough!
  */
 typedef struct rpc_xdr {
-	enum xdr_op x_op;  /* operation; fast additional param */
 	const struct xdr_ops {
-		/* get a long from underlying stream */
-		bool (*x_getlong)(struct rpc_xdr *, long *);
-		/* put a long to " */
-		bool (*x_putlong)(struct rpc_xdr *, const long *);
+		/* get 4 unsigned bytes from underlying stream */
+		bool (*x_getunit)(struct rpc_xdr *, uint32_t *);
+		/* put 4 unsigned bytes to underlying stream */
+		bool (*x_putunit)(struct rpc_xdr *, const uint32_t);
 		/* get some bytes from " */
 		bool (*x_getbytes)(struct rpc_xdr *, char *, u_int);
 		/* put some bytes to " */
@@ -192,6 +191,7 @@ typedef struct rpc_xdr {
 	struct xdr_vio x_v; /* private buffer vector */
 	u_int x_handy; /* extra private word */
 	u_int x_flags; /* shared flags */
+	enum xdr_op x_op;  /* operation; fast additional param */
 } XDR;
 
 #define XDR_VIO(x) ((xdr_vio *)((x)->x_base))
@@ -249,32 +249,35 @@ typedef bool(*xdrproc_t) (XDR *, ...);
 static inline bool
 xdr_getlong(XDR *xdrs, long *lp)
 {
-	if (xdrs->x_flags & XDR_FLAG_VIO) {
-		uint8_t *future = xdrs->x_data + sizeof(uint32_t);
+	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
+	uint32_t u;
+	bool b;
 
-		if (future <= xdrs->x_v.vio_tail) {
-			*lp = (long)ntohl(*((uint32_t *) (xdrs->x_data)));
-			xdrs->x_data = future;
-			return (true);
-		}
+	if (future <= xdrs->x_v.vio_tail) {
+		*lp = (long)ntohl(*((uint32_t *) (xdrs->x_data)));
+		xdrs->x_data = future;
+		return (true);
 	}
-	return (*xdrs->x_ops->x_getlong)(xdrs, lp);
+
+	b = (*xdrs->x_ops->x_getunit)(xdrs, &u);
+	if (b) {
+		*lp = (int32_t)u;	/* sign extends */
+	}
+	return b;
 }
 
 static inline bool
 xdr_putlong(XDR *xdrs, const long *lp)
 {
-	if (xdrs->x_flags & XDR_FLAG_VIO) {
-		uint8_t *future = xdrs->x_data + sizeof(uint32_t);
+	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
 
-		if (future <= xdrs->x_v.vio_wrap) {
-			*((int32_t *) (xdrs->x_data)) =
-				(int32_t) htonl((int32_t) (*lp));
-			xdrs->x_data = future;
-			return (true);
-		}
+	if (future <= xdrs->x_v.vio_wrap) {
+		*((int32_t *) (xdrs->x_data)) =
+			(int32_t) htonl((int32_t) (*lp));
+		xdrs->x_data = future;
+		return (true);
 	}
-	return (*xdrs->x_ops->x_putlong)(xdrs, lp);
+	return (*xdrs->x_ops->x_putunit)(xdrs, (uint32_t) (*lp));
 }
 
 #define XDR_GETLONG(xdrs, lp) xdr_getlong(xdrs, lp)
@@ -409,44 +412,31 @@ struct xdr_discrim {
 static inline bool
 xdr_getuint32(XDR *xdrs, uint32_t *ip)
 {
-	long l;
+	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
 
-	if (xdrs->x_flags & XDR_FLAG_VIO) {
-		uint8_t *future = xdrs->x_data + sizeof(uint32_t);
-
-		if (future <= xdrs->x_v.vio_tail) {
-			*ip = ntohl(*((uint32_t *) (xdrs->x_data)));
-			xdrs->x_data = future;
-			return (true);
-		}
-	}
-	if ((*xdrs->x_ops->x_getlong)(xdrs, &l)) {
-		*ip = (uint32_t) l;
+	if (future <= xdrs->x_v.vio_tail) {
+		*ip = ntohl(*((uint32_t *) (xdrs->x_data)));
+		xdrs->x_data = future;
 		return (true);
 	}
-	return (false);
+	return (*xdrs->x_ops->x_getunit)(xdrs, ip);
 }
 
 static inline bool
-xdr_putuint32(XDR *xdrs, uint32_t *ip)
+xdr_putuint32(XDR *xdrs, uint32_t v)
 {
-	long l;
+	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
 
-	if (xdrs->x_flags & XDR_FLAG_VIO) {
-		uint8_t *future = xdrs->x_data + sizeof(uint32_t);
-
-		if (future <= xdrs->x_v.vio_wrap) {
-			*((int32_t *) (xdrs->x_data)) = htonl(*ip);
-			xdrs->x_data = future;
-			return (true);
-		}
+	if (future <= xdrs->x_v.vio_wrap) {
+		*((int32_t *) (xdrs->x_data)) = htonl(v);
+		xdrs->x_data = future;
+		return (true);
 	}
-	l = (long)*ip;
-	return (*xdrs->x_ops->x_putlong)(xdrs, &l);
+	return (*xdrs->x_ops->x_putunit)(xdrs, v);
 }
 
 #define XDR_GETUINT32(xdrs, uint32p) xdr_getuint32(xdrs, uint32p)
-#define XDR_PUTUINT32(xdrs, uint32p) xdr_putuint32(xdrs, uint32p)
+#define XDR_PUTUINT32(xdrs, uint32v) xdr_putuint32(xdrs, uint32v)
 
 static inline bool
 xdr_getint32(XDR *xdrs, int32_t *ip)
@@ -455,30 +445,27 @@ xdr_getint32(XDR *xdrs, int32_t *ip)
 }
 
 static inline bool
-xdr_putint32(XDR *xdrs, int32_t *ip)
+xdr_putint32(XDR *xdrs, int32_t v)
 {
-	return xdr_putuint32(xdrs, (uint32_t *)ip);
+	return xdr_putuint32(xdrs, v);
 }
 
 #define XDR_GETINT32(xdrs, int32p) xdr_getint32(xdrs, int32p)
-#define XDR_PUTINT32(xdrs, int32p) xdr_putint32(xdrs, int32p)
+#define XDR_PUTINT32(xdrs, int32v) xdr_putint32(xdrs, int32v)
 
 static inline bool
 xdr_getuint16(XDR *xdrs, uint16_t *ip)
 {
-	long l;
+	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
+	uint32_t u;
 
-	if (xdrs->x_flags & XDR_FLAG_VIO) {
-		uint8_t *future = xdrs->x_data + sizeof(uint32_t);
-
-		if (future <= xdrs->x_v.vio_tail) {
-			*ip = (uint16_t)ntohl(*((uint32_t *) (xdrs->x_data)));
-			xdrs->x_data = future;
-			return (true);
-		}
+	if (future <= xdrs->x_v.vio_tail) {
+		*ip = (uint16_t)ntohl(*((uint32_t *) (xdrs->x_data)));
+		xdrs->x_data = future;
+		return (true);
 	}
-	if ((*xdrs->x_ops->x_getlong)(xdrs, &l)) {
-		*ip = (uint16_t) l;
+	if ((*xdrs->x_ops->x_getunit)(xdrs, &u)) {
+		*ip = (uint16_t) u;
 		return (true);
 	}
 	return (false);
@@ -487,19 +474,14 @@ xdr_getuint16(XDR *xdrs, uint16_t *ip)
 static inline bool
 xdr_putuint16(XDR *xdrs, uint32_t uint16v)
 {
-	long l;
+	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
 
-	if (xdrs->x_flags & XDR_FLAG_VIO) {
-		uint8_t *future = xdrs->x_data + sizeof(uint32_t);
-
-		if (future <= xdrs->x_v.vio_wrap) {
-			*((int32_t *) (xdrs->x_data)) = htonl(uint16v);
-			xdrs->x_data = future;
-			return (true);
-		}
+	if (future <= xdrs->x_v.vio_wrap) {
+		*((int32_t *) (xdrs->x_data)) = htonl(uint16v);
+		xdrs->x_data = future;
+		return (true);
 	}
-	l = (long)uint16v;
-	return (*xdrs->x_ops->x_putlong)(xdrs, &l);
+	return (*xdrs->x_ops->x_putunit)(xdrs, (uint32_t)uint16v);
 }
 
 #define XDR_GETUINT16(xdrs, uint16p) xdr_getuint16(xdrs, uint16p)
@@ -524,19 +506,16 @@ xdr_putint16(XDR *xdrs, int32_t int16v)
 static inline bool
 xdr_getuint8(XDR *xdrs, uint8_t *ip)
 {
-	long l;
+	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
+	uint32_t u;
 
-	if (xdrs->x_flags & XDR_FLAG_VIO) {
-		uint8_t *future = xdrs->x_data + sizeof(uint32_t);
-
-		if (future <= xdrs->x_v.vio_tail) {
-			*ip = (uint8_t)ntohl(*((uint32_t *) (xdrs->x_data)));
-			xdrs->x_data = future;
-			return (true);
-		}
+	if (future <= xdrs->x_v.vio_tail) {
+		*ip = (uint8_t)ntohl(*((uint32_t *) (xdrs->x_data)));
+		xdrs->x_data = future;
+		return (true);
 	}
-	if ((*xdrs->x_ops->x_getlong)(xdrs, &l)) {
-		*ip = (uint8_t) l;
+	if ((*xdrs->x_ops->x_getunit)(xdrs, &u)) {
+		*ip = (uint8_t) u;
 		return (true);
 	}
 	return (false);
@@ -545,19 +524,14 @@ xdr_getuint8(XDR *xdrs, uint8_t *ip)
 static inline bool
 xdr_putuint8(XDR *xdrs, uint32_t uint8v)
 {
-	long l;
+	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
 
-	if (xdrs->x_flags & XDR_FLAG_VIO) {
-		uint8_t *future = xdrs->x_data + sizeof(uint32_t);
-
-		if (future <= xdrs->x_v.vio_wrap) {
-			*((int32_t *) (xdrs->x_data)) = htonl(uint8v);
-			xdrs->x_data = future;
-			return (true);
-		}
+	if (future <= xdrs->x_v.vio_wrap) {
+		*((int32_t *) (xdrs->x_data)) = htonl(uint8v);
+		xdrs->x_data = future;
+		return (true);
 	}
-	l = (long)uint8v;
-	return (*xdrs->x_ops->x_putlong)(xdrs, &l);
+	return (*xdrs->x_ops->x_putunit)(xdrs, (uint32_t)uint8v);
 }
 
 #define XDR_GETUINT8(xdrs, uint8p) xdr_getuint8(xdrs, uint8p)

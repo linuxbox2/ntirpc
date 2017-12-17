@@ -116,7 +116,7 @@ xdr_float(XDR *xdrs, float *fp)
 
 	case XDR_ENCODE:
 #ifdef IEEEFP
-		return (XDR_PUTINT32(xdrs, (int32_t *) fp));
+		return (XDR_PUTINT32(xdrs, (int32_t) *fp));
 #else
 		vs = *((struct vax_single *)fp);
 		for (i = 0, lim = sgl_limits;
@@ -226,15 +226,15 @@ xdr_double(XDR *xdrs, double *dp)
 #ifdef IEEEFP
 		i32p = (int32_t *) (void *)dp;
 #if BYTE_ORDER == BIG_ENDIAN
-		rv = XDR_PUTINT32(xdrs, i32p);
+		rv = XDR_PUTINT32(xdrs, *i32p);
 		if (!rv)
 			return (rv);
-		rv = XDR_PUTINT32(xdrs, i32p + 1);
+		rv = XDR_PUTINT32(xdrs, *(i32p + 1));
 #else
-		rv = XDR_PUTINT32(xdrs, i32p + 1);
+		rv = XDR_PUTINT32(xdrs, *(i32p + 1));
 		if (!rv)
 			return (rv);
-		rv = XDR_PUTINT32(xdrs, i32p);
+		rv = XDR_PUTINT32(xdrs, *i32p);
 #endif
 		return (rv);
 #else

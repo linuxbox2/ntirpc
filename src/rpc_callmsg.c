@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -117,7 +118,7 @@ xdr_call_encode(XDR *xdrs, struct rpc_msg *cmsg)
 		__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
 			"%s:%u non-INLINE",
 			__func__, __LINE__);
-		if (!xdr_putuint32(xdrs, &(cmsg->rm_xid))) {
+		if (!xdr_putuint32(xdrs, cmsg->rm_xid)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR rm_xid %u",
 				__func__, __LINE__,
@@ -131,7 +132,7 @@ xdr_call_encode(XDR *xdrs, struct rpc_msg *cmsg)
 				cmsg->rm_direction);
 			return (false);
 		}
-		if (!xdr_putuint32(xdrs, &(cmsg->rm_call.cb_rpcvers))) {
+		if (!xdr_putuint32(xdrs, cmsg->rm_call.cb_rpcvers)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR rm_call.cb_rpcvers %u",
 				__func__, __LINE__,
@@ -146,21 +147,21 @@ xdr_call_encode(XDR *xdrs, struct rpc_msg *cmsg)
 				RPC_MSG_VERSION);
 			return (false);
 		}
-		if (!xdr_putuint32(xdrs, &(cmsg->cb_prog))) {
+		if (!xdr_putuint32(xdrs, cmsg->cb_prog)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR cb_prog %u",
 				__func__, __LINE__,
 				cmsg->cb_prog);
 			return (false);
 		}
-		if (!xdr_putuint32(xdrs, &(cmsg->cb_vers))) {
+		if (!xdr_putuint32(xdrs, cmsg->cb_vers)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR cb_vers %u",
 				__func__, __LINE__,
 				cmsg->cb_vers);
 			return (false);
 		}
-		if (!xdr_putuint32(xdrs, &(cmsg->cb_proc))) {
+		if (!xdr_putuint32(xdrs, cmsg->cb_proc)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR cb_proc %u",
 				__func__, __LINE__,

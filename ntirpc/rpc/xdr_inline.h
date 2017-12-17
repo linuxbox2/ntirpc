@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -179,19 +180,13 @@ inline_xdr_u_long(XDR *xdrs, u_long *ulp)
 static inline bool
 inline_xdr_int32_t(XDR *xdrs, int32_t *int32_p)
 {
-	long l;
-
 	switch (xdrs->x_op) {
 
 	case XDR_ENCODE:
-		l = (long)*int32_p;
-		return (XDR_PUTLONG(xdrs, &l));
+		return (XDR_PUTINT32(xdrs, *int32_p));
 
 	case XDR_DECODE:
-		if (!XDR_GETLONG(xdrs, &l))
-			return (false);
-		*int32_p = (int32_t) l;
-		return (true);
+		return (XDR_GETINT32(xdrs, int32_p));
 
 	case XDR_FREE:
 		return (true);
@@ -207,19 +202,13 @@ inline_xdr_int32_t(XDR *xdrs, int32_t *int32_p)
 static inline bool
 inline_xdr_u_int32_t(XDR *xdrs, u_int32_t *u_int32_p)
 {
-	u_long l;
-
 	switch (xdrs->x_op) {
 
 	case XDR_ENCODE:
-		l = (u_long) *u_int32_p;
-		return (XDR_PUTLONG(xdrs, (long *)&l));
+		return (XDR_PUTUINT32(xdrs, *u_int32_p));
 
 	case XDR_DECODE:
-		if (!XDR_GETLONG(xdrs, (long *)&l))
-			return (false);
-		*u_int32_p = (u_int32_t) l;
-		return (true);
+		return (XDR_GETUINT32(xdrs, u_int32_p));
 
 	case XDR_FREE:
 		return (true);
@@ -288,19 +277,13 @@ inline_xdr_u_short(XDR *xdrs, u_short *usp)
 static inline bool
 inline_xdr_int16_t(XDR *xdrs, int16_t *int16_p)
 {
-	long l;
-
 	switch (xdrs->x_op) {
 
 	case XDR_ENCODE:
-		l = (long)*int16_p;
-		return (XDR_PUTLONG(xdrs, &l));
+		return (XDR_PUTINT16(xdrs, *int16_p));
 
 	case XDR_DECODE:
-		if (!XDR_GETLONG(xdrs, &l))
-			return (false);
-		*int16_p = (int16_t) l;
-		return (true);
+		return (XDR_GETINT16(xdrs, int16_p));
 
 	case XDR_FREE:
 		return (true);
@@ -315,19 +298,13 @@ inline_xdr_int16_t(XDR *xdrs, int16_t *int16_p)
 static inline bool
 inline_xdr_u_int16_t(XDR *xdrs, u_int16_t *u_int16_p)
 {
-	u_long l;
-
 	switch (xdrs->x_op) {
 
 	case XDR_ENCODE:
-		l = (u_long) *u_int16_p;
-		return (XDR_PUTLONG(xdrs, (long *)&l));
+		return (XDR_PUTUINT16(xdrs, *u_int16_p));
 
 	case XDR_DECODE:
-		if (!XDR_GETLONG(xdrs, (long *)&l))
-			return (false);
-		*u_int16_p = (u_int16_t) l;
-		return (true);
+		return (XDR_GETUINT16(xdrs, u_int16_p));
 
 	case XDR_FREE:
 		return (true);
