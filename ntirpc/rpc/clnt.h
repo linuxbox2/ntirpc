@@ -199,10 +199,9 @@ struct rpc_timers {
 
 /*
  * client side rpc interface ops
- *
- * Parameter types are:
- *
  */
+#define CLNT_FAILURE(rh) ((rh)->cl_error.re_status != RPC_SUCCESS)
+#define CLNT_SUCCESS(rh) ((rh)->cl_error.re_status == RPC_SUCCESS)
 
 /*
  * enum clnt_stat
@@ -362,8 +361,10 @@ static inline void clnt_destroy_it(CLIENT *clnt,
 
 /*
  * Below are the client handle creation routines for the various
- * implementations of client side rpc.  They can return NULL if a
- * creation failure occurs.
+ * implementations of client side rpc.
+ *
+ * Always returns CLIENT. Must check cl_error.re_status,
+ * followed by CLNT_DESTROY() as necessary.
  */
 __BEGIN_DECLS
 
@@ -388,7 +389,7 @@ extern CLIENT *clnt_ncreate_timed(const char *, const rpcprog_t,
  * pointer, indicating that the default timeout should be used.
  */
 static inline CLIENT *
-clnt_ncreate(const char *hostname, rpcprog_t prog, rpcvers_t vers,
+clnt_ncreate(const char *hostname, const rpcprog_t prog, const rpcvers_t vers,
 	     const char *nettype)
 {
 	return (clnt_ncreate_timed(hostname, prog, vers, nettype, NULL));
@@ -417,9 +418,9 @@ extern CLIENT *clnt_ncreate_vers_timed(const char *, const rpcprog_t,
  * pointer, indicating that the default timeout should be used.
  */
 static inline CLIENT *
-clnt_ncreate_vers(const char *hostname, rpcprog_t prog,
-		  rpcvers_t *vers_out, rpcvers_t vers_low,
-		  rpcvers_t vers_high, const char *nettype)
+clnt_ncreate_vers(const char *hostname, const rpcprog_t prog,
+		  rpcvers_t *vers_out, const rpcvers_t vers_low,
+		  const rpcvers_t vers_high, const char *nettype)
 {
 	return (clnt_ncreate_vers_timed
 		(hostname, prog, vers_out, vers_low, vers_high, nettype, NULL));
@@ -445,8 +446,8 @@ extern CLIENT *clnt_tp_ncreate_timed(const char *, const rpcprog_t,
  * pointer, indicating that the default timeout should be used.
  */
 static inline CLIENT *
-clnt_tp_ncreate(const char *hostname, rpcprog_t prog, rpcvers_t vers,
-		const struct netconfig *nconf)
+clnt_tp_ncreate(const char *hostname, const rpcprog_t prog,
+		const rpcvers_t vers, const struct netconfig *nconf)
 {
 	return (clnt_tp_ncreate_timed(hostname, prog, vers, nconf, NULL));
 }
@@ -472,12 +473,16 @@ extern CLIENT *clnt_tli_ncreate(const int, const struct netconfig *,
  * Low level clnt create routines for connectionful transports, e.g. tcp.
  */
 
-#define CLNT_CREATE_FLAG_NONE		0x00000000
+/* uint16_t actually used */
+#define CLNT_CREATE_FLAG_NONE		SVC_CREATE_FLAG_NONE
+#define CLNT_CREATE_FLAG_CLOSE		SVC_CREATE_FLAG_CLOSE
+
+/* uint32_t instructions */
 #define CLNT_CREATE_FLAG_CONNECT	0x10000000
-#define CLNT_CREATE_FLAG_LISTEN		0x20000000
+#define CLNT_CREATE_FLAG_LISTEN		SVC_CREATE_FLAG_LISTEN
 #define CLNT_CREATE_FLAG_SVCXPRT	0x40000000
-#define CLNT_CREATE_FLAG_XPRT_DOREG	0x80000000
-#define CLNT_CREATE_FLAG_XPRT_NOREG	0x08000000
+#define CLNT_CREATE_FLAG_XPRT_DOREG	SVC_CREATE_FLAG_XPRT_DOREG
+#define CLNT_CREATE_FLAG_XPRT_NOREG	SVC_CREATE_FLAG_XPRT_NOREG
 
 extern CLIENT *clnt_vc_ncreatef(const int, const struct netbuf *,
 				const rpcprog_t, const rpcvers_t,
@@ -502,15 +507,6 @@ extern CLIENT *clnt_vc_ncreate_svc(const SVCXPRT *, const rpcprog_t,
  *      const rpcprog_t prog;                   -- RPC program number
  *      const rpcvers_t vers;                   -- RPC program version
  *      const uint32_t flags;                   -- flags
- */
-
-/*
- * const int fd;    -- open file descriptor
- * const struct netbuf *svcaddr;  -- servers address
- * const rpcprog_t prog;   -- program number
- * const rpcvers_t vers;   -- version number
- * const u_int sendsz;   -- buffer recv size
- * const u_int recvsz;   -- buffer send size
  */
 
 /*
@@ -596,19 +592,6 @@ __BEGIN_DECLS
 extern void clnt_perrno(enum clnt_stat);	/* stderr */
 extern char *clnt_sperrno(enum clnt_stat);	/* string */
 __END_DECLS
-/*
- * If a creation fails, the following allows the user to figure out why.
- */
-struct rpc_createerr {
-	enum clnt_stat cf_stat;
-	struct rpc_err cf_error; /* useful when cf_stat == RPC_PMAPFAILURE */
-};
-
-__BEGIN_DECLS
-extern struct rpc_createerr *__rpc_createerr(void);
-__END_DECLS
-#define get_rpc_createerr() (*(__rpc_createerr()))
-#define rpc_createerr  (*(__rpc_createerr()))
 /*
  * The simplified interface:
  * enum clnt_stat

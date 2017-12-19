@@ -77,12 +77,6 @@ means that the mapping does not exist
 or that the RPC
 system failed to contact the remote
 rpcbind service.
-In the latter case, the global variable
-.Va rpc_createerr
-(see
-.Xr rpc_clnt_create 3 )
-contains the
-RPC status.
 .It Fn rpcb_gettime
 This routine returns the time on
 .Fa host

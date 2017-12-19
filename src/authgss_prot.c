@@ -201,12 +201,12 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 			__func__);
 		return (FALSE);
 	}
-	databuf.value = XDR_INLINE(xdrs, databuflen);
 	databuf.length = databuflen;
+	databuf.value = xdr_inline_encode(xdrs, databuflen);
 
 	if (!databuf.value) {
 		__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-			"%s() XDR_INLINE failed",
+			"%s() xdr_inline_encode failed",
 			__func__);
 		return (FALSE);
 	}

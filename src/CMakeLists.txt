@@ -61,7 +61,6 @@ SET(ntirpc_common_SRCS
   xdr_float.c
   xdr_mem.c
   xdr_reference.c
-  xdr_stdio.c
   xdr_ioq.c
   svc_ioq.c
   work_pool.c

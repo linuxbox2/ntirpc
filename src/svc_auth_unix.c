@@ -78,7 +78,7 @@ _svcauth_unix(struct svc_req *req)
 	auth_len = (u_int) req->rq_msg.cb_cred.oa_length;
 	xdrmem_create(&xdrs, req->rq_msg.cb_cred.oa_body, auth_len,
 		      XDR_DECODE);
-	buf = XDR_INLINE(&xdrs, auth_len);
+	buf = xdr_inline_decode(&xdrs, auth_len);
 	if (buf != NULL) {
 		aup->aup_time = IXDR_GET_INT32(buf);
 		str_len = (size_t) IXDR_GET_U_INT32(buf);

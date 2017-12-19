@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2013-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,7 +59,6 @@ typedef bool (*dummy_getbufs)(XDR *, xdr_uio *, u_int);
 typedef bool (*dummy_putbufs)(XDR *, xdr_uio *, u_int);
 
 static const struct xdr_ops xdrmem_ops_aligned;
-static const struct xdr_ops xdrmem_ops_unaligned;
 
 /*
  * The procedure xdrmem_create initializes a stream descriptor for a
@@ -69,11 +69,9 @@ xdrmem_ncreate(XDR *xdrs, char *addr, u_int size, enum xdr_op op)
 {
 	xdrs->x_op = op;
 	if ((uintptr_t)addr & (sizeof(int32_t) - 1)) {
-		xdrs->x_ops = &xdrmem_ops_unaligned;
 		abort();
 	} else {
 		xdrs->x_ops = &xdrmem_ops_aligned;
-		xdrs->x_flags = XDR_FLAG_VIO;
 	}
 	xdrs->x_public = NULL;
 	xdrs->x_private = NULL;
@@ -97,28 +95,20 @@ xdrmem_ncreate(XDR *xdrs, char *addr, u_int size, enum xdr_op op)
 	xdrs->x_base = &xdrs->x_v;
 }
 
+/* ARGSUSED */
 static bool
-xdrmem_getlong_aligned(XDR *xdrs, long *lp)
+xdrmem_getunit(XDR *xdrs, uint32_t *p)
 {
-	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
-
-	if (future > xdrs->x_v.vio_tail)
-		return (false);
-	*lp = ntohl(*(u_int32_t *) xdrs->x_data);
-	xdrs->x_data = future;
-	return (true);
+	/* xdr_get* exceeds contiguous buffer */
+	return (false);
 }
 
+/* ARGSUSED */
 static bool
-xdrmem_putlong_aligned(XDR *xdrs, const long *lp)
+xdrmem_putunit(XDR *xdrs, const uint32_t v)
 {
-	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
-
-	if (future > xdrs->x_v.vio_wrap)
-		return (false);
-	*(u_int32_t *) xdrs->x_data = htonl((u_int32_t) *lp);
-	xdrs->x_data = future;
-	return (true);
+	/* xdr_put* exceeds contiguous buffer */
+	return (false);
 }
 
 /* in glibc 2.14+ x86_64, memcpy no longer tries to handle overlapping areas,
@@ -127,41 +117,13 @@ xdrmem_putlong_aligned(XDR *xdrs, const long *lp)
  */
 
 static bool
-xdrmem_getlong_unaligned(XDR *xdrs, long *lp)
-{
-	u_int32_t l;
-	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
-
-	if (future > xdrs->x_v.vio_tail)
-		return (false);
-	memcpy(&l, xdrs->x_data, sizeof(int32_t));
-	*lp = ntohl(l);
-	xdrs->x_data = future;
-	return (true);
-}
-
-static bool
-xdrmem_putlong_unaligned(XDR *xdrs, const long *lp)
-{
-	u_int32_t l;
-	uint8_t *future = xdrs->x_data + sizeof(uint32_t);
-
-	if (future > xdrs->x_v.vio_wrap)
-		return (false);
-	l = htonl((u_int32_t) *lp);
-	memcpy(xdrs->x_data, &l, sizeof(int32_t));
-	xdrs->x_data = future;
-	return (true);
-}
-
-static bool
 xdrmem_getbytes(XDR *xdrs, char *addr, u_int len)
 {
 	uint8_t *future = xdrs->x_data + len;
 
 	if (future > xdrs->x_v.vio_tail)
 		return (false);
-	memmove(addr, xdrs->x_data, len);
+	memcpy(addr, xdrs->x_data, len);
 	xdrs->x_data = future;
 	return (true);
 }
@@ -173,7 +135,7 @@ xdrmem_putbytes(XDR *xdrs, const char *addr, u_int len)
 
 	if (future > xdrs->x_v.vio_wrap)
 		return (false);
-	memmove(xdrs->x_data, addr, len);
+	memcpy(xdrs->x_data, addr, len);
 	xdrs->x_data = future;
 	return (true);
 }
@@ -201,47 +163,6 @@ xdrmem_setpos(XDR *xdrs, u_int pos)
 	return (true);
 }
 
-static int32_t *
-xdrmem_inline_aligned(XDR *xdrs, u_int len)
-{
-	int32_t *buf = (int32_t *)xdrs->x_data;
-	uint8_t *future = xdrs->x_data + len;
-
-	switch (xdrs->x_op) {
-	case XDR_ENCODE:
-		if (future <= xdrs->x_v.vio_wrap) {
-			xdrs->x_data = future;
-			xdr_tail_update(xdrs);
-			/* temporarily backward compatible */
-			xdrs->x_handy = xdrs->x_v.vio_wrap - xdrs->x_data;
-			return (buf);
-		}
-		break;
-	case XDR_DECODE:
-		/* re-consuming bytes in a stream
-		 * (after SETPOS/rewind) */
-		if (future <= xdrs->x_v.vio_tail) {
-			xdrs->x_data = future;
-			/* temporarily backward compatible */
-			xdrs->x_handy = xdrs->x_v.vio_tail - xdrs->x_data;
-			return (buf);
-		}
-		break;
-	default:
-		abort();
-		break;
-	};
-
-	return (NULL);
-}
-
-/* ARGSUSED */
-static int32_t *
-xdrmem_inline_unaligned(XDR *xdrs, u_int len)
-{
-	return (NULL);
-}
-
 /* ARGSUSED */
 static void xdrmem_destroy(XDR *xdrs)
 {
@@ -254,27 +175,12 @@ xdrmem_noop(void)
 }
 
 static const struct xdr_ops xdrmem_ops_aligned = {
-	xdrmem_getlong_aligned,
-	xdrmem_putlong_aligned,
+	xdrmem_getunit,
+	xdrmem_putunit,
 	xdrmem_getbytes,
 	xdrmem_putbytes,
 	xdrmem_getpos,
 	xdrmem_setpos,
-	xdrmem_inline_aligned,
-	xdrmem_destroy,
-	(dummyfunc3) xdrmem_noop,	/* x_control */
-	(dummy_getbufs) xdrmem_noop,	/* x_getbufs */
-	(dummy_putbufs) xdrmem_noop,	/* x_putbufs */
-};
-
-static const struct xdr_ops xdrmem_ops_unaligned = {
-	xdrmem_getlong_unaligned,
-	xdrmem_putlong_unaligned,
-	xdrmem_getbytes,
-	xdrmem_putbytes,
-	xdrmem_getpos,
-	xdrmem_setpos,
-	xdrmem_inline_unaligned,
 	xdrmem_destroy,
 	(dummyfunc3) xdrmem_noop,	/* x_control */
 	(dummy_getbufs) xdrmem_noop,	/* x_getbufs */

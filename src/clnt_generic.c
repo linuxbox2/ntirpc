@@ -51,6 +51,8 @@
 
 int __rpc_raise_fd(int);
 
+int __rpc_minfd = 3;
+
 #ifndef NETIDLEN
 #define NETIDLEN 32
 #endif
@@ -64,10 +66,8 @@ static const struct timespec to = { 3, 0 };
  * vers_low <= vers_out <= vers_high  AND an error results
  * if this can not be done.
  *
- * This routine has the same definition as clnt_create_vers(),
- * except it takes an additional timeout parameter - a pointer to
- * a timeval structure.  A NULL value for the pointer indicates
- * that the default timeout value should be used.
+ * A NULL value for the timeout pointer indicates that the default
+ * value for the timeout should be used.
  */
 CLIENT *
 clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
@@ -80,8 +80,8 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
 	enum clnt_stat rpc_stat;
 
 	clnt = clnt_ncreate_timed(hostname, prog, vers_high, nettype, tp);
-	if (clnt == NULL)
-		return (NULL);
+	if (CLNT_FAILURE(clnt))
+		return (clnt);
 
 	cc = mem_alloc(sizeof(*cc));
 	clnt_req_fill(cc, clnt, authnone_ncreate(), NULLPROC,
@@ -129,11 +129,9 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
 	}
 
  error:
-	rpc_createerr.cf_stat = rpc_stat;
-	rpc_createerr.cf_error = cc->cc_error;
+	clnt->cl_error = cc->cc_error;
 	clnt_req_release(cc);
-	CLNT_DESTROY(clnt);
-	return (NULL);
+	return (clnt);
 }
 
 /*
@@ -147,21 +145,16 @@ clnt_ncreate_vers_timed(const char *hostname, rpcprog_t prog,
  * XXX The error message in the case of failure will be the one
  * pertaining to the last create error.
  *
- * This routine has the same definition as clnt_create(),
- * except it takes an additional timeout parameter - a pointer to
- * a timeval structure.  A NULL value for the pointer indicates
- * that the default timeout value should be used.
- *
- * This function calls clnt_tp_create_timed().
+ * A NULL value for the timeout pointer indicates that the default
+ * value for the timeout should be used.
  */
 CLIENT *
 clnt_ncreate_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
 		   const char *netclass, const struct timeval *tp)
 {
 	struct netconfig *nconf;
-	CLIENT *clnt = NULL;
+	CLIENT *clnt;
 	void *handle;
-	enum clnt_stat save_cf_stat = RPC_SUCCESS;
 	struct rpc_err save_cf_error;
 	char nettype_array[NETIDLEN];
 	char *nettype = &nettype_array[0];
@@ -175,32 +168,37 @@ clnt_ncreate_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s: netclass too long %zu >= %zu",
 				__func__, len, sizeof(nettype_array));
-			rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
-			return (NULL);
+			clnt = clnt_raw_ncreate(prog, vers);
+			clnt->cl_error.re_status = RPC_TLIERROR;
+			return (clnt);
 		}
 		strcpy(nettype, netclass);
 	}
 
 	handle = __rpc_setconf((char *)nettype);
 	if (handle == NULL) {
-		rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
-		return (NULL);
+		clnt = clnt_raw_ncreate(prog, vers);
+		clnt->cl_error.re_status = RPC_UNKNOWNPROTO;
+		return (clnt);
 	}
-	rpc_createerr.cf_stat = RPC_SUCCESS;
-	while (clnt == NULL) {
+	save_cf_error.re_status = RPC_SUCCESS;
+
+	for (;;) {
 		nconf = __rpc_getconf(handle);
 		if (nconf == NULL) {
-			if (rpc_createerr.cf_stat == RPC_SUCCESS)
-				rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
+			clnt = clnt_raw_ncreate(prog, vers);
+			clnt->cl_error.re_status = RPC_UNKNOWNPROTO;
 			break;
 		}
 		__warnx(TIRPC_DEBUG_FLAG_CLNT, "%s: trying netid %s",
 			__func__, nconf->nc_netid);
 
 		clnt = clnt_tp_ncreate_timed(hostname, prog, vers, nconf, tp);
-		if (clnt)
+		if (CLNT_SUCCESS(clnt))
 			break;
-		else {
+
+		if (clnt->cl_error.re_status != RPC_N2AXLATEFAILURE
+		    && clnt->cl_error.re_status != RPC_UNKNOWNHOST) {
 			/*
 			 * Since we didn't get a name-to-address
 			 * translation failure here, we remember
@@ -217,11 +215,9 @@ clnt_ncreate_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
 			 * meaningful error than ``unknown host
 			 * name'' for the same reasons.
 			 */
-			if (rpc_createerr.cf_stat != RPC_N2AXLATEFAILURE
-			    && rpc_createerr.cf_stat != RPC_UNKNOWNHOST) {
-				save_cf_stat = rpc_createerr.cf_stat;
-				save_cf_error = rpc_createerr.cf_error;
-			}
+			save_cf_error = clnt->cl_error;
+			CLNT_DESTROY(clnt);
+			clnt = NULL;
 		}
 	}
 
@@ -229,11 +225,10 @@ clnt_ncreate_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
 	 * Attempt to return an error more specific than ``Name to address
 	 * translation failed'' or ``unknown host name''
 	 */
-	if ((rpc_createerr.cf_stat == RPC_N2AXLATEFAILURE
-	     || rpc_createerr.cf_stat == RPC_UNKNOWNHOST)
-	    && (save_cf_stat != RPC_SUCCESS)) {
-		rpc_createerr.cf_stat = save_cf_stat;
-		rpc_createerr.cf_error = save_cf_error;
+	if ((clnt->cl_error.re_status == RPC_N2AXLATEFAILURE
+	     || clnt->cl_error.re_status == RPC_UNKNOWNHOST)
+	    && (save_cf_error.re_status != RPC_SUCCESS)) {
+		clnt->cl_error = save_cf_error;
 	}
 	__rpc_endconf(handle);
 	return (clnt);
@@ -245,8 +240,6 @@ clnt_ncreate_timed(const char *hostname, rpcprog_t prog, rpcvers_t vers,
  * change using the rpc equivalent of _ioctl()'s : clnt_control()
  * It finds out the server address from rpcbind and calls clnt_tli_create().
  *
- * This has the same definition as clnt_tp_ncreate(), except it
- * takes an additional parameter - a pointer to a timeval structure.
  * A NULL value for the timeout pointer indicates that the default
  * value for the timeout should be used.
  */
@@ -261,8 +254,9 @@ clnt_tp_ncreate_timed(const char *hostname, rpcprog_t prog,
 	if (nconf == NULL) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s: %s",
 			__func__, clnt_sperrno(RPC_TLIERROR));
-		rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
-		return (NULL);
+		cl = clnt_raw_ncreate(prog, vers);
+		cl->cl_error.re_status = RPC_TLIERROR;
+		return (cl);
 	}
 
 	/*
@@ -274,13 +268,14 @@ clnt_tp_ncreate_timed(const char *hostname, rpcprog_t prog,
 				      (struct timeval *)tp);
 	if (svcaddr == NULL) {
 		/* appropriate error number is set by rpcbind libraries */
-		return (NULL);
+		return (cl);
 	}
 	if (cl == NULL) {
 		/* __rpc_findaddr_timed failed? */
 		cl = clnt_tli_ncreate(RPC_ANYFD, nconf, svcaddr, prog, vers, 0,
 				      0);
-	} else {
+	}
+	if (CLNT_SUCCESS(cl)) {
 		/* Reuse the CLIENT handle and change the appropriate fields */
 		if (CLNT_CONTROL(cl, CLSET_SVC_ADDR, (void *)svcaddr) == true) {
 			if (cl->cl_netid == NULL)
@@ -314,18 +309,19 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 		 rpcvers_t vers, u_int sendsz, u_int recvsz)
 {
 	CLIENT *cl;		/* client handle */
-	bool madefd = false;	/* whether fd opened here */
-	long servtype;
-	int one = 1;
 	struct __rpc_sockinfo si;
-	extern int __rpc_minfd;
+	long servtype;
+	int save_errno;
+	int one = 1;
+	uint32_t flags = CLNT_CREATE_FLAG_CONNECT;
 
 	if (fd == RPC_ANYFD) {
 		if (nconf == NULL) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s: %s",
 				__func__, clnt_sperrno(RPC_TLIERROR));
-			rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
-			return (NULL);
+			cl = clnt_raw_ncreate(prog, vers);
+			cl->cl_error.re_status = RPC_TLIERROR;
+			return (cl);
 		}
 
 		fd = __rpc_nconf2fd(nconf);
@@ -334,7 +330,7 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 			goto err;
 		if (fd < __rpc_minfd)
 			fd = __rpc_raise_fd(fd);
-		madefd = true;
+		flags |= CLNT_CREATE_FLAG_CLOSE;
 		servtype = nconf->nc_semantics;
 		if (!__rpc_fd2sockinfo(fd, &si))
 			goto err;
@@ -346,21 +342,24 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 		if (servtype == -1) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s: %s",
 				__func__, clnt_sperrno(RPC_UNKNOWNPROTO));
-			rpc_createerr.cf_stat = RPC_UNKNOWNPROTO;
-			return (NULL);
+			cl = clnt_raw_ncreate(prog, vers);
+			cl->cl_error.re_status = RPC_UNKNOWNPROTO;
+			return (cl);
 		}
 	}
 
 	if (si.si_af != ((struct sockaddr *)svcaddr->buf)->sa_family) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s: %s",
 			__func__, clnt_sperrno(RPC_UNKNOWNHOST));
-		rpc_createerr.cf_stat = RPC_UNKNOWNHOST;	/* XXX */
+		cl = clnt_raw_ncreate(prog, vers);
+		cl->cl_error.re_status = RPC_UNKNOWNHOST;	/* XXX */
 		goto err1;
 	}
 
 	switch (servtype) {
 	case NC_TPI_COTS:
-		cl = clnt_vc_ncreate(fd, svcaddr, prog, vers, sendsz, recvsz);
+		cl = clnt_vc_ncreatef(fd, svcaddr, prog, vers, sendsz, recvsz,
+				      flags);
 		break;
 	case NC_TPI_COTS_ORD:
 		if (nconf && ((strcmp(nconf->nc_protofmly, "inet") == 0)
@@ -368,17 +367,17 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 			(void) setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one,
 					  sizeof(one));
 		}
-		cl = clnt_vc_ncreate(fd, svcaddr, prog, vers, sendsz, recvsz);
+		cl = clnt_vc_ncreatef(fd, svcaddr, prog, vers, sendsz, recvsz,
+				      flags);
 		break;
 	case NC_TPI_CLTS:
-		cl = clnt_dg_ncreate(fd, svcaddr, prog, vers, sendsz, recvsz);
+		cl = clnt_dg_ncreatef(fd, svcaddr, prog, vers, sendsz, recvsz,
+				      flags);
 		break;
 	default:
 		goto err;
 	}
 
-	if (cl == NULL)
-		goto err1;	/* borrow errors from clnt_dg/vc ncreates */
 	if (nconf) {
 		cl->cl_netid = mem_strdup(nconf->nc_netid);
 		cl->cl_tp = mem_strdup(nconf->nc_device);
@@ -386,19 +385,17 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 		cl->cl_netid = "";
 		cl->cl_tp = "";
 	}
-	if (madefd) {
-		(void)CLNT_CONTROL(cl, CLSET_FD_CLOSE, NULL);
-/*  (void) CLNT_CONTROL(cl, CLSET_POP_TIMOD, NULL);  */
-	};
 
 	return (cl);
 
  err:
-	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
-	rpc_createerr.cf_error.re_errno = errno;
- err1:	if (madefd)
+	save_errno = errno;
+	cl = clnt_raw_ncreate(prog, vers);
+	cl->cl_error.re_status = RPC_SYSTEMERROR;
+	cl->cl_error.re_errno = save_errno;
+ err1:	if (flags & CLNT_CREATE_FLAG_CLOSE)
 		(void)close(fd);
-	return (NULL);
+	return (cl);
 }
 
 int
@@ -685,8 +682,6 @@ clnt_req_release(struct clnt_req *cc)
  *  a descriptor to a higher value.  If we fail to do it, we continue
  *  to use the old one (and hope for the best).
  */
-int __rpc_minfd = 3;
-
 int __rpc_raise_fd(int fd)
 {
 	int nfd;

@@ -88,26 +88,31 @@ clnt_rdma_data_zalloc(void)
 }
 
 /*
- * client mooshika create
+ * Create a client handle for a connection.
+ *
+ * Always returns CLIENT. Must check cl_error.re_status,
+ * followed by CLNT_DESTROY() as necessary.
  */
 CLIENT *
-clnt_rdma_create(RDMAXPRT *xprt,		/* init but NOT connect()ed descriptor */
-		 rpcprog_t program,		/* program number */
-		 rpcvers_t version,
-		 const u_int flags)
+clnt_rdma_ncreate(RDMAXPRT *xprt,		/* init but NOT connect()ed */
+		  rpcprog_t program,		/* program number */
+		  rpcvers_t version,
+		  const u_int flags)
 {
-	CLIENT *cl;		/* client handle */
-	struct cm_data *cm;
+	struct cm_data *cm = clnt_rdma_data_zalloc();
+	CLIENT *cl = &cm->cm_cx.cx_c;
 	struct timeval now;
 
+	cl->cl_ops = clnt_rdma_ops();
+
 	if (!xprt || xprt->state != RDMAXS_INITIAL) {
-		rpc_createerr.cf_stat = RPC_UNKNOWNADDR; /* FIXME, add a warnx? */
-		rpc_createerr.cf_error.re_errno = 0;
-		return (NULL);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: called with missing transport address",
+			__func__);
+		cl->cl_error.re_status = RPC_UNKNOWNADDR;
+		return (cl);
 	}
 
-	/* buffer sizes should match svc side */
-	cm = clnt_rdma_data_zalloc();
 	/* Other values can also be set through clnt_control() */
 	cm->cm_xdrs.x_lib[1] = (void *)xprt;
 
@@ -129,8 +134,6 @@ clnt_rdma_create(RDMAXPRT *xprt,		/* init but NOT connect()ed descriptor */
 	 * to let clnt_destroy do it for him/her.
 	 */
 	cm->cm_closeit = FALSE;
-	cl = &cm->cm_cx.cx_c;
-	cl->cl_ops = clnt_rdma_ops();
 	//	cl->cl_auth = authnone_create();
 
 	return (cl);
@@ -152,7 +155,7 @@ clnt_rdma_call(struct clnt_req *cc)
 
 	if (!xdr_rdma_clnt_call(&cm->cm_xdrs, cm->call_msg.rm_xid)
 	 || !xdr_callhdr(&(cm->cm_xdrs), &cm->call_msg)
-	 || !XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc)
+	 || !XDR_PUTUINT32(xdrs, cc->cc_proc)
 	 || !AUTH_MARSHALL(cc->cc_auth, xdrs)
 	 || !AUTH_WRAP(cc->cc_auth, xdrs,
 		       cc->cc_call.proc, cc->cc_call.where)) {

@@ -228,18 +228,14 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 		  int waittime,	/* maximum time to wait */
 		  const char *nettype /* transport type */)
 {
-	enum clnt_stat stat = RPC_SUCCESS;	/* Return status */
-	XDR xdr_stream;		/* XDR stream */
-	XDR *xdrs = &xdr_stream;
+	XDR xdrs[1];
 	struct rpc_msg msg;	/* RPC message */
 	struct timespec ts;
 	char *outbuf = NULL;	/* Broadcast msg buffer */
 	char *inbuf = NULL;	/* Reply buf */
-	int inlen;
-	u_int maxbufsize = 0;
 	AUTH *sys_auth = authunix_ncreate_default();
-	int i;
 	void *handle;
+	struct netconfig *nconf;
 	char uaddress[1024];	/* A self imposed limit */
 	char *uaddrp = uaddress;
 	int pmap_reply_flag;	/* reply recvd from PORTMAP */
@@ -259,11 +255,11 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 	struct r_rpcb_rmtcallargs barg;	/* Remote arguments */
 	struct r_rpcb_rmtcallres bres;	/* Remote results */
 	size_t outlen;
-	struct netconfig *nconf;
 	int msec;
 	int pollretval;
 	int fds_found;
-
+	int inlen;
+	int i;
 #ifdef PORTMAP
 	size_t outlen_pmap = 0;
 	u_long port;		/* Remote port number */
@@ -273,9 +269,14 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 	struct rmtcallres bres_pmap;	/* Remote results */
 	u_int udpbufsz = 0;
 #endif				/* PORTMAP */
+	u_int maxbufsize = 0;
+	enum clnt_stat stat = RPC_SUCCESS;	/* Return status */
 
-	if (sys_auth == NULL)
-		return (RPC_SYSTEMERROR);
+	stat = sys_auth->ah_error.re_status;
+	if (stat) {
+		AUTH_DESTROY(sys_auth);
+		return (stat);
+	}
 
 	/*
 	 * initialization: create a fd, a broadcast address, and send the

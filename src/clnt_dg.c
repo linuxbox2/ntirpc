@@ -96,7 +96,8 @@ clnt_dg_data_zalloc(void)
  * changed to improve the program efficiency and buffer allocation.
  * If they are 0, use the transport default.
  *
- * If svcaddr is NULL, returns NULL.
+ * Always returns CLIENT. Must check cl_error.re_status,
+ * followed by CLNT_DESTROY() as necessary.
  */
 CLIENT *
 clnt_dg_ncreatef(const int fd,	/* open file descriptor */
@@ -107,16 +108,21 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 		 const u_int recvsz,	/* buffer send size */
 		 const uint32_t flags)
 {
-	CLIENT *clnt;		/* client handle */
-	struct cu_data *cu;
+	struct cu_data *cu = clnt_dg_data_zalloc();
+	CLIENT *clnt = &cu->cu_cx.cx_c;
 	SVCXPRT *xprt;
 	struct svc_dg_xprt *su;
 	struct rpc_msg call_msg;
 	XDR cu_xdrs[1];		/* temp XDR stream */
 
+	clnt->cl_ops = clnt_dg_ops();
+
 	if (svcaddr == NULL) {
-		rpc_createerr.cf_stat = RPC_UNKNOWNADDR;
-		return (NULL);
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: fd %d called with missing servers address",
+			__func__, fd);
+		clnt->cl_error.re_status = RPC_UNKNOWNADDR;
+		return (clnt);
 	}
 	if (sizeof(struct sockaddr_storage) < svcaddr->len) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -125,7 +131,8 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 			__func__, fd,
 			sizeof(struct sockaddr_storage),
 			svcaddr->len);
-		return (NULL);
+		clnt->cl_error.re_status = RPC_UNKNOWNADDR;
+		return (clnt);
 	}
 
 	/* find or create shared fd state; ref+1 */
@@ -134,9 +141,8 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d svc_dg_ncreatef failed",
 			__func__, fd);
-		rpc_createerr.cf_stat = RPC_TLIERROR;	/* XXX */
-		rpc_createerr.cf_error.re_errno = 0;
-		return (NULL);
+		clnt->cl_error.re_status = RPC_TLIERROR;
+		return (clnt);
 	}
 	su = su_data(xprt);
 
@@ -145,9 +151,6 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
 	}
-
-	/* buffer sizes should match svc side */
-	cu = clnt_dg_data_zalloc();
 	cu->cu_cx.cx_rec = &su->su_dr;
 
 	(void)memcpy(&cu->cu_raddr, svcaddr->buf, (size_t) svcaddr->len);
@@ -170,17 +173,12 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d xdr_callhdr failed",
 			__func__, fd);
-		rpc_createerr.cf_stat = RPC_CANTENCODEARGS;	/* XXX */
-		rpc_createerr.cf_error.re_errno = 0;
-		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-		clnt_dg_data_free(cu);
-		return (NULL);
+		clnt->cl_error.re_status = RPC_CANTENCODEARGS;
+		XDR_DESTROY(cu_xdrs);
+		return (clnt);
 	}
 	cu->cu_cx.cx_mpos = XDR_GETPOS(cu_xdrs);
 	XDR_DESTROY(cu_xdrs);
-
-	clnt = &cu->cu_cx.cx_c;
-	clnt->cl_ops = clnt_dg_ops();
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_DG,
 		"%s: fd %d completed",
@@ -238,7 +236,7 @@ clnt_dg_call(struct clnt_req *cc)
 	cx->cx_u.cx_mcalli = ntohl(cc->cc_xid);
 
 	if ((!XDR_PUTBYTES(xdrs, cx->cx_u.cx_mcallc, cx->cx_mpos))
-	    || (!XDR_PUTINT32(xdrs, (int32_t *) &cc->cc_proc))
+	    || (!XDR_PUTUINT32(xdrs, cc->cc_proc))
 	    || (!AUTH_MARSHALL(cc->cc_auth, xdrs))
 	    || (!AUTH_WRAP(cc->cc_auth, xdrs,
 			   cc->cc_call.proc, cc->cc_call.where))) {
@@ -414,7 +412,9 @@ clnt_dg_destroy(CLIENT *clnt)
 {
 	struct cx_data *cx = CX_DATA(clnt);
 
-	SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
+	if (cx->cx_rec) {
+		SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
+	}
 	clnt_dg_data_free(CU_DATA(cx));
 }
 

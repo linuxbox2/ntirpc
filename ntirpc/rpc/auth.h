@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,8 +48,7 @@
 #define  _TIRPC_AUTH_H
 
 #include <rpc/xdr.h>
-#include <rpc/clnt_stat.h>
-#include <rpc/auth_stat.h>
+#include <rpc/rpc_err.h>
 #include <misc/abstract_atomic.h>
 
 #include <sys/cdefs.h>
@@ -79,40 +79,6 @@ struct sec_data32 {
 	caddr32_t data;		/* opaque data per flavor */
 };
 #endif				/* _SYSCALL32_IMPL */
-
-/*
- * AUTH_DES flavor specific data from sec_data opaque data field.
- * AUTH_KERB has the same structure.
- */
-typedef struct des_clnt_data {
-	struct netbuf syncaddr;	/* time sync addr */
-	struct knetconfig *knconf;	/* knetconfig info that associated */
-	/* with the syncaddr. */
-	char *netname;		/* server's netname */
-	int netnamelen;		/* server's netname len */
-} dh_k4_clntdata_t;
-
-#ifdef _SYSCALL32_IMPL
-struct des_clnt_data32 {
-	struct netbuf32 syncaddr;	/* time sync addr */
-	caddr32_t knconf;	/* knetconfig info that associated */
-	/* with the syncaddr. */
-	caddr32_t netname;	/* server's netname */
-	int32_t netnamelen;	/* server's netname len */
-};
-#endif				/* _SYSCALL32_IMPL */
-
-#ifdef KERBEROS
-/*
- * flavor specific data to hold the data for AUTH_DES/AUTH_KERB(v4)
- * in sec_data->data opaque field.
- */
-typedef struct krb4_svc_data {
-	int window;		/* window option value */
-} krb4_svcdata_t;
-
-typedef struct krb4_svc_data des_svcdata_t;
-#endif				/* KERBEROS */
 
 /*
  * authentication/security specific flags
@@ -146,25 +112,34 @@ struct opaque_auth {
  * Auth handle, interface to client side authenticators.
  */
 typedef struct __auth {
-	struct opaque_auth ah_cred;
-	struct opaque_auth ah_verf;
-	union des_block ah_key;
 	struct auth_ops {
+		/* nextverf */
 		void (*ah_nextverf) (struct __auth *);
-		/* nextverf & serialize */
+
+		/* serialize */
 		 bool(*ah_marshal) (struct __auth *, XDR *);
+
 		/* validate verifier */
 		 bool(*ah_validate) (struct __auth *, struct opaque_auth *);
+
 		/* refresh credentials */
 		 bool(*ah_refresh) (struct __auth *, void *);
+
 		/* destroy this structure */
 		void (*ah_destroy) (struct __auth *);
+
 		/* encode data for wire */
 		 bool(*ah_wrap) (struct __auth *, XDR *, xdrproc_t, caddr_t);
+
 		/* decode data for wire */
 		 bool(*ah_unwrap) (struct __auth *, XDR *, xdrproc_t, caddr_t);
-
 	} *ah_ops;
+
+	union des_block ah_key;
+	struct rpc_err ah_error;
+	struct opaque_auth ah_cred;
+	struct opaque_auth ah_verf;
+
 	void *ah_private;
 	int ah_refcnt;
 } AUTH;
@@ -187,6 +162,9 @@ static inline int auth_put(AUTH *auth)
  * XDR *xdrs;
  * struct opaque_auth verf;
  */
+#define AUTH_FAILURE(auth) ((auth)->ah_error.re_status != RPC_SUCCESS)
+#define AUTH_SUCCESS(auth) ((auth)->ah_error.re_status == RPC_SUCCESS)
+
 #define AUTH_NEXTVERF(auth)                     \
 	((*((auth)->ah_ops->ah_nextverf))(auth))
 #define auth_nextverf(auth)                     \
@@ -252,6 +230,9 @@ int authany_wrap(void), authany_unwrap(void);
 
 /*
  * These are the various implementations of client side authenticators.
+ *
+ * Always returns AUTH. Must check ah_error.re_status,
+ * followed by AUTH_DESTROY() as necessary.
  */
 
 /*
@@ -267,6 +248,7 @@ __BEGIN_DECLS
 extern AUTH *authunix_ncreate(char *, uid_t, uid_t, int, uid_t *);
 extern AUTH *authunix_ncreate_default(void);	/* takes no parameters */
 extern AUTH *authnone_ncreate(void);	/* takes no parameters */
+extern AUTH *authnone_ncreate_dummy(void);	/* takes no parameters */
 __END_DECLS
 /*
  * Netname manipulation routines.
@@ -300,38 +282,6 @@ extern int getpublickey(const char *, char *);
 extern int getpublicandprivatekey(char *, char *);
 extern int getsecretkey(char *, char *, char *);
 __END_DECLS
-#ifdef KERBEROS
-/*
- * Kerberos style authentication
- * AUTH *authkerb_seccreate(service, srv_inst, realm, window, timehost, status)
- * const char *service;   - service name
- * const char *srv_inst;   - server instance
- * const char *realm;   - server realm
- * const u_int window;   - time to live
- * const char *timehost;   - optional hostname to sync with
- * int *status;    - kerberos status returned
- */
-__BEGIN_DECLS
-extern AUTH *authkerb_nseccreate(const char *, const char *,
-				 const char *, const u_int,
-				 const char *, int *);
-__END_DECLS
-/*
- * Map a kerberos credential into a unix cred.
- *
- * authkerb_getucred(rqst, uid, gid, grouplen, groups)
- * const struct svc_req *rqst;  - request pointer
- * uid_t *uid;
- * gid_t *gid;
- * short *grouplen;
- * int *groups;
- *
- */
-__BEGIN_DECLS
-extern int authkerb_getucred(/* struct svc_req *, uid_t *, gid_t *,
-				short *, int * */);
-__END_DECLS
-#endif				/* KERBEROS */
 
 __BEGIN_DECLS
 struct svc_req;
@@ -351,6 +301,4 @@ __END_DECLS
 #define AUTH_KERB 4		/* kerberos style */
 #define RPCSEC_GSS 6		/* RPCSEC_GSS */
 
-/* for backward compatibility */
-#include <rpc/tirpc_compat.h>
 #endif				/* !_TIRPC_AUTH_H */

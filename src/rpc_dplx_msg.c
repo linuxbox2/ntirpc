@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -83,9 +84,8 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 				MAX_AUTH_BYTES);
 			return (false);
 		}
-		buf = XDR_INLINE(xdrs,
-				 6 * BYTES_PER_XDR_UNIT +
-				 RNDUP(oa->oa_length));
+		buf = xdr_inline_encode(xdrs, 6 * BYTES_PER_XDR_UNIT
+						+ RNDUP(oa->oa_length));
 
 		if (buf != NULL) {
 			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
@@ -113,20 +113,20 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 				__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
 					"%s:%u MISMATCH",
 					__func__, __LINE__);
-				buf = XDR_INLINE(xdrs,
-					2 * BYTES_PER_XDR_UNIT);
+				buf = xdr_inline_encode(xdrs,
+							2 * BYTES_PER_XDR_UNIT);
 				if (buf != NULL) {
 					IXDR_PUT_ENUM(buf, ar->ar_vers.low);
 					IXDR_PUT_ENUM(buf, ar->ar_vers.high);
 				} else if (!xdr_putuint32(xdrs,
-						&(ar->ar_vers.low))) {
+							  ar->ar_vers.low)) {
 					__warnx(TIRPC_DEBUG_FLAG_ERROR,
 						"%s:%u ERROR ar_vers.low %u",
 						__func__, __LINE__,
 						ar->ar_vers.low);
 					return (false);
 				} else if (!xdr_putuint32(xdrs,
-						&(ar->ar_vers.high))) {
+							  ar->ar_vers.high)) {
 					__warnx(TIRPC_DEBUG_FLAG_ERROR,
 						"%s:%u ERROR ar_vers.high %u",
 						__func__, __LINE__,
@@ -146,7 +146,7 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 		__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
 			"%s:%u ACCEPTED non-INLINE",
 			__func__, __LINE__);
-		if (!xdr_putuint32(xdrs, &(dmsg->rm_xid))) {
+		if (!xdr_putuint32(xdrs, dmsg->rm_xid)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR rm_xid %u",
 				__func__, __LINE__,
@@ -176,12 +176,12 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 		struct rejected_reply *rr = (struct rejected_reply *)
 						&(dmsg->rm_reply.ru);
 
-		buf = XDR_INLINE(xdrs, 3 * BYTES_PER_XDR_UNIT);
+		buf = xdr_inline_encode(xdrs, 3 * BYTES_PER_XDR_UNIT);
 		if (buf != NULL) {
 			IXDR_PUT_INT32(buf, dmsg->rm_xid);
 			IXDR_PUT_ENUM(buf, dmsg->rm_direction);
 			IXDR_PUT_ENUM(buf, dmsg->rm_reply.rp_stat);
-		} else if (!xdr_putuint32(xdrs, &(dmsg->rm_xid))) {
+		} else if (!xdr_putuint32(xdrs, dmsg->rm_xid)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR rm_xid %u",
 				__func__, __LINE__,
@@ -206,7 +206,7 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
 				"%s:%u DENIED MISMATCH",
 				__func__, __LINE__);
-			buf = XDR_INLINE(xdrs, 3 * BYTES_PER_XDR_UNIT);
+			buf = xdr_inline_encode(xdrs, 3 * BYTES_PER_XDR_UNIT);
 
 			if (buf != NULL) {
 				IXDR_PUT_ENUM(buf, rr->rj_stat);
@@ -218,15 +218,13 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 					__func__, __LINE__,
 					rr->rj_stat);
 				return (false);
-			} else if (!xdr_putuint32(xdrs,
-						&(rr->rj_vers.low))) {
+			} else if (!xdr_putuint32(xdrs, rr->rj_vers.low)) {
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"%s:%u ERROR rj_vers.low %u",
 					__func__, __LINE__,
 					rr->rj_vers.low);
 				return (false);
-			} else if (!xdr_putuint32(xdrs,
-						&(rr->rj_vers.high))) {
+			} else if (!xdr_putuint32(xdrs, rr->rj_vers.high)) {
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"%s:%u ERROR rj_vers.high %u",
 					__func__, __LINE__,
@@ -238,7 +236,7 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 			__warnx(TIRPC_DEBUG_FLAG_RPC_MSG,
 				"%s:%u DENIED AUTH",
 				__func__, __LINE__);
-			buf = XDR_INLINE(xdrs, 2 * BYTES_PER_XDR_UNIT);
+			buf = xdr_inline_encode(xdrs, 2 * BYTES_PER_XDR_UNIT);
 
 			if (buf != NULL) {
 				IXDR_PUT_ENUM(buf, rr->rj_stat);
@@ -436,7 +434,7 @@ xdr_dplx_decode(XDR *xdrs, struct rpc_msg *dmsg)
 	/*
 	 * NOTE: 5 here, 3 more in each _decode
 	 */
-	buf = XDR_INLINE(xdrs, 5 * BYTES_PER_XDR_UNIT);
+	buf = xdr_inline_decode(xdrs, 5 * BYTES_PER_XDR_UNIT);
 	if (buf != NULL) {
 		dmsg->rm_xid = IXDR_GET_U_INT32(buf);
 		dmsg->rm_direction = IXDR_GET_ENUM(buf, enum msg_type);
