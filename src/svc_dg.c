@@ -32,7 +32,7 @@
  * Copyright (c) 1986-1991 by Sun Microsystems Inc.
  */
 
-#include <config.h>
+#include "config.h"
 
 /*
  * svc_dg.c, Server side for connectionless RPC.

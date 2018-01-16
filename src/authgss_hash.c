@@ -25,7 +25,7 @@
 
 /* Portions Copyright (c) 2010-2011, ** others, update */
 
-#include <config.h>
+#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

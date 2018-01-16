@@ -32,6 +32,7 @@
  * will work with any unix system that has adopted the sun NIS domain
  * architecture.
  */
+#include "config.h"
 #include <sys/param.h>
 #include <rpc/rpc.h>
 #include "rpc_com.h"

@@ -42,6 +42,7 @@
  * CRC32 code derived from work by Gary S. Brown.
  */
 
+#include "config.h"
 #include <sys/cdefs.h>
 
 #include <stdint.h>

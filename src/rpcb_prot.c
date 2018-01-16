@@ -37,7 +37,7 @@
  * Copyright (C) 1984, 1988, Sun Microsystems, Inc.
  */
 
-#include <config.h>
+#include "config.h"
 #include <rpc/rpc.h>
 #include <rpc/types.h>
 #include <rpc/xdr_inline.h>

@@ -30,6 +30,7 @@
  * Copyright (C) 1986, Sun Microsystems, Inc.
  */
 
+#include "config.h"
 #include <sys/types.h>
 #include <rpc/types.h>
 #include <rpc/des_crypt.h>

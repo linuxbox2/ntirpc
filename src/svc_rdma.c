@@ -31,7 +31,7 @@
  * Implements connection server side RPC/RDMA.
  */
 
-#include <config.h>
+#include "config.h"
 
 #include <sys/cdefs.h>
 #include <pthread.h>

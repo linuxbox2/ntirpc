@@ -29,6 +29,7 @@
  * Copyright (c) 1986-1991 by Sun Microsystems Inc.
  */
 
+#include "config.h"
 #include <sys/cdefs.h>
 
 /*

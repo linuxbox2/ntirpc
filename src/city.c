@@ -33,6 +33,7 @@
  * compromising on hash quality.
  */
 
+#include "config.h"
 #include <string.h>
 #include <misc/city.h>
 
