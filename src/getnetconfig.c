@@ -30,7 +30,7 @@
  * Copyright (c) 1989 by Sun Microsystems, Inc.
  */
 
-#include <config.h>
+#include "config.h"
 #include <pthread.h>
 #include <reentrant.h>
 #include <sys/cdefs.h>

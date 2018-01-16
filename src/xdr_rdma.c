@@ -27,7 +27,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <config.h>
+#include "config.h"
 #include <sys/cdefs.h>
 
 #include "namespace.h"

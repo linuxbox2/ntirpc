@@ -12,7 +12,7 @@
  *-------------------------------------------------------------------------
  */
 
-#include <config.h>
+#include "config.h"
 
 #include <stdint.h>
 #include <sys/param.h>

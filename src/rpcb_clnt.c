@@ -31,7 +31,7 @@
  * rpcb_clnt.c
  * interface to rpcbind rpc service.
  */
-#include <config.h>
+#include "config.h"
 #include <pthread.h>
 #include <reentrant.h>
 #include <sys/stat.h>

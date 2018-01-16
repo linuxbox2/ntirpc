@@ -30,7 +30,7 @@
  * Copyright (c) 1984 by Sun Microsystems, Inc.
  */
 
-#include <config.h>
+#include "config.h"
 #include <sys/types.h>
 
 #include <netinet/in.h>

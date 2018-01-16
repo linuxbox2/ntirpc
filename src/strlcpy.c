@@ -16,6 +16,7 @@
 
 #ifndef HAVE_STRLCPY
 
+#include "config.h"
 #include <sys/types.h>
 
 /*

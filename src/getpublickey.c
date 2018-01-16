@@ -37,6 +37,7 @@
 /*
  * Public key lookup routines
  */
+#include "config.h"
 #include <stdio.h>
 #include <pwd.h>
 #include <rpc/rpc.h>

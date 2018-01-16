@@ -16,6 +16,7 @@
 
 #ifndef HAVE_STRLCAT
 
+#include "config.h"
 #include <sys/types.h>
 #include <string.h>
 

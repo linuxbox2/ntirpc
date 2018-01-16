@@ -37,7 +37,7 @@
  * any interference from the kernel.
  *
  */
-#include <config.h>
+#include "config.h"
 #include <pthread.h>
 #include <reentrant.h>
 #include <sys/types.h>

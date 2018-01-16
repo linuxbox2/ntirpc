@@ -27,7 +27,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <config.h>
+#include "config.h"
 
 /*
  * svc_vc.c, Server side for Connection Oriented RPC.

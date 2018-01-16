@@ -42,7 +42,7 @@
  *
  * Copyright (C) 1984, Sun Microsystems, Inc.
  */
-#include <config.h>
+#include "config.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <errno.h>
