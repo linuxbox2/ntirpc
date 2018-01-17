@@ -153,14 +153,14 @@ include_directories(BEFORE
 
 # Find misc system libs
 find_library(LIBRT rt)   # extended Pthreads functions
-find_library(LIBNSL nsl) # sockets
+find_package(NSL) # sockets
 
 set(SYSTEM_LIBRARIES
   ${LIBTIRPC_LIBRARIES}
   ${KRB5_LIBRARIES}
   ${SYSTEM_LIBRARIES}
   ${LIBRT}
-  ${LIBNSL}
+  ${NSL_LIBRARY}
 )
 
 set(LIBNTIRPC_MAP "${PROJECT_BINARY_DIR}/src/libntirpc.map")
