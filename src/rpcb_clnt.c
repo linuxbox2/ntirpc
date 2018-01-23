@@ -252,7 +252,7 @@ add_cache(const char *host, const char *netid, struct netbuf *taddr,
  * rpcbind. If targaddr is non-NULL, the "universal address" of the
  * host will be stored in *targaddr; the caller is responsible for
  * freeing this string.
- * On error, returns NULL and free's everything.
+ * On error, a CLIENT with cl_error.re_status set
  */
 static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 			     char **targaddr)
@@ -295,8 +295,7 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 		t = rpc_sperror(&client->cl_error, __func__);
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_RPCB, "%s", t);
 		mem_free(t, RPC_SPERROR_BUFLEN);
-		CLNT_DESTROY(client);
-		client = NULL;
+		goto out_err;
 
 		addr_to_delete.len = addr->len;
 		addr_to_delete.buf = (char *)mem_zalloc(addr->len);
@@ -317,6 +316,8 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 		assert(client == NULL);
 		__warnx(TIRPC_DEBUG_FLAG_WARN, "%s: %s",
 			__func__, clnt_sperrno(RPC_UNKNOWNPROTO));
+		client = clnt_raw_ncreate(1, 1);
+		client->cl_error.re_status = RPC_UNKNOWNPROTO;
 		goto out_err;
 	}
 
@@ -332,7 +333,7 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 
 	if (strcmp(nconf->nc_protofmly, NC_LOOPBACK) == 0) {
 		client = local_rpcb(__func__);
-		if (client) {
+		if (CLNT_SUCCESS(client)) {
 			struct sockaddr_un sun;
 
 			if (targaddr) {
@@ -348,6 +349,8 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 			assert(client == NULL);
 			__warnx(TIRPC_DEBUG_FLAG_WARN, "%s: %s",
 				__func__, clnt_sperrno(RPC_UNKNOWNHOST));
+			client = clnt_raw_ncreate(1, 1);
+			client->cl_error.re_status = RPC_UNKNOWNHOST;
 			goto out_err;
 		}
 	}
@@ -394,13 +397,11 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 		t = rpc_sperror(&client->cl_error, __func__);
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_RPCB, "%s", t);
 		mem_free(t, RPC_SPERROR_BUFLEN);
-		CLNT_DESTROY(client);
-		client = NULL;
 	}
 	if (res)
 		freeaddrinfo(res);
  out_err:
-	if (!client && targaddr)
+	if (CLNT_FAILURE(client) && targaddr)
 		mem_free(*targaddr, 0);
 	return (client);
 }
@@ -433,8 +434,10 @@ rpcb_set(rpcprog_t program, rpcvers_t version, const struct netconfig *nconf,
 		return (false);
 	}
 	client = local_rpcb(__func__);
-	if (!client)
+	if (CLNT_FAILURE(client)) {
+		CLNT_DESTROY(client);
 		return (false);
+	}
 
 	/* convert to universal */
 	/*LINTED const castaway */
@@ -496,8 +499,10 @@ rpcb_unset(rpcprog_t program, rpcvers_t version,
 	bool_t rslt = false;	/* yes, bool_t */
 
 	client = local_rpcb(__func__);
-	if (!client)
+	if (CLNT_FAILURE(client)) {
+		CLNT_DESTROY(client);
 		return (false);
+	}
 
 	parms.r_prog = program;
 	parms.r_vers = version;
@@ -682,12 +687,9 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 
 			newnconf = getnetconfigent("udp");
 			if (!newnconf) {
-				__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s: %s",
-					__func__,
-					clnt_sperrno(RPC_UNKNOWNPROTO));
 				client = clnt_raw_ncreate(program, version);
 				client->cl_error.re_status = RPC_UNKNOWNPROTO;
-				goto done;
+				goto error;
 			}
 			client = getclnthandle(host, newnconf, &parms.r_addr);
 			freenetconfigent(newnconf);
@@ -695,8 +697,8 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 			client = getclnthandle(host, nconf, &parms.r_addr);
 		else
 			goto try_rpcbind;
-		if (client == NULL)
-			return (NULL);
+		if (CLNT_FAILURE(client))
+			goto error;
 
 		CLNT_CONTROL(client, CLSET_VERS, (char *)&pmapvers);
 
@@ -770,8 +772,8 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 
 	if (client == NULL) {
 		client = getclnthandle(host, nconf, &parms.r_addr);
-		if (client == NULL)
-			goto done;
+		if (CLNT_FAILURE(client))
+			goto error;
 	}
 	if (parms.r_addr == NULL) {
 		/*LINTED const castaway */
@@ -1100,6 +1102,9 @@ boolrpcb_gettime(const char *host, time_t *timep)
 	}
 
 	do {
+		if (client)
+			CLNT_DESTROY(client);
+
 		nconf = __rpc_getconf(handle);
 		if (!nconf) {
 			__warnx(TIRPC_DEBUG_FLAG_CLNT_RPCB, "%s: %s",
@@ -1107,11 +1112,13 @@ boolrpcb_gettime(const char *host, time_t *timep)
 			break;
 		}
 		client = getclnthandle(host, nconf, NULL);
-	} while (!client);
+	} while (CLNT_FAILURE(client));
 
 	__rpc_endconf(handle);
-	if (client == (CLIENT *) NULL)
+	if (CLNT_FAILURE(client)) {
+		CLNT_DESTROY(client);
 		return (false);
+	}
 
 	cc = mem_alloc(sizeof(*cc));
 	clnt_req_fill(cc, client, authnone_ncreate(), RPCBPROC_GETTIME,
@@ -1172,8 +1179,10 @@ char *rpcb_taddr2uaddr(struct netconfig *nconf, struct netbuf *taddr)
 		return (NULL);
 	}
 	client = local_rpcb(__func__);
-	if (!client)
-		return (NULL);
+	if (CLNT_FAILURE(client)) {
+		CLNT_DESTROY(client);
+		return (false);
+	}
 
 	cc = mem_alloc(sizeof(*cc));
 	clnt_req_fill(cc, client, authnone_ncreate(), RPCBPROC_TADDR2UADDR,
@@ -1219,8 +1228,10 @@ struct netbuf *rpcb_uaddr2taddr(struct netconfig *nconf, char *uaddr)
 		return (NULL);
 	}
 	client = local_rpcb(__func__);
-	if (!client)
-		return (NULL);
+	if (CLNT_FAILURE(client)) {
+		CLNT_DESTROY(client);
+		return (false);
+	}
 
 	cc = mem_alloc(sizeof(*cc));
 	taddr = (struct netbuf *)mem_zalloc(sizeof(struct netbuf));
@@ -1252,11 +1263,12 @@ struct netbuf *rpcb_uaddr2taddr(struct netconfig *nconf, char *uaddr)
 
 /*
  * This routine will return a client handle that is connected to the local
- * rpcbind. Returns NULL on error and free's everything.
+ * rpcbind.
+ * On error, a CLIENT with cl_error.re_status set
  */
 static CLIENT *local_rpcb(const char *tag)
 {
-	CLIENT *client;
+	CLIENT *client = NULL;
 	char *t;
 	static struct netconfig *loopnconf;
 	static char *hostname;
@@ -1294,7 +1306,8 @@ static CLIENT *local_rpcb(const char *tag)
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_RPCB, "%s", t);
 	mem_free(t, RPC_SPERROR_BUFLEN);
-	CLNT_DESTROY(client);
+
+	/* Save client for error return */
 
 	/* Nobody needs this socket anymore; free the descriptor. */
 	close(sock);
@@ -1315,7 +1328,8 @@ static CLIENT *local_rpcb(const char *tag)
 			__warnx(TIRPC_DEBUG_FLAG_WARN,
 				"%s(%s): failed to open " NETCONFIG " %s",
 				__func__, tag, clnt_sperrno(RPC_UNKNOWNPROTO));
-			return (NULL);
+			client->cl_error.re_status = RPC_UNKNOWNPROTO;
+			return (client);
 		}
 		while ((nconf = getnetconfig(nc_handle)) != NULL) {
 #ifdef INET6
@@ -1347,13 +1361,17 @@ static CLIENT *local_rpcb(const char *tag)
 			__warnx(TIRPC_DEBUG_FLAG_WARN,
 				"%s(%s): failed to find " NETCONFIG " %s",
 				__func__, tag, clnt_sperrno(RPC_UNKNOWNPROTO));
-			return (NULL);
+			client->cl_error.re_status = RPC_UNKNOWNPROTO;
+			return (client);
 		}
 		loopnconf = getnetconfigent(tmpnconf->nc_netid);
 		/* loopnconf is never freed */
 		endnetconfig(nc_handle);
 	}
 	mutex_unlock(&loopnconf_lock);
+	/* Free client used for errors before */
+	CLNT_DESTROY(client);
+
 	client = getclnthandle(hostname, loopnconf, NULL);
 	return (client);
 }
