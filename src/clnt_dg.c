@@ -159,6 +159,7 @@ clnt_dg_ncreatef(const int fd,	/* open file descriptor */
 	/*
 	 * initialize call message
 	 */
+	call_msg.rm_xid = su->su_dr.call_xid;
 	call_msg.rm_direction = CALL;
 	call_msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
 	call_msg.cb_prog = program;
@@ -298,13 +299,13 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 	case CLSET_FD_CLOSE:
 		(void)atomic_set_uint16_t_bits(&rec->xprt.xp_flags,
 						SVC_XPRT_FLAG_CLOSE);
-		rslt = true;
 		goto unlock;
 	case CLSET_FD_NCLOSE:
 		(void)atomic_clear_uint16_t_bits(&rec->xprt.xp_flags,
 						SVC_XPRT_FLAG_CLOSE);
-		rslt = true;
 		goto unlock;
+	default:
+		break;
 	}
 
 	/* for other requests which use info */
@@ -330,12 +331,13 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 		addr = (struct netbuf *)info;
 		if (addr->len < sizeof(cu->cu_raddr)) {
 			rslt = false;
-			goto unlock;
+			break;
 
 		}
 		(void)memcpy(&cu->cu_raddr, addr->buf, addr->len);
 		cu->cu_rlen = addr->len;
 		break;
+
 	case CLGET_XID:
 		/*
 		 * use the knowledge that xid is the
@@ -348,22 +350,21 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 
 	case CLSET_XID:
 		/* This will set the xid of the NEXT call */
-		*(u_int32_t *) (void *)&cx->cx_u.cx_mcalli =
-		    htonl(*(u_int32_t *) info - 1);
-		/* decrement by 1 as clnt_dg_call() increments once */
+		rec->call_xid = htonl(*(u_int32_t *) info - 1);
+		/* decrement by 1 as clnt_req_setup() increments once */
 		break;
 
 	case CLGET_VERS:
 		/*
 		 * This RELIES on the information that, in the call body,
 		 * the version number field is the fifth field from the
-		 * begining of the RPC header. MUST be changed if the
-		 * call_struct is changed
+		 * beginning of the RPC header.
 		 */
 		{
 			u_int32_t *tmp =
 			    (u_int32_t *) (cx->cx_u.cx_mcallc +
 					   4 * BYTES_PER_XDR_UNIT);
+
 			*(u_int32_t *) info = ntohl(*tmp);
 		}
 		break;
@@ -371,6 +372,7 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 	case CLSET_VERS:
 		{
 			u_int32_t tmp = htonl(*(u_int32_t *) info);
+
 			*(cx->cx_u.cx_mcallc + 4 * BYTES_PER_XDR_UNIT) = tmp;
 		}
 		break;
@@ -379,13 +381,13 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 		/*
 		 * This RELIES on the information that, in the call body,
 		 * the program number field is the fourth field from the
-		 * begining of the RPC header. MUST be changed if the
-		 * call_struct is changed
+		 * beginning of the RPC header.
 		 */
 		{
 			u_int32_t *tmp =
 			    (u_int32_t *) (cx->cx_u.cx_mcallc +
 					   3 * BYTES_PER_XDR_UNIT);
+
 			*(u_int32_t *) info = ntohl(*tmp);
 		}
 		break;
@@ -393,10 +395,13 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 	case CLSET_PROG:
 		{
 			u_int32_t tmp = htonl(*(u_int32_t *) info);
+
 			*(cx->cx_u.cx_mcallc + 3 * BYTES_PER_XDR_UNIT) = tmp;
 		}
 		break;
+
 	default:
+		rslt = false;
 		break;
 	}
 

@@ -192,74 +192,107 @@ static bool
 clnt_rdma_control(CLIENT *cl, u_int request, void *info)
 {
 	struct cx_data *cx = CX_DATA(cl);
-	struct cm_data *cm = CM_DATA(cx);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
-	sigset_t mask;
-	bool result = TRUE;
+	bool rslt = true;
 
-	thr_sigsetmask(SIG_SETMASK, (sigset_t *) 0, &mask); /* XXX */
 	/* always take recv lock first if taking together */
 	rpc_dplx_rli(rec); //receive lock clnt
 	mutex_lock(&cl->cl_lock);
 
 	switch (request) {
 	case CLSET_FD_CLOSE:
-		cm->cm_closeit = TRUE;
-		result = TRUE;
+		(void)atomic_set_uint16_t_bits(&rec->xprt.xp_flags,
+						SVC_XPRT_FLAG_CLOSE);
 		goto unlock;
 	case CLSET_FD_NCLOSE:
-		cm->cm_closeit = FALSE;
-		result = TRUE;
+		(void)atomic_clear_uint16_t_bits(&rec->xprt.xp_flags,
+						SVC_XPRT_FLAG_CLOSE);
 		goto unlock;
+	default:
+		break;
 	}
 
 	/* for other requests which use info */
 	if (info == NULL) {
-	    result = FALSE;
-	    goto unlock;
+		rslt = false;
+		goto unlock;
 	}
 	switch (request) {
 	case CLGET_FD:
-		*(RDMAXPRT **)info = cm->cm_xdrs.x_lib[1];
+		*(struct rpc_dplx_rec **)info = rec;
 		break;
+
 	case CLGET_XID:
 		/*
 		 * use the knowledge that xid is the
 		 * first element in the call structure *.
 		 * This will get the xid of the PREVIOUS call
 		 */
-		*(u_int32_t *)info = cm->call_msg.rm_xid - 1;
+		*(u_int32_t *) info =
+		    ntohl(*(u_int32_t *) (void *)&cx->cx_u.cx_mcalli);
 		break;
 
 	case CLSET_XID:
 		/* This will set the xid of the NEXT call */
-		cm->call_msg.rm_xid = *(u_int32_t *)info;
+		rec->call_xid = htonl(*(u_int32_t *) info - 1);
+		/* decrement by 1 as clnt_req_setup() increments once */
 		break;
 
 	case CLGET_VERS:
-		*(u_int32_t *)info = cm->call_msg.cb_vers;
+		/*
+		 * This RELIES on the information that, in the call body,
+		 * the version number field is the fifth field from the
+		 * beginning of the RPC header.
+		 */
+		{
+			u_int32_t *tmp =
+			    (u_int32_t *) (cx->cx_u.cx_mcallc +
+					   4 * BYTES_PER_XDR_UNIT);
+
+			*(u_int32_t *) info = ntohl(*tmp);
+		}
 		break;
 
 	case CLSET_VERS:
-		cm->call_msg.cb_vers = *(u_int32_t *)info;
+		{
+			u_int32_t tmp = htonl(*(u_int32_t *) info);
+
+			*(cx->cx_u.cx_mcallc + 4 * BYTES_PER_XDR_UNIT) = tmp;
+		}
 		break;
 
 	case CLGET_PROG:
-		*(u_int32_t *)info = cm->call_msg.cb_prog;
+		/*
+		 * This RELIES on the information that, in the call body,
+		 * the program number field is the fourth field from the
+		 * beginning of the RPC header.
+		 */
+		{
+			u_int32_t *tmp =
+			    (u_int32_t *) (cx->cx_u.cx_mcallc +
+					   3 * BYTES_PER_XDR_UNIT);
+
+			*(u_int32_t *) info = ntohl(*tmp);
+		}
 		break;
 
 	case CLSET_PROG:
-		cm->call_msg.cb_prog = *(u_int32_t *)info;
+		{
+			u_int32_t tmp = htonl(*(u_int32_t *) info);
+
+			*(cx->cx_u.cx_mcallc + 3 * BYTES_PER_XDR_UNIT) = tmp;
+		}
 		break;
 
 	default:
+		rslt = false;
 		break;
 	}
 
 unlock:
 	rpc_dplx_rui(rec);
 	mutex_unlock(&cl->cl_lock);
-	return (result);
+	return (rslt);
 }
 
 static void

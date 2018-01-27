@@ -98,12 +98,17 @@ clnt_raw_ncreate(rpcprog_t prog, rpcvers_t vers)
 	}
 
 	/*
-	 * pre-serialize the static part of the call msg and stash it away
+	 * initialize call message
 	 */
+	call_msg.rm_xid = REC_XPRT(xprt)->call_xid;
 	call_msg.rm_direction = CALL;
 	call_msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
 	call_msg.cb_prog = prog;
 	call_msg.cb_vers = vers;
+
+	/*
+	 * pre-serialize the static part of the call msg and stash it away
+	 */
 	xdrmem_create(xdrs, cm->cm_cx.cx_u.cx_mcallc, MCALL_MSG_SIZE,
 		      XDR_ENCODE);
 	if (!xdr_callhdr(xdrs, &call_msg)) {
