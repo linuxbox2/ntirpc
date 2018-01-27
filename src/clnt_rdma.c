@@ -94,18 +94,17 @@ clnt_rdma_data_zalloc(void)
  * followed by CLNT_DESTROY() as necessary.
  */
 CLIENT *
-clnt_rdma_ncreate(RDMAXPRT *xprt,		/* init but NOT connect()ed */
-		  rpcprog_t program,		/* program number */
-		  rpcvers_t version,
-		  const u_int flags)
+clnt_rdma_ncreatef(RDMAXPRT *xd,		/* init but NOT connect()ed */
+		   const rpcprog_t program,
+		   const rpcvers_t version,
+		   const u_int flags)
 {
 	struct cm_data *cm = clnt_rdma_data_zalloc();
 	CLIENT *cl = &cm->cm_cx.cx_c;
-	struct timeval now;
 
 	cl->cl_ops = clnt_rdma_ops();
 
-	if (!xprt || xprt->state != RDMAXS_INITIAL) {
+	if (!xd || xd->state != RDMAXS_INITIAL) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: called with missing transport address",
 			__func__);
@@ -113,20 +112,12 @@ clnt_rdma_ncreate(RDMAXPRT *xprt,		/* init but NOT connect()ed */
 		return (cl);
 	}
 
-	/* Other values can also be set through clnt_control() */
-	cm->cm_xdrs.x_lib[1] = (void *)xprt;
-
-	(void) gettimeofday(&now, NULL);
-	//	cm->call_msg.rm_xid = __RPC_GETXID(&now);
 	cm->call_msg.rm_xid = 1;
 	cm->call_msg.cb_prog = program;
 	cm->call_msg.cb_vers = version;
 
-	rpc_rdma_connect(xprt);
-
-	xdr_rdma_create(&cm->cm_xdrs, xprt);
-
-	rpc_rdma_connect_finalize(xprt);
+	rpc_rdma_connect(xd);
+	rpc_rdma_connect_finalize(xd);
 
 	/*
 	 * By default, closeit is always FALSE. It is users responsibility

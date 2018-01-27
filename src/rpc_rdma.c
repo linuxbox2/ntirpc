@@ -1273,61 +1273,59 @@ rpc_rdma_destroy_stuff(RDMAXPRT *xprt)
 /**
  * rpc_rdma_destroy: disconnects and free transport data
  *
- * @param[IN] xprt	pointer to the service transport to destroy
+ * @param[IN] xd	pointer to the service transport to destroy
  */
 void
-rpc_rdma_destroy(SVCXPRT *s_xprt)
+rpc_rdma_destroy(RDMAXPRT *xd)
 {
-	RDMAXPRT *xprt = RDMA_DR(REC_XPRT(s_xprt));
-
 	/* inhibit repeated destroy */
-	xprt->destroy_on_disconnect = false;
+	xd->destroy_on_disconnect = false;
 
-	if (xprt->state == RDMAXS_CONNECTED
-	 || xprt->state == RDMAXS_CLOSED) {
-		mutex_lock(&xprt->cm_lock);
-		if (xprt->state != RDMAXS_CLOSED
-		 && xprt->state != RDMAXS_LISTENING
-		 && xprt->state != RDMAXS_ERROR)
-			xprt->state = RDMAXS_CLOSING;
+	if (xd->state == RDMAXS_CONNECTED
+	 || xd->state == RDMAXS_CLOSED) {
+		mutex_lock(&xd->cm_lock);
+		if (xd->state != RDMAXS_CLOSED
+		 && xd->state != RDMAXS_LISTENING
+		 && xd->state != RDMAXS_ERROR)
+			xd->state = RDMAXS_CLOSING;
 
-		if (xprt->cm_id && xprt->cm_id->verbs)
-			rdma_disconnect(xprt->cm_id);
+		if (xd->cm_id && xd->cm_id->verbs)
+			rdma_disconnect(xd->cm_id);
 
-		while (xprt->state != RDMAXS_CLOSED
-			&& xprt->state != RDMAXS_LISTENING
-			&& xprt->state != RDMAXS_ERROR) {
+		while (xd->state != RDMAXS_CLOSED
+			&& xd->state != RDMAXS_LISTENING
+			&& xd->state != RDMAXS_ERROR) {
 			__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
 				"%s() we're not closed yet, "
 				"waiting for disconnect_event",
 				__func__);
-			cond_wait(&xprt->cm_cond, &xprt->cm_lock);
+			cond_wait(&xd->cm_cond, &xd->cm_lock);
 		}
-		xprt->state = RDMAXS_CLOSED;
-		mutex_unlock(&xprt->cm_lock);
+		xd->state = RDMAXS_CLOSED;
+		mutex_unlock(&xd->cm_lock);
 	}
 
-	if (xprt->cm_id) {
-		rdma_destroy_id(xprt->cm_id);
-		xprt->cm_id = NULL;
+	if (xd->cm_id) {
+		rdma_destroy_id(xd->cm_id);
+		xd->cm_id = NULL;
 	}
 
-	if (xprt->stats_sock)
-		rpc_rdma_stats_del(xprt);
+	if (xd->stats_sock)
+		rpc_rdma_stats_del(xd);
 
 	/* event channel is shared between all children,
 	 * so don't close it unless it's its own.
 	 */
-	if ((xprt->server != RDMAX_SERVER_CHILD)
-	 && xprt->event_channel) {
-		rpc_rdma_fd_del(xprt->event_channel->fd,
+	if ((xd->server != RDMAX_SERVER_CHILD)
+	 && xd->event_channel) {
+		rpc_rdma_fd_del(xd->event_channel->fd,
 				rpc_rdma_state.cm_epollfd);
-		rdma_destroy_event_channel(xprt->event_channel);
-		xprt->event_channel = NULL;
+		rdma_destroy_event_channel(xd->event_channel);
+		xd->event_channel = NULL;
 	}
 
-	rpc_rdma_destroy_stuff(xprt);
-	rpc_rdma_pd_put(xprt);
+	rpc_rdma_destroy_stuff(xd);
+	rpc_rdma_pd_put(xd);
 
 	if (atomic_dec_int32_t(&rpc_rdma_state.run_count) <= 0) {
 		mutex_lock(&rpc_rdma_state.lock);
@@ -1337,11 +1335,12 @@ rpc_rdma_destroy(SVCXPRT *s_xprt)
 
 	/* destroy locking last, was initialized first (below).
 	 */
-	cond_destroy(&xprt->cm_cond);
-	mutex_destroy(&xprt->cm_lock);
-	mutex_destroy(&xprt->sm_dr.xprt.xp_lock);
+	cond_destroy(&xd->cm_cond);
+	mutex_destroy(&xd->cm_lock);
+	XDR_DESTROY(xd->sm_dr.ioq.xdrs);
+	rpc_dplx_rec_destroy(&xd->sm_dr);
 
-	mem_free(xprt, sizeof(*xprt));
+	mem_free(xd, sizeof(*xd));
 }
 
 /**
@@ -1354,7 +1353,7 @@ rpc_rdma_destroy(SVCXPRT *s_xprt)
 static RDMAXPRT *
 rpc_rdma_allocate(const struct rpc_rdma_attr *xa)
 {
-	RDMAXPRT *xprt;
+	RDMAXPRT *xd;
 	int rc;
 
 	if (!xa) {
@@ -1364,27 +1363,22 @@ rpc_rdma_allocate(const struct rpc_rdma_attr *xa)
 		return NULL;
 	}
 
-	xprt = mem_zalloc(sizeof(RDMAXPRT));
+	xd = mem_zalloc(sizeof(*xd));
 
-	xprt->sm_dr.xprt.xp_type = XPRT_RDMA;
-	xprt->sm_dr.xprt.xp_refs = 1;
-	xprt->sm_dr.xprt.xp_ops = &rpc_rdma_ops;
+	xd->sm_dr.xprt.xp_type = XPRT_RDMA;
+	xd->sm_dr.xprt.xp_refs = 1;
+	xd->sm_dr.xprt.xp_ops = &rpc_rdma_ops;
 
-	xprt->xa = xa;
-	xprt->conn_type = RDMA_PS_TCP;
-	xprt->destroy_on_disconnect = xa->destroy_on_disconnect;
+	xd->xa = xa;
+	xd->conn_type = RDMA_PS_TCP;
+	xd->destroy_on_disconnect = xa->destroy_on_disconnect;
 
 	/* initialize locking first, will be destroyed last (above).
 	 */
-	rc = mutex_init(&xprt->sm_dr.xprt.xp_lock, NULL);
-	if (rc) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s() mutex_init xp_lock failed: %s (%d)",
-			__func__, strerror(rc), rc);
-		goto xp_lock;
-	}
+	xdr_ioq_setup(&xd->sm_dr.ioq);
+	rpc_dplx_rec_init(&xd->sm_dr);
 
-	rc = mutex_init(&xprt->cm_lock, NULL);
+	rc = mutex_init(&xd->cm_lock, NULL);
 	if (rc) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s() mutex_init failed: %s (%d)",
@@ -1392,7 +1386,7 @@ rpc_rdma_allocate(const struct rpc_rdma_attr *xa)
 		goto cm_lock;
 	}
 
-	rc = cond_init(&xprt->cm_cond, NULL, NULL);
+	rc = cond_init(&xd->cm_cond, NULL, NULL);
 	if (rc) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s() cond_init failed: %s (%d)",
@@ -1400,14 +1394,14 @@ rpc_rdma_allocate(const struct rpc_rdma_attr *xa)
 		goto cm_cond;
 	}
 
-	return (xprt);
+	return (xd);
 
 cm_cond:
-	mutex_destroy(&xprt->cm_lock);
+	mutex_destroy(&xd->cm_lock);
 cm_lock:
-	mutex_destroy(&xprt->sm_dr.xprt.xp_lock);
-xp_lock:
-	mem_free(xprt, sizeof(*xprt));
+	mutex_destroy(&xd->sm_dr.xprt.xp_lock);
+
+	mem_free(xd, sizeof(*xd));
 	return NULL;
 }
 
@@ -1426,7 +1420,7 @@ rpc_rdma_ncreatef(const struct rpc_rdma_attr *xa,
 		  const u_int sendsize, const u_int recvsize,
 		  const uint32_t flags)
 {
-	RDMAXPRT *xprt;
+	RDMAXPRT *xd;
 	int rc;
 
 	if (xa->backlog > 4096) {
@@ -1436,20 +1430,20 @@ rpc_rdma_ncreatef(const struct rpc_rdma_attr *xa,
 		return NULL;
 	}
 
-	xprt = rpc_rdma_allocate(xa);
-	if (!xprt) {
+	xd = rpc_rdma_allocate(xa);
+	if (!xd) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR (return)",
 			__func__, __LINE__);
 		return NULL;
 	}
-	xprt->server = xa->backlog; /* convenient number > 0 */
+	xd->server = xa->backlog; /* convenient number > 0 */
 
 	/* presence of event_channel confirms RDMA,
 	 * otherwise, cleanup and quit RDMA dispatcher.
 	 */
-	xprt->event_channel = rdma_create_event_channel();
-	if (!xprt->event_channel) {
+	xd->event_channel = rdma_create_event_channel();
+	if (!xd->event_channel) {
 		rc = errno;
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s() create_event_channel failed: %s (%d)",
@@ -1457,8 +1451,8 @@ rpc_rdma_ncreatef(const struct rpc_rdma_attr *xa,
 		goto failure;
 	}
 
-	rc = rdma_create_id(xprt->event_channel, &xprt->cm_id, xprt,
-			    xprt->conn_type);
+	rc = rdma_create_id(xd->event_channel, &xd->cm_id, xd,
+			    xd->conn_type);
 	if (rc) {
 		rc = errno;
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -1479,22 +1473,22 @@ rpc_rdma_ncreatef(const struct rpc_rdma_attr *xa,
 	pthread_mutex_unlock(&svc_work_pool.pqh.qmutex);
 
 	/* buffer sizes MUST be page sized */
-	xprt->sm_dr.pagesz = sysconf(_SC_PAGESIZE);
+	xd->sm_dr.pagesz = sysconf(_SC_PAGESIZE);
 	if (recvsize) {
 		/* round up */
-		xprt->sm_dr.recvsz = recvsize + (xprt->sm_dr.pagesz - 1);
-		xprt->sm_dr.recvsz &= ~(xprt->sm_dr.pagesz - 1);
+		xd->sm_dr.recvsz = recvsize + (xd->sm_dr.pagesz - 1);
+		xd->sm_dr.recvsz &= ~(xd->sm_dr.pagesz - 1);
 	} else {
 		/* default */
-		xprt->sm_dr.recvsz = xprt->sm_dr.pagesz;
+		xd->sm_dr.recvsz = xd->sm_dr.pagesz;
 	}
 	if (sendsize) {
 		/* round up */
-		xprt->sm_dr.sendsz = sendsize + (xprt->sm_dr.pagesz - 1);
-		xprt->sm_dr.sendsz &= ~(xprt->sm_dr.pagesz - 1);
+		xd->sm_dr.sendsz = sendsize + (xd->sm_dr.pagesz - 1);
+		xd->sm_dr.sendsz &= ~(xd->sm_dr.pagesz - 1);
 	} else {
 		/* default */
-		xprt->sm_dr.recvsz = xprt->sm_dr.pagesz;
+		xd->sm_dr.recvsz = xd->sm_dr.pagesz;
 	}
 
 	/* round up to the next power of two */
@@ -1506,7 +1500,7 @@ rpc_rdma_ncreatef(const struct rpc_rdma_attr *xa,
 						* sizeof(struct rdma_cm_id *));
 	sem_init(&rpc_rdma_state.c_r.u_sem, 0, rpc_rdma_state.c_r.q_size);
 
-	rc = rpc_rdma_bind_server(xprt);
+	rc = rpc_rdma_bind_server(xd);
 	if (rc) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s() NFS/RDMA dispatcher could not bind engine",
@@ -1517,10 +1511,10 @@ rpc_rdma_ncreatef(const struct rpc_rdma_attr *xa,
 		"%s() NFS/RDMA engine bound",
 		__func__);
 
-	return (&xprt->sm_dr.xprt);
+	return (&xd->sm_dr.xprt);
 
 failure:
-	rpc_rdma_destroy(&xprt->sm_dr.xprt);
+	rpc_rdma_destroy(xd);
 	return NULL;
 }
 
@@ -1783,24 +1777,24 @@ rpc_rdma_bind_server(RDMAXPRT *xprt)
 static RDMAXPRT *
 rpc_rdma_clone(RDMAXPRT *l_xprt, struct rdma_cm_id *cm_id)
 {
-	RDMAXPRT *xprt = rpc_rdma_allocate(l_xprt->xa);
+	RDMAXPRT *xd = rpc_rdma_allocate(l_xprt->xa);
 	int rc;
 
-	if (!xprt) {
+	if (!xd) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR (return)",
 			__func__, __LINE__);
 		return NULL;
 	}
 
-	xprt->cm_id = cm_id;
-	xprt->cm_id->context = xprt;
-	xprt->state = RDMAXS_CONNECT_REQUEST;
-	xprt->server = RDMAX_SERVER_CHILD;
+	xd->cm_id = cm_id;
+	xd->cm_id->context = xd;
+	xd->state = RDMAXS_CONNECT_REQUEST;
+	xd->server = RDMAX_SERVER_CHILD;
 
-	xprt->event_channel = l_xprt->event_channel;
+	xd->event_channel = l_xprt->event_channel;
 
-	rc = rpc_rdma_pd_get(xprt);
+	rc = rpc_rdma_pd_get(xd);
 	if (rc) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR (return)",
@@ -1809,14 +1803,14 @@ rpc_rdma_clone(RDMAXPRT *l_xprt, struct rdma_cm_id *cm_id)
 	}
 
 	if (l_xprt->xa->use_srq) {
-		if (!xprt->pd->srq) {
+		if (!xd->pd->srq) {
 			struct ibv_srq_init_attr srq_attr = {
-				.attr.max_wr = xprt->xa->rq_depth,
-				.attr.max_sge = xprt->xa->max_recv_sge,
+				.attr.max_wr = xd->xa->rq_depth,
+				.attr.max_sge = xd->xa->max_recv_sge,
 			};
-			xprt->pd->srq =
-				ibv_create_srq(xprt->pd->pd, &srq_attr);
-			if (!xprt->pd->srq) {
+			xd->pd->srq =
+				ibv_create_srq(xd->pd->pd, &srq_attr);
+			if (!xd->pd->srq) {
 				rc = errno;
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"%s() ibv_create_srq failed: %s (%d)",
@@ -1825,10 +1819,10 @@ rpc_rdma_clone(RDMAXPRT *l_xprt, struct rdma_cm_id *cm_id)
 			}
 		}
 
-		if (!xprt->pd->srqh.qcount) {
-			rc = rpc_rdma_setup_cbq(&xprt->pd->srqh,
-						xprt->xa->rq_depth,
-						xprt->xa->max_recv_sge);
+		if (!xd->pd->srqh.qcount) {
+			rc = rpc_rdma_setup_cbq(&xd->pd->srqh,
+						xd->xa->rq_depth,
+						xd->xa->max_recv_sge);
 			if (rc) {
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"%s:%u ERROR (return)",
@@ -1838,9 +1832,9 @@ rpc_rdma_clone(RDMAXPRT *l_xprt, struct rdma_cm_id *cm_id)
 		}
 
 		/* only send contexts */
-		rc = rpc_rdma_setup_cbq(&xprt->cbqh,
-					xprt->xa->sq_depth,
-					xprt->xa->credits);
+		rc = rpc_rdma_setup_cbq(&xd->cbqh,
+					xd->xa->sq_depth,
+					xd->xa->credits);
 		if (rc) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR (return)",
@@ -1848,10 +1842,10 @@ rpc_rdma_clone(RDMAXPRT *l_xprt, struct rdma_cm_id *cm_id)
 			goto failure;
 		}
 	} else {
-		rc = rpc_rdma_setup_cbq(&xprt->cbqh,
-					xprt->xa->rq_depth +
-					xprt->xa->sq_depth,
-					xprt->xa->credits);
+		rc = rpc_rdma_setup_cbq(&xd->cbqh,
+					xd->xa->rq_depth +
+					xd->xa->sq_depth,
+					xd->xa->credits);
 		if (rc) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR (return)",
@@ -1861,9 +1855,9 @@ rpc_rdma_clone(RDMAXPRT *l_xprt, struct rdma_cm_id *cm_id)
 	}
 
 	/* srq only used as a boolean here */
-	xprt->srq = xprt->pd->srq;
+	xd->srq = xd->pd->srq;
 
-	rc = rpc_rdma_setup_stuff(xprt);
+	rc = rpc_rdma_setup_stuff(xd);
 	if (rc) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR (return)",
@@ -1872,10 +1866,10 @@ rpc_rdma_clone(RDMAXPRT *l_xprt, struct rdma_cm_id *cm_id)
 	}
 
 	atomic_inc_int32_t(&rpc_rdma_state.run_count);
-	return xprt;
+	return xd;
 
 failure:
-	rpc_rdma_destroy(&xprt->sm_dr.xprt);
+	rpc_rdma_destroy(xd);
 	return (NULL);
 }
 
@@ -2215,7 +2209,7 @@ rpc_rdma_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		/* call free hook */
 		xprt->xp_ops->xp_free_user_data(xprt);
 	}
-	rpc_rdma_destroy(xprt);
+	rpc_rdma_destroy(RDMA_DR(REC_XPRT(xprt)));
 }
 
 extern mutex_t ops_lock;

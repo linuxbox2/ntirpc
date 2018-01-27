@@ -917,58 +917,45 @@ xdr_rdma_callq(RDMAXPRT *xprt)
 /****************************/
 
 void
-xdr_rdma_destroy(XDR *xdrs)
+xdr_rdma_destroy(RDMAXPRT *xd)
 {
-	RDMAXPRT *xprt;
-
-	if (!xdrs) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s() no xdrs?",
-			__func__);
-		return;
-	}
-	xprt = x_xprt(xdrs);
-
-	if (xprt->mr) {
-		ibv_dereg_mr(xprt->mr);
-		xprt->mr = NULL;
+	if (xd->mr) {
+		ibv_dereg_mr(xd->mr);
+		xd->mr = NULL;
 	}
 
-	xdr_ioq_destroy_pool(&xprt->sm_dr.ioq.ioq_uv.uvqh);
+	xdr_ioq_destroy_pool(&xd->sm_dr.ioq.ioq_uv.uvqh);
 
 	/* must be after queues, xdr_ioq_destroy() moves them here */
-	xdr_ioq_release(&xprt->inbufs.uvqh);
-	poolq_head_destroy(&xprt->inbufs.uvqh);
-	xdr_ioq_release(&xprt->outbufs.uvqh);
-	poolq_head_destroy(&xprt->outbufs.uvqh);
+	xdr_ioq_release(&xd->inbufs.uvqh);
+	poolq_head_destroy(&xd->inbufs.uvqh);
+	xdr_ioq_release(&xd->outbufs.uvqh);
+	poolq_head_destroy(&xd->outbufs.uvqh);
 
 	/* must be after pools */
-	if (xprt->buffer_aligned) {
-		mem_free(xprt->buffer_aligned, xprt->buffer_total);
-		xprt->buffer_aligned = NULL;
+	if (xd->buffer_aligned) {
+		mem_free(xd->buffer_aligned, xd->buffer_total);
+		xd->buffer_aligned = NULL;
 	}
 
-	xdrs->x_lib[0] = NULL;
-	xdrs->x_lib[1] = NULL;
+	xd->sm_dr.ioq.xdrs[0].x_lib[0] = NULL;
+	xd->sm_dr.ioq.xdrs[0].x_lib[1] = NULL;
 }
 
 /*
  * initializes a stream descriptor for a memory buffer.
  *
- * XDR has already been created and passed as arg.
- *
  * credits is the number of buffers used
  */
 int
-xdr_rdma_create(XDR *xdrs, RDMAXPRT *xprt)
+xdr_rdma_create(RDMAXPRT *xd)
 {
 	uint8_t *b;
 
-	if (!xprt->pd || !xprt->pd->pd) {
+	if (!xd->pd || !xd->pd->pd) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s() %p[%u] xdr %p missing Protection Domain",
-			__func__, xprt, xprt->state, xdrs);
-		xdr_rdma_destroy(xdrs);
+			"%s() %p[%u] missing Protection Domain",
+			__func__, xd, xd->state);
 		return ENODEV;
 	}
 
@@ -978,71 +965,68 @@ xdr_rdma_create(XDR *xdrs, RDMAXPRT *xprt)
 	 * more than one buffer can be chained to one ioq_uv head,
 	 * but never need more ioq_uv heads than buffers.
 	 */
-	xprt->buffer_total = xprt->sm_dr.recvsz * xprt->xa->rq_depth
-			   + xprt->sm_dr.sendsz * xprt->xa->sq_depth;
+	xd->buffer_total = xd->sm_dr.recvsz * xd->xa->rq_depth
+			 + xd->sm_dr.sendsz * xd->xa->sq_depth;
 
-	xprt->buffer_aligned =
-		mem_aligned(xprt->sm_dr.pagesz, xprt->buffer_total);
+	xd->buffer_aligned = mem_aligned(xd->sm_dr.pagesz, xd->buffer_total);
 
 	__warnx(TIRPC_DEBUG_FLAG_RPC_RDMA,
 		"%s() buffer_aligned at %p",
-		__func__, xprt->buffer_aligned);
+		__func__, xd->buffer_aligned);
 
 	/* register it in two chunks for read and write??? */
-	xprt->mr = ibv_reg_mr(xprt->pd->pd, xprt->buffer_aligned,
-				xprt->buffer_total,
-				IBV_ACCESS_LOCAL_WRITE |
-				IBV_ACCESS_REMOTE_WRITE |
-				IBV_ACCESS_REMOTE_READ);
+	xd->mr = ibv_reg_mr(xd->pd->pd, xd->buffer_aligned, xd->buffer_total,
+			    IBV_ACCESS_LOCAL_WRITE |
+			    IBV_ACCESS_REMOTE_WRITE |
+			    IBV_ACCESS_REMOTE_READ);
 
-	poolq_head_setup(&xprt->inbufs.uvqh);
-	xprt->inbufs.min_bsize = xprt->sm_dr.pagesz;
-	xprt->inbufs.max_bsize = xprt->sm_dr.recvsz;
+	poolq_head_setup(&xd->inbufs.uvqh);
+	xd->inbufs.min_bsize = xd->sm_dr.pagesz;
+	xd->inbufs.max_bsize = xd->sm_dr.recvsz;
 
-	poolq_head_setup(&xprt->outbufs.uvqh);
-	xprt->outbufs.min_bsize = xprt->sm_dr.pagesz;
-	xprt->outbufs.max_bsize = xprt->sm_dr.sendsz;
+	poolq_head_setup(&xd->outbufs.uvqh);
+	xd->outbufs.min_bsize = xd->sm_dr.pagesz;
+	xd->outbufs.max_bsize = xd->sm_dr.sendsz;
 
 	/* Each pre-allocated buffer has a corresponding xdr_ioq_uv,
 	 * stored on the pool queues.
 	 */
-	b = xprt->buffer_aligned;
+	b = xd->buffer_aligned;
 
-	for (xprt->inbufs.uvqh.qcount = 0;
-	     xprt->inbufs.uvqh.qcount < xprt->xa->rq_depth;
-	     xprt->inbufs.uvqh.qcount++) {
+	for (xd->inbufs.uvqh.qcount = 0;
+	     xd->inbufs.uvqh.qcount < xd->xa->rq_depth;
+	     xd->inbufs.uvqh.qcount++) {
 		struct xdr_ioq_uv *data = xdr_ioq_uv_create(0, UIO_FLAG_BUFQ);
 
 		data->v.vio_base =
 		data->v.vio_head =
 		data->v.vio_tail = b;
-		data->v.vio_wrap = (char *)b + xprt->sm_dr.recvsz;
-		data->u.uio_p1 = &xprt->inbufs.uvqh;
-		data->u.uio_p2 = xprt->mr;
-		TAILQ_INSERT_TAIL(&xprt->inbufs.uvqh.qh, &data->uvq, q);
+		data->v.vio_wrap = (char *)b + xd->sm_dr.recvsz;
+		data->u.uio_p1 = &xd->inbufs.uvqh;
+		data->u.uio_p2 = xd->mr;
+		TAILQ_INSERT_TAIL(&xd->inbufs.uvqh.qh, &data->uvq, q);
 
-		b += xprt->sm_dr.recvsz;
+		b += xd->sm_dr.recvsz;
 	}
 
-	for (xprt->outbufs.uvqh.qcount = 0;
-	     xprt->outbufs.uvqh.qcount < xprt->xa->sq_depth;
-	     xprt->outbufs.uvqh.qcount++) {
+	for (xd->outbufs.uvqh.qcount = 0;
+	     xd->outbufs.uvqh.qcount < xd->xa->sq_depth;
+	     xd->outbufs.uvqh.qcount++) {
 		struct xdr_ioq_uv *data = xdr_ioq_uv_create(0, UIO_FLAG_BUFQ);
 
 		data->v.vio_base =
 		data->v.vio_head =
 		data->v.vio_tail = b;
-		data->v.vio_wrap = (char *)b + xprt->sm_dr.sendsz;
-		data->u.uio_p1 = &xprt->outbufs.uvqh;
-		data->u.uio_p2 = xprt->mr;
-		TAILQ_INSERT_TAIL(&xprt->outbufs.uvqh.qh, &data->uvq, q);
+		data->v.vio_wrap = (char *)b + xd->sm_dr.sendsz;
+		data->u.uio_p1 = &xd->outbufs.uvqh;
+		data->u.uio_p2 = xd->mr;
+		TAILQ_INSERT_TAIL(&xd->outbufs.uvqh.qh, &data->uvq, q);
 
-		b += xprt->sm_dr.sendsz;
+		b += xd->sm_dr.sendsz;
 	}
 
-	xdr_ioq_setup(&xprt->sm_dr.ioq);
-	while (xprt->sm_dr.ioq.ioq_uv.uvqh.qcount < CALLQ_SIZE) {
-		xdr_rdma_callq(xprt);
+	while (xd->sm_dr.ioq.ioq_uv.uvqh.qcount < CALLQ_SIZE) {
+		xdr_rdma_callq(xd);
 	}
 	return 0;
 }
