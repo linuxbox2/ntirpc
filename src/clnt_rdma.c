@@ -62,12 +62,6 @@ static struct clnt_ops *clnt_rdma_ops(void);
 
 struct cm_data {
 	struct cx_data cm_cx;
-	XDR cm_xdrs;
-	char *buffers;
-	struct rpc_msg call_msg;
-	//add a lastreceive?
-	u_int cm_xdrpos;
-	bool cm_closeit; /* close it on destroy */
 };
 #define CM_DATA(p) (opr_containerof((p), struct cm_data, cm_cx))
 
@@ -101,63 +95,109 @@ clnt_rdma_ncreatef(RDMAXPRT *xd,		/* init but NOT connect()ed */
 {
 	struct cm_data *cm = clnt_rdma_data_zalloc();
 	CLIENT *cl = &cm->cm_cx.cx_c;
+	struct rpc_msg call_msg;
+	XDR xdrs[1];		/* temp XDR stream */
 
 	cl->cl_ops = clnt_rdma_ops();
 
 	if (!xd || xd->state != RDMAXS_INITIAL) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: called with missing transport address",
-			__func__);
+			"%s: %p@%p called with invalid transport address",
+			__func__, cl, xd);
 		cl->cl_error.re_status = RPC_UNKNOWNADDR;
 		return (cl);
 	}
-
-	cm->call_msg.rm_xid = 1;
-	cm->call_msg.cb_prog = program;
-	cm->call_msg.cb_vers = version;
+	cm->cm_cx.cx_rec = &xd->sm_dr;
 
 	rpc_rdma_connect(xd);
 	rpc_rdma_connect_finalize(xd);
 
 	/*
-	 * By default, closeit is always FALSE. It is users responsibility
-	 * to do a close on it, else the user may use clnt_control
-	 * to let clnt_destroy do it for him/her.
+	 * initialize call message
 	 */
-	cm->cm_closeit = FALSE;
-	//	cl->cl_auth = authnone_create();
+	call_msg.rm_xid = xd->sm_dr.call_xid;
+	call_msg.rm_direction = CALL;
+	call_msg.rm_call.cb_rpcvers = RPC_MSG_VERSION;
+	call_msg.cb_prog = program;
+	call_msg.cb_vers = version;
 
+	/*
+	 * pre-serialize the static part of the call msg and stash it away
+	 */
+	xdrmem_create(xdrs, cm->cm_cx.cx_u.cx_mcallc, MCALL_MSG_SIZE,
+		      XDR_ENCODE);
+	if (!xdr_callhdr(xdrs, &call_msg)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: %p@%p xdr_callhdr failed",
+			__func__, cl, xd);
+		cl->cl_error.re_status = RPC_CANTENCODEARGS;
+		XDR_DESTROY(xdrs);
+		return (cl);
+	}
+	cm->cm_cx.cx_mpos = XDR_GETPOS(xdrs);
+	XDR_DESTROY(xdrs);
+
+	__warnx(TIRPC_DEBUG_FLAG_CLNT_RDMA,
+		"%s: %p@%p completed",
+		__func__, cl, xd);
 	return (cl);
 }
 
+/*
+ * Send a call.
+ *
+ * Not truly asynchronous: RDMA cards cannot handle many work queues,
+ * so the callback contexts are preallocated and limited.  This will
+ * wait for a context to become available, and then will also wait
+ * until a spare reply context is also ready.
+ */
 static enum clnt_stat
 clnt_rdma_call(struct clnt_req *cc)
 {
 	CLIENT *cl = cc->cc_clnt;
 	struct cx_data *cx = CX_DATA(cl);
-	struct cm_data *cm = CM_DATA(cx);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
-	SVCXPRT *xprt = &rec->xprt;
+	RDMAXPRT *xd = RDMA_DR(rec);
+	struct poolq_entry *have =
+		xdr_ioq_uv_fetch(&xd->sm_dr.ioq, &xd->cbqh,
+				 "call context", 1, IOQ_FLAG_NONE);
+	struct rpc_rdma_cbc *cbc = (struct rpc_rdma_cbc *)(_IOQ(have));
 	XDR *xdrs;
 
-	xdrs = &(cm->cm_xdrs);
-	cc->cc_error.re_status = RPC_SUCCESS;
-	cm->call_msg.rm_xid = cc->cc_xid;
+	/* free old buffers (should do nothing) */
+	xdr_ioq_release(&cbc->workq.ioq_uv.uvqh);
+	xdr_ioq_release(&cbc->holdq.ioq_uv.uvqh);
+	xdr_rdma_callq(xd);
 
-	if (!xdr_rdma_clnt_call(&cm->cm_xdrs, cm->call_msg.rm_xid)
-	 || !xdr_callhdr(&(cm->cm_xdrs), &cm->call_msg)
+	cbc->workq.xdrs[0].x_lib[1] =
+	cbc->holdq.xdrs[0].x_lib[1] = xd;
+
+	(void) xdr_ioq_uv_fetch(&cbc->holdq, &xd->outbufs.uvqh,
+				"call buffer", 1, IOQ_FLAG_NONE);
+	xdr_ioq_reset(&cbc->holdq, 0);
+
+	xdrs = cbc->holdq.xdrs;
+	cc->cc_error.re_status = RPC_SUCCESS;
+
+	mutex_lock(&cl->cl_lock);
+	cx->cx_u.cx_mcalli = ntohl(cc->cc_xid);
+
+	if (!XDR_PUTBYTES(xdrs, cx->cx_u.cx_mcallc, cx->cx_mpos)
 	 || !XDR_PUTUINT32(xdrs, cc->cc_proc)
 	 || !AUTH_MARSHALL(cc->cc_auth, xdrs)
 	 || !AUTH_WRAP(cc->cc_auth, xdrs,
 		       cc->cc_call.proc, cc->cc_call.where)) {
+		/* error case */
+		mutex_unlock(&cl->cl_lock);
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_RDMA,
-			"%s: fd %d failed",
-			__func__, xprt->xp_fd);
-		XDR_DESTROY(xdrs);
+			"%s: %p@%p failed",
+			__func__, cl, cx->cx_rec);
+		xdr_ioq_release(&cbc->holdq.ioq_uv.uvqh);
 		return (RPC_CANTENCODEARGS);
 	}
+	mutex_unlock(&cl->cl_lock);
 
-	if (! xdr_rdma_clnt_flushout(&cm->cm_xdrs)) {
+	if (!xdr_rdma_clnt_flushout(cbc)) {
 		cl->cl_error.re_errno = errno;
 		return (RPC_CANTSEND);
 	}
@@ -168,18 +208,7 @@ clnt_rdma_call(struct clnt_req *cc)
 static bool
 clnt_rdma_freeres(CLIENT *cl, xdrproc_t xdr_res, void *res_ptr)
 {
-	struct cx_data *cx = CX_DATA(cl);
-	struct cm_data *cm = CM_DATA(cx);
-	XDR *xdrs;
-
-	/* XXX guard against illegal invocation from libc (will fix) */
-	if (! xdr_res)
-		return (0);
-
-	xdrs = &(cm->cm_xdrs);
-	xdrs->x_op = XDR_FREE;
-
-	return ((*xdr_res)(xdrs, res_ptr));
+	return (xdr_free(xdr_res, res_ptr));
 }
 
 /*ARGSUSED*/

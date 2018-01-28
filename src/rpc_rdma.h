@@ -245,11 +245,11 @@ int rpc_rdma_connect_finalize(RDMAXPRT *);
 
 /* XDR functions */
 int xdr_rdma_create(RDMAXPRT *);
+void xdr_rdma_callq(RDMAXPRT *);
 void xdr_rdma_destroy(RDMAXPRT *);
 
-bool xdr_rdma_clnt_call(XDR *, u_int32_t);
 bool xdr_rdma_clnt_reply(XDR *, u_int32_t);
-bool xdr_rdma_clnt_flushout(XDR *);
+bool xdr_rdma_clnt_flushout(struct rpc_rdma_cbc *);
 
 bool xdr_rdma_svc_recv(struct rpc_rdma_cbc *, u_int32_t);
 bool xdr_rdma_svc_reply(struct rpc_rdma_cbc *, u_int32_t);

@@ -889,27 +889,27 @@ xdr_rdma_encode_reply_header(struct svcxprt_rdma *xprt,
  * keep at least 2 spare waiting for calls,
  * the remainder can be used for incoming rdma buffers.
  */
-static void
-xdr_rdma_callq(RDMAXPRT *xprt)
+void
+xdr_rdma_callq(RDMAXPRT *xd)
 {
 	struct poolq_entry *have =
-		xdr_ioq_uv_fetch(&xprt->sm_dr.ioq, &xprt->cbqh,
+		xdr_ioq_uv_fetch(&xd->sm_dr.ioq, &xd->cbqh,
 				 "callq context", 1, IOQ_FLAG_NONE);
 	struct rpc_rdma_cbc *cbc = (struct rpc_rdma_cbc *)(_IOQ(have));
 
-	have = xdr_ioq_uv_fetch(&cbc->workq, &xprt->inbufs.uvqh,
+	have = xdr_ioq_uv_fetch(&cbc->workq, &xd->inbufs.uvqh,
 				"callq buffer", 1, IOQ_FLAG_NONE);
 
 	/* input positions */
 	IOQ_(have)->v.vio_head = IOQ_(have)->v.vio_base;
 	IOQ_(have)->v.vio_tail = IOQ_(have)->v.vio_wrap;
 	IOQ_(have)->v.vio_wrap = (char *)IOQ_(have)->v.vio_base
-			       + xprt->sm_dr.recvsz;
+			       + xd->sm_dr.recvsz;
 
 	cbc->workq.xdrs[0].x_lib[1] =
-	cbc->holdq.xdrs[0].x_lib[1] = xprt;
+	cbc->holdq.xdrs[0].x_lib[1] = xd;
 
-	xdr_rdma_post_recv_cb(xprt, cbc, 1);
+	xdr_rdma_post_recv_cb(xd, cbc, 1);
 }
 
 /****************************/
@@ -1029,41 +1029,6 @@ xdr_rdma_create(RDMAXPRT *xd)
 		xdr_rdma_callq(xd);
 	}
 	return 0;
-}
-
-/** xdr_rdma_clnt_call
- *
- * Client processes a call request
- *
- * @param[IN] xdrs	cm_data
- *
- * called by clnt_rdma_call()
- */
-bool
-xdr_rdma_clnt_call(XDR *xdrs, u_int32_t xid)
-{
-	struct rpc_rdma_cbc *cbc = (struct rpc_rdma_cbc *)xdrs;
-	RDMAXPRT *xprt;
-
-	if (!xdrs) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s() no context?",
-			__func__);
-		return (false);
-	}
-	xprt = x_xprt(xdrs);
-
-	/* free old buffers (should do nothing) */
-	xdr_ioq_release(&cbc->workq.ioq_uv.uvqh);
-	xdr_ioq_release(&cbc->holdq.ioq_uv.uvqh);
-	xdr_rdma_callq(xprt);
-
-	/* get new buffer */
-	(void) xdr_ioq_uv_fetch(&cbc->holdq, &xprt->outbufs.uvqh,
-				"call buffer", 1, IOQ_FLAG_NONE);
-
-	xdr_ioq_reset(&cbc->holdq, 0);
-	return (true);
 }
 
 /** xdr_rdma_clnt_reply
@@ -1317,38 +1282,30 @@ xdr_rdma_svc_reply(struct rpc_rdma_cbc *cbc, u_int32_t xid)
 
 /** xdr_rdma_clnt_flushout
  *
- * @param[IN] xdrs	combined callback context
+ * @param[IN] cbc	combined callback context
+ *			call request is in holdq
  *
  * @return true is message sent, false otherwise
  *
  * called by clnt_rdma_call()
  */
 bool
-xdr_rdma_clnt_flushout(XDR *xdrs)
+xdr_rdma_clnt_flushout(struct rpc_rdma_cbc *cbc)
 {
 /* FIXME: decide how many buffers we use in argument!!!!!! */
-#define num_chunks (xprt->xa->credits - 1)
+#define num_chunks (xd->xa->credits - 1)
 
-	struct rpc_rdma_cbc *cbc = (struct rpc_rdma_cbc *)xdrs;
-	RDMAXPRT *xprt;
+	RDMAXPRT *xd = x_xprt(cbc->workq.xdrs);
 	struct rpc_msg *msg;
 	struct rdma_msg *rmsg;
 	struct xdr_write_list *w_array;
 	struct xdr_ioq_uv *head_uv;
-	struct xdr_ioq_uv *work_uv;
+	struct xdr_ioq_uv *hold_uv;
 	struct poolq_entry *have;
 	int i = 0;
 
-	if (!xdrs) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s() no context?",
-			__func__);
-		return (false);
-	}
-	xprt = x_xprt(cbc->workq.xdrs);
-
-	work_uv = IOQ_(TAILQ_FIRST(&cbc->workq.ioq_uv.uvqh.qh));
-	msg = (struct rpc_msg *)(work_uv->v.vio_head);
+	hold_uv = IOQ_(TAILQ_FIRST(&cbc->holdq.ioq_uv.uvqh.qh));
+	msg = (struct rpc_msg *)(hold_uv->v.vio_head);
 	xdr_tail_update(cbc->workq.xdrs);
 
 	switch(ntohl(msg->rm_direction)) {
@@ -1369,16 +1326,16 @@ xdr_rdma_clnt_flushout(XDR *xdrs)
 
 	cbc->workq.ioq_uv.uvq_fetch = xdr_ioq_uv_fetch_nothing;
 
-	head_uv = IOQ_(xdr_ioq_uv_fetch(&cbc->workq, &xprt->outbufs.uvqh,
+	head_uv = IOQ_(xdr_ioq_uv_fetch(&cbc->workq, &xd->outbufs.uvqh,
 					"c_head buffer", 1, IOQ_FLAG_NONE));
 
-	(void)xdr_ioq_uv_fetch(&cbc->holdq, &xprt->inbufs.uvqh,
+	(void)xdr_ioq_uv_fetch(&cbc->holdq, &xd->inbufs.uvqh,
 				"call buffers", num_chunks, IOQ_FLAG_NONE);
 
 	rmsg = m_(head_uv->v.vio_head);
 	rmsg->rdma_xid = msg->rm_xid;
 	rmsg->rdma_vers = htonl(RPCRDMA_VERSION);
-	rmsg->rdma_credit = htonl(xprt->xa->credits);
+	rmsg->rdma_credit = htonl(xd->xa->credits);
 	rmsg->rdma_type = htonl(RDMA_MSG);
 
 	/* no read, write chunks. */
@@ -1395,7 +1352,7 @@ xdr_rdma_clnt_flushout(XDR *xdrs)
 			&w_array->entry[i++].target;
 		uint32_t length = ioquv_length(IOQ_(have));
 
-		w_seg->handle = htonl(xprt->mr->rkey);
+		w_seg->handle = htonl(xd->mr->rkey);
 		w_seg->length = htonl(length);
 		xdr_encode_hyper((uint32_t*)&w_seg->offset,
 				 (uintptr_t)IOQ_(have)->v.vio_head);
@@ -1405,10 +1362,10 @@ xdr_rdma_clnt_flushout(XDR *xdrs)
 				+ xdr_rdma_header_length(rmsg);
 
 	rpcrdma_dump_msg(head_uv, "clnthead", msg->rm_xid);
-	rpcrdma_dump_msg(work_uv, "clntcall", msg->rm_xid);
+	rpcrdma_dump_msg(hold_uv, "clntcall", msg->rm_xid);
 
 	/* actual send, callback will take care of cleanup */
-	xdr_rdma_post_send_cb(xprt, cbc, 2);
+	xdr_rdma_post_send_cb(xd, cbc, 2);
 	return (true);
 }
 
