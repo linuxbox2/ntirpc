@@ -683,6 +683,13 @@ svc_vc_recv(SVCXPRT *xprt)
 				__warnx(TIRPC_DEBUG_FLAG_WARN,
 					"%s: %p fd %d recv errno %d (try again)",
 					"svc_vc_wait", xprt, xprt->xp_fd, code);
+				if (unlikely(svc_rqst_rearm_events(xprt))) {
+					__warnx(TIRPC_DEBUG_FLAG_ERROR,
+						"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
+						"svc_vc_wait",
+						xprt, xprt->xp_fd);
+					SVC_DESTROY(xprt);
+				}
 				return SVC_STAT(xprt);
 			}
 			__warnx(TIRPC_DEBUG_FLAG_WARN,
@@ -734,6 +741,12 @@ svc_vc_recv(SVCXPRT *xprt)
 			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 				"%s: %p fd %d recv errno %d (try again)",
 				__func__, xprt, xprt->xp_fd, code);
+			if (unlikely(svc_rqst_rearm_events(xprt))) {
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
+					__func__, xprt, xprt->xp_fd);
+				SVC_DESTROY(xprt);
+			}
 			return SVC_STAT(xprt);
 		}
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,

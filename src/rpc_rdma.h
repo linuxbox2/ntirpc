@@ -233,23 +233,23 @@ void rpc_rdma_internals_init(void);
 void rpc_rdma_internals_fini(void);
 
 /* server specific */
-int rpc_rdma_accept_finalize(RDMAXPRT *xprt);
-RDMAXPRT *rpc_rdma_accept_wait(RDMAXPRT *l_xprt, int msleep);
-void rpc_rdma_destroy(SVCXPRT *s_xprt);
+int rpc_rdma_accept_finalize(RDMAXPRT *);
+RDMAXPRT *rpc_rdma_accept_wait(RDMAXPRT *, int);
+void rpc_rdma_destroy(RDMAXPRT *);
 
-enum xprt_stat svc_rdma_rendezvous(SVCXPRT *l_xprt);
+enum xprt_stat svc_rdma_rendezvous(SVCXPRT *);
 
 /* client */
-int rpc_rdma_connect(RDMAXPRT *xprt);
-int rpc_rdma_connect_finalize(RDMAXPRT *xprt);
+int rpc_rdma_connect(RDMAXPRT *);
+int rpc_rdma_connect_finalize(RDMAXPRT *);
 
 /* XDR functions */
-int xdr_rdma_create(XDR *, RDMAXPRT *);
-void xdr_rdma_destroy(XDR *);
+int xdr_rdma_create(RDMAXPRT *);
+void xdr_rdma_callq(RDMAXPRT *);
+void xdr_rdma_destroy(RDMAXPRT *);
 
-bool xdr_rdma_clnt_call(XDR *, u_int32_t);
 bool xdr_rdma_clnt_reply(XDR *, u_int32_t);
-bool xdr_rdma_clnt_flushout(XDR *);
+bool xdr_rdma_clnt_flushout(struct rpc_rdma_cbc *);
 
 bool xdr_rdma_svc_recv(struct rpc_rdma_cbc *, u_int32_t);
 bool xdr_rdma_svc_reply(struct rpc_rdma_cbc *, u_int32_t);

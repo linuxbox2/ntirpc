@@ -201,18 +201,18 @@ static const char *const rpc_errlist[] = {
 	"RPC: Port mapper failure",	/* 14 - RPC_PMAPFAILURE */
 	"RPC: Program not registered",	/* 15 - RPC_PROGNOTREGISTERED */
 	"RPC: Failed (unspecified error)",	/* 16 - RPC_FAILED */
-	"RPC: Unknown protocol"	/* 17 - RPC_UNKNOWNPROTO */
-	"RPC: Interrupted"	/* 18 - RPC_INTR */
-	"RPC: Unknown remote address"	/* 19 - RPC_UNKNOWNADDR */
-	"RPC_TLIERROR"	/* 20 - RPC_TLIERROR */
-	"RPC: Broadcasting not supported"	/* 21 - RPC_NOBROADCAST */
-	"RPC: Name to address translation failed"/* 22 - RPC_N2AXLATEFAILURE */
-	"RPC_UDERROR"	/* 23 - RPC_UDERROR */
-	"RPC_INPROGRESS"	/* 24 - RPC_INPROGRESS */
-	"RPC_STALERACHANDLE"	/* 25 - RPC_STALERACHANDLE */
-	"RPC_CANTCONNECT"	/* 26 - RPC_CANTCONNECT */
-	"RPC_XPRTFAILED"	/* 27 - RPC_XPRTFAILED */
-	"RPC_CANTCREATESTREAM"	/* 28 - RPC_CANTCREATESTREAM */
+	"RPC: Unknown protocol",	/* 17 - RPC_UNKNOWNPROTO */
+	"RPC: Interrupted",	/* 18 - RPC_INTR */
+	"RPC: Unknown remote address",	/* 19 - RPC_UNKNOWNADDR */
+	"RPC_TLIERROR",	/* 20 - RPC_TLIERROR */
+	"RPC: Broadcasting not supported",	/* 21 - RPC_NOBROADCAST */
+	"RPC: Name to address translation failed",/* 22 - RPC_N2AXLATEFAILURE */
+	"RPC_UDERROR",	/* 23 - RPC_UDERROR */
+	"RPC_INPROGRESS",	/* 24 - RPC_INPROGRESS */
+	"RPC_STALERACHANDLE",	/* 25 - RPC_STALERACHANDLE */
+	"RPC_CANTCONNECT",	/* 26 - RPC_CANTCONNECT */
+	"RPC_XPRTFAILED",	/* 27 - RPC_XPRTFAILED */
+	"RPC_CANTCREATESTREAM",	/* 28 - RPC_CANTCREATESTREAM */
 };
 
 /*

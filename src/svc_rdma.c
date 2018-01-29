@@ -60,81 +60,62 @@
 #include <rpc/svc_rqst.h>
 #include <rpc/svc_auth.h>
 
-/*
- * kept in xprt->xp_p2 (sm_data(xprt))
- */
-struct svc_rdma_xdr {
-	XDR	sm_xdrs;			/* XDR handle *MUST* be top */
-	char	sm_verfbody[MAX_AUTH_BYTES];	/* verifier body */
-
-	struct msghdr   sm_msghdr;		/* msghdr received from	clnt */
-	unsigned char   sm_cmsg[64];		/* cmsghdr received from clnt */
-	size_t		sm_iosz;		/* size of send.recv buffer */
-};
-
-#define	sm_data(xprt)	((struct svc_rdma_xdr *)(xprt->xp_p2))
-
 static void svc_rdma_ops(SVCXPRT *);
 
 /*
  * svc_rdma_rendezvous: waits for connection request
  */
 enum xprt_stat
-svc_rdma_rendezvous(SVCXPRT *s_xprt)
+svc_rdma_rendezvous(SVCXPRT *xprt)
 {
-	struct svc_rdma_xdr *sm;
 	struct sockaddr_storage *ss;
-	RDMAXPRT *l_xprt = RDMA_DR(REC_XPRT(s_xprt));
-	RDMAXPRT *r_xprt = rpc_rdma_accept_wait(l_xprt,
-						__svc_params->idle_timeout);
+	RDMAXPRT *req_xd = RDMA_DR(REC_XPRT(xprt));
+	RDMAXPRT *xd = rpc_rdma_accept_wait(req_xd,
+					    __svc_params->idle_timeout);
 
-	if (!r_xprt) {
+	if (!xd) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR (return)",
 			__func__, __LINE__);
 		return (XPRT_DIED);
 	}
 
-	sm = mem_zalloc(sizeof (*sm));
-
-	sm->sm_xdrs.x_lib[1] = r_xprt;
-	r_xprt->sm_dr.xprt.xp_p2 = sm;
-
-	r_xprt->sm_dr.xprt.xp_flags = SVC_XPRT_FLAG_CLOSE
-				    | SVC_XPRT_FLAG_INITIAL
-				    | SVC_XPRT_FLAG_INITIALIZED;
+	xd->sm_dr.xprt.xp_flags = SVC_XPRT_FLAG_CLOSE
+				| SVC_XPRT_FLAG_INITIAL
+				| SVC_XPRT_FLAG_INITIALIZED;
 	/* fixme: put something here, but make it not work on fd operations. */
-	r_xprt->sm_dr.xprt.xp_fd = -1;
+	xd->sm_dr.xprt.xp_fd = -1;
 
-	ss = (struct sockaddr_storage *)rdma_get_local_addr(r_xprt->cm_id);
-	__rpc_address_setup(&r_xprt->sm_dr.xprt.xp_local);
-	memcpy(&r_xprt->sm_dr.xprt.xp_local.nb.buf, ss,
-		r_xprt->sm_dr.xprt.xp_local.nb.len);
+	ss = (struct sockaddr_storage *)rdma_get_local_addr(xd->cm_id);
+	__rpc_address_setup(&xd->sm_dr.xprt.xp_local);
+	memcpy(&xd->sm_dr.xprt.xp_local.nb.buf, ss,
+		xd->sm_dr.xprt.xp_local.nb.len);
 
-	ss = (struct sockaddr_storage *)rdma_get_peer_addr(r_xprt->cm_id);
-	__rpc_address_setup(&r_xprt->sm_dr.xprt.xp_remote);
-	memcpy(&r_xprt->sm_dr.xprt.xp_remote.nb.buf, ss,
-		r_xprt->sm_dr.xprt.xp_remote.nb.len);
+	ss = (struct sockaddr_storage *)rdma_get_peer_addr(xd->cm_id);
+	__rpc_address_setup(&xd->sm_dr.xprt.xp_remote);
+	memcpy(&xd->sm_dr.xprt.xp_remote.nb.buf, ss,
+		xd->sm_dr.xprt.xp_remote.nb.len);
 
-	svc_rdma_ops(&r_xprt->sm_dr.xprt);
+	svc_rdma_ops(&xd->sm_dr.xprt);
 
-	if (xdr_rdma_create(&sm->sm_xdrs, r_xprt)) {
-		goto freedata;
+	if (xdr_rdma_create(xd)) {
+		SVC_DESTROY(&xd->sm_dr.xprt);
+		return (XPRT_DESTROYED);
 	}
 
-	if (rpc_rdma_accept_finalize(r_xprt)) {
-		goto freedata;
+	if (rpc_rdma_accept_finalize(xd)) {
+		SVC_DESTROY(&xd->sm_dr.xprt);
+		return (XPRT_DESTROYED);
 	}
 
-	SVC_REF(s_xprt, SVC_REF_FLAG_NONE);
-	r_xprt->sm_dr.xprt.xp_parent = s_xprt;
-	return (s_xprt->xp_dispatch.rendezvous_cb(&r_xprt->sm_dr.xprt));
-
-freedata:
-	mem_free(sm, sizeof (*sm));
-	r_xprt->sm_dr.xprt.xp_p2 = NULL;
-	svc_rqst_xprt_unregister(&r_xprt->sm_dr.xprt);
-	return (XPRT_DIED);
+	SVC_REF(xprt, SVC_REF_FLAG_NONE);
+	xd->sm_dr.xprt.xp_parent = xprt;
+	if (xprt->xp_dispatch.rendezvous_cb(&xd->sm_dr.xprt)
+	 || svc_rqst_xprt_register(&xd->sm_dr.xprt, xprt)) {
+		SVC_DESTROY(&xd->sm_dr.xprt);
+		return (XPRT_DESTROYED);
+	}
+	return (XPRT_IDLE);
 }
 
 /*ARGSUSED*/
@@ -242,15 +223,14 @@ svc_rdma_reply(struct svc_req *req)
 static void
 svc_rdma_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
-	struct svc_rdma_xdr *sm = sm_data(xprt);
+	RDMAXPRT *xd = RDMA_DR(REC_XPRT(xprt));
 
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 		"%s() %p xp_refs %" PRId32
 		" should actually destroy things @ %s:%d",
 		__func__, xprt, xprt->xp_refs, tag, line);
 
-	xdr_rdma_destroy(&(sm->sm_xdrs));
-	mem_free(sm, sizeof (*sm));
+	xdr_rdma_destroy(xd);
 
 	if (xprt->xp_ops->xp_free_user_data) {
 		/* call free hook */
@@ -258,7 +238,7 @@ svc_rdma_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	}
 	if (xprt->xp_parent)
 		SVC_RELEASE(xprt->xp_parent, SVC_RELEASE_FLAG_NONE);
-	rpc_rdma_destroy(xprt);
+	rpc_rdma_destroy(xd);
 }
 
 extern mutex_t ops_lock;
