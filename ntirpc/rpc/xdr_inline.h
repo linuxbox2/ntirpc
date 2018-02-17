@@ -881,34 +881,6 @@ xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
  */
 
 /*
- * XDR hypers
- */
-static inline bool
-inline_xdr_hyper(XDR *xdrs, quad_t *llp)
-{
-
-	/*
-	 * Don't bother open-coding this; it's a fair amount of code.  Just
-	 * call xdr_int64_t().
-	 */
-	return (inline_xdr_int64_t(xdrs, (int64_t *) llp));
-}
-
-/*
- * XDR unsigned hypers
- */
-static inline bool
-inline_xdr_u_hyper(XDR *xdrs, u_quad_t *ullp)
-{
-
-	/*
-	 * Don't bother open-coding this; it's a fair amount of code.  Just
-	 * call xdr_u_int64_t().
-	 */
-	return (inline_xdr_u_int64_t(xdrs, (u_int64_t *) ullp));
-}
-
-/*
  * XDR longlong_t's
  */
 static inline bool

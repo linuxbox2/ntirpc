@@ -180,7 +180,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_dplx_msg;
     xdr_float;
     xdr_free_null_stream;
-    xdr_hyper;
     xdr_int;
     xdr_long;
     xdr_longlong_t;
@@ -216,7 +215,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_rpcbs_proc;
     xdr_rpcbs_rmtcalllist;
     xdr_rpcbs_rmtcalllist_ptr;
-    xdr_u_hyper;
     xdr_u_int;
     xdr_u_long;
     xdr_u_longlong_t;

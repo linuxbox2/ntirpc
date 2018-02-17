@@ -200,32 +200,6 @@ xdr_wrapstring(XDR *xdrs, char **cpp)
  */
 
 /*
- * XDR hypers
- */
-bool
-xdr_hyper(XDR *xdrs, longlong_t *llp)
-{
-	/*
-	 * Don't bother open-coding this; it's a fair amount of code.  Just
-	 * call xdr_int64_t().
-	 */
-	return (xdr_int64_t(xdrs, (int64_t *) llp));
-}
-
-/*
- * XDR unsigned hypers
- */
-bool
-xdr_u_hyper(XDR *xdrs, u_longlong_t *ullp)
-{
-	/*
-	 * Don't bother open-coding this; it's a fair amount of code.  Just
-	 * call xdr_u_int64_t().
-	 */
-	return (xdr_u_int64_t(xdrs, (u_int64_t *) ullp));
-}
-
-/*
  * XDR longlong_t's
  */
 bool

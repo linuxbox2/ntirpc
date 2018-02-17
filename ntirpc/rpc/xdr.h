@@ -626,8 +626,6 @@ extern bool xdr_quadruple(XDR *, long double *);
 extern bool xdr_reference(XDR *, char **, u_int, xdrproc_t);
 extern bool xdr_pointer(XDR *, char **, u_int, xdrproc_t);
 extern bool xdr_wrapstring(XDR *, char **);
-extern bool xdr_hyper(XDR *, quad_t *);
-extern bool xdr_u_hyper(XDR *, u_quad_t *);
 extern bool xdr_longlong_t(XDR *, quad_t *);
 extern bool xdr_u_longlong_t(XDR *, u_quad_t *);
 
