@@ -622,15 +622,11 @@ extern bool xdr_array(XDR *, char **, u_int *, u_int, u_int, xdrproc_t);
 extern bool xdr_vector(XDR *, char *, u_int, u_int, xdrproc_t);
 extern bool xdr_float(XDR *, float *);
 extern bool xdr_double(XDR *, double *);
-extern bool xdr_quadruple(XDR *, long double *);
 extern bool xdr_reference(XDR *, char **, u_int, xdrproc_t);
 extern bool xdr_pointer(XDR *, char **, u_int, xdrproc_t);
 extern bool xdr_wrapstring(XDR *, char **);
 extern bool xdr_longlong_t(XDR *, quad_t *);
 extern bool xdr_u_longlong_t(XDR *, u_quad_t *);
-
-#define xdr_quad_t  xdr_int64_t
-#define xdr_uquad_t xdr_uint64_t
 
 __END_DECLS
 

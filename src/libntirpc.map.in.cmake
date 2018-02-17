@@ -194,7 +194,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_pmaplist;
     xdr_pmaplist_ptr;
     xdr_pointer;
-    xdr_quad_t;
     xdr_reference;
     xdr_rmtcall_args;
     xdr_rmtcallres;
@@ -218,7 +217,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_u_int;
     xdr_u_long;
     xdr_u_longlong_t;
-    xdr_u_quad_t;
     xdr_vector;
     xdr_void;
     xdr_wrapstring;
