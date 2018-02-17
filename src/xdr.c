@@ -261,48 +261,6 @@ xdr_netobj(XDR *xdrs, struct netobj *np)
 }
 
 /*
- * XDR a descriminated union
- * Support routine for discriminated unions.
- * You create an array of xdrdiscrim structures, terminated with
- * an entry with a null procedure pointer.  The routine gets
- * the discriminant value and then searches the array of xdrdiscrims
- * looking for that value.  It calls the procedure given in the xdrdiscrim
- * to handle the discriminant.  If there is no specific routine a default
- * routine may be called.
- * If there is no specific or default routine an error is returned.
- */
-bool
-xdr_union(XDR  *xdrs, enum_t *dscmp, /* enum to decide which arm to work on */
-	  char *unp,	/* the union itself */
-	  const struct xdr_discrim *choices,
-			/* [value, xdr proc] for each arm */
-	  xdrproc_t dfault /* default xdr routine */)
-{
-	enum_t dscm;
-
-	/*
-	 * we deal with the discriminator;  it's an enum
-	 */
-	if (!xdr_enum(xdrs, dscmp))
-		return (false);
-	dscm = *dscmp;
-
-	/*
-	 * search choices for a value that matches the discriminator.
-	 * if we find one, execute the xdr routine for that value.
-	 */
-	for (; choices->proc != NULL_xdrproc_t; choices++) {
-		if (choices->value == dscm)
-			return ((*(choices->proc)) (xdrs, unp));
-	}
-
-	/*
-	 * no match - execute the default xdr routine if there is one
-	 */
-	return ((dfault == NULL_xdrproc_t) ? false : (*dfault) (xdrs, unp));
-}
-
-/*
  * Non-portable xdr primitives.
  * Care should be taken when moving these routines to new architectures.
  */

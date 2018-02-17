@@ -225,7 +225,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_u_longlong_t;
     xdr_u_quad_t;
     xdr_u_short;
-    xdr_union;
     xdr_vector;
     xdr_void;
     xdr_wrapstring;

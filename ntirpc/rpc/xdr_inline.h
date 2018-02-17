@@ -803,13 +803,13 @@ xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
  * If there is no specific or default routine an error is returned.
  */
 static inline bool
-inline_xdr_union(XDR *xdrs, enum_t *dscmp,
-  /* enum to decide which arm to work on */
-		 char *unp,	/* the union itself */
-		 const struct xdr_discrim *choices,
-/* [value, xdr proc] for each arm */
-		 xdrproc_t dfault)
-{				/* default xdr routine */
+xdr_union(XDR *xdrs,
+	  enum_t *dscmp,	/* enum to decide which arm to work on */
+	  char *unp,		/* the union itself */
+	  const struct xdr_discrim *choices,
+				/* [value, xdr proc] for each arm */
+	  xdrproc_t dfault /* default xdr routine */)
+{
 	enum_t dscm;
 
 	/*
@@ -833,6 +833,7 @@ inline_xdr_union(XDR *xdrs, enum_t *dscmp,
 	 */
 	return ((dfault == NULL_xdrproc_t) ? false : (*dfault) (xdrs, unp));
 }
+#define inline_xdr_union xdr_union
 
 /*
  * Non-portable xdr primitives.
