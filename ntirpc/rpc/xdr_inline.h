@@ -53,28 +53,6 @@
 #include <rpc/xdr.h>
 
 /*
- * Free a data structure using XDR
- * Not a filter, but a convenient utility nonetheless
- */
-static inline void
-inline_xdr_free(xdrproc_t proc, void *objp)
-{
-	XDR x;
-
-	x.x_op = XDR_FREE;
-	(*proc) (&x, objp);
-}
-
-/*
- * XDR nothing
- */
-static inline bool
-inline_xdr_void(void)
-{
-	return (true);
-}
-
-/*
  * XDR integers
  */
 static inline bool
