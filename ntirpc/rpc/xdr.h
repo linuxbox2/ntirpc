@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2010-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -324,16 +325,6 @@ xdr_putlong(XDR *xdrs, const long *lp)
 #define xdr_control(xdrs, req, op) XDR_CONTROL(xdrs, req, op)
 
 /*
- * Solaris strips the '_t' from these types -- not sure why.
- * But, let's be compatible.
- */
-#define xdr_rpcvers(xdrs, versp) xdr_u_int32(xdrs, versp)
-#define xdr_rpcprog(xdrs, progp) xdr_u_int32(xdrs, progp)
-#define xdr_rpcproc(xdrs, procp) xdr_u_int32(xdrs, procp)
-#define xdr_rpcprot(xdrs, protp) xdr_u_int32(xdrs, protp)
-#define xdr_rpcport(xdrs, portp) xdr_u_int32(xdrs, portp)
-
-/*
  * Support struct for discriminated unions.
  * You create an array of xdrdiscrim structures, terminated with
  * an entry with a null procedure pointer.  The xdr_union routine gets
@@ -621,14 +612,6 @@ extern bool xdr_long(XDR *, long *);
 extern bool xdr_u_long(XDR *, u_long *);
 extern bool xdr_short(XDR *, short *);
 extern bool xdr_u_short(XDR *, u_short *);
-extern bool xdr_int16_t(XDR *, int16_t *);
-extern bool xdr_u_int16_t(XDR *, u_int16_t *);
-extern bool xdr_int32_t(XDR *, int32_t *);
-extern bool xdr_u_int32_t(XDR *, u_int32_t *);
-extern bool xdr_uint32_t(XDR *, u_int32_t *);
-extern bool xdr_int64_t(XDR *, int64_t *);
-extern bool xdr_u_int64_t(XDR *, u_int64_t *);
-extern bool xdr_uint64_t(XDR *, u_int64_t *);
 extern bool xdr_bool(XDR *, bool_t *);
 extern bool xdr_enum(XDR *, enum_t *);
 extern bool xdr_array(XDR *, char **, u_int *, u_int, u_int, xdrproc_t);

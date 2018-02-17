@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
- * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2012-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -174,11 +174,53 @@ inline_xdr_u_long(XDR *xdrs, u_long *ulp)
 }
 
 /*
- * XDR 32-bit integers
- * same as xdr_u_int32_t - open coded to save a proc call!
+ * XDR 64-bit integers
+ * (always transmitted as unsigned 32-bit)
  */
 static inline bool
-inline_xdr_int32_t(XDR *xdrs, int32_t *int32_p)
+xdr_uint64_t(XDR *xdrs, uint64_t *uint64_p)
+{
+	uint32_t u[2];
+
+	switch (xdrs->x_op) {
+	case XDR_ENCODE:
+		u[0] = (uint32_t) (*uint64_p >> 32) & 0xffffffff;
+		u[1] = (uint32_t) (*uint64_p) & 0xffffffff;
+		if (!XDR_PUTUINT32(xdrs, u[0]))
+			return (false);
+		return (XDR_PUTUINT32(xdrs, u[1]));
+	case XDR_DECODE:
+		if (!XDR_GETUINT32(xdrs, &u[0])
+		 || !XDR_GETUINT32(xdrs, &u[1]))
+			return (false);
+		*uint64_p = (((uint64_t) u[0] << 32) | ((uint64_t) u[1]));
+		return (true);
+	case XDR_FREE:
+		return (true);
+	}
+	/* NOTREACHED */
+	return (false);
+}
+
+static inline bool
+xdr_u_int64_t(XDR *xdrs, u_int64_t *u_int64_p)
+{
+	return (xdr_uint64_t(xdrs, (uint64_t *)u_int64_p));
+}
+#define inline_xdr_u_int64_t xdr_u_int64_t
+
+static inline bool
+xdr_int64_t(XDR *xdrs, int64_t *int64_p)
+{
+	return (xdr_uint64_t(xdrs, (uint64_t *)int64_p));
+}
+#define inline_xdr_int64_t xdr_int64_t
+
+/*
+ * XDR 32-bit integers
+ */
+static inline bool
+xdr_int32_t(XDR *xdrs, int32_t *int32_p)
 {
 	switch (xdrs->x_op) {
 
@@ -194,13 +236,13 @@ inline_xdr_int32_t(XDR *xdrs, int32_t *int32_p)
 	/* NOTREACHED */
 	return (false);
 }
+#define inline_xdr_int32_t xdr_int32_t
 
 /*
  * XDR unsigned 32-bit integers
- * same as xdr_int32_t - open coded to save a proc call!
  */
 static inline bool
-inline_xdr_u_int32_t(XDR *xdrs, u_int32_t *u_int32_p)
+xdr_uint32_t(XDR *xdrs, uint32_t *u_int32_p)
 {
 	switch (xdrs->x_op) {
 
@@ -215,6 +257,47 @@ inline_xdr_u_int32_t(XDR *xdrs, u_int32_t *u_int32_p)
 	}
 	/* NOTREACHED */
 	return (false);
+}
+
+static inline bool
+xdr_u_int32_t(XDR *xdrs, u_int32_t *u_int32_p)
+{
+	return (xdr_uint32_t(xdrs, (uint32_t *)u_int32_p));
+}
+#define inline_xdr_u_int32_t xdr_u_int32_t
+
+/*
+ * Solaris strips the '_t' from these types -- not sure why.
+ * But, let's be compatible.
+ */
+static inline bool
+xdr_rpcprog(XDR *xdrs, rpcprog_t *u_int32_p)
+{
+	return (xdr_uint32_t(xdrs, (uint32_t *)u_int32_p));
+}
+
+static inline bool
+xdr_rpcvers(XDR *xdrs, rpcvers_t *u_int32_p)
+{
+	return (xdr_uint32_t(xdrs, (uint32_t *)u_int32_p));
+}
+
+static inline bool
+xdr_rpcproc(XDR *xdrs, rpcproc_t *u_int32_p)
+{
+	return (xdr_uint32_t(xdrs, (uint32_t *)u_int32_p));
+}
+
+static inline bool
+xdr_rpcprot(XDR *xdrs, rpcprot_t *u_int32_p)
+{
+	return (xdr_uint32_t(xdrs, (uint32_t *)u_int32_p));
+}
+
+static inline bool
+xdr_rpcport(XDR *xdrs, rpcport_t *u_int32_p)
+{
+	return (xdr_uint32_t(xdrs, (uint32_t *)u_int32_p));
 }
 
 /*
@@ -275,7 +358,7 @@ inline_xdr_u_short(XDR *xdrs, u_short *usp)
  * XDR 16-bit integers
  */
 static inline bool
-inline_xdr_int16_t(XDR *xdrs, int16_t *int16_p)
+xdr_int16_t(XDR *xdrs, int16_t *int16_p)
 {
 	switch (xdrs->x_op) {
 
@@ -291,12 +374,13 @@ inline_xdr_int16_t(XDR *xdrs, int16_t *int16_p)
 	/* NOTREACHED */
 	return (false);
 }
+#define inline_xdr_int16_t xdr_int16_t
 
 /*
  * XDR unsigned 16-bit integers
  */
 static inline bool
-inline_xdr_u_int16_t(XDR *xdrs, u_int16_t *u_int16_p)
+xdr_uint16_t(XDR *xdrs, uint16_t *u_int16_p)
 {
 	switch (xdrs->x_op) {
 
@@ -312,6 +396,63 @@ inline_xdr_u_int16_t(XDR *xdrs, u_int16_t *u_int16_p)
 	/* NOTREACHED */
 	return (false);
 }
+
+static inline bool
+xdr_u_int16_t(XDR *xdrs, u_int16_t *u_int16_p)
+{
+	return (xdr_uint16_t(xdrs, (uint16_t *)u_int16_p));
+}
+#define inline_xdr_u_int16_t xdr_u_int16_t
+
+/*
+ * XDR 8-bit integers
+ */
+static inline bool
+xdr_int8_t(XDR *xdrs, int8_t *int8_p)
+{
+	switch (xdrs->x_op) {
+
+	case XDR_ENCODE:
+		return (XDR_PUTINT8(xdrs, *int8_p));
+
+	case XDR_DECODE:
+		return (XDR_GETINT8(xdrs, int8_p));
+
+	case XDR_FREE:
+		return (true);
+	}
+	/* NOTREACHED */
+	return (false);
+}
+#define inline_xdr_int8_t xdr_int8_t
+
+/*
+ * XDR unsigned 8-bit integers
+ */
+static inline bool
+xdr_uint8_t(XDR *xdrs, uint8_t *u_int8_p)
+{
+	switch (xdrs->x_op) {
+
+	case XDR_ENCODE:
+		return (XDR_PUTUINT8(xdrs, *u_int8_p));
+
+	case XDR_DECODE:
+		return (XDR_GETUINT8(xdrs, u_int8_p));
+
+	case XDR_FREE:
+		return (true);
+	}
+	/* NOTREACHED */
+	return (false);
+}
+
+static inline bool
+xdr_u_int8_t(XDR *xdrs, u_int8_t *u_int8_p)
+{
+	return (xdr_uint8_t(xdrs, (uint8_t *)u_int8_p));
+}
+#define inline_xdr_u_int8_t xdr_u_int8_t
 
 /*
  * XDR a char
@@ -855,66 +996,6 @@ xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
  *
  * --thorpej@netbsd.org, November 30, 1999
  */
-
-/*
- * XDR 64-bit integers
- */
-static inline bool
-inline_xdr_int64_t(XDR *xdrs, int64_t *llp)
-{
-	u_long ul[2];
-
-	switch (xdrs->x_op) {
-	case XDR_ENCODE:
-		ul[0] = (u_long) ((u_int64_t) *llp >> 32) & 0xffffffff;
-		ul[1] = (u_long) ((u_int64_t) *llp) & 0xffffffff;
-		if (XDR_PUTLONG(xdrs, (long *)&ul[0]) == false)
-			return (false);
-		return (XDR_PUTLONG(xdrs, (long *)&ul[1]));
-	case XDR_DECODE:
-		if (XDR_GETLONG(xdrs, (long *)&ul[0]) == false)
-			return (false);
-		if (XDR_GETLONG(xdrs, (long *)&ul[1]) == false)
-			return (false);
-		*llp = (int64_t)
-		    (((u_int64_t) ul[0] << 32) | ((u_int64_t) ul[1]));
-		return (true);
-	case XDR_FREE:
-		return (true);
-	}
-	/* NOTREACHED */
-	return (false);
-}
-
-/*
- * XDR unsigned 64-bit integers
- */
-static inline bool
-inline_xdr_u_int64_t(XDR *xdrs, u_int64_t *ullp)
-{
-	u_long ul[2];
-
-	switch (xdrs->x_op) {
-	case XDR_ENCODE:
-		ul[0] = (u_long) (*ullp >> 32) & 0xffffffff;
-		ul[1] = (u_long) (*ullp) & 0xffffffff;
-		if (XDR_PUTLONG(xdrs, (long *)&ul[0]) == false)
-			return (false);
-		return (XDR_PUTLONG(xdrs, (long *)&ul[1]));
-	case XDR_DECODE:
-		if (XDR_GETLONG(xdrs, (long *)&ul[0]) == false)
-			return (false);
-		if (XDR_GETLONG(xdrs, (long *)&ul[1]) == false)
-			return (false);
-		*ullp = (u_int64_t)
-		    (((u_int64_t) ul[0] << 32) | ((u_int64_t) ul[1]));
-		return (true);
-	case XDR_FREE:
-		return (true);
-	}
-	/* NOTREACHED */
-	return (false);
-}
 
 /*
  * XDR hypers
