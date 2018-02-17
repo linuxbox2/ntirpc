@@ -272,60 +272,6 @@ xdr_rpcport(XDR *xdrs, rpcport_t *u_int32_p)
 }
 
 /*
- * XDR short integers
- */
-static inline bool
-inline_xdr_short(XDR *xdrs, short *sp)
-{
-	long l;
-
-	switch (xdrs->x_op) {
-
-	case XDR_ENCODE:
-		l = (long)*sp;
-		return (XDR_PUTLONG(xdrs, &l));
-
-	case XDR_DECODE:
-		if (!XDR_GETLONG(xdrs, &l))
-			return (false);
-		*sp = (short)l;
-		return (true);
-
-	case XDR_FREE:
-		return (true);
-	}
-	/* NOTREACHED */
-	return (false);
-}
-
-/*
- * XDR unsigned short integers
- */
-static inline bool
-inline_xdr_u_short(XDR *xdrs, u_short *usp)
-{
-	u_long l;
-
-	switch (xdrs->x_op) {
-
-	case XDR_ENCODE:
-		l = (u_long) *usp;
-		return (XDR_PUTLONG(xdrs, (long *)&l));
-
-	case XDR_DECODE:
-		if (!XDR_GETLONG(xdrs, (long *)&l))
-			return (false);
-		*usp = (u_short) l;
-		return (true);
-
-	case XDR_FREE:
-		return (true);
-	}
-	/* NOTREACHED */
-	return (false);
-}
-
-/*
  * XDR 16-bit integers
  */
 static inline bool

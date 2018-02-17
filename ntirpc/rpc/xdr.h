@@ -405,14 +405,10 @@ xdr_inline_encode(XDR *xdrs, size_t count)
 #define IXDR_GET_BOOL(buf)  ((bool)IXDR_GET_LONG(buf))
 #define IXDR_GET_ENUM(buf, t)  ((t)IXDR_GET_LONG(buf))
 #define IXDR_GET_U_LONG(buf)  ((u_long)IXDR_GET_LONG(buf))
-#define IXDR_GET_SHORT(buf)  ((short)IXDR_GET_LONG(buf))
-#define IXDR_GET_U_SHORT(buf)  ((u_short)IXDR_GET_LONG(buf))
 
 #define IXDR_PUT_BOOL(buf, v)  IXDR_PUT_LONG((buf), (v))
 #define IXDR_PUT_ENUM(buf, v)  IXDR_PUT_LONG((buf), (v))
 #define IXDR_PUT_U_LONG(buf, v)  IXDR_PUT_LONG((buf), (v))
-#define IXDR_PUT_SHORT(buf, v)  IXDR_PUT_LONG((buf), (v))
-#define IXDR_PUT_U_SHORT(buf, v) IXDR_PUT_LONG((buf), (v))
 
 /*
  * In-line routines for vector encode/decode of primitive data types.
@@ -622,8 +618,6 @@ extern bool xdr_int(XDR *, int *);
 extern bool xdr_u_int(XDR *, u_int *);
 extern bool xdr_long(XDR *, long *);
 extern bool xdr_u_long(XDR *, u_long *);
-extern bool xdr_short(XDR *, short *);
-extern bool xdr_u_short(XDR *, u_short *);
 extern bool xdr_array(XDR *, char **, u_int *, u_int, u_int, xdrproc_t);
 extern bool xdr_vector(XDR *, char *, u_int, u_int, xdrproc_t);
 extern bool xdr_float(XDR *, float *);

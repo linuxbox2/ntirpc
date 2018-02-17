@@ -168,60 +168,6 @@ xdr_u_long(XDR *xdrs, u_long *ulp)
 }
 
 /*
- * XDR short integers
- */
-bool
-xdr_short(XDR *xdrs, short *sp)
-{
-	long l;
-
-	switch (xdrs->x_op) {
-
-	case XDR_ENCODE:
-		l = (long)*sp;
-		return (XDR_PUTLONG(xdrs, &l));
-
-	case XDR_DECODE:
-		if (!XDR_GETLONG(xdrs, &l))
-			return (false);
-		*sp = (short)l;
-		return (true);
-
-	case XDR_FREE:
-		return (true);
-	}
-	/* NOTREACHED */
-	return (false);
-}
-
-/*
- * XDR unsigned short integers
- */
-bool
-xdr_u_short(XDR *xdrs, u_short *usp)
-{
-	u_long l;
-
-	switch (xdrs->x_op) {
-
-	case XDR_ENCODE:
-		l = (u_long) *usp;
-		return (XDR_PUTLONG(xdrs, (long *)&l));
-
-	case XDR_DECODE:
-		if (!XDR_GETLONG(xdrs, (long *)&l))
-			return (false);
-		*usp = (u_short) l;
-		return (true);
-
-	case XDR_FREE:
-		return (true);
-	}
-	/* NOTREACHED */
-	return (false);
-}
-
-/*
  * Implemented here due to commonality of the object.
  */
 bool

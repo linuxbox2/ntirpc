@@ -677,7 +677,7 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		struct netbuf remote;
 		struct pmap pmapparms;
 		rpcvers_t pmapvers = 2;
-		u_short port = 0;
+		uint16_t port = 0;
 
 		/*
 		 * Try UDP only - there are some portmappers out
@@ -712,7 +712,7 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		cc = mem_alloc(sizeof(*cc));
 		clnt_req_fill(cc, client, auth, PMAPPROC_GETPORT,
 			      (xdrproc_t) xdr_pmap, &pmapparms,
-			      (xdrproc_t) xdr_u_short, &port);
+			      (xdrproc_t) xdr_uint16_t, &port);
 		clnt_st = clnt_req_setup(cc, tv);
 		if (clnt_st == RPC_SUCCESS) {
 			clnt_st = CLNT_CALL_WAIT(cc);
@@ -741,8 +741,8 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		address->buf = (char *)mem_alloc(remote.len);
 
 		memcpy(address->buf, remote.buf, remote.len);
-		memcpy(&((char *)address->buf)[sizeof(short)],
-		       (char *)(void *)&port, sizeof(short));
+		memcpy(&((char *)address->buf)[sizeof(uint16_t)],
+		       (char *)(void *)&port, sizeof(uint16_t));
 		address->len = address->maxlen = remote.len;
 		goto done;
 	}
