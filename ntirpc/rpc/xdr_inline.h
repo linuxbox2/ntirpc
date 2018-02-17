@@ -53,13 +53,6 @@
 #include <rpc/xdr.h>
 
 /*
- * constants specific to the xdr "protocol"
- */
-#define XDR_FALSE ((long) 0)
-#define XDR_TRUE ((long) 1)
-#define RPC_MAXDATASIZE 9000
-
-/*
  * Free a data structure using XDR
  * Not a filter, but a convenient utility nonetheless
  */
@@ -488,21 +481,15 @@ inline_xdr_u_char(XDR *xdrs, u_char *cp)
  * XDR booleans
  */
 static inline bool
-inline_xdr_bool(XDR *xdrs, bool_t *bp)
+xdr_bool(XDR *xdrs, bool_t *bp)
 {
-	long lb;
-
 	switch (xdrs->x_op) {
 
 	case XDR_ENCODE:
-		lb = *bp ? XDR_TRUE : XDR_FALSE;
-		return (XDR_PUTLONG(xdrs, &lb));
+		return (xdr_putbool(xdrs, *bp));
 
 	case XDR_DECODE:
-		if (!XDR_GETLONG(xdrs, &lb))
-			return (false);
-		*bp = (lb == XDR_FALSE) ? false : true;
-		return (true);
+		return (xdr_getbool(xdrs, bp));
 
 	case XDR_FREE:
 		return (true);
@@ -510,6 +497,7 @@ inline_xdr_bool(XDR *xdrs, bool_t *bp)
 	/* NOTREACHED */
 	return (false);
 }
+#define inline_xdr_bool xdr_bool
 
 /*
  * XDR enumerations

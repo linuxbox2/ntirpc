@@ -48,16 +48,10 @@
 #include <rpc/xdr.h>
 #include <rpc/xdr_inline.h>
 #include <rpc/rpc.h>
+#include "rpc_com.h"
 
 typedef quad_t longlong_t;	/* ANSI long long type */
 typedef u_quad_t u_longlong_t;	/* ANSI unsigned long long type */
-
-/*
- * constants specific to the xdr "protocol"
- */
-#define XDR_FALSE ((long) 0)
-#define XDR_TRUE ((long) 1)
-#define RPC_MAXDATASIZE 9000
 
 /*
  * for cleanup
@@ -255,33 +249,6 @@ xdr_u_char(XDR *xdrs, u_char *cp)
 		return (false);
 	*cp = u;
 	return (true);
-}
-
-/*
- * XDR booleans
- */
-bool
-xdr_bool(XDR *xdrs, bool_t *bp)
-{
-	long lb;
-
-	switch (xdrs->x_op) {
-
-	case XDR_ENCODE:
-		lb = *bp ? XDR_TRUE : XDR_FALSE;
-		return (XDR_PUTLONG(xdrs, &lb));
-
-	case XDR_DECODE:
-		if (!XDR_GETLONG(xdrs, &lb))
-			return (false);
-		*bp = (lb == XDR_FALSE) ? false : true;
-		return (true);
-
-	case XDR_FREE:
-		return (true);
-	}
-	/* NOTREACHED */
-	return (false);
 }
 
 /*

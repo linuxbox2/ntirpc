@@ -40,6 +40,7 @@
 #include <sys/un.h>
 #include <sys/utsname.h>
 #include <rpc/rpc.h>
+#include <rpc/xdr_inline.h>
 #include <rpc/rpcb_prot.h>
 #include <rpc/nettype.h>
 #include <netconfig.h>

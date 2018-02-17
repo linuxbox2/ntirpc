@@ -42,6 +42,7 @@
 #include <rpc/rpc.h>
 #include <rpc/xdr.h>
 #include <rpc/xdr_inline.h>
+#include "rpc_com.h"
 
 /* Link list of all the stats about getport and getaddr */
 

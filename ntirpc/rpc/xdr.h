@@ -96,6 +96,13 @@ enum xdr_op {
  * This is the number of bytes per unit of external data.
  */
 #define BYTES_PER_XDR_UNIT (4)
+
+/*
+ * constants specific to the xdr "protocol"
+ */
+#define XDR_FALSE (0)
+#define XDR_TRUE (1)
+
 /* Taken verbatim from a system xdr.h, which carries a BSD-style
  * license (Matt) */
 /*
@@ -587,13 +594,18 @@ xdr_putenum(XDR *xdrs, enum_t enumv)
 static inline bool
 xdr_getbool(XDR *xdrs, bool_t *ip)
 {
-	return xdr_getuint32(xdrs, (uint32_t *)ip);
+	uint32_t lv;
+
+	if (!xdr_getuint32(xdrs, &lv))
+		return (false);
+	*ip = lv ? XDR_TRUE : XDR_FALSE;
+	return (true);
 }
 
 static inline bool
 xdr_putbool(XDR *xdrs, bool_t boolv)
 {
-	return xdr_putuint16(xdrs, (uint32_t)boolv);
+	return xdr_putuint16(xdrs, boolv ? XDR_TRUE : XDR_FALSE);
 }
 
 #define XDR_GETBOOL(xdrs, boolp) xdr_getbool(xdrs, boolp)
@@ -612,7 +624,6 @@ extern bool xdr_long(XDR *, long *);
 extern bool xdr_u_long(XDR *, u_long *);
 extern bool xdr_short(XDR *, short *);
 extern bool xdr_u_short(XDR *, u_short *);
-extern bool xdr_bool(XDR *, bool_t *);
 extern bool xdr_array(XDR *, char **, u_int *, u_int, u_int, xdrproc_t);
 extern bool xdr_union(XDR *, enum_t *, char *, const struct xdr_discrim *,
 		      xdrproc_t);
