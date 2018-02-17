@@ -426,36 +426,6 @@ xdr_u_int8_t(XDR *xdrs, u_int8_t *u_int8_p)
 #define inline_xdr_u_int8_t xdr_u_int8_t
 
 /*
- * XDR a char
- */
-static inline bool
-inline_xdr_char(XDR *xdrs, char *cp)
-{
-	int i;
-
-	i = (*cp);
-	if (!inline_xdr_int(xdrs, &i))
-		return (false);
-	*cp = i;
-	return (true);
-}
-
-/*
- * XDR an unsigned char
- */
-static inline bool
-inline_xdr_u_char(XDR *xdrs, u_char *cp)
-{
-	u_int u;
-
-	u = (*cp);
-	if (!inline_xdr_u_int(xdrs, &u))
-		return (false);
-	*cp = u;
-	return (true);
-}
-
-/*
  * XDR booleans
  */
 static inline bool

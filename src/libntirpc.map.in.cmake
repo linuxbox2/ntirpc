@@ -175,7 +175,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_authunix_parms;
     xdr_call_decode;
     xdr_call_encode;
-    xdr_char;
     xdr_double;
     xdr_dplx_decode;
     xdr_dplx_msg;
@@ -218,7 +217,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_rpcbs_rmtcalllist;
     xdr_rpcbs_rmtcalllist_ptr;
     xdr_short;
-    xdr_u_char;
     xdr_u_hyper;
     xdr_u_int;
     xdr_u_long;

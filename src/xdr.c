@@ -222,36 +222,6 @@ xdr_u_short(XDR *xdrs, u_short *usp)
 }
 
 /*
- * XDR a char
- */
-bool
-xdr_char(XDR *xdrs, char *cp)
-{
-	int i;
-
-	i = (*cp);
-	if (!xdr_int(xdrs, &i))
-		return (false);
-	*cp = i;
-	return (true);
-}
-
-/*
- * XDR an unsigned char
- */
-bool
-xdr_u_char(XDR *xdrs, u_char *cp)
-{
-	u_int u;
-
-	u = (*cp);
-	if (!xdr_u_int(xdrs, &u))
-		return (false);
-	*cp = u;
-	return (true);
-}
-
-/*
  * Implemented here due to commonality of the object.
  */
 bool
