@@ -613,7 +613,6 @@ extern bool xdr_u_long(XDR *, u_long *);
 extern bool xdr_short(XDR *, short *);
 extern bool xdr_u_short(XDR *, u_short *);
 extern bool xdr_bool(XDR *, bool_t *);
-extern bool xdr_enum(XDR *, enum_t *);
 extern bool xdr_array(XDR *, char **, u_int *, u_int, u_int, xdrproc_t);
 extern bool xdr_union(XDR *, enum_t *, char *, const struct xdr_discrim *,
 		      xdrproc_t);

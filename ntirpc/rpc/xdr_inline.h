@@ -515,23 +515,23 @@ inline_xdr_bool(XDR *xdrs, bool_t *bp)
  * XDR enumerations
  */
 static inline bool
-inline_xdr_enum(XDR *xdrs, enum_t *ep)
+xdr_enum(XDR *xdrs, enum_t *ep)
 {
-	enum sizecheck { SIZEVAL };	/* used to find the size of an enum */
+	switch (xdrs->x_op) {
 
-	/*
-	 * enums are treated as ints
-	 */
-	/* LINTED */ if (sizeof(enum sizecheck) == sizeof(long)) {
-		return (inline_xdr_long(xdrs, (long *)(void *)ep));
-	} else /* LINTED */ if (sizeof(enum sizecheck) == sizeof(int)) {
-		return (inline_xdr_int(xdrs, (int *)(void *)ep));
-	} else /* LINTED */ if (sizeof(enum sizecheck) == sizeof(short)) {
-		return (inline_xdr_short(xdrs, (short *)(void *)ep));
-	} else {
-		return (false);
+	case XDR_ENCODE:
+		return (xdr_putenum(xdrs, *ep));
+
+	case XDR_DECODE:
+		return (xdr_getenum(xdrs, ep));
+
+	case XDR_FREE:
+		return (true);
 	}
+	/* NOTREACHED */
+	return (false);
 }
+#define inline_xdr_enum xdr_enum
 
 /*
  * decode opaque data

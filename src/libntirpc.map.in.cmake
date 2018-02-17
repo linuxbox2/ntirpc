@@ -180,7 +180,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_double;
     xdr_dplx_decode;
     xdr_dplx_msg;
-    xdr_enum;
     xdr_float;
     xdr_free_null_stream;
     xdr_hyper;
