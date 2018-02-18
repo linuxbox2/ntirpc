@@ -576,13 +576,13 @@ static inline bool
 xdr_bytes_decode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 {
 	char *sp = *cpp;	/* sp is the actual string pointer */
-	long size;
+	uint32_t size;
 	bool ret;
 
 	/*
 	 * first deal with the length since xdr bytes are counted
 	 */
-	if (!XDR_GETLONG(xdrs, &size)) {
+	if (!XDR_GETUINT32(xdrs, &size)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR size",
 			__func__, __LINE__);
@@ -590,7 +590,7 @@ xdr_bytes_decode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 	}
 	if (size > maxsize) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s:%u ERROR size %ul > max %u",
+			"%s:%u ERROR size %" PRIu32 " > max %u",
 			__func__, __LINE__,
 			size, maxsize);
 		return (false);
@@ -618,35 +618,33 @@ static inline bool
 xdr_bytes_encode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 {
 	char *sp = *cpp;	/* sp is the actual string pointer */
-	long size = *sizep;
-	u_int nodesize;
+	uint32_t size = (uint32_t)*sizep;
 
-	if (size > maxsize) {
+	if (*sizep > maxsize) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s:%u ERROR size %ul > max %u",
+			"%s:%u ERROR size %u > max %u",
 			__func__, __LINE__,
-			size, maxsize);
+			*sizep, maxsize);
 		return (false);
 	}
 
-	nodesize = (uint32_t)size;
-	if (nodesize < size) {
+	if (*sizep > size) {
 		/* caller provided very large maxsize */
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s:%u ERROR overflow %ul",
+			"%s:%u ERROR overflow %u",
 			__func__, __LINE__,
-			size);
+			*sizep);
 		return (false);
 	}
 
-	if (!XDR_PUTLONG(xdrs, &size)) {
+	if (!XDR_PUTUINT32(xdrs, size)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR size",
 			__func__, __LINE__);
 		return (false);
 	}
 
-	return (xdr_opaque_encode(xdrs, sp, nodesize));
+	return (xdr_opaque_encode(xdrs, sp, size));
 }
 
 static inline bool
@@ -746,14 +744,14 @@ static inline bool
 xdr_string_decode(XDR *xdrs, char **cpp, u_int maxsize)
 {
 	char *sp = *cpp;	/* sp is the actual string pointer */
-	long size;
+	uint32_t size;
 	u_int nodesize;
 	bool ret;
 
 	/*
 	 * first deal with the length since xdr strings are counted-strings
 	 */
-	if (!XDR_GETLONG(xdrs, &size)) {
+	if (!XDR_GETUINT32(xdrs, &size)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR size",
 			__func__, __LINE__);
@@ -762,7 +760,7 @@ xdr_string_decode(XDR *xdrs, char **cpp, u_int maxsize)
 
 	if (size > maxsize) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s:%u ERROR size %ul > max %u",
+			"%s:%u ERROR size %" PRIu32 " > max %u",
 			__func__, __LINE__,
 			size, maxsize);
 		return (false);
@@ -772,7 +770,7 @@ xdr_string_decode(XDR *xdrs, char **cpp, u_int maxsize)
 	if (nodesize < (size + 1)) {
 		/* caller provided very large maxsize */
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s:%u ERROR overflow %ul",
+			"%s:%u ERROR overflow %" PRIu32,
 			__func__, __LINE__,
 			size);
 		return (false);
@@ -797,7 +795,7 @@ xdr_string_decode(XDR *xdrs, char **cpp, u_int maxsize)
 static inline bool
 xdr_string_encode(XDR *xdrs, char **cpp, u_int maxsize)
 {
-	long size;
+	u_long size;
 	u_int nodesize;
 
 	if (!(*cpp)) {
@@ -826,7 +824,7 @@ xdr_string_encode(XDR *xdrs, char **cpp, u_int maxsize)
 		return (false);
 	}
 
-	if (!XDR_PUTLONG(xdrs, &size)) {
+	if (!XDR_PUTUINT32(xdrs, size)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR size",
 			__func__, __LINE__);
