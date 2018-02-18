@@ -538,14 +538,14 @@ xdr_opaque(XDR *xdrs, caddr_t cp, u_int cnt)
  * *sp is a pointer to the bytes, *sizep is the count.
  */
 static inline bool
-xdr_opaques(XDR *xdrs, char *sp, u_int *sizep, u_int maxsize)
+xdr_opaques(XDR *xdrs, char *sp, uint32_t *sizep, uint32_t maxsize)
 {
-	u_int nodesize;
+	uint32_t nodesize;
 
 	/*
 	 * first deal with the length since xdr bytes are counted
 	 */
-	if (!inline_xdr_u_int(xdrs, sizep))
+	if (!xdr_uint32_t(xdrs, sizep))
 		return (false);
 
 	nodesize = *sizep;

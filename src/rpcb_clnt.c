@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2010, Oracle America, Inc.
- * Copyright (c) 2017 Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2012-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1088,6 +1088,7 @@ boolrpcb_gettime(const char *host, time_t *timep)
 	void *handle;
 	struct netconfig *nconf;
 	rpcvers_t vers;
+	int32_t time32 = 0; 	/* old protocol 32-bits not long time_t */
 	enum clnt_stat st;
 
 	if ((host == NULL) || (host[0] == 0)) {
@@ -1124,7 +1125,7 @@ boolrpcb_gettime(const char *host, time_t *timep)
 	cc = mem_alloc(sizeof(*cc));
 	clnt_req_fill(cc, client, authnone_ncreate(), RPCBPROC_GETTIME,
 		      (xdrproc_t) xdr_void, NULL,
-		      (xdrproc_t) xdr_int, timep);
+		      (xdrproc_t) xdr_int32_t, &time32);
 	st = clnt_req_setup(cc, to);
 	if (st == RPC_SUCCESS) {
 		st = CLNT_CALL_WAIT(cc);
@@ -1154,6 +1155,7 @@ boolrpcb_gettime(const char *host, time_t *timep)
 
 	clnt_req_release(cc);
 	CLNT_DESTROY(client);
+	*timep = time32;
 	return (st == RPC_SUCCESS ? true : false);
 }
 

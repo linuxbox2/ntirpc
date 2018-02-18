@@ -361,8 +361,8 @@ bool xdr_rpcb_entry_list_ptr();
 struct rpcbs_addrlist {
 	rpcprog_t prog;
 	rpcvers_t vers;
-	int success;
-	int failure;
+	int32_t success;
+	int32_t failure;
 	char *netid;
 	struct rpcbs_addrlist *next;
 };
@@ -383,9 +383,9 @@ struct rpcbs_rmtcalllist {
 	rpcprog_t prog;
 	rpcvers_t vers;
 	rpcproc_t proc;
-	int success;
-	int failure;
-	int indirect;
+	int32_t success;
+	int32_t failure;
+	int32_t indirect;
 	char *netid;
 	struct rpcbs_rmtcalllist *next;
 };
@@ -435,8 +435,8 @@ bool xdr_rpcbs_rmtcalllist_ptr();
 
 struct rpcb_stat {
 	rpcbs_proc info;
-	int setinfo;
-	int unsetinfo;
+	int32_t setinfo;
+	int32_t unsetinfo;
 	rpcbs_addrlist_ptr addrinfo;
 	rpcbs_rmtcalllist_ptr rmtinfo;
 };

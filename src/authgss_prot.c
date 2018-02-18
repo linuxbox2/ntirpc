@@ -109,14 +109,14 @@ xdr_rpc_gss_cred(XDR *xdrs, struct rpc_gss_cred *p)
 {
 	bool xdr_stat;
 
-	xdr_stat = (inline_xdr_u_int(xdrs, &p->gc_v)
+	xdr_stat = (inline_xdr_u_int32_t(xdrs, &p->gc_v)
 		    && inline_xdr_enum(xdrs, (enum_t *) &p->gc_proc)
-		    && inline_xdr_u_int(xdrs, &p->gc_seq)
+		    && inline_xdr_u_int32_t(xdrs, &p->gc_seq)
 		    && inline_xdr_enum(xdrs, (enum_t *) &p->gc_svc)
 		    && xdr_rpc_gss_buf(xdrs, &p->gc_ctx, MAX_AUTH_BYTES));
 
 	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-		"%s() %s %s (v %d, proc %d, seq %d, svc %d, ctx %p:%d)",
+		"%s() %s %s (v %" PRIu32 ", proc %" PRIu32 ", seq %" PRIu32 ", svc %" PRIu32 ", ctx %p:%d)",
 		__func__,
 		(xdrs->x_op == XDR_ENCODE) ? "encode" : "decode",
 		(xdr_stat == TRUE) ? "success" : "failure",
@@ -152,13 +152,13 @@ xdr_rpc_gss_init_res(XDR *xdrs, struct rpc_gss_init_res *p)
 	u_int tok_maxlen = (u_int) (p->gr_token.length + RPC_SLACK_SPACE);
 
 	xdr_stat = (xdr_rpc_gss_buf(xdrs, &p->gr_ctx, ctx_maxlen)
-		    && inline_xdr_u_int(xdrs, &p->gr_major)
-		    && inline_xdr_u_int(xdrs, &p->gr_minor)
-		    && inline_xdr_u_int(xdrs, &p->gr_win)
+		    && inline_xdr_u_int32_t(xdrs, &p->gr_major)
+		    && inline_xdr_u_int32_t(xdrs, &p->gr_minor)
+		    && inline_xdr_u_int32_t(xdrs, &p->gr_win)
 		    && xdr_rpc_gss_buf(xdrs, &p->gr_token, tok_maxlen));
 
 	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-		"%s() %s %s (ctx %p:%d, maj %d, min %d, win %d, token %p:%d)",
+		"%s() %s %s (ctx %p:%d, maj %" PRIu32 ", min %" PRIu32 ", win %" PRIu32 ", token %p:%d)",
 		__func__,
 		(xdrs->x_op == XDR_ENCODE) ? "encode" : "decode",
 		(xdr_stat == TRUE) ? "success" : "failure",
@@ -182,14 +182,14 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	/* Write dummy for databody length. */
 	start = XDR_GETPOS(xdrs);
 	databuflen = 0xaaaaaaaa;	/* should always overwrite */
-	if (!inline_xdr_u_int(xdrs, &databuflen))
+	if (!XDR_PUTUINT32(xdrs, databuflen))
 		return (FALSE);
 
 	memset(&databuf, 0, sizeof(databuf));
 	memset(&wrapbuf, 0, sizeof(wrapbuf));
 
 	/* Marshal rpc_gss_data_t (sequence number + arguments). */
-	if (!inline_xdr_u_int(xdrs, &seq) || !(*xdr_func) (xdrs, xdr_ptr))
+	if (!XDR_PUTUINT32(xdrs, seq) || !(*xdr_func) (xdrs, xdr_ptr))
 		return (FALSE);
 	end = XDR_GETPOS(xdrs);
 
@@ -221,7 +221,7 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 				__func__);
 			return (FALSE);
 		}
-		if (!inline_xdr_u_int(xdrs, &databuflen))
+		if (!XDR_PUTUINT32(xdrs, databuflen))
 			return (FALSE);
 
 		/* Checksum rpc_gss_data_t. */
@@ -278,8 +278,9 @@ xdr_rpc_gss_unwrap(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	XDR tmpxdrs;
 	gss_buffer_desc databuf, wrapbuf;
 	OM_uint32 maj_stat, min_stat;
-	u_int seq_num, qop_state;
+	u_int qop_state;
 	int conf_state;
+	uint32_t seq_num;
 	bool xdr_stat;
 
 	if (xdr_func == (xdrproc_t) xdr_void || xdr_ptr == NULL)
@@ -340,7 +341,7 @@ xdr_rpc_gss_unwrap(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 	}
 	/* Decode rpc_gss_data_t (sequence number + arguments). */
 	xdrmem_create(&tmpxdrs, databuf.value, databuf.length, XDR_DECODE);
-	xdr_stat = (xdr_u_int(&tmpxdrs, &seq_num)
+	xdr_stat = (XDR_GETUINT32(&tmpxdrs, &seq_num)
 		    && (*xdr_func) (&tmpxdrs, xdr_ptr));
 	XDR_DESTROY(&tmpxdrs);
 	gss_release_buffer(&min_stat, &databuf);

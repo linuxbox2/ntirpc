@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
- * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2012-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -264,8 +264,7 @@ xdr_rpcb_rmtcallargs(XDR *xdrs, struct rpcb_rmtcallargs *p)
 		return (false);
 	}
 	position = XDR_GETPOS(xdrs);
-	objp->args.args_len =
-	    (u_int) ((u_long) position - (u_long) argposition);
+	objp->args.args_len = position - argposition;
 
 	XDR_SETPOS(xdrs, lenposition);
 	if (!XDR_PUTUINT32(xdrs, objp->args.args_len)) {
@@ -291,7 +290,7 @@ xdr_rpcb_rmtcallres(XDR *xdrs, struct rpcb_rmtcallres *p)
 
 	if (!xdr_string(xdrs, &objp->addr, (u_int) ~ 0))
 		return (false);
-	if (!xdr_u_int(xdrs, &objp->results.results_len))
+	if (!xdr_uint32_t(xdrs, &objp->results.results_len))
 		return (false);
 	dummy = (*(objp->xdr_res)) (xdrs, objp->results.results_val);
 	return (dummy);

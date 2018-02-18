@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
- * Copyright (c) 2013-2017 Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2013-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,9 +53,9 @@ xdr_rpcbs_addrlist(XDR *xdrs, rpcbs_addrlist *objp)
 		return (false);
 	if (!xdr_u_int32_t(xdrs, &objp->vers))
 		return (false);
-	if (!xdr_int(xdrs, &objp->success))
+	if (!xdr_int32_t(xdrs, &objp->success))
 		return (false);
-	if (!xdr_int(xdrs, &objp->failure))
+	if (!xdr_int32_t(xdrs, &objp->failure))
 		return (false);
 	if (!xdr_string(xdrs, &objp->netid, RPC_MAXDATASIZE))
 		return (false);
@@ -186,11 +186,11 @@ xdr_rpcbs_rmtcalllist(XDR *xdrs, rpcbs_rmtcalllist *objp)
 		return (false);
 	if (!xdr_u_int32_t(xdrs, &objp->proc))
 		return (false);
-	if (!xdr_int(xdrs, &objp->success))
+	if (!xdr_int32_t(xdrs, &objp->success))
 		return (false);
-	if (!xdr_int(xdrs, &objp->failure))
+	if (!xdr_int32_t(xdrs, &objp->failure))
 		return (false);
-	if (!xdr_int(xdrs, &objp->indirect))
+	if (!xdr_int32_t(xdrs, &objp->indirect))
 		return (false);
 	if (!xdr_string(xdrs, &objp->netid, RPC_MAXDATASIZE))
 		return (false);
@@ -206,8 +206,8 @@ bool
 xdr_rpcbs_proc(XDR *xdrs, rpcbs_proc objp)
 {
 	if (!xdr_vector
-	    (xdrs, (char *)(void *)objp, RPCBSTAT_HIGHPROC, sizeof(int),
-	     (xdrproc_t) xdr_int))
+	    (xdrs, (char *)(void *)objp, RPCBSTAT_HIGHPROC, sizeof(uint32_t),
+	     (xdrproc_t)xdr_uint32_t))
 		return (false);
 
 	return (true);
@@ -240,9 +240,9 @@ xdr_rpcb_stat(XDR *xdrs, rpcb_stat *objp)
 {
 	if (!xdr_rpcbs_proc(xdrs, objp->info))
 		return (false);
-	if (!xdr_int(xdrs, &objp->setinfo))
+	if (!xdr_int32_t(xdrs, &objp->setinfo))
 		return (false);
-	if (!xdr_int(xdrs, &objp->unsetinfo))
+	if (!xdr_int32_t(xdrs, &objp->unsetinfo))
 		return (false);
 	if (!xdr_rpcbs_addrlist_ptr(xdrs, &objp->addrinfo))
 		return (false);

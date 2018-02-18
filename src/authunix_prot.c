@@ -56,10 +56,10 @@ xdr_authunix_parms(XDR *xdrs, struct authunix_parms *p)
 
 	if (inline_xdr_int32_t(xdrs, &(p->aup_time))
 	    && inline_xdr_string(xdrs, &(p->aup_machname), MAX_MACHINE_NAME)
-	    && inline_xdr_u_int(xdrs, &(p->aup_uid))
-	    && inline_xdr_u_int(xdrs, &(p->aup_gid))
+	    && inline_xdr_u_int32_t(xdrs, &(p->aup_uid))
+	    && inline_xdr_u_int32_t(xdrs, &(p->aup_gid))
 	    && xdr_array(xdrs, (caddr_t *) &(p->aup_gids), &(p->aup_len),
-			 NGRPS, sizeof(int), (xdrproc_t) xdr_int)) {
+			 NGRPS, sizeof(u_int32_t), (xdrproc_t)xdr_u_int32_t)) {
 		return (true);
 	}
 	return (false);
