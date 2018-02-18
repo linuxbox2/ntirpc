@@ -728,6 +728,181 @@ xdr_union(XDR *xdrs,
 #define inline_xdr_union xdr_union
 
 /*
+ * XDR a fixed length array. Unlike variable-length arrays,
+ * the storage of fixed length arrays is static and unfreeable.
+ * > basep: pointer of the array
+ * > nelem: number of elements
+ * > selem: size (in bytes) of each element
+ * > xdr_elem: routine to XDR each element
+ */
+static inline bool
+xdr_vector(XDR *xdrs, char *basep, u_int nelem, u_int selem,
+	   xdrproc_t xdr_elem)
+{
+	char *target = basep;
+	u_int i = 0;
+
+	for (; i < nelem; i++) {
+		if (!(*xdr_elem) (xdrs, target))
+			return (false);
+		target += selem;
+	}
+	return (true);
+}
+
+/*
+ * XDR an array of arbitrary elements
+ * > **cpp: pointer to the array
+ * > *sizep: number of elements
+ * > maxsize: maximum number of elements
+ * > selem: size (in bytes) of each element
+ * > xdr_elem: routine to XDR each element
+ *
+ * If *cpp is NULL, (*sizep * selem) bytes are allocated.
+ */
+static inline bool
+xdr_array_decode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize,
+		 u_int selem, xdrproc_t xdr_elem)
+{
+	char *target = *cpp;
+	u_int i = 0;
+	uint32_t size;
+	bool stat = true;
+
+	if (maxsize > (UINT_MAX / selem)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR maxsize %u > max %u",
+			__func__, __LINE__,
+			maxsize, (UINT_MAX / selem));
+		return (false);
+	}
+
+	/*
+	 * first deal with the length since xdr arrays are counted-arrays
+	 */
+	if (!XDR_GETUINT32(xdrs, &size)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR size",
+			__func__, __LINE__);
+		return (false);
+	}
+	if (size > maxsize) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR size %" PRIu32 " > max %u",
+			__func__, __LINE__,
+			size, maxsize);
+		return (false);
+	}
+	*sizep = (u_int)size;		/* only valid size */
+
+	/*
+	 * now deal with the actual elements
+	 */
+	if (!size)
+		return (true);
+	if (!target)
+		*cpp = target = mem_zalloc(size * selem);
+
+	for (; (i < size) && stat; i++) {
+		stat = (*xdr_elem) (xdrs, target);
+		target += selem;
+	}
+
+	return (stat);
+}
+
+static inline bool
+xdr_array_encode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize,
+		 u_int selem, xdrproc_t xdr_elem)
+{
+	char *target = *cpp;
+	u_int i = 0;
+	uint32_t size = (uint32_t)*sizep;
+	bool stat = true;
+
+	if (*sizep > maxsize) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR size %u > max %u",
+			__func__, __LINE__,
+			*sizep, maxsize);
+		return (false);
+	}
+
+	if (*sizep > size) {
+		/* caller provided very large maxsize */
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR overflow %u",
+			__func__, __LINE__,
+			*sizep);
+		return (false);
+	}
+
+	if (!XDR_PUTUINT32(xdrs, size)) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s:%u ERROR size",
+			__func__, __LINE__);
+		return (false);
+	}
+
+	for (; (i < size) && stat; i++) {
+		stat = (*xdr_elem) (xdrs, target);
+		target += selem;
+	}
+
+	return (stat);
+}
+
+static inline bool
+xdr_array_free(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize,
+	       u_int selem, xdrproc_t xdr_elem)
+{
+	char *target = *cpp;
+	u_int i = 0;
+	uint32_t size = *sizep;
+	bool stat = true;
+
+	if (!target) {
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s:%u already free",
+			__func__, __LINE__);
+		return (true);
+	}
+
+	for (; (i < size) && stat; i++) {
+		stat = (*xdr_elem) (xdrs, target);
+		target += selem;
+	}
+
+	mem_free(*cpp, size * selem);
+	*cpp = NULL;
+
+	return (stat);
+}
+
+static inline bool
+xdr_array(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize,
+	  u_int selem, xdrproc_t xdr_elem)
+{
+	switch (xdrs->x_op) {
+	case XDR_DECODE:
+		return (xdr_array_decode(xdrs, cpp, sizep, maxsize, selem,
+					 xdr_elem));
+	case XDR_ENCODE:
+		return (xdr_array_encode(xdrs, cpp, sizep, maxsize, selem,
+					 xdr_elem));
+	case XDR_FREE:
+		return (xdr_array_free(xdrs, cpp, sizep, maxsize, selem,
+				       xdr_elem));
+	}
+
+	__warnx(TIRPC_DEBUG_FLAG_ERROR,
+		"%s:%u ERROR xdrs->x_op (%u)",
+		__func__, __LINE__,
+		xdrs->x_op);
+	return (false);
+}
+
+/*
  * Non-portable xdr primitives.
  * Care should be taken when moving these routines to new architectures.
  */

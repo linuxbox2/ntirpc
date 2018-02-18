@@ -618,8 +618,6 @@ extern bool xdr_int(XDR *, int *);
 extern bool xdr_u_int(XDR *, u_int *);
 extern bool xdr_long(XDR *, long *);
 extern bool xdr_u_long(XDR *, u_long *);
-extern bool xdr_array(XDR *, char **, u_int *, u_int, u_int, xdrproc_t);
-extern bool xdr_vector(XDR *, char *, u_int, u_int, xdrproc_t);
 extern bool xdr_float(XDR *, float *);
 extern bool xdr_double(XDR *, double *);
 extern bool xdr_reference(XDR *, char **, u_int, xdrproc_t);

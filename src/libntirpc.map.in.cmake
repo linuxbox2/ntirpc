@@ -171,7 +171,6 @@ NTIRPC_${NTIRPC_VERSION} {
     uaddr2taddr;
 
     # x*
-    xdr_array;
     xdr_authunix_parms;
     xdr_call_decode;
     xdr_call_encode;
@@ -217,7 +216,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_u_int;
     xdr_u_long;
     xdr_u_longlong_t;
-    xdr_vector;
     xdr_void;
     xdr_wrapstring;
     xdrmem_ncreate;
