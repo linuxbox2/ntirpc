@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2013-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,16 +45,19 @@
 #include <sys/cdefs.h>
 
 struct rmtcallargs {
-	u_long prog, vers, proc, arglen;
 	caddr_t args_ptr;
 	xdrproc_t xdr_args;
+	uint32_t arglen;	/* count of args_ptr */
+	rpcprog_t prog;
+	rpcvers_t vers;
+	rpcproc_t proc;
 };
 
 struct rmtcallres {
-	u_long *port_ptr;
-	u_long resultslen;
 	caddr_t results_ptr;
 	xdrproc_t xdr_results;
+	uint32_t resultslen;	/* count of results_ptr */
+	rpcport_t port;
 };
 
 __BEGIN_DECLS

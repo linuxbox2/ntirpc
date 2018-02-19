@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
- * Copyright (c) 2017 Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2012-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,6 +52,7 @@
 #include <unistd.h>
 
 #include <rpc/rpc.h>
+#include <rpc/xdr_inline.h>
 #include <rpc/pmap_prot.h>
 #include <rpc/pmap_rmt.h>
 
@@ -67,18 +68,19 @@ xdr_rmtcall_args(XDR *xdrs, struct rmtcallargs *cap)
 	assert(xdrs != NULL);
 	assert(cap != NULL);
 
-	if (xdr_u_long(xdrs, &(cap->prog)) && xdr_u_long(xdrs, &(cap->vers))
-	    && xdr_u_long(xdrs, &(cap->proc))) {
+	if (xdr_rpcprog(xdrs, &(cap->prog))
+	 && xdr_rpcvers(xdrs, &(cap->vers))
+	 && xdr_rpcproc(xdrs, &(cap->proc))) {
 		lenposition = XDR_GETPOS(xdrs);
-		if (!xdr_u_long(xdrs, &(cap->arglen)))
+		if (!xdr_uint32_t(xdrs, &(cap->arglen)))
 			return (false);
 		argposition = XDR_GETPOS(xdrs);
 		if (!(*(cap->xdr_args)) (xdrs, cap->args_ptr))
 			return (false);
 		position = XDR_GETPOS(xdrs);
-		cap->arglen = (u_long) position - (u_long) argposition;
+		cap->arglen = position - argposition;
 		XDR_SETPOS(xdrs, lenposition);
-		if (!xdr_u_long(xdrs, &(cap->arglen)))
+		if (!xdr_uint32_t(xdrs, &(cap->arglen)))
 			return (false);
 		XDR_SETPOS(xdrs, position);
 		return (true);
@@ -93,16 +95,11 @@ xdr_rmtcall_args(XDR *xdrs, struct rmtcallargs *cap)
 bool
 xdr_rmtcallres(XDR *xdrs, struct rmtcallres *crp)
 {
-	caddr_t port_ptr;
-
 	assert(xdrs != NULL);
 	assert(crp != NULL);
 
-	port_ptr = (caddr_t) (void *)crp->port_ptr;
-	if (xdr_reference
-	    (xdrs, &port_ptr, sizeof(u_long), (xdrproc_t) xdr_u_long)
-	    && xdr_u_long(xdrs, &crp->resultslen)) {
-		crp->port_ptr = (u_long *) (void *)port_ptr;
+	if (xdr_rpcport(xdrs, &crp->port)
+	 && xdr_uint32_t(xdrs, &crp->resultslen)) {
 		return ((*(crp->xdr_results)) (xdrs, crp->results_ptr));
 	}
 	return (false);

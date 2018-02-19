@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2010, Oracle America, Inc.
- * Copyright (c) 2017 Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2012-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
 #include <sys/un.h>
 #include <sys/utsname.h>
 #include <rpc/rpc.h>
+#include <rpc/xdr_inline.h>
 #include <rpc/rpcb_prot.h>
 #include <rpc/nettype.h>
 #include <netconfig.h>
@@ -676,7 +677,7 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		struct netbuf remote;
 		struct pmap pmapparms;
 		rpcvers_t pmapvers = 2;
-		u_short port = 0;
+		uint16_t port = 0;
 
 		/*
 		 * Try UDP only - there are some portmappers out
@@ -711,7 +712,7 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		cc = mem_alloc(sizeof(*cc));
 		clnt_req_fill(cc, client, auth, PMAPPROC_GETPORT,
 			      (xdrproc_t) xdr_pmap, &pmapparms,
-			      (xdrproc_t) xdr_u_short, &port);
+			      (xdrproc_t) xdr_uint16_t, &port);
 		clnt_st = clnt_req_setup(cc, tv);
 		if (clnt_st == RPC_SUCCESS) {
 			clnt_st = CLNT_CALL_WAIT(cc);
@@ -740,8 +741,8 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		address->buf = (char *)mem_alloc(remote.len);
 
 		memcpy(address->buf, remote.buf, remote.len);
-		memcpy(&((char *)address->buf)[sizeof(short)],
-		       (char *)(void *)&port, sizeof(short));
+		memcpy(&((char *)address->buf)[sizeof(uint16_t)],
+		       (char *)(void *)&port, sizeof(uint16_t));
 		address->len = address->maxlen = remote.len;
 		goto done;
 	}
@@ -1087,6 +1088,7 @@ boolrpcb_gettime(const char *host, time_t *timep)
 	void *handle;
 	struct netconfig *nconf;
 	rpcvers_t vers;
+	int32_t time32 = 0; 	/* old protocol 32-bits not long time_t */
 	enum clnt_stat st;
 
 	if ((host == NULL) || (host[0] == 0)) {
@@ -1123,7 +1125,7 @@ boolrpcb_gettime(const char *host, time_t *timep)
 	cc = mem_alloc(sizeof(*cc));
 	clnt_req_fill(cc, client, authnone_ncreate(), RPCBPROC_GETTIME,
 		      (xdrproc_t) xdr_void, NULL,
-		      (xdrproc_t) xdr_int, timep);
+		      (xdrproc_t) xdr_int32_t, &time32);
 	st = clnt_req_setup(cc, to);
 	if (st == RPC_SUCCESS) {
 		st = CLNT_CALL_WAIT(cc);
@@ -1153,6 +1155,7 @@ boolrpcb_gettime(const char *host, time_t *timep)
 
 	clnt_req_release(cc);
 	CLNT_DESTROY(client);
+	*timep = time32;
 	return (st == RPC_SUCCESS ? true : false);
 }
 

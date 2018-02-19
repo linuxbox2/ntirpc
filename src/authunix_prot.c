@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,12 +54,12 @@ xdr_authunix_parms(XDR *xdrs, struct authunix_parms *p)
 	assert(xdrs != NULL);
 	assert(p != NULL);
 
-	if (inline_xdr_u_long(xdrs, &(p->aup_time))
+	if (inline_xdr_int32_t(xdrs, &(p->aup_time))
 	    && inline_xdr_string(xdrs, &(p->aup_machname), MAX_MACHINE_NAME)
-	    && inline_xdr_u_int(xdrs, &(p->aup_uid))
-	    && inline_xdr_u_int(xdrs, &(p->aup_gid))
+	    && inline_xdr_u_int32_t(xdrs, &(p->aup_uid))
+	    && inline_xdr_u_int32_t(xdrs, &(p->aup_gid))
 	    && xdr_array(xdrs, (caddr_t *) &(p->aup_gids), &(p->aup_len),
-			 NGRPS, sizeof(int), (xdrproc_t) xdr_int)) {
+			 NGRPS, sizeof(u_int32_t), (xdrproc_t)xdr_u_int32_t)) {
 		return (true);
 	}
 	return (false);

@@ -57,7 +57,6 @@ SET(ntirpc_common_SRCS
   svc_vc.c
   svc_xprt.c
   xdr.c
-  xdr_array.c
   xdr_float.c
   xdr_mem.c
   xdr_reference.c

@@ -718,8 +718,9 @@ xdr_rpc_gss_checksum(struct svc_req *req, gss_ctx_id_t ctx, gss_qop_t qop,
 	XDR tmpxdrs;
 	gss_buffer_desc databuf, wrapbuf;
 	OM_uint32 maj_stat, min_stat;
-	u_int seq_num, qop_state;
+	u_int qop_state;
 	int conf_state;
+	uint32_t seq_num;
 	bool xdr_stat;
 
 	if (req->rq_msg.rm_xdr.proc == (xdrproc_t) xdr_void
@@ -782,7 +783,7 @@ xdr_rpc_gss_checksum(struct svc_req *req, gss_ctx_id_t ctx, gss_qop_t qop,
 	/* Decode rpc_gss_data_t (sequence number + arguments). */
 	xdrmem_create(&tmpxdrs, databuf.value, databuf.length, XDR_DECODE);
 	SVC_CHECKSUM(req, databuf.value, databuf.length);
-	xdr_stat = (xdr_u_int(&tmpxdrs, &seq_num)
+	xdr_stat = (XDR_GETUINT32(&tmpxdrs, &seq_num)
 		    && (*req->rq_msg.rm_xdr.proc)
 			(&tmpxdrs, req->rq_msg.rm_xdr.where));
 	XDR_DESTROY(&tmpxdrs);

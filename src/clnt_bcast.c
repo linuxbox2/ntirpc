@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2012-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -262,7 +263,6 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 	int i;
 #ifdef PORTMAP
 	size_t outlen_pmap = 0;
-	u_long port;		/* Remote port number */
 	int pmap_flag = 0;	/* UDP exists ? */
 	char *outbuf_pmap = NULL;
 	struct rmtcallargs barg_pmap;	/* Remote arguments */
@@ -401,7 +401,6 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 		barg_pmap.proc = proc;
 		barg_pmap.args_ptr = argsp;
 		barg_pmap.xdr_args = xargs;
-		bres_pmap.port_ptr = &port;
 		bres_pmap.xdr_results = xresults;
 		bres_pmap.results_ptr = resultsp;
 		xdrmem_create(xdrs, outbuf_pmap, udpbufsz, XDR_ENCODE);
@@ -593,7 +592,7 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 						memcpy(&sin, &fdlist[i].raddr,
 						       sizeof(sin));
 						sin.sin_port =
-						    htons((u_short) port);
+						    htons(bres_pmap.port);
 						memcpy(&fdlist[i].raddr, &sin,
 						       sizeof(sin));
 						taddr.len = taddr.maxlen =

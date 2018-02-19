@@ -2,6 +2,7 @@
 
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2010-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -95,6 +96,13 @@ enum xdr_op {
  * This is the number of bytes per unit of external data.
  */
 #define BYTES_PER_XDR_UNIT (4)
+
+/*
+ * constants specific to the xdr "protocol"
+ */
+#define XDR_FALSE (0)
+#define XDR_TRUE (1)
+
 /* Taken verbatim from a system xdr.h, which carries a BSD-style
  * license (Matt) */
 /*
@@ -324,16 +332,6 @@ xdr_putlong(XDR *xdrs, const long *lp)
 #define xdr_control(xdrs, req, op) XDR_CONTROL(xdrs, req, op)
 
 /*
- * Solaris strips the '_t' from these types -- not sure why.
- * But, let's be compatible.
- */
-#define xdr_rpcvers(xdrs, versp) xdr_u_int32(xdrs, versp)
-#define xdr_rpcprog(xdrs, progp) xdr_u_int32(xdrs, progp)
-#define xdr_rpcproc(xdrs, procp) xdr_u_int32(xdrs, procp)
-#define xdr_rpcprot(xdrs, protp) xdr_u_int32(xdrs, protp)
-#define xdr_rpcport(xdrs, portp) xdr_u_int32(xdrs, portp)
-
-/*
  * Support struct for discriminated unions.
  * You create an array of xdrdiscrim structures, terminated with
  * an entry with a null procedure pointer.  The xdr_union routine gets
@@ -407,14 +405,10 @@ xdr_inline_encode(XDR *xdrs, size_t count)
 #define IXDR_GET_BOOL(buf)  ((bool)IXDR_GET_LONG(buf))
 #define IXDR_GET_ENUM(buf, t)  ((t)IXDR_GET_LONG(buf))
 #define IXDR_GET_U_LONG(buf)  ((u_long)IXDR_GET_LONG(buf))
-#define IXDR_GET_SHORT(buf)  ((short)IXDR_GET_LONG(buf))
-#define IXDR_GET_U_SHORT(buf)  ((u_short)IXDR_GET_LONG(buf))
 
 #define IXDR_PUT_BOOL(buf, v)  IXDR_PUT_LONG((buf), (v))
 #define IXDR_PUT_ENUM(buf, v)  IXDR_PUT_LONG((buf), (v))
 #define IXDR_PUT_U_LONG(buf, v)  IXDR_PUT_LONG((buf), (v))
-#define IXDR_PUT_SHORT(buf, v)  IXDR_PUT_LONG((buf), (v))
-#define IXDR_PUT_U_SHORT(buf, v) IXDR_PUT_LONG((buf), (v))
 
 /*
  * In-line routines for vector encode/decode of primitive data types.
@@ -596,13 +590,18 @@ xdr_putenum(XDR *xdrs, enum_t enumv)
 static inline bool
 xdr_getbool(XDR *xdrs, bool_t *ip)
 {
-	return xdr_getuint32(xdrs, (uint32_t *)ip);
+	uint32_t lv;
+
+	if (!xdr_getuint32(xdrs, &lv))
+		return (false);
+	*ip = lv ? XDR_TRUE : XDR_FALSE;
+	return (true);
 }
 
 static inline bool
 xdr_putbool(XDR *xdrs, bool_t boolv)
 {
-	return xdr_putuint16(xdrs, (uint32_t)boolv);
+	return xdr_putuint16(xdrs, boolv ? XDR_TRUE : XDR_FALSE);
 }
 
 #define XDR_GETBOOL(xdrs, boolp) xdr_getbool(xdrs, boolp)
@@ -619,37 +618,13 @@ extern bool xdr_int(XDR *, int *);
 extern bool xdr_u_int(XDR *, u_int *);
 extern bool xdr_long(XDR *, long *);
 extern bool xdr_u_long(XDR *, u_long *);
-extern bool xdr_short(XDR *, short *);
-extern bool xdr_u_short(XDR *, u_short *);
-extern bool xdr_int16_t(XDR *, int16_t *);
-extern bool xdr_u_int16_t(XDR *, u_int16_t *);
-extern bool xdr_int32_t(XDR *, int32_t *);
-extern bool xdr_u_int32_t(XDR *, u_int32_t *);
-extern bool xdr_uint32_t(XDR *, u_int32_t *);
-extern bool xdr_int64_t(XDR *, int64_t *);
-extern bool xdr_u_int64_t(XDR *, u_int64_t *);
-extern bool xdr_uint64_t(XDR *, u_int64_t *);
-extern bool xdr_bool(XDR *, bool_t *);
-extern bool xdr_enum(XDR *, enum_t *);
-extern bool xdr_array(XDR *, char **, u_int *, u_int, u_int, xdrproc_t);
-extern bool xdr_union(XDR *, enum_t *, char *, const struct xdr_discrim *,
-		      xdrproc_t);
-extern bool xdr_char(XDR *, char *);
-extern bool xdr_u_char(XDR *, u_char *);
-extern bool xdr_vector(XDR *, char *, u_int, u_int, xdrproc_t);
 extern bool xdr_float(XDR *, float *);
 extern bool xdr_double(XDR *, double *);
-extern bool xdr_quadruple(XDR *, long double *);
 extern bool xdr_reference(XDR *, char **, u_int, xdrproc_t);
 extern bool xdr_pointer(XDR *, char **, u_int, xdrproc_t);
 extern bool xdr_wrapstring(XDR *, char **);
-extern bool xdr_hyper(XDR *, quad_t *);
-extern bool xdr_u_hyper(XDR *, u_quad_t *);
 extern bool xdr_longlong_t(XDR *, quad_t *);
 extern bool xdr_u_longlong_t(XDR *, u_quad_t *);
-
-#define xdr_quad_t  xdr_int64_t
-#define xdr_uquad_t xdr_uint64_t
 
 __END_DECLS
 

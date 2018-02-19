@@ -171,24 +171,15 @@ NTIRPC_${NTIRPC_VERSION} {
     uaddr2taddr;
 
     # x*
-    xdr_array;
     xdr_authunix_parms;
-    xdr_bool;
     xdr_call_decode;
     xdr_call_encode;
-    xdr_char;
     xdr_double;
     xdr_dplx_decode;
     xdr_dplx_msg;
-    xdr_enum;
     xdr_float;
     xdr_free_null_stream;
-    xdr_hyper;
     xdr_int;
-    xdr_int8_t;
-    xdr_int16_t;
-    xdr_int32_t;
-    xdr_int64_t;
     xdr_long;
     xdr_longlong_t;
     xdr_naccepted_reply;
@@ -202,7 +193,6 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_pmaplist;
     xdr_pmaplist_ptr;
     xdr_pointer;
-    xdr_quad_t;
     xdr_reference;
     xdr_rmtcall_args;
     xdr_rmtcallres;
@@ -223,24 +213,9 @@ NTIRPC_${NTIRPC_VERSION} {
     xdr_rpcbs_proc;
     xdr_rpcbs_rmtcalllist;
     xdr_rpcbs_rmtcalllist_ptr;
-    xdr_short;
-    xdr_u_char;
-    xdr_u_hyper;
-    xdr_u_int8_t;
-    xdr_u_int16_t;
-    xdr_u_int32_t;
-    xdr_u_int64_t;
     xdr_u_int;
     xdr_u_long;
     xdr_u_longlong_t;
-    xdr_u_quad_t;
-    xdr_u_short;
-    xdr_uint8_t;
-    xdr_uint16_t;
-    xdr_uint32_t;
-    xdr_uint64_t;
-    xdr_union;
-    xdr_vector;
     xdr_void;
     xdr_wrapstring;
     xdrmem_ncreate;

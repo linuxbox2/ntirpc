@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2013-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,12 +58,12 @@
  * Unix style credentials.
  */
 struct authunix_parms {
-	u_long aup_time;
 	char *aup_machname;
+	gid_t *aup_gids;
+	u_int aup_len;		/* count of aup_gids */
 	uid_t aup_uid;
 	gid_t aup_gid;
-	u_int aup_len;
-	gid_t *aup_gids;
+	int32_t aup_time; 	/* old protocol 32-bits not long time_t */
 };
 
 #define authsys_parms authunix_parms

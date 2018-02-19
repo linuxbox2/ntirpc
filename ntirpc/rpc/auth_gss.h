@@ -86,9 +86,9 @@ extern gss_OID_desc spkm3oid;
 
 /* Credentials. */
 struct rpc_gss_cred {
-	u_int gc_v;		/* version */
+	u_int32_t gc_v;		/* version */
 	rpc_gss_proc_t gc_proc;	/* control procedure */
-	u_int gc_seq;		/* sequence number */
+	u_int32_t gc_seq;	/* sequence number */
 	rpc_gss_svc_t gc_svc;	/* service */
 	gss_buffer_desc gc_ctx;	/* context handle */
 };
@@ -96,9 +96,9 @@ struct rpc_gss_cred {
 /* Context creation response. */
 struct rpc_gss_init_res {
 	gss_buffer_desc gr_ctx;	/* context handle */
-	u_int gr_major;		/* major status */
-	u_int gr_minor;		/* minor status */
-	u_int gr_win;		/* sequence window */
+	u_int32_t gr_major;	/* major status */
+	u_int32_t gr_minor;	/* minor status */
+	u_int32_t gr_win;	/* sequence window */
 	gss_buffer_desc gr_token;	/* token */
 };
 

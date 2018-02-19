@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
+ * Copyright (c) 2009-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,7 +38,7 @@
 #include <assert.h>
 
 #include <rpc/types.h>
-#include <rpc/xdr.h>
+#include <rpc/xdr_inline.h>
 #include <rpc/pmap_prot.h>
 
 bool
@@ -46,8 +47,9 @@ xdr_pmap(XDR *xdrs, struct pmap *regs)
 	assert(xdrs != NULL);
 	assert(regs != NULL);
 
-	if (xdr_u_long(xdrs, &regs->pm_prog) && xdr_u_long(xdrs, &regs->pm_vers)
-	    && xdr_u_long(xdrs, &regs->pm_prot))
-		return (xdr_u_long(xdrs, &regs->pm_port));
+	if (xdr_rpcprog(xdrs, &regs->pm_prog)
+	 && xdr_rpcvers(xdrs, &regs->pm_vers)
+	 && xdr_rpcprot(xdrs, &regs->pm_prot))
+		return (xdr_rpcport(xdrs, &regs->pm_port));
 	return (false);
 }
