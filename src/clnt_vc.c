@@ -205,6 +205,7 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: fd %d svc_fd_ncreatef failed",
 			__func__, fd);
+		clnt->cl_error.re_status = RPC_SYSTEMERROR;
 		goto err;
 	}
 	xd = VC_DR(REC_XPRT(xprt));
