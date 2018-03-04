@@ -172,8 +172,7 @@ static void authnone_destroy_dummy(AUTH *auth)
 }
 
 static bool
-authnone_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xfunc,
-	      caddr_t xwhere)
+authnone_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xfunc, void *xwhere)
 {
 	return ((*xfunc) (xdrs, xwhere));
 }

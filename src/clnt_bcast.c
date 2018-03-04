@@ -221,9 +221,9 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 		  rpcvers_t vers,	/* version number */
 		  rpcproc_t proc,	/* procedure number */
 		  xdrproc_t xargs,	/* xdr routine for args */
-		  caddr_t argsp,	/* pointer to args */
+		  void *argsp,	/* pointer to args */
 		  xdrproc_t xresults,	/* xdr routine for results */
-		  caddr_t resultsp,	/* pointer to results */
+		  void *resultsp,	/* pointer to results */
 		  resultproc_t eachresult, /* call with each result obtained */
 		  int inittime,	/* how long to wait initially */
 		  int waittime,	/* maximum time to wait */
@@ -563,7 +563,7 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 				pmap_reply_flag = 0;
 				msg.RPCM_ack.ar_verf = _null_auth;
 				msg.RPCM_ack.ar_results.where =
-				    (caddr_t) (void *)&bres;
+				    &bres;
 				msg.RPCM_ack.ar_results.proc =
 				    (xdrproc_t) xdr_rpcb_rmtcallres;
 #ifdef PORTMAP
@@ -573,7 +573,7 @@ rpc_broadcast_exp(rpcprog_t prog,	/* program number */
 				pmap_reply_flag = 1;
 				msg.RPCM_ack.ar_verf = _null_auth;
 				msg.RPCM_ack.ar_results.where =
-				    (caddr_t) (void *)&bres_pmap;
+				    &bres_pmap;
 				msg.RPCM_ack.ar_results.proc =
 				    (xdrproc_t) xdr_rmtcallres;
 #endif				/* PORTMAP */
@@ -663,9 +663,9 @@ rpc_broadcast(rpcprog_t prog,	/* program number */
 	      rpcvers_t vers,	/* version number */
 	      rpcproc_t proc,	/* procedure number */
 	      xdrproc_t xargs,	/* xdr routine for args */
-	      caddr_t argsp,	/* pointer to args */
+	      void *argsp,	/* pointer to args */
 	      xdrproc_t xresults,	/* xdr routine for results */
-	      caddr_t resultsp,	/* pointer to results */
+	      void *resultsp,	/* pointer to results */
 	      resultproc_t eachresult,	/* call with each result obtained */
 	      const char *nettype /* transport type */)
 {

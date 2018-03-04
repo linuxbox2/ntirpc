@@ -450,7 +450,7 @@ xdr_opaque_decode(XDR *xdrs, char *cp, u_int cnt)
 	if (rndup > 0) {
 		uint32_t crud;
 
-		if (!XDR_GETBYTES(xdrs, (caddr_t) &crud,
+		if (!XDR_GETBYTES(xdrs, (char *) &crud,
 				  BYTES_PER_XDR_UNIT - rndup)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR crud",
@@ -497,7 +497,7 @@ xdr_opaque_encode(XDR *xdrs, const char *cp, u_int cnt)
 	if (rndup > 0) {
 		uint32_t zero = 0;
 
-		if (!XDR_PUTBYTES(xdrs, (caddr_t) &zero,
+		if (!XDR_PUTBYTES(xdrs, (char *) &zero,
 				  BYTES_PER_XDR_UNIT - rndup)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR zero",
@@ -515,7 +515,7 @@ xdr_opaque_encode(XDR *xdrs, const char *cp, u_int cnt)
  * cp points to the opaque object and cnt gives the byte length.
  */
 static inline bool
-xdr_opaque(XDR *xdrs, caddr_t cp, u_int cnt)
+xdr_opaque(XDR *xdrs, char *cp, u_int cnt)
 {
 	switch (xdrs->x_op) {
 	case XDR_DECODE:
@@ -697,7 +697,7 @@ xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 static inline bool
 xdr_union(XDR *xdrs,
 	  enum_t *dscmp,	/* enum to decide which arm to work on */
-	  char *unp,		/* the union itself */
+	  void *unp,		/* the union itself */
 	  const struct xdr_discrim *choices,
 				/* [value, xdr proc] for each arm */
 	  xdrproc_t dfault /* default xdr routine */)

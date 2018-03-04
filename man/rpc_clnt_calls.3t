@@ -21,9 +21,9 @@
 .Sh SYNOPSIS
 .In rpc/rpc.h
 .Ft "enum clnt_stat"
-.Fn clnt_call "CLIENT *clnt" "const rpcproc_t procnum" "const xdrproc_t inproc" "const caddr_t in" "const xdrproc_t outproc" "caddr_t out" "const struct timeval tout"
+.Fn clnt_call "CLIENT *clnt" "const rpcproc_t procnum" "const xdrproc_t inproc" "const void *in" "const xdrproc_t outproc" "void *out" "const struct timeval tout"
 .Ft bool_t
-.Fn clnt_freeres "CLIENT *clnt" "const xdrproc_t outproc" "caddr_t out"
+.Fn clnt_freeres "CLIENT *clnt" "const xdrproc_t outproc" "void *out"
 .Ft void
 .Fn clnt_perrno "const enum clnt_stat stat"
 .Ft "char *"
@@ -32,15 +32,15 @@
 .Fo rpc_broadcast
 .Fa "const rpcprog_t prognum" "const rpcvers_t versnum"
 .Fa "const rpcproc_t procnum" "const xdrproc_t inproc"
-.Fa "const caddr_t in" "const xdrproc_t outproc" "caddr_t out"
+.Fa "const void *in" "const xdrproc_t outproc" "void *out"
 .Fa "const resultproc_t eachresult" "const char *nettype"
 .Fc
 .Ft "enum clnt_stat"
 .Fo rpc_broadcast_exp
 .Fa "const rpcprog_t prognum" "const rpcvers_t versnum"
 .Fa "const rpcproc_t procnum" "const xdrproc_t xargs"
-.Fa "caddr_t argsp" "const xdrproc_t xresults"
-.Fa "caddr_t resultsp" "const resultproc_t eachresult"
+.Fa "void *argsp" "const xdrproc_t xresults"
+.Fa "void *resultsp" "const resultproc_t eachresult"
 .Fa "const int inittime" "const int waittime"
 .Fa "const char * nettype"
 .Fc
@@ -48,8 +48,8 @@
 .Fo rpc_call
 .Fa "const char *host" "const rpcprog_t prognum"
 .Fa "const rpcvers_t versnum" "const rpcproc_t procnum"
-.Fa "const xdrproc_t inproc" "const char *in"
-.Fa "const xdrproc_t outproc" "char *out" "const char *nettype"
+.Fa "const xdrproc_t inproc" "const void *in"
+.Fa "const xdrproc_t outproc" "void *out" "const char *nettype"
 .Fc
 .Sh DESCRIPTION
 RPC library routines allow C language programs to make procedure
@@ -179,7 +179,7 @@ this routine calls
 .Fn eachresult ,
 whose form is:
 .Ft bool_t
-.Fn eachresult "caddr_t out" "const struct netbuf * addr" "const struct netconfig * netconf"
+.Fn eachresult "void *out" "const struct netbuf *addr" "const struct netconfig *netconf"
 where
 .Fa out
 is the same as

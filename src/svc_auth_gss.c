@@ -197,10 +197,10 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 	/* Deserialize arguments. */
 	memset(&recv_tok, 0, sizeof(recv_tok));
 
-	req->rq_msg.rm_xdr.where = (caddr_t)&recv_tok;
+	req->rq_msg.rm_xdr.where = &recv_tok;
 	req->rq_msg.rm_xdr.proc = (xdrproc_t)xdr_rpc_gss_init_args;
 	if (!SVCAUTH_UNWRAP(req)) {
-		xdr_free((xdrproc_t)xdr_rpc_gss_init_args, (caddr_t)&recv_tok);
+		xdr_free((xdrproc_t)xdr_rpc_gss_init_args, (void *)&recv_tok);
 		return (false);
 	}
 
@@ -210,7 +210,7 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 				   &gd->client_name, &mech, &gr->gr_token,
 				   &ret_flags, &time_rec, NULL);
 
-	xdr_free((xdrproc_t)xdr_rpc_gss_init_args, (caddr_t)&recv_tok);
+	xdr_free((xdrproc_t)xdr_rpc_gss_init_args, (void *)&recv_tok);
 
 	if ((gr->gr_major != GSS_S_COMPLETE)
 	    && (gr->gr_major != GSS_S_CONTINUE_NEEDED)) {
@@ -333,7 +333,7 @@ svcauth_gss_validate(struct svc_req *req,
 	IXDR_PUT_ENUM(buf, oa->oa_flavor);
 	IXDR_PUT_LONG(buf, oa->oa_length);
 	if (oa->oa_length) {
-		memcpy((caddr_t) buf, oa->oa_body, oa->oa_length);
+		memcpy(buf, oa->oa_body, oa->oa_length);
 		buf += RNDUP(oa->oa_length) / sizeof(int32_t);
 	}
 	rpcbuf.value = rpchdr;
@@ -460,7 +460,7 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 		auth = mem_alloc(sizeof(SVCAUTH));
 		gd = alloc_svc_rpc_gss_data();
 		auth->svc_ah_ops = &svc_auth_gss_ops;
-		auth->svc_ah_private = (caddr_t) gd;
+		auth->svc_ah_private = gd;
 		gd->auth = auth;
 	}
 
@@ -523,7 +523,7 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 
 		*no_dispatch = true;
 
-		req->rq_msg.RPCM_ack.ar_results.where = (caddr_t) &gr;
+		req->rq_msg.RPCM_ack.ar_results.where = &gr;
 		req->rq_msg.RPCM_ack.ar_results.proc =
 					(xdrproc_t) xdr_rpc_gss_init_res;
 		call_stat = svc_sendreply(req);

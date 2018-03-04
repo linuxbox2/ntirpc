@@ -170,7 +170,7 @@ xdr_rpc_gss_init_res(XDR *xdrs, struct rpc_gss_init_res *p)
 }
 
 bool
-xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
+xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 		 gss_ctx_id_t ctx, gss_qop_t qop, rpc_gss_svc_t svc, u_int seq)
 {
 	gss_buffer_desc databuf, wrapbuf;
@@ -271,7 +271,7 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
 }
 
 bool
-xdr_rpc_gss_unwrap(XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr,
+xdr_rpc_gss_unwrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 		   gss_ctx_id_t ctx, gss_qop_t qop, rpc_gss_svc_t svc,
 		   u_int seq)
 {

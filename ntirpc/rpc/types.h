@@ -68,7 +68,6 @@ typedef uint64_t u_int64_t;
 typedef uint64_t u_quad_t;
 
 /* misc */
-typedef char *caddr_t;
 typedef uint32_t uid_t;
 typedef uint32_t gid_t;
 

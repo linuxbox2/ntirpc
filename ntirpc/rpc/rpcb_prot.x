@@ -421,11 +421,11 @@ program RPCBPROG {
 % * A mapping of (program, version, network ID) to address
 % */
 %struct rpcb {
-%	rpcprog_t r_prog;		/* program number */
-%	rpcvers_t r_vers;		/* version number */
 %	char *r_netid;			/* network id */
 %	char *r_addr;			/* universal address */
 %	char *r_owner;			/* owner of the mapping */
+%	rpcprog_t r_prog;		/* program number */
+%	rpcvers_t r_vers;		/* version number */
 %};
 %typedef struct rpcb RPCB;
 %
@@ -443,12 +443,12 @@ program RPCBPROG {
 % * Remote calls arguments
 % */
 %struct rpcb_rmtcallargs {
+%	xdrproc_t xdr_args;		/* XDR routine for argument */
+%	void *args_ptr;			/* argument */
+%	u_int32_t arglen;		/* arg len */
 %	rpcprog_t prog;			/* program number */
 %	rpcvers_t vers;			/* version number */
 %	rpcproc_t proc;			/* procedure number */
-%	u_int32_t arglen;			/* arg len */
-%	caddr_t args_ptr;		/* argument */
-%	xdrproc_t xdr_args;		/* XDR routine for argument */
 %};
 %typedef struct rpcb_rmtcallargs rpcb_rmtcallargs;
 %
@@ -457,18 +457,18 @@ program RPCBPROG {
 % */
 %struct rpcb_rmtcallres {
 %	char *addr_ptr;			/* remote universal address */
-%	u_int32_t resultslen;		/* results length */
-%	caddr_t results_ptr;		/* results */
 %	xdrproc_t xdr_results;		/* XDR routine for result */
+%	void *results_ptr;		/* results */
+%	u_int32_t resultslen;		/* results length */
 %};
 %typedef struct rpcb_rmtcallres rpcb_rmtcallres;
 %
 %struct rpcb_entry {
 %	char *r_maddr;
 %	char *r_nc_netid;
-%	unsigned int r_nc_semantics;
 %	char *r_nc_protofmly;
 %	char *r_nc_proto;
+%	unsigned int r_nc_semantics;
 %};
 %typedef struct rpcb_entry rpcb_entry;
 %

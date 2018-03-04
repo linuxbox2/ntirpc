@@ -984,11 +984,11 @@ rpcb_getmaps(const struct netconfig *nconf, const char *host)
 enum clnt_stat
 rpcb_rmtcall(const struct netconfig *nconf, /* Netconfig structure */
 	     const char *host, /* Remote host name */
-	     rpcprog_t prog, rpcvers_t vers,
-	     rpcproc_t proc,/* Remote proc identifiers */
-	     xdrproc_t xdrargs, caddr_t argsp, xdrproc_t xdrres,
-	     caddr_t resp,	/* Argument and Result */
-	     struct timeval tout,	/* Timeout value for this call */
+	     const rpcprog_t prog, const rpcvers_t vers,
+	     const rpcproc_t proc,/* Remote proc identifiers */
+	     const xdrproc_t xdrargs, void *argsp,
+	     const xdrproc_t xdrres, void *resp, /* Argument and Result */
+	     const struct timeval tout,	/* Timeout value for this call */
 	     const struct netbuf *addr_ptr
 	     /* Preallocated netbuf address */)
 {
