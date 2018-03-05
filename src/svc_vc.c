@@ -295,6 +295,13 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 
 	xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags, flags
 						| SVC_XPRT_FLAG_INITIALIZED);
+
+	if (!(xp_flags & SVC_XPRT_FLAG_INITIAL)) {
+		/* This is a reused xprt, so decrement nconns we incremented
+		 * above */
+		svc_vc_dec_nconns();
+	}
+
 	if (xp_flags & SVC_XPRT_FLAG_INITIALIZED) {
 		rpc_dplx_rui(rec);
 		XPRT_TRACE(xprt, __func__, __func__, __LINE__);
