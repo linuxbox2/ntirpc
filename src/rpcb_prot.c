@@ -111,9 +111,9 @@ xdr_rpcblist_ptr(XDR *xdrs, rpcblist_ptr *rp)
 		 */
 		if (freeing)
 			next = (*rp)->rpcb_next;
-		if (!xdr_reference
-		    (xdrs, (caddr_t *) rp, (u_int) sizeof(rpcblist),
-		     (xdrproc_t) xdr_rpcb)) {
+		if (!xdr_reference(xdrs, (void *) rp,
+				   (u_int) sizeof(rpcblist),
+				   (xdrproc_t) xdr_rpcb)) {
 			return (false);
 		}
 		if (freeing) {
@@ -188,9 +188,9 @@ xdr_rpcb_entry_list_ptr(XDR *xdrs, rpcb_entry_list_ptr *rp)
 		 */
 		if (freeing)
 			next = (*rp)->rpcb_entry_next;
-		if (!xdr_reference
-		    (xdrs, (caddr_t *) rp, (u_int) sizeof(rpcb_entry_list),
-		     (xdrproc_t) xdr_rpcb_entry)) {
+		if (!xdr_reference(xdrs, (void *) rp,
+				   (u_int) sizeof(rpcb_entry_list),
+				   (xdrproc_t) xdr_rpcb_entry)) {
 			return (false);
 		}
 		if (freeing) {

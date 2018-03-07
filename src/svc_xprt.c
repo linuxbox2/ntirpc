@@ -39,7 +39,7 @@
 #include <misc/portable.h>
 #include <rpc/rpc.h>
 #include "rpc_com.h"
-#include "rpc_dplx_internal.h"
+#include "svc_internal.h"
 #include "svc_xprt.h"
 
 /**
@@ -67,6 +67,7 @@ static bool initialized;
 struct svc_xprt_fd {
 	mutex_t lock;
 	struct rbtree_x xt;
+	uint32_t connections;
 };
 
 static struct svc_xprt_fd svc_xprt_fd = {
@@ -160,6 +161,16 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 		rwlock_wrlock(&t->lock);
 		nv = opr_rbtree_lookup(&t->t, &sk.fd_node);
 		if (!nv) {
+			if (atomic_inc_uint32_t(&svc_xprt_fd.connections)
+			    > __svc_params->max_connections) {
+				atomic_dec_uint32_t(&svc_xprt_fd.connections);
+				rwlock_unlock(&t->lock);
+				__warnx(TIRPC_DEBUG_FLAG_ERROR,
+					"%s: fd %d max_connections %u exceeded\n",
+					__func__, fd,
+					__svc_params->max_connections);
+				return (NULL);
+			}
 			(*setup)(&xprt); /* zalloc, xp_refs = 1 */
 			xprt->xp_fd = fd;
 			xprt->xp_flags = SVC_XPRT_FLAG_INITIAL;
@@ -173,6 +184,7 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 					"%s: collision inserting in locked rbtree partition",
 					__func__);
 				(*setup)(&xprt);	/* free, sets NULL */
+				atomic_dec_uint32_t(&svc_xprt_fd.connections);
 			}
 			rwlock_unlock(&t->lock);
 			return (xprt);
@@ -227,6 +239,7 @@ svc_xprt_clear(SVCXPRT *xprt)
 		/* if another thread passes test during svc_xprt_shutdown(),
 		 * this lock (and generation test) prevents repeats.
 		 */
+		atomic_dec_uint32_t(&svc_xprt_fd.connections);
 		rwlock_wrlock(&t->lock);
 		opr_rbtree_remove(&t->t, &REC_XPRT(xprt)->fd_node);
 		rwlock_unlock(&t->lock);

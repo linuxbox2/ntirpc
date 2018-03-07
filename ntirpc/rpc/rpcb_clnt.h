@@ -70,8 +70,8 @@ extern rpcblist *rpcb_getmaps(const struct netconfig *, const char *);
 extern enum clnt_stat rpcb_rmtcall(const struct netconfig *, const char *,
 				   const rpcprog_t, const rpcvers_t,
 				   const rpcproc_t, const xdrproc_t,
-				   const caddr_t, const xdrproc_t,
-				   const caddr_t, const struct timeval,
+				   void *, const xdrproc_t,
+				   void *, const struct timeval,
 				   const struct netbuf *);
 extern bool rpcb_getaddr(const rpcprog_t, const rpcvers_t,
 			 const struct netconfig *, struct netbuf *,

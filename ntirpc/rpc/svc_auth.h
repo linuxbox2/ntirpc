@@ -54,7 +54,7 @@ typedef struct SVCAUTH {
 		bool(*svc_ah_release) (struct svc_req *);
 		bool(*svc_ah_destroy) (struct SVCAUTH *);
 	} *svc_ah_ops;
-	caddr_t svc_ah_private;
+	void *svc_ah_private;
 } SVCAUTH;
 
 #define SVCAUTH_WRAP(req, xdrs) \

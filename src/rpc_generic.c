@@ -371,8 +371,9 @@ __rpc_getconfip(const char *nettype)
 
 		confighandle = setnetconfig();
 		if (!confighandle) {
-			__warnx(TIRPC_DEBUG_FLAG_DEFAULT,
-				"rpc: failed to open %s", NETCONFIG);
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: setnetconfig failed to open %s",
+				__func__, NETCONFIG);
 			return (NULL);
 		}
 		while ((nconf = getnetconfig(confighandle)) != NULL) {
@@ -431,6 +432,9 @@ __rpc_setconf(const char *nettype)
 	case _RPC_DATAGRAM_N:
 		handle->nhandle = setnetpath();
 		if (!handle->nhandle) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: setnetpath failed",
+				__func__);
 			mem_free(handle, sizeof(*handle));
 			return (NULL);
 		}
@@ -444,14 +448,18 @@ __rpc_setconf(const char *nettype)
 	case _RPC_VSOCK:
 		handle->nhandle = setnetconfig();
 		if (!handle->nhandle) {
-			__warnx(TIRPC_DEBUG_FLAG_DEFAULT,
-				"rpc: failed to open %s", NETCONFIG);
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s: setnetconfig failed to open %s",
+				__func__, NETCONFIG);
 			mem_free(handle, sizeof(*handle));
 			return (NULL);
 		}
 		handle->nflag = false;
 		break;
 	default:
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: unknown net type %s",
+			__func__, nettype);
 		mem_free(handle, sizeof(*handle));
 		return (NULL);
 	}

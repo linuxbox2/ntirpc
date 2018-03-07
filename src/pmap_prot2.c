@@ -108,9 +108,9 @@ xdr_pmaplist(XDR *xdrs, struct pmaplist **rp)
 		 */
 		if (freeing)
 			next = &((*rp)->pml_next);
-		if (!xdr_reference
-		    (xdrs, (caddr_t *) rp, (u_int) sizeof(struct pmaplist),
-		     (xdrproc_t) xdr_pmap))
+		if (!xdr_reference(xdrs, (void **) rp,
+				   (u_int) sizeof(struct pmaplist),
+				   (xdrproc_t) xdr_pmap))
 			return (false);
 		rp = (freeing) ? next : &((*rp)->pml_next);
 	}

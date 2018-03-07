@@ -57,13 +57,6 @@ struct svc_params {
 	svc_xprt_fun_t disconnect_cb;
 	svc_xprt_xdr_fun_t request_cb;
 
-	union {
-		struct {
-			mutex_t mtx;
-			u_int nconns;
-		} vc;
-	} xprt_u;
-
 	struct {
 		int ctx_hash_partitions;
 		int max_ctx;
@@ -82,44 +75,6 @@ struct svc_params {
 };
 
 extern struct svc_params __svc_params[1];
-
-#define svc_cond_init()	\
-	do { \
-		if (!__svc_params->initialized) { \
-			(void)svc_init(&(svc_init_params) \
-				 {       .flags = SVC_INIT_EPOLL, \
-						 .max_connections = 8192, \
-						 .max_events = 512, \
-						 .gss_ctx_hash_partitions = 13,\
-						 .gss_max_ctx = 1024,	\
-						 .gss_max_idle_gen = 1024, \
-						 .gss_max_gc = 200 \
-						 }); \
-		} \
-	} while (0)
-
-
-static inline bool
-svc_vc_new_conn_ok(void)
-{
-	bool ok = false;
-	svc_cond_init();
-	mutex_lock((&__svc_params->xprt_u.vc.mtx));
-	if (__svc_params->xprt_u.vc.nconns < __svc_params->max_connections) {
-		++(__svc_params->xprt_u.vc.nconns);
-		ok = true;
-	}
-	mutex_unlock(&(__svc_params->xprt_u.vc.mtx));
-	return (ok);
-}
-
-#define svc_vc_dec_nconns() \
-	do { \
-		mutex_lock((&__svc_params->xprt_u.vc.mtx)); \
-		--(__svc_params->xprt_u.vc.nconns); \
-		mutex_unlock(&(__svc_params->xprt_u.vc.mtx)); \
-	} while (0)
-
 
 /*
  * The following union is defined just to use SVC_CMSG_SIZE macro for an array

@@ -276,13 +276,6 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 
 	assert(fd != -1);
 
-	if (!svc_vc_new_conn_ok()) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: fd %d max_connections exceeded\n",
-			__func__, fd);
-		return (NULL);
-	}
-
 	/* atomically find or create shared fd state; ref+1; locked */
 	xprt = svc_xprt_lookup(fd, svc_vc_xprt_setup);
 	if (!xprt) {
@@ -295,13 +288,6 @@ makefd_xprt(const int fd, const u_int sendsz, const u_int recvsz,
 
 	xp_flags = atomic_postset_uint16_t_bits(&xprt->xp_flags, flags
 						| SVC_XPRT_FLAG_INITIALIZED);
-
-	if (!(xp_flags & SVC_XPRT_FLAG_INITIAL)) {
-		/* This is a reused xprt, so decrement nconns we incremented
-		 * above */
-		svc_vc_dec_nconns();
-	}
-
 	if (xp_flags & SVC_XPRT_FLAG_INITIALIZED) {
 		rpc_dplx_rui(rec);
 		XPRT_TRACE(xprt, __func__, __func__, __LINE__);
@@ -582,9 +568,6 @@ svc_vc_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 static void
 svc_vc_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
-	/* connection tracking--decrement now, he's dead jim */
-	svc_vc_dec_nconns();
-
 	svc_vc_destroy_it(xprt, flags, tag, line);
 }
 

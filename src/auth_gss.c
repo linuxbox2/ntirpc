@@ -59,9 +59,9 @@ static bool authgss_validate(AUTH *auth, struct opaque_auth *verf);
 static void authgss_destroy(AUTH *auth);
 static void authgss_destroy_context(AUTH *auth);
 static bool authgss_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func,
-			 caddr_t xdr_ptr);
+			 void *xdr_ptr);
 static bool authgss_unwrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func,
-			   caddr_t xdr_ptr);
+			   void *xdr_ptr);
 
 /*
  * from mit-krb5-1.2.1 mechglue/mglueP.h:
@@ -616,7 +616,7 @@ authgss_destroy(AUTH *auth)
 }
 
 bool
-authgss_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr)
+authgss_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr)
 {
 	struct rpc_gss_data *gd = AUTH_PRIVATE(auth);
 
@@ -631,7 +631,7 @@ authgss_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr)
 }
 
 bool
-authgss_unwrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, caddr_t xdr_ptr)
+authgss_unwrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr)
 {
 	struct rpc_gss_data *gd = AUTH_PRIVATE(auth);
 

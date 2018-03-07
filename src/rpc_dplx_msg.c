@@ -162,7 +162,7 @@ xdr_reply_encode(XDR *xdrs, struct rpc_msg *dmsg)
 		}
 		if (!inline_xdr_union(xdrs,
 				      (enum_t *) &(dmsg->rm_reply.rp_stat),
-				      (caddr_t)(void *)&(dmsg->rm_reply.ru),
+				      (void *)&(dmsg->rm_reply.ru),
 				      reply_dscrm, NULL_xdrproc_t)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s:%u ERROR inline_xdr_union",

@@ -68,7 +68,7 @@ typedef struct sec_data {
 	u_int secmod;		/* security mode number e.g. in nfssec.conf */
 	u_int rpcflavor;	/* rpc flavors:AUTH_UNIX,AUTH_DES,RPCSEC_GSS */
 	int flags;		/* AUTH_F_xxx flags */
-	caddr_t data;		/* opaque data per flavor */
+	void *data;		/* opaque data per flavor */
 } sec_data_t;
 
 #ifdef _SYSCALL32_IMPL
@@ -76,7 +76,7 @@ struct sec_data32 {
 	uint32_t secmod;	/* security mode number e.g. in nfssec.conf */
 	uint32_t rpcflavor;	/* rpc flavors:AUTH_UNIX,AUTH_DES,RPCSEC_GSS */
 	int32_t flags;		/* AUTH_F_xxx flags */
-	caddr32_t data;		/* opaque data per flavor */
+	void *data;		/* opaque data per flavor */
 };
 #endif				/* _SYSCALL32_IMPL */
 
@@ -129,10 +129,10 @@ typedef struct __auth {
 		void (*ah_destroy) (struct __auth *);
 
 		/* encode data for wire */
-		 bool(*ah_wrap) (struct __auth *, XDR *, xdrproc_t, caddr_t);
+		 bool(*ah_wrap) (struct __auth *, XDR *, xdrproc_t, void *);
 
 		/* decode data for wire */
-		 bool(*ah_unwrap) (struct __auth *, XDR *, xdrproc_t, caddr_t);
+		 bool(*ah_unwrap) (struct __auth *, XDR *, xdrproc_t, void *);
 	} *ah_ops;
 
 	union des_block ah_key;

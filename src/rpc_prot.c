@@ -64,7 +64,7 @@ xdr_des_block(XDR *xdrs, des_block *blkp)
 	assert(xdrs != NULL);
 	assert(blkp != NULL);
 
-	return (xdr_opaque(xdrs, (caddr_t) (void *)blkp, sizeof(des_block)));
+	return (xdr_opaque(xdrs, (char *)blkp, sizeof(des_block)));
 }
 
 /* * * * * * * * * * * * * * XDR RPC MESSAGE * * * * * * * * * * * * * * * */
@@ -147,10 +147,10 @@ xdr_nreplymsg(XDR *xdrs, struct rpc_msg *rmsg)
 	if (inline_xdr_u_int32_t(xdrs, &(rmsg->rm_xid))
 	    && inline_xdr_enum(xdrs, (enum_t *) &(rmsg->rm_direction))
 	    && (rmsg->rm_direction == REPLY))
-		return (inline_xdr_union
-			(xdrs, (enum_t *) &(rmsg->rm_reply.rp_stat),
-			 (caddr_t) (void *)&(rmsg->rm_reply.ru), reply_dscrm,
-			 NULL_xdrproc_t));
+		return (inline_xdr_union(xdrs,
+					 (enum_t *)&(rmsg->rm_reply.rp_stat),
+					 (void *)&(rmsg->rm_reply.ru),
+					 reply_dscrm, NULL_xdrproc_t));
 	return (false);
 }
 

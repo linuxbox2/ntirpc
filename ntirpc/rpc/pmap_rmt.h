@@ -45,8 +45,8 @@
 #include <sys/cdefs.h>
 
 struct rmtcallargs {
-	caddr_t args_ptr;
 	xdrproc_t xdr_args;
+	void *args_ptr;
 	uint32_t arglen;	/* count of args_ptr */
 	rpcprog_t prog;
 	rpcvers_t vers;
@@ -54,8 +54,8 @@ struct rmtcallargs {
 };
 
 struct rmtcallres {
-	caddr_t results_ptr;
 	xdrproc_t xdr_results;
+	void *results_ptr;
 	uint32_t resultslen;	/* count of results_ptr */
 	rpcport_t port;
 };

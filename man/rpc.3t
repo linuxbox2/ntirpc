@@ -134,16 +134,14 @@ RPC package are shown below.
  */
 struct opaque_auth {
     enum_t    oa_flavor;    /* flavor of auth */
-    caddr_t    oa_base;    /* address of more auth stuff */
     u_int    oa_length;    /* not to exceed MAX_AUTH_BYTES */
+    char    oa_body[MAX_AUTH_BYTES];
 };
 
 /*
  * Auth handle, interface to client side authenticators.
  */
 typedef struct {
-    struct    opaque_auth    ah_cred;
-    struct    opaque_auth    ah_verf;
     struct auth_ops {
         void    (*ah_nextverf)(\|);
         int    (*ah_marshal)(\|);    /* nextverf & serialize */
@@ -151,7 +149,9 @@ typedef struct {
         int    (*ah_refresh)(\|);    /* refresh credentials */
         void    (*ah_destroy)(\|);    /* destroy this structure */
     } *ah_ops;
-    caddr_t ah_private;
+    struct opaque_auth  ah_cred;
+    struct opaque_auth  ah_verf;
+    void *ah_private;
 } AUTH;
 .Ed
 .Sh "The CLIENT Structure"
@@ -201,11 +201,11 @@ typedef struct {
     } *xp_ops;
     char    *xp_tp;    /* transport provider device name */
     char    *xp_netid;    /* network identifier */
-    caddr_t    xp_p1;    /* private: for use by svc ops */
-    caddr_t    xp_p2;    /* private: for use by svc ops */
-    caddr_t    xp_p3;    /* private: for use by svc lib */
-    caddr_t    xp_u1;    /* public: user data */
-    caddr_t    xp_u2;    /* public: user data */
+    void *xp_p1;    /* private: for use by svc ops */
+    void *xp_p2;    /* private: for use by svc ops */
+    void *xp_p3;    /* private: for use by svc lib */
+    void *xp_u1;    /* public: user data */
+    void *xp_u2;    /* public: user data */
     struct rpc_address xp_local;	/* local address, length, port */
     struct rpc_address xp_remote;	/* remote address, length, port */
     int    xp_fd;    /* file descriptor for the server handle */
@@ -247,7 +247,7 @@ enum xdr_op {
  * structure of the data type to be decoded.  If this points to 0,
  * then the type routines should allocate dynamic storage of the
  * appropriate size and return it.
- * bool_t  (*xdrproc_t)(XDR *, caddr_t *);
+ * bool_t  (*xdrproc_t)(XDR *, ...);
  */
 typedef  bool_t (*xdrproc_t)();
 

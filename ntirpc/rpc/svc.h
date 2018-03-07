@@ -292,8 +292,8 @@ struct svc_req {
 	SVCXPRT *rq_xprt;	/* associated transport */
 
 	/* New with TI-RPC */
-	caddr_t rq_clntname;	/* read only client name */
-	caddr_t rq_svcname;	/* read only cooked service cred */
+	char *rq_clntname;	/* read only client name */
+	char *rq_svcname;	/* read only cooked service cred */
 
 	/* New with N TI-RPC */
 	XDR *rq_xdrs;

@@ -64,11 +64,11 @@
  * proc is the routine to handle the referenced structure.
  */
 bool
-xdr_reference(XDR *xdrs, caddr_t *pp,	/* the pointer to work on */
+xdr_reference(XDR *xdrs, void **pp,	/* the pointer to work on */
 	      u_int size,	/* size of the object pointed to */
 	      xdrproc_t proc /* xdr routine to handle the object */)
 {
-	caddr_t loc = *pp;
+	void *loc = *pp;
 	bool stat;
 
 	if (loc == NULL)
@@ -77,7 +77,7 @@ xdr_reference(XDR *xdrs, caddr_t *pp,	/* the pointer to work on */
 			return (true);
 
 		case XDR_DECODE:
-			*pp = loc = (caddr_t) mem_zalloc(size);
+			*pp = loc = mem_zalloc(size);
 			break;
 
 		case XDR_ENCODE:
@@ -112,7 +112,7 @@ xdr_reference(XDR *xdrs, caddr_t *pp,	/* the pointer to work on */
  * > xdr_obj: routine to XDR an object.
  *
  */
-bool xdr_pointer(XDR *xdrs, char **objpp, u_int obj_size, xdrproc_t xdr_obj)
+bool xdr_pointer(XDR *xdrs, void **objpp, u_int obj_size, xdrproc_t xdr_obj)
 {
 
 	bool_t more_data;

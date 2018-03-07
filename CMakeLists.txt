@@ -171,6 +171,7 @@ configure_file(
 )
 
 add_subdirectory(src)
+add_subdirectory(tests)
 
 # display configuration vars
 

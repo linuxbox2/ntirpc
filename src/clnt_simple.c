@@ -95,9 +95,9 @@ rpc_call(const char *host,	/* host name */
 	 rpcvers_t versnum,	/* version number */
 	 rpcproc_t procnum,	/* procedure number */
 	 xdrproc_t inproc,	/* in XDR procedure */
-	 const char *in,
+	 const void *in,
 	 xdrproc_t outproc,	/* out XDR procedure */
-	 char *out,	/* recv/send data */
+	 void *out,	/* recv/send data */
 	 const char *nettype /* nettype */)
 {
 	struct rpc_call_private *rcp;

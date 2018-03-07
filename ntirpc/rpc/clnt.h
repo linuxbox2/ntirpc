@@ -600,16 +600,17 @@ __END_DECLS
  * const rpcprog_t prognum;
  * const rpcvers_t versnum;
  * const rpcproc_t procnum;
- * const xdrproc_t inproc, outproc;
- * const char *in;
- * char *out;
+ * const xdrproc_t inproc;
+ * const void *in;
+ * const xdrproc_t outproc;
+ * void *out;
  * const char *nettype;
  */
 __BEGIN_DECLS
 extern enum clnt_stat rpc_call(const char *, const rpcprog_t,
 			       const rpcvers_t, const rpcproc_t,
-			       const xdrproc_t, const char *,
-			       const xdrproc_t, char *,
+			       const xdrproc_t, const void *,
+			       const xdrproc_t, void *,
 			       const char *);
 __END_DECLS
 /*
@@ -623,9 +624,9 @@ __END_DECLS
  * const rpcvers_t  vers;  -- version number
  * const rpcproc_t  proc;  -- procedure number
  * const xdrproc_t xargs;  -- xdr routine for args
- * caddr_t  argsp;  -- pointer to args
+ * void *argsp;  -- pointer to args
  * const xdrproc_t xresults; -- xdr routine for results
- * caddr_t  resultsp; -- pointer to results
+ * void *resultsp; -- pointer to results
  * const resultproc_t eachresult; -- call with each result
  * const char  *nettype; -- Transport type
  *
@@ -633,7 +634,7 @@ __END_DECLS
  * Its form is:
  *  done = eachresult(resp, raddr, nconf)
  *   bool done;
- *   caddr_t resp;
+ *   void *resp;
  *   struct netbuf *raddr;
  *   struct netconfig *nconf;
  * where resp points to the results of the call and raddr is the
@@ -647,27 +648,27 @@ __END_DECLS
  * const rpcvers_t  vers;  -- version number
  * const rpcproc_t  proc;  -- procedure number
  * const xdrproc_t xargs;  -- xdr routine for args
- * caddr_t  argsp;  -- pointer to args
+ * void *argsp;  -- pointer to args
  * const xdrproc_t xresults; -- xdr routine for results
- * caddr_t  resultsp; -- pointer to results
+ * void  *resultsp; -- pointer to results
  * const resultproc_t eachresult; -- call with each result
  * const int   inittime; -- how long to wait initially
  * const int   waittime; -- maximum time to wait
  * const char  *nettype; -- Transport type
  */
-typedef bool(*resultproc_t) (caddr_t, ...);
+typedef bool(*resultproc_t) (void *, ...);
 
 __BEGIN_DECLS
 extern enum clnt_stat rpc_broadcast(const rpcprog_t,
 				    const rpcvers_t,
 				    const rpcproc_t,
-				    const xdrproc_t, caddr_t,
-				    const xdrproc_t, caddr_t,
+				    const xdrproc_t, void *,
+				    const xdrproc_t, void *,
 				    const resultproc_t,
 				    const char *);
 extern enum clnt_stat rpc_broadcast_exp(const rpcprog_t, const rpcvers_t,
 					const rpcproc_t, const xdrproc_t,
-					caddr_t, const xdrproc_t, caddr_t,
+					void *, const xdrproc_t, void *,
 					const resultproc_t, const int,
 					const int, const char *);
 __END_DECLS
