@@ -154,10 +154,6 @@ svc_init(svc_init_params *params)
 	__svc_params->max_connections =
 	    (params->max_connections) ? params->max_connections : FD_SETSIZE;
 
-	/* svc_vc */
-	__svc_params->xprt_u.vc.nconns = 0;
-	mutex_init(&__svc_params->xprt_u.vc.mtx, NULL);
-
 #if defined(HAVE_BLKIN)
 	if (params->flags & SVC_INIT_BLKIN) {
 		int r = blkin_init();
