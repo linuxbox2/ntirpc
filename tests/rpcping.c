@@ -3,10 +3,12 @@
  * Copyright (c) 2018 Red Hat, Inc.
  *
  * AUTHOR: Tigran Mkrtchayn (tigran.mkrtchyan@desy.de)
+ * AUTHOR: William Allen Simpson <wsimpson@redhat.com>
  *
- * This code is released into the "public domain" by its author(s).  Anybody may use, alter and
- * distribute the code without restriction.  The author makes no guarantees, and takes no liability
- * of any kind for use of this code.
+ * This code is released into the "public domain" by its author(s). 
+ * Anybody may use, alter, and distribute the code without restriction. 
+ * The author(s) make no guarantees, and take no liability of any kind
+ * for use of this code.
  */
 
 /**
@@ -134,9 +136,9 @@ int main(int argc, char *argv[])
 	double total;
 	int i;
 	int nthreads;
-	int count = 100000;
-	int prog = 0;
-	int vers = 1;
+	int count = 1500; /* observed optimal concurrent requests */
+	int prog = 100003; /* nfs */
+	int vers = 3; /* allow raw, rdma, tcp, udp by default */
 	int proc = 0;
 
 	if (argc < 4 || argc > 8) {
@@ -211,4 +213,5 @@ int main(int argc, char *argv[])
 		argv[1], argv[2], nthreads, count, prog, vers, proc,
 		total / nthreads, total);
 	fflush(stdout);
+	return (0);
 }
