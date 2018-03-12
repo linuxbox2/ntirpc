@@ -20,13 +20,15 @@
  *
  * Simple RPC ping test.
  *
- * @note    Partially based upon previous work:
- *          2012 April 22 tigran.mkrtchyan
  */
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/times.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 #include <pthread.h>
+#include <getopt.h>
 #include <rpc/rpc.h>
 #include <rpc/svc_auth.h>
 
@@ -45,6 +47,61 @@ struct state {
 	int requests;
 	int id;
 };
+
+static int
+get_conn_fd(const char *host, int hbport)
+{
+	struct addrinfo *res, *fr;
+	int r, fd = 0;
+
+	r = getaddrinfo(host, NULL, NULL, &res);
+	if (r) {
+		return 0;
+	}
+	fr = res;
+
+	while (res) {
+		fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+		if (fd <= 0)
+			goto next;
+		switch (res->ai_family) {
+		case AF_INET:
+		{
+			struct sockaddr_in *sin;
+			sin = (struct sockaddr_in *) res->ai_addr;
+			sin->sin_port = htons(hbport);
+			r = connect(fd, (struct sockaddr *) sin,
+				    sizeof(struct sockaddr));
+			if (!!r) {
+				close(fd);
+			} else
+				goto done;
+		}
+			break;
+		case AF_INET6:
+		{
+			struct sockaddr_in6 *sin6;
+			sin6 = (struct sockaddr_in6 *) res->ai_addr;
+			sin6->sin6_port = htons(hbport);
+			r = connect(fd, (struct sockaddr *) sin6,
+				    sizeof(struct sockaddr));
+			if (!!r) {
+				close(fd);
+			} else
+				goto done;
+		}
+			break;
+		default:
+			break;
+		};
+	next:
+		res = res->ai_next;
+	}
+
+done:
+	freeaddrinfo(fr);
+	return fd;
+}
 
 static void
 worker_cb(struct clnt_req *cc)
@@ -127,6 +184,11 @@ decode_request(SVCXPRT *xprt, XDR *xdrs)
 	return stat;
 }
 
+static void usage()
+{
+	printf("Usage: rpcping <protocol> <host> [--rpcbind] [--threads=<n>] [--count=<n>] [--port=<n>] [--program=<n>] [--version=<n>] [--procedure=<n>] [--nobind]\n");
+}
+
 int main(int argc, char *argv[])
 {
 	svc_init_params svc_params;
@@ -135,33 +197,72 @@ int main(int argc, char *argv[])
 	struct state *states;
 	double total;
 	int i;
+	char *proto;
+	char *host;
 	int nthreads;
 	int count = 1500; /* observed optimal concurrent requests */
+	int port = 2049;
 	int prog = 100003; /* nfs */
 	int vers = 3; /* allow raw, rdma, tcp, udp by default */
 	int proc = 0;
+	int send_sz = 8192;
+	int recv_sz = 8192;
+	int rpcbind = false;
+	int opt;
 
-	if (argc < 4 || argc > 8) {
-		printf("Usage: rpcping <protocol> <host> <nthreads> [<count> [<program> [<version> [<procedure>]]]]\n");
+	/* protocol and host/dest positional */
+	if (argc < 3) {
+		usage();
 		exit(1);
 	}
 
-	nthreads = atoi(argv[3]);
+	proto = argv[1];
+	host = argv[2];
+	
+	struct option long_options[] =
+	{
+		{"port", optional_argument, NULL, 'p'},
+		{"threads", optional_argument, NULL, 't'},
+		{"count", optional_argument, NULL, 'c'},
+		{"program", optional_argument, NULL, 'm'},
+		{"version", optional_argument, NULL, 'v'},
+		{"procedure", optional_argument, NULL, 'x'},
+		{"rpcbind", optional_argument, NULL, 'b'},
+		{NULL, 0, NULL, 0}
+	};
 
-	if (argc > 4) {
-		count = atoi(argv[4]);
-	}
-
-	if (argc > 5) {
-		prog = atoi(argv[5]);
-	}
-
-	if (argc > 6) {
-		vers = atoi(argv[6]);
-	}
-
-	if (argc > 7) {
-		proc = atoi(argv[7]);
+	optind = 3;
+	while ((opt = getopt_long(argc, argv, "bt:c:p:m:v:s:", long_options,
+						NULL))
+		!= -1) {
+		switch (opt)
+		{
+		case 't':
+			nthreads = atoi(optarg);
+			break;
+		case 'c':
+			count = atoi(optarg);
+			break;
+		case 'p':
+			port = atoi(optarg);
+			break;
+		case 'm':
+			prog = atoi(optarg);
+			break;
+		case 'v':
+			vers = atoi(optarg);
+			break;
+		case 'x':
+			proc = atoi(optarg);
+			break;
+		case 'b':
+			rpcbind = true;
+			break;
+		default:
+			usage();
+			exit(1);
+			break;
+		};
 	}
 
 	states = calloc(nthreads, sizeof(struct state));
@@ -183,10 +284,34 @@ int main(int argc, char *argv[])
 	for (i = 0; i < nthreads; i++) {
 		pthread_t t;
 
-		clnt = clnt_ncreate(argv[2], prog, vers, argv[1]);
-		if (CLNT_FAILURE(clnt)) {
-			rpc_perror(&clnt->cl_error, "clnt_ncreate failed");
-			exit(2);
+		if (rpcbind) {
+			clnt = clnt_ncreate(host, prog, vers, proto);
+			if (CLNT_FAILURE(clnt)) {
+				rpc_perror(&clnt->cl_error,
+					"clnt_ncreate failed");
+				exit(2);
+			}
+		} else {
+			/* connect to host:port */
+			struct sockaddr_storage ss;
+			struct netbuf raddr = {
+				.buf = &ss,
+				.len = sizeof(ss)
+			};
+			int fd = get_conn_fd(host, port);
+			if (fd <= 0) {
+				perror("get_v4_conn failed");
+				exit(3);
+			}
+			clnt = clnt_vc_ncreatef(fd, &raddr, prog, vers,
+						send_sz,
+						recv_sz,
+						CLNT_CREATE_FLAG_CLOSE);
+			if (CLNT_FAILURE(clnt)) {
+				rpc_perror(&clnt->cl_error,
+					"clnt_ncreate failed");
+				exit(4);
+			}
 		}
 		s = &states[i];
 		clnt->cl_u1 = s;
@@ -209,8 +334,8 @@ int main(int argc, char *argv[])
 		total += s->averageTime;
 	}
 
-	fprintf(stdout, "rpcping %s %s threads=%d count=%d (program=%d version=%d procedure=%d): %2.4lf, total %2.4lf\n",
-		argv[1], argv[2], nthreads, count, prog, vers, proc,
+	fprintf(stdout, "rpcping %s %s threads=%d count=%d (port=%d program=%d version=%d procedure=%d): %2.4lf, total %2.4lf\n",
+		proto, host, nthreads, count, port, prog, vers, proc,
 		total / nthreads, total);
 	fflush(stdout);
 	return (0);
