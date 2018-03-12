@@ -1,12 +1,13 @@
 /*
- * Copyright (c) 2017 DESY Hamburg DMG-Division.
+ * Copyright (c) 2012-2017 DESY Hamburg DMG-Division.
  * Copyright (c) 2018 Red Hat, Inc.
  *
  * AUTHOR: Tigran Mkrtchayn (tigran.mkrtchyan@desy.de)
  * AUTHOR: William Allen Simpson <wsimpson@redhat.com>
+ * AUTHOR: Matt Benjamin <mbenjamin@redhat.com>
  *
- * This code is released into the "public domain" by its author(s). 
- * Anybody may use, alter, and distribute the code without restriction. 
+ * This code is released into the "public domain" by its author(s).
+ * Anybody may use, alter, and distribute the code without restriction.
  * The author(s) make no guarantees, and take no liability of any kind
  * for use of this code.
  */
@@ -64,33 +65,36 @@ get_conn_fd(const char *host, int hbport)
 		fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 		if (fd <= 0)
 			goto next;
+
 		switch (res->ai_family) {
 		case AF_INET:
 		{
-			struct sockaddr_in *sin;
-			sin = (struct sockaddr_in *) res->ai_addr;
+			struct sockaddr_in *sin = (struct sockaddr_in *)
+							res->ai_addr;
+
 			sin->sin_port = htons(hbport);
 			r = connect(fd, (struct sockaddr *) sin,
 				    sizeof(struct sockaddr));
-			if (!!r) {
-				close(fd);
-			} else
+			if (!r) {
 				goto done;
-		}
+			}
+			close(fd);
 			break;
+		}
 		case AF_INET6:
 		{
-			struct sockaddr_in6 *sin6;
-			sin6 = (struct sockaddr_in6 *) res->ai_addr;
+			struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)
+							res->ai_addr;
+
 			sin6->sin6_port = htons(hbport);
 			r = connect(fd, (struct sockaddr *) sin6,
 				    sizeof(struct sockaddr));
-			if (!!r) {
-				close(fd);
-			} else
+			if (!r) {
 				goto done;
-		}
+			}
+			close(fd);
 			break;
+		}
 		default:
 			break;
 		};
@@ -186,8 +190,20 @@ decode_request(SVCXPRT *xprt, XDR *xdrs)
 
 static void usage()
 {
-	printf("Usage: rpcping <protocol> <host> [--rpcbind] [--threads=<n>] [--count=<n>] [--port=<n>] [--program=<n>] [--version=<n>] [--procedure=<n>] [--nobind]\n");
+	printf("Usage: rpcping <raw|rdma|tcp|udp> <host> [--rpcbind] [--threads=<n>] [--count=<n>] [--port=<n>] [--program=<n>] [--version=<n>] [--procedure=<n>]\n");
 }
+
+static struct option long_options[] =
+{
+	{"port", required_argument, NULL, 'p'},
+	{"threads", required_argument, NULL, 't'},
+	{"count", required_argument, NULL, 'c'},
+	{"program", required_argument, NULL, 'm'},
+	{"version", required_argument, NULL, 'v'},
+	{"procedure", required_argument, NULL, 'x'},
+	{"rpcbind", no_argument, NULL, 'b'},
+	{NULL, 0, NULL, 0}
+};
 
 int main(int argc, char *argv[])
 {
@@ -195,11 +211,12 @@ int main(int argc, char *argv[])
 	CLIENT *clnt;
 	struct state *s;
 	struct state *states;
-	double total;
-	int i;
 	char *proto;
 	char *host;
-	int nthreads;
+	double total;
+	int i;
+	int opt;
+	int nthreads = 1;
 	int count = 1500; /* observed optimal concurrent requests */
 	int port = 2049;
 	int prog = 100003; /* nfs */
@@ -208,7 +225,6 @@ int main(int argc, char *argv[])
 	int send_sz = 8192;
 	int recv_sz = 8192;
 	int rpcbind = false;
-	int opt;
 
 	/* protocol and host/dest positional */
 	if (argc < 3) {
@@ -218,23 +234,10 @@ int main(int argc, char *argv[])
 
 	proto = argv[1];
 	host = argv[2];
-	
-	struct option long_options[] =
-	{
-		{"port", optional_argument, NULL, 'p'},
-		{"threads", optional_argument, NULL, 't'},
-		{"count", optional_argument, NULL, 'c'},
-		{"program", optional_argument, NULL, 'm'},
-		{"version", optional_argument, NULL, 'v'},
-		{"procedure", optional_argument, NULL, 'x'},
-		{"rpcbind", optional_argument, NULL, 'b'},
-		{NULL, 0, NULL, 0}
-	};
 
 	optind = 3;
-	while ((opt = getopt_long(argc, argv, "bt:c:p:m:v:s:", long_options,
-						NULL))
-		!= -1) {
+	while ((opt = getopt_long(argc, argv, "bt:c:p:m:v:x:",
+				  long_options, NULL)) != -1) {
 		switch (opt)
 		{
 		case 't':
@@ -299,8 +302,9 @@ int main(int argc, char *argv[])
 				.len = sizeof(ss)
 			};
 			int fd = get_conn_fd(host, port);
+
 			if (fd <= 0) {
-				perror("get_v4_conn failed");
+				perror("get_conn_fd failed");
 				exit(3);
 			}
 			clnt = clnt_vc_ncreatef(fd, &raddr, prog, vers,
