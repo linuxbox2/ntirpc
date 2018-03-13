@@ -801,7 +801,7 @@ xdr_array_decode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize,
 	if (!size)
 		return (true);
 	if (!target)
-		*cpp = target = mem_zalloc(size * selem);
+		*cpp = target = (char*) mem_zalloc(size * selem);
 
 	for (; (i < size) && stat; i++) {
 		stat = (*xdr_elem) (xdrs, target);
