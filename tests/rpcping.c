@@ -35,7 +35,7 @@
 
 static pthread_mutex_t rpcpring_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t rpcpring_cond = PTHREAD_COND_INITIALIZER;
-static volatile unsigned rpcpring_threads;
+static uint32_t rpcping_threads;
 
 static struct timespec to = {30, 0};
 
@@ -45,8 +45,8 @@ struct state {
 	clock_t rtime;
 	int count;
 	int proc;
-	int requests;
 	int id;
+	uint32_t requests;
 };
 
 static int
@@ -115,7 +115,7 @@ worker_cb(struct clnt_req *cc)
 	struct tms dumm;
 
 	clnt_req_release(cc);
-	if (--s->requests > 0) {
+	if (atomic_dec_uint32_t(&s->requests) > 0) {
 		return;
 	}
 	s->averageTime = s->count
@@ -123,9 +123,7 @@ worker_cb(struct clnt_req *cc)
 			 / (double) sysconf(_SC_CLK_TCK));
 
 	CLNT_DESTROY(clnt);
-	pthread_mutex_lock(&rpcpring_mutex);
-	--rpcpring_threads;
-	pthread_mutex_unlock(&rpcpring_mutex);
+	(void)atomic_dec_uint32_t(&rpcping_threads);
 	pthread_cond_broadcast(&rpcpring_cond);
 }
 
@@ -144,7 +142,7 @@ worker(void *arg)
 			      (xdrproc_t) xdr_void, NULL,
 			      (xdrproc_t) xdr_void, NULL);
 
-		s->requests++;
+		(void)atomic_inc_uint32_t(&s->requests);
 		if (clnt_req_setup(cc, to) != RPC_SUCCESS) {
 			rpc_perror(&cc->cc_error, "clnt_req_setup failed");
 			s->count = s->requests;
@@ -325,10 +323,10 @@ int main(int argc, char *argv[])
 		s->count = count;
 		s->proc = proc;
 		pthread_create(&t, NULL, worker, s);
-		rpcpring_threads++;
+		(void)atomic_inc_uint32_t(&rpcping_threads);
 	}
 
-	while (rpcpring_threads) {
+	while (atomic_fetch_uint32_t(&rpcping_threads)) {
 		pthread_cond_wait(&rpcpring_cond, &rpcpring_mutex);
 	}
 
