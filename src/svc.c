@@ -119,17 +119,6 @@ static struct svc_callout *svc_find(rpcprog_t, rpcvers_t, struct svc_callout **,
 
 struct work_pool svc_work_pool;
 
-static int
-svc_work_pool_init()
-{
-	struct work_pool_params params = {
-		.thrd_max = __svc_params->ioq.thrd_max,
-		.thrd_min = SVC_WORK_POOL_THRD_MIN,
-	};
-
-	return work_pool_init(&svc_work_pool, "svc_", &params);
-}
-
 /* Package init function.
  * It is intended that applications which must make use of global state
  * will call svc_init() before accessing such state and before executing
@@ -138,6 +127,7 @@ svc_work_pool_init()
 bool
 svc_init(svc_init_params *params)
 {
+	struct work_pool_params work_pool_params;
 	uint32_t channels = params->channels ? params->channels : 8;
 
 	mutex_lock(&__svc_params->mtx);
@@ -185,18 +175,22 @@ svc_init(svc_init_params *params)
 	else
 		__svc_params->ioq.send_max = RPC_MAXDATA_DEFAULT;
 
-	if (params->ioq_thrd_max)
-		__svc_params->ioq.thrd_max = params->ioq_thrd_max;
-	else
-		__svc_params->ioq.thrd_max = 200;
+	__svc_params->ioq.thrd_min = SVC_WORK_POOL_THRD_MIN;
+	if (__svc_params->ioq.thrd_min < params->ioq_thrd_min)
+		__svc_params->ioq.thrd_min = params->ioq_thrd_min;
 
-	if (__svc_params->ioq.thrd_max < channels + SVC_WORK_POOL_THRD_MIN)
-		__svc_params->ioq.thrd_max = channels + SVC_WORK_POOL_THRD_MIN;
+	__svc_params->ioq.thrd_max = __svc_params->ioq.thrd_min;
+	if (__svc_params->ioq.thrd_max < params->ioq_thrd_max)
+		__svc_params->ioq.thrd_max = params->ioq_thrd_max;
 
 	svc_ioq_init();
 
-	/* uses ioq.thrd_max */
-	if (svc_work_pool_init()) {
+	work_pool_params.thrd_min = __svc_params->ioq.thrd_min + channels;
+	work_pool_params.thrd_max = __svc_params->ioq.thrd_max;
+	if (work_pool_params.thrd_max < work_pool_params.thrd_min)
+		work_pool_params.thrd_max = work_pool_params.thrd_min;
+
+	if (work_pool_init(&svc_work_pool, "svc_", &work_pool_params)) {
 		mutex_unlock(&__svc_params->mtx);
 		return false;
 	}

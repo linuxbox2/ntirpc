@@ -67,6 +67,7 @@ struct svc_params {
 	struct {
 		u_int send_max;
 		u_int thrd_max;
+		u_int thrd_min;
 	} ioq;
 
 	u_long flags;
