@@ -126,6 +126,7 @@ typedef struct svc_init_params {
 	u_int max_events;	/* evchan events */
 	u_int ioq_send_max;
 	u_int ioq_thrd_max;
+	u_int ioq_thrd_min;
 	u_int gss_ctx_hash_partitions;
 	u_int gss_max_ctx;
 	u_int gss_max_idle_gen;
