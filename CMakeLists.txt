@@ -41,6 +41,7 @@ else (USE_LIB64)
 endif (USE_LIB64)
 
 set(SYSTEM_LIBRARIES ${SYSTEM_LIBRARIES})
+set(BINARY_LIBRARIES ${BINARY_LIBRARIES})
 
 include(GetGitRevisionDescription)
 get_git_head_revision(GIT_REFSPEC _GIT_HEAD_COMMIT)
@@ -79,6 +80,17 @@ endif(USE_RPC_RDMA)
 
 # MSPAC support -lwbclient link flag
 option(_MSPAC_SUPPORT "enable mspac Winbind support" OFF)
+
+option(USE_PROFILE "Build with gperf profiling" OFF)
+if (USE_PROFILE)
+  find_package(Gperftools)
+  if(GPERFTOOLS_FOUND)
+    set(BINARY_LIBRARIES ${BINARY_LIBRARIES} ${GPERFTOOLS_LIBRARIES})
+  else(GPERFTOOLS_FOUND)
+    message(WARNING "Couldn't find gperftools. Disabling USE_PROFILE")
+    set(USE_PROFILE OFF)
+  endif(GPERFTOOLS_FOUND)
+endif(USE_PROFILE)
 
 # Choose a shortcut build config
 
@@ -180,6 +192,7 @@ message(STATUS "-------------------------------------------------------")
 message(STATUS "TIRPC_EPOLL = ${TIRPC_EPOLL}")
 message(STATUS "USE_RPC_RDMA = ${USE_RPC_RDMA}")
 message(STATUS "USE_GSS = ${USE_GSS}")
+message(STATUS "USE_PROFILE = ${USE_PROFILE}")
 
 #force command line options to be stored in cache
 set(_MSPAC_SUPPORT ${_MSPAC_SUPPORT}
