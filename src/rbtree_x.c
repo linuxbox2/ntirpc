@@ -72,6 +72,7 @@ int rbtx_init(struct rbtree_x *xt, opr_rbtree_cmpf_t cmpf, uint32_t npart,
 		t = &(xt->tree[ix]);
 		mutex_init(&t->mtx, NULL);
 		rwlock_init(&t->lock, &rwlock_attr);
+		pthread_spin_init(&t->sp, PTHREAD_PROCESS_PRIVATE);
 		opr_rbtree_init(&t->t, cmpf /* may be NULL */);
 	}
 
