@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 CohortFS, LLC.
+ * Copyright (c) 2013-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -74,21 +75,23 @@ work_pool_init(struct work_pool *pool, const char *name,
 	poolq_head_setup(&pool->pqh);
 	TAILQ_INIT(&pool->wptqh);
 
+	pool->timeout_ms = WORK_POOL_TIMEOUT_MS;
+
 	pool->name = mem_strdup(name);
 	pool->params = *params;
-
-	if (pool->params.thrd_max < 1) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s() thrd_max (%d) < 1",
-			__func__, pool->params.thrd_max);
-		pool->params.thrd_max = 1;
-	};
 
 	if (pool->params.thrd_min < 1) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s() thrd_min (%d) < 1",
 			__func__, pool->params.thrd_min);
 		pool->params.thrd_min = 1;
+	};
+
+	if (pool->params.thrd_max < pool->params.thrd_min) {
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s() thrd_max (%d) < thrd_min (%d)",
+			__func__, pool->params.thrd_max, pool->params.thrd_min);
+		pool->params.thrd_max = pool->params.thrd_min;
 	};
 
 	rc = pthread_attr_init(&pool->attr);
@@ -198,7 +201,7 @@ work_pool_thread(void *arg)
 			__func__, wpt->worker_name);
 
 		clock_gettime(CLOCK_REALTIME_FAST, &ts);
-		timespec_addms(&ts, WORK_POOL_TIMEOUT_MS);
+		timespec_addms(&ts, pool->timeout_ms);
 
 		/* Note: the mutex is the pool _head,
 		 * but the condition is per worker,
@@ -206,25 +209,23 @@ work_pool_thread(void *arg)
 		 */
 		rc = pthread_cond_timedwait(&wpt->pqcond, &pool->pqh.qmutex,
 					    &ts);
-		if (rc) {
-			if (!wpt->work) {
-				/* Allow for possible timing race:
-				 * work entry can be submitted by another
-				 * thread during the timeout result?
-				 * Then, has already been removed there.
-				 * Only remove with no work here.
-				 */
-				pool->pqh.qcount--;
-				TAILQ_REMOVE(&pool->pqh.qh, &wpt->pqe, q);
-			}
-			if (unlikely(rc != ETIMEDOUT)) {
-				__warnx(TIRPC_DEBUG_FLAG_ERROR,
-					"%s() cond_timedwait failed (%d)\n",
-					__func__, rc);
-				break;
-			}
+		if (!wpt->work) {
+			/* Allow for possible timing race:
+			 * work entry can be submitted by another
+			 * thread during the thread task switch
+			 * after shutdown or timeout?
+			 * Then, has already been removed there.
+			 */
+			pool->pqh.qcount--;
+			TAILQ_REMOVE(&pool->pqh.qh, &wpt->pqe, q);
 		}
-	} while (wpt->work || pool->pqh.qcount <= pool->params.thrd_min);
+		if (rc && rc != ETIMEDOUT) {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() cond_timedwait failed (%d)\n",
+				__func__, rc);
+			break;
+		}
+	} while (wpt->work || pool->pqh.qcount < pool->params.thrd_min);
 
 	pool->n_threads--;
 	TAILQ_REMOVE(&pool->wptqh, wpt, wptq);
@@ -237,22 +238,6 @@ work_pool_thread(void *arg)
 	mem_free(wpt, sizeof(*wpt));
 
 	return (NULL);
-}
-
-static inline void
-work_pool_dispatch(struct work_pool *pool, struct work_pool_entry *work)
-{
-	struct work_pool_thread *wpt = (struct work_pool_thread *)
-		TAILQ_FIRST(&pool->pqh.qh);
-
-	TAILQ_REMOVE(&pool->pqh.qh, &wpt->pqe, q);
-	wpt->work = work;
-
-	/* Note: the mutex is the pool _head,
-	 * but the condition is per worker,
-	 * making the signal efficient!
-	 */
-	pthread_cond_signal(&wpt->pqcond);
 }
 
 static int
@@ -286,8 +271,18 @@ work_pool_submit(struct work_pool *pool, struct work_pool_entry *work)
 	pthread_mutex_lock(&pool->pqh.qmutex);
 
 	if (0 < pool->pqh.qcount--) {
+		struct work_pool_thread *wpt = (struct work_pool_thread *)
+			TAILQ_FIRST(&pool->pqh.qh);
+
 		/* positive for waiting worker(s) */
-		work_pool_dispatch(pool, work);
+		TAILQ_REMOVE(&pool->pqh.qh, &wpt->pqe, q);
+		wpt->work = work;
+
+		/* Note: the mutex is the pool _head,
+		 * but the condition is per worker,
+		 * making the signal efficient!
+		 */
+		pthread_cond_signal(&wpt->pqcond);
 	} else {
 		/* negative for task(s) */
 		TAILQ_INSERT_TAIL(&pool->pqh.qh, &work->pqe, q);
@@ -302,26 +297,30 @@ work_pool_shutdown(struct work_pool *pool)
 {
 	struct work_pool_thread *wpt;
 	struct timespec ts = {
-		.tv_sec = 1,
-		.tv_nsec = 0,
+		.tv_sec = 0,
+		.tv_nsec = 3000,
 	};
 
+	pthread_mutex_lock(&pool->pqh.qmutex);
+	pool->timeout_ms = 1;
 	pool->params.thrd_max =
 	pool->params.thrd_min = 0;
 
+	wpt = TAILQ_FIRST(&pool->wptqh);
+	while (wpt) {
+		pthread_cond_signal(&wpt->pqcond);
+		wpt = TAILQ_NEXT(wpt, wptq);
+	}
+
 	while (pool->n_threads > 0) {
+		pthread_mutex_unlock(&pool->pqh.qmutex);
 		__warnx(TIRPC_DEBUG_FLAG_WORKER,
 			"%s() \"%s\" %" PRIu32,
 			__func__, pool->name, pool->n_threads);
-		pthread_mutex_lock(&pool->pqh.qmutex);
-		wpt = TAILQ_FIRST(&pool->wptqh);
-		while (wpt) {
-			pthread_cond_signal(&wpt->pqcond);
-			wpt = TAILQ_NEXT(wpt, wptq);
-		}
-		pthread_mutex_unlock(&pool->pqh.qmutex);
 		nanosleep(&ts, NULL);
+		pthread_mutex_lock(&pool->pqh.qmutex);
 	}
+	pthread_mutex_unlock(&pool->pqh.qmutex);
 
 	mem_free(pool->name, 0);
 	poolq_head_destroy(&pool->pqh);

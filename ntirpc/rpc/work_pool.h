@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 CohortFS, LLC.
+ * Copyright (c) 2013-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,6 +55,7 @@ struct work_pool {
 	char *name;
 	pthread_attr_t attr;
 	struct work_pool_params params;
+	long timeout_ms;
 	uint32_t n_threads;
 	uint32_t worker_index;
 };
