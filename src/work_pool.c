@@ -126,6 +126,7 @@ work_pool_init(struct work_pool *pool, const char *name,
 	}
 
 	/* initial spawn will spawn more threads as needed */
+	pool->n_threads = 1;
 	return work_pool_spawn(pool);
 }
 
@@ -151,7 +152,6 @@ work_pool_thread(void *arg)
 	pthread_cond_init(&wpt->pqcond, NULL);
 	pthread_mutex_lock(&pool->pqh.qmutex);
 	TAILQ_INSERT_TAIL(&pool->wptqh, wpt, wptq);
-	pool->n_threads++;
 
 	wpt->worker_index = atomic_inc_uint32_t(&pool->worker_index);
 	snprintf(wpt->worker_name, sizeof(wpt->worker_name), "%.5s%" PRIu32,
@@ -166,6 +166,8 @@ work_pool_thread(void *arg)
 			wpt->work->wpt = wpt;
 			spawn = pool->pqh.qcount < pool->params.thrd_min
 			      && pool->n_threads < pool->params.thrd_max;
+			if (spawn)
+				pool->n_threads++;
 			pthread_mutex_unlock(&pool->pqh.qmutex);
 
 			if (spawn) {
