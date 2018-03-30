@@ -9,6 +9,11 @@
 # The hint can be given on the command line too:
 #   cmake -DEPOLL_PATH_HINT=/DATA/ERIC/EPOLL /path/to/source
 
+if (FREEBSD)
+    set (EPOLL_FOUND ON)
+    return ()
+endif (FREEBSD)
+
 include(CheckIncludeFiles)
 include(CheckFunctionExists)
 
