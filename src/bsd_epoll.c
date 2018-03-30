@@ -56,6 +56,7 @@
 #include <string.h>
 
 #include <misc/bsd_epoll.h>
+#include <rpc/types.h>
 
 /* Create a new epoll file descriptor. */
 int
