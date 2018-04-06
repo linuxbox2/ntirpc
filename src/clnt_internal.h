@@ -36,10 +36,7 @@ struct cx_data {
 	struct rpc_client cx_c;		/**< Transport Independent handle */
 	struct rpc_dplx_rec *cx_rec;	/* unified sync */
 
-	union {
-		char cx_mcallc[MCALL_MSG_SIZE];	/* marshalled callmsg */
-		u_int32_t cx_mcalli;
-	} cx_u;
+	char cx_mcallc[MCALL_MSG_SIZE];	/* marshalled callmsg */
 	u_int cx_mpos;		/* pos after marshal */
 };
 #define CX_DATA(p) (opr_containerof((p), struct cx_data, cx_c))

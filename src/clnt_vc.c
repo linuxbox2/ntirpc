@@ -232,7 +232,7 @@ clnt_vc_ncreatef(const int fd,	/* open file descriptor */
 	/*
 	 * pre-serialize the static part of the call msg and stash it away
 	 */
-	xdrmem_create(ct_xdrs, ct->ct_cx.cx_u.cx_mcallc, MCALL_MSG_SIZE,
+	xdrmem_create(ct_xdrs, ct->ct_cx.cx_mcallc, MCALL_MSG_SIZE,
 		      XDR_ENCODE);
 	if (!xdr_callhdr(ct_xdrs, &call_msg)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -288,6 +288,7 @@ clnt_vc_call(struct clnt_req *cc)
 	SVCXPRT *xprt = &rec->xprt;
 	struct xdr_ioq *xioq;
 	XDR *xdrs;
+	u_int32_t *uint32p;
 
 	/* XXX Until gss_get_mic and gss_wrap can be replaced with
 	 * iov equivalents, replies with RPCSEC_GSS security must be
@@ -306,9 +307,10 @@ clnt_vc_call(struct clnt_req *cc)
 	cc->cc_error.re_status = RPC_SUCCESS;
 
 	mutex_lock(&clnt->cl_lock);
-	cx->cx_u.cx_mcalli = ntohl(cc->cc_xid);
+	uint32p = (u_int32_t *)&cx->cx_mcallc[0];
+	*uint32p = htonl(cc->cc_xid);
 
-	if ((!XDR_PUTBYTES(xdrs, cx->cx_u.cx_mcallc, cx->cx_mpos))
+	if ((!XDR_PUTBYTES(xdrs, cx->cx_mcallc, cx->cx_mpos))
 	    || (!XDR_PUTUINT32(xdrs, cc->cc_proc))
 	    || (!AUTH_MARSHALL(cc->cc_auth, xdrs))
 	    || (!AUTH_WRAP(cc->cc_auth, xdrs,
@@ -348,6 +350,7 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 	struct ct_data *ct = CT_DATA(cx);
 	struct rpc_dplx_rec *rec = cx->cx_rec;
 	struct netbuf *addr;
+	u_int32_t *uint32p;
 	bool rslt = true;
 
 	/* always take recv lock first if taking together */
@@ -398,8 +401,8 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 		 * first element in the call structure
 		 * This will get the xid of the PREVIOUS call
 		 */
-		*(u_int32_t *) info =
-		    ntohl(*(u_int32_t *) (void *)&cx->cx_u.cx_mcalli);
+		uint32p = (u_int32_t *)&cx->cx_mcallc[0];
+		*(u_int32_t *)info = ntohl(*uint32p);
 		break;
 
 	case CLSET_XID:
@@ -414,21 +417,13 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 		 * the version number field is the fifth field from the
 		 * beginning of the RPC header.
 		 */
-		{
-			u_int32_t *tmp =
-			    (u_int32_t *) (cx->cx_u.cx_mcallc +
-					   4 * BYTES_PER_XDR_UNIT);
-
-			*(u_int32_t *) info = ntohl(*tmp);
-		}
+		uint32p = (u_int32_t *)&cx->cx_mcallc[4 * BYTES_PER_XDR_UNIT];
+		*(u_int32_t *)info = ntohl(*uint32p);
 		break;
 
 	case CLSET_VERS:
-		{
-			u_int32_t tmp = htonl(*(u_int32_t *) info);
-
-			*(cx->cx_u.cx_mcallc + 4 * BYTES_PER_XDR_UNIT) = tmp;
-		}
+		uint32p = (u_int32_t *)&cx->cx_mcallc[4 * BYTES_PER_XDR_UNIT];
+		*uint32p = htonl(*(u_int32_t *)info);
 		break;
 
 	case CLGET_PROG:
@@ -437,21 +432,13 @@ clnt_vc_control(CLIENT *clnt, u_int request, void *info)
 		 * the program number field is the fourth field from the
 		 * beginning of the RPC header.
 		 */
-		{
-			u_int32_t *tmp =
-			    (u_int32_t *) (cx->cx_u.cx_mcallc +
-					   3 * BYTES_PER_XDR_UNIT);
-
-			*(u_int32_t *) info = ntohl(*tmp);
-		}
+		uint32p = (u_int32_t *)&cx->cx_mcallc[3 * BYTES_PER_XDR_UNIT];
+		*(u_int32_t *)info = ntohl(*uint32p);
 		break;
 
 	case CLSET_PROG:
-		{
-			u_int32_t tmp = htonl(*(u_int32_t *) info);
-
-			*(cx->cx_u.cx_mcallc + 3 * BYTES_PER_XDR_UNIT) = tmp;
-		}
+		uint32p = (u_int32_t *)&cx->cx_mcallc[3 * BYTES_PER_XDR_UNIT];
+		*uint32p = htonl(*(u_int32_t *)info);
 		break;
 
 	default:

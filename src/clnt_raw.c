@@ -109,7 +109,7 @@ clnt_raw_ncreate(rpcprog_t prog, rpcvers_t vers)
 	/*
 	 * pre-serialize the static part of the call msg and stash it away
 	 */
-	xdrmem_create(xdrs, cm->cm_cx.cx_u.cx_mcallc, MCALL_MSG_SIZE,
+	xdrmem_create(xdrs, cm->cm_cx.cx_mcallc, MCALL_MSG_SIZE,
 		      XDR_ENCODE);
 	if (!xdr_callhdr(xdrs, &call_msg)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -135,18 +135,20 @@ clnt_raw_call(struct clnt_req *cc)
 	struct cx_data *cx = CX_DATA(clnt);
 	struct cm_data *cm = CM_DATA(cx);
 	XDR *xdrs = &cm->xdr_stream;
+	u_int32_t *uint32p;
 	struct rpc_msg msg;
 	struct rpc_err error;
 
 	cc->cc_error.re_status = RPC_SUCCESS;
 
 	mutex_lock(&clnt->cl_lock);
-	cx->cx_u.cx_mcalli = ntohl(cc->cc_xid);
+	uint32p = (u_int32_t *)&cx->cx_mcallc[0];
+	*uint32p = htonl(cc->cc_xid);
 
 	/*
 	 * send request
 	 */
-	if ((!XDR_PUTBYTES(xdrs, cx->cx_u.cx_mcallc, cx->cx_mpos))
+	if ((!XDR_PUTBYTES(xdrs, cx->cx_mcallc, cx->cx_mpos))
 	    || (!XDR_PUTUINT32(xdrs, cc->cc_proc))
 	    || (!AUTH_MARSHALL(cc->cc_auth, xdrs))
 	    || (!(*cc->cc_call.proc) (xdrs, cc->cc_call.where))) {
