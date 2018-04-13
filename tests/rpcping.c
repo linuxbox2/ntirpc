@@ -22,6 +22,7 @@
  * Simple RPC ping test.
  *
  */
+#include "config.h"
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/times.h>
@@ -32,6 +33,9 @@
 #include <getopt.h>
 #include <rpc/rpc.h>
 #include <rpc/svc_auth.h>
+#ifdef USE_LTTNG_NTIRPC
+#include "lttng/rpcping.h"
+#endif
 
 static pthread_mutex_t rpcping_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t rpcping_cond = PTHREAD_COND_INITIALIZER;
@@ -255,6 +259,10 @@ int main(int argc, char *argv[])
 	unsigned int timeouts = 0;
 	bool rpcbind = false;
 
+#ifdef USE_LTTNG_NTIRPC
+	tracepoint(rpcping, test,
+		   __FILE__, __func__, __LINE__, "Boo");
+#endif
 	/* protocol and host/dest positional */
 	if (argc < 3) {
 		usage();

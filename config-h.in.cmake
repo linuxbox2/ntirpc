@@ -19,6 +19,7 @@
 #cmakedefine BIGEND 1
 #cmakedefine TIRPC_EPOLL 1
 #cmakedefine USE_RPC_RDMA 1
+#cmakedefine USE_LTTNG_NTIRPC 1
 
 /* Package stuff */
 #define PACKAGE "libntirpc"
