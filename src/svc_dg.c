@@ -305,14 +305,21 @@ svc_dg_rendezvous(SVCXPRT *xprt)
 static enum xprt_stat
 svc_dg_recv(SVCXPRT *xprt)
 {
-	/* Stolen reference! Callee must take a reference to rq_xprt. */
-	xprt->xp_refs--;
-	XPRT_TRACE(xprt, __func__, __func__, __LINE__);
+	enum xprt_stat stat;
 
 	/* pass the xdrs to user to store in struct svc_req, as most of
 	 * the work has already been done on rendezvous
 	 */
-	return (__svc_params->request_cb(xprt, REC_XPRT(xprt)->ioq.xdrs));
+	stat = __svc_params->request_cb(xprt, REC_XPRT(xprt)->ioq.xdrs);
+
+	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
+		return (XPRT_DESTROYED);
+
+	/* Only after checking SVC_XPRT_FLAG_DESTROYED:
+	 * because SVC_DESTROY() has decremented already.
+	 */
+	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+	return (stat);
 }
 
 static enum xprt_stat
