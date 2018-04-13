@@ -48,7 +48,9 @@ struct state {
 	int count;
 	int proc;
 	int id;
+	uint32_t failures;
 	uint32_t responses;
+	uint32_t timeouts;
 };
 
 static uint64_t timespec_elapsed(const struct timespec *starting,
@@ -123,6 +125,14 @@ worker_cb(struct clnt_req *cc)
 {
 	CLIENT *clnt = cc->cc_clnt;
 	struct state *s = clnt->cl_u1;
+
+	if (cc->cc_error.re_status != RPC_SUCCESS) {
+		if (cc->cc_error.re_status == RPC_TIMEDOUT) {
+			atomic_inc_uint32_t(&s->timeouts);
+		} else {
+			atomic_inc_uint32_t(&s->failures);
+		}
+	}
 
 	clnt_req_release(cc);
 	if (atomic_inc_uint32_t(&s->responses) < s->count) {
@@ -241,6 +251,8 @@ int main(int argc, char *argv[])
 	int proc = 0;
 	int send_sz = 8192;
 	int recv_sz = 8192;
+	unsigned int failures = 0;
+	unsigned int timeouts = 0;
 	bool rpcbind = false;
 
 	/* protocol and host/dest positional */
@@ -357,6 +369,8 @@ int main(int argc, char *argv[])
 	elapsed_ns = 0.0;
 	for (i = 0; i < nthreads; i++) {
 		s = &states[i];
+		failures += s->failures;
+		timeouts += s->timeouts;
 		total += s->responses;
 		elapsed_ns += timespec_elapsed(&s->starting, &s->stopping);
 		CLNT_DESTROY(s->handle);
@@ -364,9 +378,11 @@ int main(int argc, char *argv[])
 	total *= 1000000000.0;
 	total /= elapsed_ns;
 
-	fprintf(stdout, "rpcping %s %s count=%d threads=%d workers=%d (port=%d program=%d version=%d procedure=%d): mean %2.4lf, total %2.4lf\n",
+	fprintf(stdout, "rpcping %s %s count=%d threads=%d workers=%d (port=%d program=%d version=%d procedure=%d): failures %u timeouts %u mean %2.4lf, total %2.4lf\n",
 		proto, host, count, nthreads, nworkers, port, prog, vers, proc,
-		total / nthreads, total);
+		failures, timeouts, total / nthreads, total);
 	fflush(stdout);
+
+	(void)svc_shutdown(SVC_SHUTDOWN_FLAG_NONE);
 	return (0);
 }
