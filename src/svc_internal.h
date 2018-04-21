@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2012 Linux Box Corporation.
+ * Copyright (c) 2012-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -150,6 +151,6 @@ svc_override_ops(struct xp_ops *ops, SVCXPRT *rendezvous)
 /* in svc_rqst.c */
 int svc_rqst_rearm_events(SVCXPRT *);
 int svc_rqst_xprt_register(SVCXPRT *, SVCXPRT *);
-void svc_rqst_xprt_unregister(SVCXPRT *);
+void svc_rqst_xprt_unregister(SVCXPRT *, uint32_t);
 
 #endif				/* TIRPC_SVC_INTERNAL_H */

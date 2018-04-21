@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
- * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2012-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -248,7 +248,7 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	     && !(flags & SVC_CREATE_FLAG_XPRT_NOREG))
 	    || (flags & SVC_CREATE_FLAG_XPRT_DOREG))
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
-				    SVC_RQST_FLAG_LOCKED |
+				    RPC_DPLX_LOCKED |
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
 
 	/* release */
@@ -547,8 +547,7 @@ svc_vc_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		.tv_nsec = 0,
 	};
 
-	/* clears xprt from the xprt table (eg, idle scans) */
-	svc_rqst_xprt_unregister(xprt);
+	svc_rqst_xprt_unregister(xprt, flags);
 
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 		"%s() %p fd %d xp_refs %" PRIu32

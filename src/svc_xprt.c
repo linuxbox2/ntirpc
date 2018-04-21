@@ -1,7 +1,6 @@
 /*
  * Copyright (c) 2012 Linux Box Corporation.
- * Copyright (c) 2013-2015 CohortFS, LLC.
- * Copyright (c) 2017 Red Hat, Inc.
+ * Copyright (c) 2013-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -133,7 +132,7 @@ svc_xprt_init_failure(void)
 }
 
 /*
- * On success, returns with RPC_DPLX_FLAG_LOCKED
+ * On success, returns with RPC_DPLX_LOCKED
  */
 SVCXPRT *
 svc_xprt_lookup(int fd, svc_xprt_setup_t setup)

@@ -1,7 +1,5 @@
 /*
- * Copyright (c) 2012 Linux Box Corporation.
- * Copyright (c) 2013-2015 CohortFS, LLC.
- * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2012-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,6 +66,10 @@
 
 #define SVC_RQST_TIMEOUT_MS (29 /* seconds (prime) was 120 */ * 1000)
 #define SVC_RQST_WAKEUPS (1023)
+
+/* > RPC_DPLX_LOCKED > SVC_XPRT_FLAG_LOCKED */
+#define SVC_RQST_LOCKED		0x01000000
+#define SVC_RQST_UNLOCK		0x02000000
 
 static uint32_t round_robin;
 /*static*/ uint32_t wakeups;
@@ -404,7 +406,7 @@ svc_rqst_release(struct svc_rqst_rec *sr_rec)
 }
 
 /*
- * SVC_RQST_FLAG_LOCKED, and SVC_XPRT_FLAG_ADDED cleared
+ * may be RPC_DPLX_LOCKED, and SVC_XPRT_FLAG_ADDED cleared
  */
 static inline int
 svc_rqst_unhook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
@@ -529,7 +531,7 @@ svc_rqst_rearm_events(SVCXPRT *xprt)
 }
 
 /*
- * SVC_RQST_FLAG_LOCKED, and SVC_XPRT_FLAG_ADDED set
+ * RPC_DPLX_LOCKED, and SVC_XPRT_FLAG_ADDED set
  */
 static inline int
 svc_rqst_hook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
@@ -591,7 +593,7 @@ svc_rqst_hook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
 }
 
 /*
- * SVC_RQST_FLAG_LOCKED
+ * RPC_DPLX_LOCKED
  */
 static void
 svc_rqst_unreg(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
@@ -644,12 +646,14 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 		return (ENOENT);
 	}
 
-	if (!(flags & SVC_RQST_FLAG_LOCKED))
+	if (!(flags & RPC_DPLX_LOCKED))
 		rpc_dplx_rli(rec);
 
-	if ((ev_p = (struct svc_rqst_rec *)rec->ev_p) != NULL) {
+	ev_p = (struct svc_rqst_rec *)rec->ev_p;
+	if (ev_p) {
 		if (ev_p == sr_rec) {
-			rpc_dplx_rui(rec);
+			if (!(flags & RPC_DPLX_LOCKED))
+				rpc_dplx_rui(rec);
 			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
 				"%s: %p already registered evchan %d",
 				__func__, xprt, chan_id);
@@ -667,7 +671,7 @@ svc_rqst_evchan_reg(uint32_t chan_id, SVCXPRT *xprt, uint32_t flags)
 	/* register on event channel */
 	code = svc_rqst_hook_events(rec, sr_rec);
 
-	if (!(flags & SVC_RQST_FLAG_LOCKED))
+	if (!(flags & RPC_DPLX_LOCKED))
 		rpc_dplx_rui(rec);
 
 	return (code);
@@ -712,25 +716,34 @@ svc_rqst_xprt_register(SVCXPRT *newxprt, SVCXPRT *xprt)
 }
 
 /*
- * not locked
+ * flags indicate locking state
+ *
+ * @note Locking
+ *	Called via svc_release_it() with once-only semantic.
  */
 void
-svc_rqst_xprt_unregister(SVCXPRT *xprt)
+svc_rqst_xprt_unregister(SVCXPRT *xprt, uint32_t flags)
 {
 	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
-	struct svc_rqst_rec *ev_p;
+	struct svc_rqst_rec *sr_rec = (struct svc_rqst_rec *)rec->ev_p;
 
-	rpc_dplx_rli(rec);
-	if ((ev_p = (struct svc_rqst_rec *)rec->ev_p) != NULL) {
-		svc_rqst_unreg(rec, ev_p);
-	}
-
-	/* There is a small window between removing the registration
-	 * (system call latency) and processing outstanding events.
-	 * Therefore, remove from the transport tree here (and only here).
+	/* Remove from the transport list here (and only here)
+	 * before clearing the registration to ensure other
+	 * lookups cannot re-use this transport.
 	 */
+	if (!(flags & RPC_DPLX_LOCKED))
+		rpc_dplx_rli(rec);
+
 	svc_xprt_clear(xprt);
-	rpc_dplx_rui(rec);
+
+	if (!(flags & RPC_DPLX_LOCKED))
+		rpc_dplx_rui(rec);
+
+	if (!sr_rec) {
+		/* not currently registered */
+		return;
+	}
+	svc_rqst_unreg(rec, sr_rec);
 }
 
 /*static*/ void
