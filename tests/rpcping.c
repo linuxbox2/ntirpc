@@ -203,7 +203,7 @@ decode_request(SVCXPRT *xprt, XDR *xdrs)
 	SVC_REF(xprt, SVC_REF_FLAG_NONE);
 	req->rq_xprt = xprt;
 	req->rq_xdrs = xdrs;
-	req->rq_refs = 1;
+	req->rq_refcnt = 1;
 
 	stat = SVC_DECODE(req);
 

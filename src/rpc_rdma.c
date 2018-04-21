@@ -1366,7 +1366,7 @@ rpc_rdma_allocate(const struct rpc_rdma_attr *xa)
 	xd = mem_zalloc(sizeof(*xd));
 
 	xd->sm_dr.xprt.xp_type = XPRT_RDMA;
-	xd->sm_dr.xprt.xp_refs = 1;
+	xd->sm_dr.xprt.xp_refcnt = 1;
 	xd->sm_dr.xprt.xp_ops = &rpc_rdma_ops;
 
 	xd->xa = xa;

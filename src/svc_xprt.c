@@ -170,7 +170,7 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 					__svc_params->max_connections);
 				return (NULL);
 			}
-			(*setup)(&xprt); /* zalloc, xp_refs = 1 */
+			(*setup)(&xprt); /* zalloc, xp_refcnt = 1 */
 			xprt->xp_fd = fd;
 			xprt->xp_flags = SVC_XPRT_FLAG_INITIAL;
 
@@ -366,7 +366,7 @@ svc_xprt_shutdown()
 			/* prevent repeats, see svc_xprt_clear() */
 			opr_rbtree_remove(&t->t, &rec->fd_node);
 
-			/* fd_node is counted by initial xp_refs = 1,
+			/* fd_node is counted by initial xp_refcnt = 1,
 			 * SVC_DESTROY() decrements that reference.
 			 */
 			rwlock_unlock(&t->lock);
@@ -387,9 +387,9 @@ void
 svc_xprt_trace(SVCXPRT *xprt, const char *func, const char *tag, const int line)
 {
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-		"%s() %p fd %d xp_refs %" PRId32
-		" af %u port %u @ %s:%d",
-		func, xprt, xprt->xp_fd, xprt->xp_refs,
+		"%s() %p fd %d xp_refcnt %" PRId32
+		" af %u port %u @%s:%d",
+		func, xprt, xprt->xp_fd, xprt->xp_refcnt,
 		xprt->xp_remote.ss.ss_family,
 		__rpc_address_port(&xprt->xp_remote),
 		tag, line);

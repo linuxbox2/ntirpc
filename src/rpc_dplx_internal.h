@@ -119,7 +119,7 @@ rpc_dplx_rec_init(struct rpc_dplx_rec *rec)
 	/* Stop this xprt being cleaned immediately */
 	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &(rec->recv.ts));
 
-	rec->xprt.xp_refs = 1;
+	rec->xprt.xp_refcnt = 1;
 }
 
 static inline void
