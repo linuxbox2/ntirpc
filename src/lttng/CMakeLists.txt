@@ -4,6 +4,7 @@ include_directories(
 
 set(ntirpc_tracepoints_LIB_SRCS
   rpcping.c
+  xprt.c
 )
 
 add_library(ntirpc_tracepoints SHARED ${ntirpc_tracepoints_LIB_SRCS})

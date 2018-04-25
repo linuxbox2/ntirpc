@@ -51,6 +51,9 @@
 #if defined(HAVE_BLKIN)
 #include <blkin/zipkin_c.h>
 #endif
+#ifdef USE_LTTNG_NTIRPC
+#include "lttng/xprt.h"
+#endif
 
 typedef struct svc_xprt SVCXPRT;
 
@@ -374,13 +377,19 @@ __END_DECLS
 static inline void svc_ref_it(SVCXPRT *xprt, u_int flags,
 			      const char *tag, const int line)
 {
-	atomic_inc_uint32_t(&xprt->xp_refs);
+#ifdef USE_LTTNG_NTIRPC
+	uint32_t refs =
+#endif /* USE_LTTNG_NTIRPC */
+		atomic_inc_uint32_t(&xprt->xp_refs);
 
 	if (flags & SVC_REF_FLAG_LOCKED)  {
 		/* unlock before warning trace */
 		mutex_unlock(&xprt->xp_lock);
 	}
 	XPRT_TRACE(xprt, __func__, tag, line);
+#ifdef USE_LTTNG_NTIRPC
+	tracepoint(xprt, ref, tag, line, xprt, refs);
+#endif /* USE_LTTNG_NTIRPC */
 }
 #define SVC_REF2(xprt, flags, tag, line)				\
 	svc_ref_it(xprt, flags, tag, line)
@@ -398,6 +407,9 @@ static inline void svc_release_it(SVCXPRT *xprt, u_int flags,
 		mutex_unlock(&xprt->xp_lock);
 	}
 	XPRT_TRACE(xprt, __func__, tag, line);
+#ifdef USE_LTTNG_NTIRPC
+	tracepoint(xprt, unref, tag, line, xprt, refs);
+#endif /* USE_LTTNG_NTIRPC */
 
 	if (likely(refs > 0)) {
 		/* normal case */

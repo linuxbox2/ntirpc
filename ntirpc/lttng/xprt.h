@@ -29,31 +29,59 @@
  */
 
 #include "config.h"
+#include <stdint.h>
 
-/**
- * @brief LTTng trace enabling magic
- *
- * Every trace include file must be added here regardless whether it
- * is actually used in this source file.  The file must also be
- * included ONLY ONCE.  Failure to do so will create interesting
- * build time failure messages.  The key bit is the definitions of
- * TRACEPOINT_DEFINE and TRACEPOINT_PROBE_DYNAMIC_LINKAGE that are here
- * to trigger the global definitions as a shared object with the right
- * (weak) symbols to make the module loading optional.
- *
- * If and when this file gets some tracepoints of its own, the include
- * here is necessary and sufficient.
- */
+#undef TRACEPOINT_PROVIDER
+#define TRACEPOINT_PROVIDER xprt
 
-#ifdef USE_LTTNG_NTIRPC
-#define TRACEPOINT_DEFINE
-#define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#if !defined(GANESHA_LTTNG_XPRT_TP_H) || defined(TRACEPOINT_HEADER_MULTI_READ)
+#define GANESHA_LTTNG_XPRT_TP_H
 
-#include "lttng/rpcping.h"
-#include "lttng/xprt.h"
+#include <lttng/tracepoint.h>
 
-/* This is a hack to make older versions of LTTng link */
-struct lttng_ust_tracepoint_dlopen tracepoint_dlopen
-	__attribute__((weak));
+TRACEPOINT_EVENT(
+	xprt,
+	ref,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt,
+		uint32_t, count),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+		ctf_integer(uint32_t, count, count)
+	)
+)
 
-#endif /* USE_LTTNG_NTIRPC */
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	ref,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	unref,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt,
+		uint32_t, count),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+		ctf_integer(uint32_t, count, count)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	unref,
+	TRACE_INFO)
+
+#endif /* GANESHA_LTTNG_XPRT_TP_H */
+
+#undef TRACEPOINT_INCLUDE
+#define TRACEPOINT_INCLUDE "lttng/xprt.h"
+
+#include <lttng/tracepoint-event.h>
