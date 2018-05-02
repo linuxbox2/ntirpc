@@ -35,7 +35,7 @@
 
 /* Convert to coarse milliseconds with round up */
 #define timespec_ms(tsp) \
-	((tsp)->tv_sec * 1000 + ((tsp)->tv_nsec + 999999) % 1000000)
+	((tsp)->tv_sec * 1000 + ((tsp)->tv_nsec + 999999) / 1000000)
 
 /* Operations on timespecs */
 #define timespecclear(tvp)      ((tvp)->tv_sec = (tvp)->tv_nsec = 0)
