@@ -193,8 +193,8 @@ epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 	int rc;
 
 	/* Convert from miliseconds to timespec. */
-	ts.tv_sec = timeout / 1000000;
-	ts.tv_nsec = (timeout % 1000000) * 1000;
+	ts.tv_sec = timeout / 1000;
+	ts.tv_nsec = (timeout % 1000) * 1000000;
 
 	kevp = mem_calloc(maxevents, sizeof(*kevp));
 	/*
