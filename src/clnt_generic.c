@@ -314,6 +314,7 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 	int save_errno;
 	int one = 1;
 	uint32_t flags = CLNT_CREATE_FLAG_CONNECT;
+	struct timeval timeval;
 
 	if (fd == RPC_ANYFD) {
 		if (nconf == NULL) {
@@ -358,6 +359,18 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 
 	switch (servtype) {
 	case NC_TPI_COTS:
+		if (nconf && ((strcmp(nconf->nc_protofmly, "inet") == 0)
+			      || (strcmp(nconf->nc_protofmly, "inet6") == 0))) {
+			/* set SO_SNDTIMEO to deal with bad clients */
+			timeval.tv_sec = 5;
+			timeval.tv_usec = 0;
+			if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO,
+				       (char *)&timeval, sizeof(timeval))) {
+				__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+					"%s: fd %d SO_SNDTIMEO failed (%d)",
+					__func__, fd, errno);
+			}
+		}
 		cl = clnt_vc_ncreatef(fd, svcaddr, prog, vers, sendsz, recvsz,
 				      flags);
 		break;
@@ -366,6 +379,16 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 			      || (strcmp(nconf->nc_protofmly, "inet6") == 0))) {
 			(void) setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one,
 					  sizeof(one));
+			/* set SO_SNDTIMEO to deal with bad clients */
+			timeval.tv_sec = 5;
+			timeval.tv_usec = 0;
+			if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO,
+				       (char *)&timeval, sizeof(timeval))) {
+				__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+					"%s: fd %d SO_SNDTIMEO failed (%d)",
+					__func__, fd, errno);
+			}
+
 		}
 		cl = clnt_vc_ncreatef(fd, svcaddr, prog, vers, sendsz, recvsz,
 				      flags);

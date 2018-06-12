@@ -412,6 +412,7 @@ svc_vc_rendezvous(SVCXPRT *xprt)
 	int rc;
 	socklen_t len;
 	static int n = 1;
+	struct timeval timeval;
 
  again:
 	len = sizeof(addr);
@@ -466,6 +467,16 @@ svc_vc_rendezvous(SVCXPRT *xprt)
 		len = 1;
 		(void) setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &len,
 				  sizeof(len));
+	}
+
+	/* set SO_SNDTIMEO to deal with bad clients */
+	timeval.tv_sec = 5;
+	timeval.tv_usec = 0;
+	if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeval,
+		       sizeof(timeval))) {
+		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+			"%s: fd %d SO_SNDTIMEO failed (%d)",
+			 __func__, fd, errno);
 	}
 
 	__rpc_address_setup(&newxprt->xp_local);
