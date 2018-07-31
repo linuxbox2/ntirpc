@@ -87,11 +87,16 @@ if(USE_RPC_RDMA)
   )
 endif(USE_RPC_RDMA)
 
+if(USE_LTTNG_NTIRPC)
+  add_subdirectory(lttng)
+endif(USE_LTTNG_NTIRPC)
+
 # declares the library
 add_library(ntirpc SHARED
   ${ntirpc_common_SRCS}
   ${ntirpc_gss_SRCS}
   ${ntirpc_rdma_SRCS}
+  ${ntirpc_lttng_SRCS}
   )
 
 # add required libraries--for Ganesha build, it's ok for them to

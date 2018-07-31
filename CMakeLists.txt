@@ -92,6 +92,23 @@ if (USE_PROFILE)
   endif(GPERFTOOLS_FOUND)
 endif(USE_PROFILE)
 
+option(USE_LTTNG "Enable LTTng tracing" OFF)
+if(USE_LTTNG)
+  # Set LTTNG_PATH_HINT on the command line
+  # if your LTTng is not in a standard place
+  find_package(LTTng REQUIRED)
+  if(LTTNG_FOUND)
+    include_directories(${LTTNG_INCLUDE_DIR})
+    set(USE_LTTNG_NTIRPC ON)
+    set(BINARY_LIBRARIES ${BINARY_LIBRARIES} ntirpc_lttng)
+  else(LTTNG_FOUND)
+    message(WARNING "LTTng libraries not found. Disabling USE_LTTNG_NTIRPC")
+    set(USE_LTTNG_NTIRPC OFF)
+  endif(LTTNG_FOUND)
+else(USE_LTTNG)
+  set(USE_LTTNG_NTIRPC OFF)
+endif(USE_LTTNG)
+
 # Choose a shortcut build config
 
 IF(BUILD_CONFIG)
@@ -199,6 +216,7 @@ message(STATUS "TIRPC_EPOLL = ${TIRPC_EPOLL}")
 message(STATUS "USE_RPC_RDMA = ${USE_RPC_RDMA}")
 message(STATUS "USE_GSS = ${USE_GSS}")
 message(STATUS "USE_PROFILE = ${USE_PROFILE}")
+message(STATUS "USE_LTTNG_NTIRPC = ${USE_LTTNG_NTIRPC}")
 
 #force command line options to be stored in cache
 set(_MSPAC_SUPPORT ${_MSPAC_SUPPORT}
