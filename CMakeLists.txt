@@ -251,6 +251,7 @@ configure_file(
   "${PROJECT_SOURCE_DIR}/libntirpc.spec"
 )
 
+if (NOT TARGET dist)
 # Define CPACK component (to deal with sub packages)
 set(CPACK_COMPONENTS_ALL daemon fsal headers )
 set(CPACK_COMPONENT_DAEMON_DISPLAY_NAME "libntirpc")
@@ -260,7 +261,6 @@ include(${CMAKE_SOURCE_DIR}/cmake/cpack_config.cmake)
 include(CPack)
 
 set( PKG_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}.tar.gz")
-if (NOT TARGET dist)
 	add_custom_target(dist COMMAND ${CMAKE_MAKE_PROGRAM} package_source)
 endif (NOT TARGET dist)
 
