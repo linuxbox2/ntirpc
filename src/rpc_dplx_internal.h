@@ -116,6 +116,8 @@ rpc_dplx_rec_init(struct rpc_dplx_rec *rec)
 	rpc_dplx_lock_init(&rec->recv.lock);
 	opr_rbtree_init(&rec->call_replies, clnt_req_xid_cmpf);
 	mutex_init(&rec->xprt.xp_lock, NULL);
+	/* Stop this xprt being cleaned immediately */
+	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &(rec->recv.ts));
 
 	rec->xprt.xp_refs = 1;
 }
