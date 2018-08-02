@@ -238,7 +238,7 @@ authgss_ctx_hash_del(struct svc_rpc_gss_data *gd)
 	(void)atomic_dec_uint32_t(&authgss_hash_st.size);
 
 	/* release gd */
-	unref_svc_rpc_gss_data(gd, SVC_RPC_GSS_FLAG_NONE);
+	unref_svc_rpc_gss_data(gd);
 
 	return (true);
 }
@@ -294,7 +294,7 @@ void authgss_ctx_gc_idle(void)
 			(void)atomic_dec_uint32_t(&authgss_hash_st.size);
 
 			/* drop sentinel ref (may free gd) */
-			unref_svc_rpc_gss_data(gd, SVC_RPC_GSS_FLAG_NONE);
+			unref_svc_rpc_gss_data(gd);
 
 			if (++cnt < __svc_params->gss.max_gc)
 				goto again;
