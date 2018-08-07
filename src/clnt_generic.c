@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2010, Oracle America, Inc.
- * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2012-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -688,15 +688,19 @@ clnt_req_wait_reply(struct clnt_req *cc)
 int
 clnt_req_release(struct clnt_req *cc)
 {
-	uint32_t refs = atomic_dec_uint32_t(&cc->cc_refs);
+	int refs = atomic_dec_int32_t(&cc->cc_refcnt);
 
-	if (refs)
+	if (likely(refs > 0)) {
+		/* normal case */
 		return (refs);
+	}
 
 	clnt_req_reset(cc);
 	clnt_req_fini(cc);
+	CLNT_RELEASE(cc->cc_clnt, CLNT_RELEASE_FLAG_NONE);
+
 	(*cc->cc_free_cb)(cc, cc->cc_size);
-	return (0);
+	return (refs);
 }
 
 /*

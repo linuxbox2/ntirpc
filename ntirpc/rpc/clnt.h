@@ -2,7 +2,7 @@
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
- * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2012-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -114,7 +114,7 @@ typedef struct rpc_client {
 
 	mutex_t cl_lock;	/* serialize private data */
 	struct rpc_err cl_error; /* specific error code */
-	uint32_t cl_refcnt;	/* handle refcnt */
+	int32_t cl_refcnt;	/* handle reference count */
 	uint16_t cl_flags;	/* state flags */
 
 } CLIENT;
@@ -148,7 +148,7 @@ struct clnt_req {
 	int cc_refreshes;
 	rpcproc_t cc_proc;
 	uint32_t cc_xid;
-	uint32_t cc_refs;
+	int32_t cc_refcnt;
 	uint16_t cc_flags;
 };
 
@@ -273,13 +273,13 @@ struct rpc_timers {
 static inline void clnt_ref_it(CLIENT *clnt, uint32_t flags,
 			       const char *tag, const int line)
 {
-	uint32_t refs = atomic_inc_uint32_t(&clnt->cl_refcnt);
+	int32_t refs = atomic_inc_int32_t(&clnt->cl_refcnt);
 
 	if (flags & CLNT_REF_FLAG_LOCKED)  {
 		/* unlock before warning trace */
 		mutex_unlock(&clnt->cl_lock);
 	}
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: %p %" PRIu32 " @%s:%d",
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: %p %" PRId32 " @%s:%d",
 		__func__, clnt, refs, tag, line);
 }
 #define CLNT_REF(clnt, flags)						\
@@ -288,14 +288,14 @@ static inline void clnt_ref_it(CLIENT *clnt, uint32_t flags,
 static inline void clnt_release_it(CLIENT *clnt, uint32_t flags,
 				   const char *tag, const int line)
 {
-	uint32_t refs = atomic_dec_uint32_t(&clnt->cl_refcnt);
+	int32_t refs = atomic_dec_int32_t(&clnt->cl_refcnt);
 	uint16_t cl_flags;
 
 	if (flags & CLNT_RELEASE_FLAG_LOCKED) {
 		/* unlock before warning trace */
 		mutex_unlock(&clnt->cl_lock);
 	}
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: %p %" PRIu32 " @%s:%d",
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: %p %" PRId32 " @%s:%d",
 		__func__, clnt, refs, tag, line);
 
 	if (likely(refs > 0)) {
@@ -329,7 +329,7 @@ static inline void clnt_destroy_it(CLIENT *clnt,
 	uint16_t flags = atomic_postset_uint16_t_bits(&clnt->cl_flags,
 						      CLNT_FLAG_DESTROYING);
 
-	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: %p %" PRIu32 " @%s:%d",
+	__warnx(TIRPC_DEBUG_FLAG_REFCNT, "%s: %p %" PRId32 " @%s:%d",
 		__func__, clnt, clnt->cl_refcnt, tag, line);
 
 	if (flags & CLNT_FLAG_DESTROYING) {
@@ -561,7 +561,7 @@ static inline void clnt_req_fill(struct clnt_req *cc, struct rpc_client *clnt,
 
 	cc->cc_free_cb = (clnt_req_freer)__ntirpc_pkg_params.free_size_;
 	cc->cc_size = sizeof(*cc);
-	cc->cc_refs = 1;
+	cc->cc_refcnt = 1;
 
 	/* protects this */
 	pthread_mutex_init(&cc->cc_we.mtx, NULL);
@@ -574,7 +574,6 @@ static inline void clnt_req_fini(struct clnt_req *cc)
 	pthread_cond_destroy(&cc->cc_we.cv);
 	pthread_mutex_unlock(&cc->cc_we.mtx);
 	pthread_mutex_destroy(&cc->cc_we.mtx);
-	CLNT_RELEASE(cc->cc_clnt, CLNT_RELEASE_FLAG_NONE);
 }
 
 enum clnt_stat clnt_req_callback(struct clnt_req *);

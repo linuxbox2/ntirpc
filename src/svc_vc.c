@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
- * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2012-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -248,7 +248,7 @@ svc_vc_ncreatef(const int fd, const u_int sendsz, const u_int recvsz,
 	     && !(flags & SVC_CREATE_FLAG_XPRT_NOREG))
 	    || (flags & SVC_CREATE_FLAG_XPRT_DOREG))
 		svc_rqst_evchan_reg(__svc_params->ev_u.evchan.id, xprt,
-				    SVC_RQST_FLAG_LOCKED |
+				    RPC_DPLX_LOCKED |
 				    SVC_RQST_FLAG_CHAN_AFFINITY);
 
 	/* release */
@@ -519,10 +519,10 @@ svc_vc_destroy_task(struct work_pool_entry *wpe)
 	uint16_t xp_flags;
 
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-		"%s() %p fd %d xp_refs %" PRIu32,
-		__func__, rec, rec->xprt.xp_fd, rec->xprt.xp_refs);
+		"%s() %p fd %d xp_refcnt %" PRId32,
+		__func__, rec, rec->xprt.xp_fd, rec->xprt.xp_refcnt);
 
-	if (rec->xprt.xp_refs) {
+	if (rec->xprt.xp_refcnt) {
 		/* instead of nanosleep */
 		work_pool_submit(&svc_work_pool, &(rec->ioq.ioq_wpe));
 		return;
@@ -558,13 +558,11 @@ svc_vc_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 		.tv_nsec = 0,
 	};
 
-	/* clears xprt from the xprt table (eg, idle scans) */
-	svc_rqst_xprt_unregister(xprt);
+	svc_rqst_xprt_unregister(xprt, flags);
 
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
-		"%s() %p fd %d xp_refs %" PRIu32
-		" should actually destroy things @ %s:%d",
-		__func__, xprt, xprt->xp_fd, xprt->xp_refs, tag, line);
+		"%s() %p fd %d xp_refcnt %" PRId32 " @%s:%d",
+		__func__, xprt, xprt->xp_fd, xprt->xp_refcnt, tag, line);
 
 	while (atomic_postset_uint16_t_bits(&(REC_XPRT(xprt)->ioq.ioq_s.qflags),
 					    IOQ_FLAG_WORKING)

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2012 Linux Box Corporation.
- * Copyright (c) 2012-2017 Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2012-2018 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -79,9 +79,9 @@ struct rpc_dplx_rec {
 };
 #define REC_XPRT(p) (opr_containerof((p), struct rpc_dplx_rec, xprt))
 
-#define RPC_DPLX_FLAG_NONE          0x0000
-#define RPC_DPLX_FLAG_LOCKED        0x0001
-#define RPC_DPLX_FLAG_UNLOCK        0x0002
+/* > SVC_XPRT_FLAG_LOCKED */
+#define RPC_DPLX_LOCKED		0x00100000
+#define RPC_DPLX_UNLOCK		0x00200000
 
 #ifndef HAVE_STRLCAT
 extern size_t strlcat(char *, const char *, size_t);
@@ -119,7 +119,7 @@ rpc_dplx_rec_init(struct rpc_dplx_rec *rec)
 	/* Stop this xprt being cleaned immediately */
 	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &(rec->recv.ts));
 
-	rec->xprt.xp_refs = 1;
+	rec->xprt.xp_refcnt = 1;
 }
 
 static inline void
