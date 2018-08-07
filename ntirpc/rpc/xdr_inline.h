@@ -607,7 +607,10 @@ xdr_bytes_decode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 
 	ret = xdr_opaque_decode(xdrs, sp, size);
 	if (!ret) {
-		mem_free(sp, size);
+		if (!*cpp) {
+			/* Only free if we allocated */
+			mem_free(sp, size);
+		}
 		return (ret);
 	}
 	*cpp = sp;			/* only valid pointer */
