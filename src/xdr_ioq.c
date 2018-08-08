@@ -721,6 +721,7 @@ xdr_ioq_destroy(struct xdr_ioq *xioq, size_t qsize)
 		return;
 	}
 	poolq_head_destroy(&xioq->ioq_uv.uvqh);
+	pthread_cond_destroy(&xioq->ioq_cond);
 
 	if (xioq->xdrs[0].x_flags & XDR_FLAG_FREE) {
 		mem_free(xioq, qsize);
