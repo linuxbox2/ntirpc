@@ -43,6 +43,7 @@ NTIRPC_${NTIRPC_VERSION} {
     authgss_get_private_data;
     authgss_service;
     authnone_ncreate;
+    authnone_ncreate_dummy;
     authunix_ncreate;
     authunix_ncreate_default;
 
