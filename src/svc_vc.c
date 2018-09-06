@@ -442,6 +442,7 @@ svc_vc_rendezvous(SVCXPRT *xprt)
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
 			__func__, xprt, xprt->xp_fd);
+		close(fd);
 		return (XPRT_DIED);
 	}
 
