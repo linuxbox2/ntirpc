@@ -296,7 +296,6 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 		t = rpc_sperror(&client->cl_error, __func__);
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_RPCB, "%s", t);
 		mem_free(t, RPC_SPERROR_BUFLEN);
-		goto out_err;
 
 		addr_to_delete.len = addr->len;
 		addr_to_delete.buf = (char *)mem_zalloc(addr->len);
