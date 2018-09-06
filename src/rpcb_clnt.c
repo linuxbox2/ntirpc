@@ -1116,6 +1116,11 @@ boolrpcb_gettime(const char *host, time_t *timep)
 	} while (CLNT_FAILURE(client));
 
 	__rpc_endconf(handle);
+
+	if (!client) {
+		return false;
+	}
+
 	if (CLNT_FAILURE(client)) {
 		CLNT_DESTROY(client);
 		return (false);
@@ -1272,7 +1277,7 @@ static CLIENT *local_rpcb(const char *tag)
 {
 	CLIENT *client = NULL;
 	char *t;
-	static struct netconfig *loopnconf;
+	static struct netconfig *loopnconf = NULL;
 	static char *hostname;
 	extern mutex_t loopnconf_lock;
 	struct netbuf nbuf;
@@ -1287,8 +1292,11 @@ static CLIENT *local_rpcb(const char *tag)
 	 */
 	memset(&sun, 0, sizeof(sun));
 	sock = socket(AF_LOCAL, SOCK_STREAM, 0);
-	if (sock < 0)
+	if (sock < 0) {
+		/* For error codes */
+		client = clnt_raw_ncreate(RPCBPROG, RPCBVERS);
 		goto try_nconf;
+	}
 	sun.sun_family = AF_LOCAL;
 	strcpy(sun.sun_path, _PATH_RPCBINDSOCK);
 	nbuf.len = SUN_LEN(&sun);
