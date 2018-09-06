@@ -646,6 +646,8 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 	rpcvers_t start_vers = RPCBVERS4;
 	enum clnt_stat clnt_st;
 
+	parms.r_addr = NULL;
+
 	/* parameter checking */
 	if (nconf == NULL) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s: %s",
@@ -654,8 +656,6 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		client->cl_error.re_status = RPC_UNKNOWNPROTO;
 		goto done;
 	}
-
-	parms.r_addr = NULL;
 
 	/* authnone handle */
 	auth = authnone_ncreate();	/* idempotent */
