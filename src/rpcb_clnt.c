@@ -847,8 +847,9 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		xdr_free((xdrproc_t) xdr_wrapstring, (char *)(void *)&ua);
 	if (clpp)
 		*clpp = client;
-	else if (client)
+	else
 		CLNT_DESTROY(client);
+
 	if (parms.r_addr != NULL && parms.r_addr != nullstring)
 		mem_free(parms.r_addr, 0);
 	return (address);
