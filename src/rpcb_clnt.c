@@ -296,7 +296,6 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 		t = rpc_sperror(&client->cl_error, __func__);
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_RPCB, "%s", t);
 		mem_free(t, RPC_SPERROR_BUFLEN);
-		goto out_err;
 
 		addr_to_delete.len = addr->len;
 		addr_to_delete.buf = (char *)mem_zalloc(addr->len);
@@ -647,6 +646,8 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 	rpcvers_t start_vers = RPCBVERS4;
 	enum clnt_stat clnt_st;
 
+	parms.r_addr = NULL;
+
 	/* parameter checking */
 	if (nconf == NULL) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR, "%s: %s",
@@ -655,8 +656,6 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		client->cl_error.re_status = RPC_UNKNOWNPROTO;
 		goto done;
 	}
-
-	parms.r_addr = NULL;
 
 	/* authnone handle */
 	auth = authnone_ncreate();	/* idempotent */
@@ -848,8 +847,9 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		xdr_free((xdrproc_t) xdr_wrapstring, (char *)(void *)&ua);
 	if (clpp)
 		*clpp = client;
-	else if (client)
+	else
 		CLNT_DESTROY(client);
+
 	if (parms.r_addr != NULL && parms.r_addr != nullstring)
 		mem_free(parms.r_addr, 0);
 	return (address);
@@ -1117,6 +1117,11 @@ boolrpcb_gettime(const char *host, time_t *timep)
 	} while (CLNT_FAILURE(client));
 
 	__rpc_endconf(handle);
+
+	if (!client) {
+		return false;
+	}
+
 	if (CLNT_FAILURE(client)) {
 		CLNT_DESTROY(client);
 		return (false);
@@ -1273,7 +1278,7 @@ static CLIENT *local_rpcb(const char *tag)
 {
 	CLIENT *client = NULL;
 	char *t;
-	static struct netconfig *loopnconf;
+	static struct netconfig *loopnconf = NULL;
 	static char *hostname;
 	extern mutex_t loopnconf_lock;
 	struct netbuf nbuf;
@@ -1288,8 +1293,11 @@ static CLIENT *local_rpcb(const char *tag)
 	 */
 	memset(&sun, 0, sizeof(sun));
 	sock = socket(AF_LOCAL, SOCK_STREAM, 0);
-	if (sock < 0)
+	if (sock < 0) {
+		/* For error codes */
+		client = clnt_raw_ncreate(RPCBPROG, RPCBVERS);
 		goto try_nconf;
+	}
 	sun.sun_family = AF_LOCAL;
 	strcpy(sun.sun_path, _PATH_RPCBINDSOCK);
 	nbuf.len = SUN_LEN(&sun);

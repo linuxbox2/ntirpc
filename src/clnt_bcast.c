@@ -162,7 +162,10 @@ __rpc_getbroadifs(int af, int proto, int socktype, broadlist_t *list)
 #ifdef INET6
 		if (af == AF_INET6 && (ifap->ifa_flags & IFF_MULTICAST)) {
 			sin6 = (struct sockaddr_in6 *)(void *)&bip->broadaddr;
-			inet_pton(af, RPCB_MULTICAST_ADDR, &sin6->sin6_addr);
+			if (inet_pton(af, RPCB_MULTICAST_ADDR, &sin6->sin6_addr)
+			    != 1) {
+				continue;
+			}
 			sin6->sin6_family = af;
 			sin6->sin6_port = ((struct sockaddr_in6 *)
 					   (void *)res->ai_addr)->sin6_port;

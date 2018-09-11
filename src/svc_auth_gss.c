@@ -603,11 +603,12 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 
 		*no_dispatch = true;
 
-		(void)authgss_ctx_hash_del(gd);
-
 		/* avoid lock order reversal gd->lock, xprt->xp_lock */
 		mutex_unlock(&gd->lock);
 		gd_locked = false;
+
+		/* This takes gd->lock, so call it after we unlock */
+		(void)authgss_ctx_hash_del(gd);
 
 		req->rq_msg.RPCM_ack.ar_results.where = NULL;
 		req->rq_msg.RPCM_ack.ar_results.proc = (xdrproc_t) xdr_void;

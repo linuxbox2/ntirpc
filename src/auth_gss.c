@@ -574,7 +574,7 @@ authgss_destroy_context(AUTH *auth)
 				      (xdrproc_t) xdr_void, NULL,
 				      (xdrproc_t) xdr_void, NULL);
 			if (clnt_req_setup(cc, to) == RPC_SUCCESS) {
-				CLNT_CALL_WAIT(cc);
+				(void)CLNT_CALL_WAIT(cc);
 			}
 			clnt_req_release(cc);
 		}

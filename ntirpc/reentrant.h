@@ -88,12 +88,65 @@ mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *a
 #define cond_timedwait(c, m, a)	pthread_cond_timedwait(c, m, a)
 #define cond_destroy(c)		pthread_cond_destroy(c)
 
-#define rwlock_init(l, a)	pthread_rwlock_init(l, a)
-#define rwlock_rdlock(l)	pthread_rwlock_rdlock(l)
-#define rwlock_wrlock(l)	pthread_rwlock_wrlock(l)
-#define rwlock_unlock(l)	pthread_rwlock_unlock(l)
-#define rwlockattr_init(a)      pthread_rwlockattr_init(a)
-#define rwlock_destroy(l)	pthread_rwlock_destroy(l)
+#define rwlock_init(l, a)						\
+	do {								\
+		int rc;							\
+									\
+		rc = pthread_rwlock_init(l, a);				\
+		if (rc != 0) {						\
+			abort();					\
+		}							\
+	} while (0)
+
+#define rwlock_rdlock(l)						\
+	do {								\
+		int rc;							\
+									\
+		rc = pthread_rwlock_rdlock(l);				\
+		if (rc != 0) {						\
+			abort();					\
+		}							\
+	} while (0)
+
+#define rwlock_wrlock(l)	\
+	do {								\
+		int rc;							\
+									\
+		rc = pthread_rwlock_wrlock(l);				\
+		if (rc != 0) {						\
+			abort();					\
+		}							\
+	} while (0)
+
+#define rwlock_unlock(l)						\
+	do {								\
+		int rc;							\
+									\
+		rc = pthread_rwlock_unlock(l);				\
+		if (rc != 0) {						\
+			abort();					\
+		}							\
+	} while (0)
+
+#define rwlockattr_init(a)      					\
+	do {								\
+		int rc;							\
+									\
+		rc = pthread_rwlockattr_init(a);			\
+		if (rc != 0) {						\
+			abort();					\
+		}							\
+	} while (0)
+
+#define rwlock_destroy(l)						\
+	do {								\
+		int rc;							\
+									\
+		rc = pthread_rwlock_destroy(l);				\
+		if (rc != 0) {						\
+			abort();					\
+		}							\
+	} while (0)
 
 #define spin_init(l, a)         pthread_spin_init(l, a)
 #define spin_lock(l)            pthread_spin_lock(l)

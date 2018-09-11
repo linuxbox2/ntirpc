@@ -119,7 +119,6 @@ unref_svc_rpc_gss_data(struct svc_rpc_gss_data *gd)
 	/* if refcnt is 0, gd is not reachable */
 	if (unlikely(atomic_dec_uint32_t(&gd->refcnt) == 0)) {
 		svcauth_gss_destroy(gd->auth);
-		return;
 	}
 
 	mutex_unlock(&gd->lock);
