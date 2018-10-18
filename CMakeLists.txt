@@ -180,6 +180,8 @@ include_directories(BEFORE
   "${EXTRA_INCLUDE_DIR}"
 )
 
+find_library(LIBURCU urcu)
+
 # Find misc system libs
 find_library(LIBRT rt)   # extended Pthreads functions
 
@@ -188,6 +190,7 @@ set(SYSTEM_LIBRARIES
   ${KRB5_LIBRARIES}
   ${SYSTEM_LIBRARIES}
   ${LIBRT}
+  ${LIBURCU}
 )
 
 if (NOT FREEBSD)
