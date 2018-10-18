@@ -338,7 +338,7 @@ xdr_rdma_wrap_callback(struct rpc_rdma_cbc *cbc, RDMAXPRT *xprt)
 {
 	XDR *xdrs = cbc->holdq.xdrs;
 
-	return (int)__svc_params->request_cb(&xprt->sm_dr.xprt, xdrs);
+	return (int)svc_request(&xprt->sm_dr.xprt, xdrs);
 }
 
 /***********************************/

@@ -118,11 +118,13 @@ enum xprt_stat {
 #define RPC_SVC_FDSET_SET       5
 
 typedef enum xprt_stat (*svc_xprt_fun_t) (SVCXPRT *);
-typedef enum xprt_stat (*svc_xprt_xdr_fun_t) (SVCXPRT *, XDR *);
+typedef struct svc_req *(*svc_xprt_alloc_fun_t) (SVCXPRT *, XDR *);
+typedef void (*svc_xprt_free_fun_t) (struct svc_req *, enum xprt_stat);
 
 typedef struct svc_init_params {
 	svc_xprt_fun_t disconnect_cb;
-	svc_xprt_xdr_fun_t request_cb;
+	svc_xprt_alloc_fun_t alloc_cb;
+	svc_xprt_free_fun_t free_cb;
 
 	u_long flags;
 	u_int max_connections;	/* xprts */

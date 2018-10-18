@@ -56,7 +56,8 @@ struct svc_params {
 	} ev_u;
 
 	svc_xprt_fun_t disconnect_cb;
-	svc_xprt_xdr_fun_t request_cb;
+	svc_xprt_alloc_fun_t alloc_cb;
+	svc_xprt_free_fun_t free_cb;
 
 	struct {
 		int ctx_hash_partitions;
@@ -75,6 +76,8 @@ struct svc_params {
 	u_int max_connections;
 	int32_t idle_timeout;
 };
+
+enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs);
 
 extern struct svc_params __svc_params[1];
 

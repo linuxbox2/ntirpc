@@ -194,26 +194,23 @@ worker(void *arg)
 	return NULL;
 }
 
-static enum xprt_stat
-decode_request(SVCXPRT *xprt, XDR *xdrs)
+static struct svc_req *
+alloc_request(SVCXPRT *xprt, XDR *xdrs)
 {
 	struct svc_req *req = calloc(1, sizeof(*req));
-	enum xprt_stat stat;
 
 	SVC_REF(xprt, SVC_REF_FLAG_NONE);
 	req->rq_xprt = xprt;
 	req->rq_xdrs = xdrs;
 	req->rq_refcnt = 1;
 
-	stat = SVC_DECODE(req);
+	return req;
+}
 
-	if (req->rq_auth)
-		SVCAUTH_RELEASE(req);
-
-	XDR_DESTROY(req->rq_xdrs);
-	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+static void
+free_request(struct svc_req *req, enum xprt_stat stat)
+{
 	free(req);
-	return stat;
 }
 
 static void usage()
@@ -315,7 +312,8 @@ int main(int argc, char *argv[])
 	}
 
 	memset(&svc_params, 0, sizeof(svc_params));
-	svc_params.request_cb = decode_request;
+	svc_params.alloc_cb = alloc_request;
+	svc_params.free_cb = free_request;
 	svc_params.flags = SVC_INIT_EPOLL | SVC_INIT_NOREG_XPRTS;
 	svc_params.max_events = 512;
 	svc_params.ioq_thrd_max = nworkers;

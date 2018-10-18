@@ -49,6 +49,7 @@
 #include "clnt_internal.h"
 #include "svc_internal.h"
 #include "svc_xprt.h"
+#include <rpc/svc_auth.h>
 
 /**
  * @file svc_rqst.c
@@ -775,6 +776,25 @@ svc_rqst_xprt_task(struct work_pool_entry *wpe)
 
 	/* If tests fail, log non-fatal "WARNING! already destroying!" */
 	SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
+}
+
+enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs)
+{
+	static enum xprt_stat stat;
+	struct svc_req *req = __svc_params->alloc_cb(xprt, xdrs);
+
+	stat = SVC_DECODE(req);
+
+	if (req->rq_auth)
+		SVCAUTH_RELEASE(req);
+
+	XDR_DESTROY(req->rq_xdrs);
+
+	__svc_params->free_cb(req, stat);
+
+	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+
+	return stat;
 }
 
 /*
