@@ -639,7 +639,7 @@ clnt_req_wait_reply(struct clnt_req *cc)
 	}
 
 	(void)clock_gettime(CLOCK_REALTIME_FAST, &ts);
-	timespecadd(&ts, &cc->cc_timeout);
+	timespecadd(&ts, &cc->cc_timeout, &ts);
 	code = cond_timedwait(&cc->cc_we.cv, &cc->cc_we.mtx, &ts);
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_REQ,

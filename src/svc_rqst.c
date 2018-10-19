@@ -222,7 +222,7 @@ svc_rqst_expire_ms(struct timespec *to)
 
 	/* coarse nsec, not system time */
 	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
-	timespecadd(&ts, to);
+	timespecadd(&ts, to, &ts);
 	return timespec_ms(&ts);
 }
 
