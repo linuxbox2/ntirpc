@@ -780,10 +780,25 @@ svc_rqst_xprt_task(struct work_pool_entry *wpe)
 
 enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs)
 {
-	static enum xprt_stat stat;
+	enum xprt_stat stat;
 	struct svc_req *req = __svc_params->alloc_cb(xprt, xdrs);
+	struct rpc_dplx_rec *rpc_dplx_rec = REC_XPRT(xprt);
 
+	/* Track the request we are processing */
+	rpc_dplx_rec->svc_req = req;
+
+	/* All decode functions basically do a
+	 * return xprt->xp_dispatch.process_cb(req);
+	 */
 	stat = SVC_DECODE(req);
+
+	if (stat == XPRT_SUSPEND) {
+		/* The rquest is suspended, don't touch the request in any way
+		 * because the resume may already be scheduled and running on
+		 * another thread.
+		 */
+		return XPRT_SUSPEND;
+	}
 
 	if (req->rq_auth)
 		SVCAUTH_RELEASE(req);
@@ -795,6 +810,43 @@ enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs)
 	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 
 	return stat;
+}
+
+static void svc_resume_task(struct work_pool_entry *wpe)
+{
+	struct rpc_dplx_rec *rec =
+			opr_containerof(wpe, struct rpc_dplx_rec, ioq.ioq_wpe);
+	struct svc_req *req = rec->svc_req;
+	SVCXPRT *xprt = &rec->xprt;
+	enum xprt_stat stat;
+
+	/* Resume the request. */
+	stat  = req->rq_xprt->xp_resume_cb(req);
+
+	if (stat == XPRT_SUSPEND) {
+		/* The rquest is suspended, don't touch the request in any way
+		 * because the resume may already be scheduled and running on
+		 * another thread.
+		 */
+		return;
+	}
+
+	if (req->rq_auth)
+		SVCAUTH_RELEASE(req);
+
+	XDR_DESTROY(req->rq_xdrs);
+
+	__svc_params->free_cb(req, stat);
+
+	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+}
+
+void svc_resume(struct svc_req *req)
+{
+	struct rpc_dplx_rec *rpc_dplx_rec = REC_XPRT(req->rq_xprt);
+
+	rpc_dplx_rec->ioq.ioq_wpe.fun = svc_resume_task;
+	work_pool_submit(&svc_work_pool, &(rpc_dplx_rec->ioq.ioq_wpe));
 }
 
 /*

@@ -60,6 +60,7 @@ typedef struct svc_xprt SVCXPRT;
 enum xprt_stat {
 	XPRT_IDLE = 0,
 	XPRT_MOREREQS,
+	XPRT_SUSPEND,
 	/* always last in this order for comparisons */
 	XPRT_DIED,
 	XPRT_DESTROYED
@@ -237,6 +238,8 @@ struct svc_xprt {
 		svc_req_fun_t process_cb;
 		svc_xprt_fun_t rendezvous_cb;
 	}  xp_dispatch;
+	/* Handle resumed requests */
+	svc_req_fun_t xp_resume_cb;
 	SVCXPRT *xp_parent;
 
 	char *xp_tp;		/* transport provider device name */
@@ -329,6 +332,8 @@ struct svc_req {
 #define svc_getlocal_netbuf(x) (&(x)->xp_local.nb)
 #define svc_getrpccaller(x) (&(x)->xp_remote.ss)
 #define svc_getrpclocal(x) (&(x)->xp_local.ss)
+
+extern void svc_resume(struct svc_req *req);
 
 /*
  * Ganesha.  Get connected transport type.
