@@ -174,6 +174,9 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 			xprt->xp_fd = fd;
 			xprt->xp_flags = SVC_XPRT_FLAG_INITIAL;
 
+			/* Get ref for caller */
+			SVC_REF(xprt, SVC_REF_FLAG_NONE);
+
 			rec = REC_XPRT(xprt);
 			rpc_dplx_rli(rec);
 			if (opr_rbtree_insert(&t->t, &rec->fd_node)) {
