@@ -55,6 +55,7 @@
 #include <string.h>
 #include <errno.h>
 #include <intrinsic.h>
+#include <urcu.h>
 
 #include <rpc/work_pool.h>
 
@@ -149,6 +150,8 @@ work_pool_thread(void *arg)
 	int rc;
 	bool spawn;
 
+	rcu_register_thread();
+
 	pthread_cond_init(&wpt->pqcond, NULL);
 	pthread_mutex_lock(&pool->pqh.qmutex);
 	TAILQ_INSERT_TAIL(&pool->wptqh, wpt, wptq);
@@ -238,6 +241,7 @@ work_pool_thread(void *arg)
 		__func__, wpt->worker_name);
 	cond_destroy(&wpt->pqcond);
 	mem_free(wpt, sizeof(*wpt));
+	rcu_unregister_thread();
 
 	return (NULL);
 }
