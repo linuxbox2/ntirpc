@@ -55,7 +55,7 @@
 #include <string.h>
 #include <errno.h>
 #include <intrinsic.h>
-#include <urcu.h>
+#include <urcu-bp.h>
 
 #include <rpc/work_pool.h>
 

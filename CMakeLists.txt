@@ -180,7 +180,7 @@ include_directories(BEFORE
   "${EXTRA_INCLUDE_DIR}"
 )
 
-find_library(LIBURCU urcu)
+find_library(LIBURCU urcu-bp)
 
 # Find misc system libs
 find_library(LIBRT rt)   # extended Pthreads functions

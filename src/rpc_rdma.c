@@ -51,7 +51,7 @@
 #include <unistd.h>	//fcntl
 #include <fcntl.h>	//fcntl
 #include <sys/epoll.h>
-#include <urcu.h>
+#include <urcu-bp.h>
 
 #define EPOLL_SIZE (10)
 /*^ expected number of fd, must be > 0 */
