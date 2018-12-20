@@ -182,6 +182,7 @@ struct rpc_timers {
 #define CLNT_FLAG_DESTROYING		SVC_XPRT_FLAG_DESTROYING
 #define CLNT_FLAG_RELEASING		SVC_XPRT_FLAG_RELEASING
 #define CLNT_FLAG_DESTROYED		SVC_XPRT_FLAG_DESTROYED
+#define CLNT_FLAG_LOCAL			0x8000 /* Client is unshared/local */
 
 /*
  * CLNT_REF flags
