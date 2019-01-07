@@ -477,6 +477,7 @@ svc_rqst_rearm_events(SVCXPRT *xprt)
 	if (sr_rec->ev_flags & SVC_RQST_FLAG_SHUTDOWN)
 		return (0);
 
+	SVC_REF(xprt, SVC_REF_FLAG_NONE);
 	rpc_dplx_rli(rec);
 
 	/* assuming success */
@@ -507,6 +508,7 @@ svc_rqst_rearm_events(SVCXPRT *xprt)
 				sr_rec, sr_rec->id_k, sr_rec->ev_refcnt,
 				sr_rec->ev_u.epoll.epoll_fd,
 				sr_rec->sv[0], sr_rec->sv[1], code);
+			SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 		} else {
 			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST |
 				TIRPC_DEBUG_FLAG_REFCNT,
@@ -862,10 +864,10 @@ svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 	}
 
 	/* Another task may release transport in parallel.
-	 * Take extra reference now to keep window as small as possible.
-	 * Under normal circumstances, worker task (above) will release.
+	 * We have a ref from being in epoll, but since epoll is one-shot, a new ref
+	 * will be taken when we re-enter epoll.  Use this ref for the processor
+	 * without taking another one.
 	 */
-	SVC_REF(&rec->xprt, SVC_REF_FLAG_NONE);
 
 	/* MUST handle flags after reference.
 	 * Although another task may unhook, the error is non-fatal.

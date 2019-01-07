@@ -1311,6 +1311,8 @@ static CLIENT *local_rpcb(const char *tag)
 				  CLNT_CREATE_FLAG_CONNECT);
 
 	if (CLNT_SUCCESS(client)) {
+		/* This is a local client (we created the fd above) */
+		client->cl_flags |= CLNT_FLAG_LOCAL;
 		return client;
 	}
 	t = rpc_sperror(&client->cl_error, tag);

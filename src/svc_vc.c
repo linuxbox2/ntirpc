@@ -507,6 +507,8 @@ svc_vc_rendezvous(SVCXPRT *xprt)
 	if (xprt->xp_dispatch.rendezvous_cb(newxprt)
 	 || svc_rqst_xprt_register(newxprt, xprt)) {
 		SVC_DESTROY(newxprt);
+		/* Was never added to epoll */
+		SVC_RELEASE(newxprt, SVC_RELEASE_FLAG_NONE);
 		return (XPRT_DESTROYED);
 	}
 	return (XPRT_IDLE);

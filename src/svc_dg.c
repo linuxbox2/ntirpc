@@ -94,6 +94,8 @@ svc_dg_xprt_zalloc(size_t iosz)
 
 	/* Init SVCXPRT locks, etc */
 	rpc_dplx_rec_init(&su->su_dr);
+	/* Extra ref to match TCP */
+	SVC_REF(&su->su_dr.xprt, SVC_REF_FLAG_NONE);
 	xdr_ioq_setup(&su->su_dr.ioq);
 	return (su);
 }
@@ -318,6 +320,7 @@ svc_dg_recv(SVCXPRT *xprt)
 	/* Only after checking SVC_XPRT_FLAG_DESTROYED:
 	 * because SVC_DESTROY() has decremented already.
 	 */
+	SVC_DESTROY(xprt);
 	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 	return (stat);
 }

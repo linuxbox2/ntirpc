@@ -461,6 +461,11 @@ clnt_vc_destroy(CLIENT *clnt)
 	if (cx->cx_rec) {
 		SVC_RELEASE(&cx->cx_rec->xprt, SVC_RELEASE_FLAG_NONE);
 	}
+	if (clnt->cl_flags & CLNT_FLAG_LOCAL) {
+		/* Local client; destroy the xprt */
+		SVC_DESTROY(&cx->cx_rec->xprt);
+	}
+
 	clnt_vc_data_free(CT_DATA(cx));
 }
 
