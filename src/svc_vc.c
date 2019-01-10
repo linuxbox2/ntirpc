@@ -797,7 +797,7 @@ svc_vc_recv(SVCXPRT *xprt)
 		return SVC_STAT(xprt);
 	}
 
-	return (__svc_params->request_cb(xprt, xioq->xdrs));
+	return svc_request(xprt, xioq->xdrs);
 }
 
 static enum xprt_stat

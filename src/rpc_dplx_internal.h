@@ -76,6 +76,7 @@ struct rpc_dplx_rec {
 	u_int sendsz;
 	uint32_t call_xid;		/**< current call xid */
 	uint32_t ev_count;		/**< atomic count of waiting events */
+	struct svc_req *svc_req;	/**< svc_req we are processing */
 };
 #define REC_XPRT(p) (opr_containerof((p), struct rpc_dplx_rec, xprt))
 

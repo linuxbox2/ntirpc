@@ -312,7 +312,7 @@ svc_dg_recv(SVCXPRT *xprt)
 	/* pass the xdrs to user to store in struct svc_req, as most of
 	 * the work has already been done on rendezvous
 	 */
-	stat = __svc_params->request_cb(xprt, REC_XPRT(xprt)->ioq.xdrs);
+	stat = svc_request(xprt, REC_XPRT(xprt)->ioq.xdrs);
 
 	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
 		return (XPRT_DESTROYED);

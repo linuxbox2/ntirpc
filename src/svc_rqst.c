@@ -49,6 +49,7 @@
 #include "clnt_internal.h"
 #include "svc_internal.h"
 #include "svc_xprt.h"
+#include <rpc/svc_auth.h>
 
 /**
  * @file svc_rqst.c
@@ -195,6 +196,8 @@ svc_rqst_lookup_chan(uint32_t chan_id)
 
 /* forward declaration in lieu of moving code {WAS} */
 static void svc_rqst_run_task(struct work_pool_entry *);
+static void svc_rqst_epoll_loop(struct work_pool_entry *wpe);
+static void svc_complete_task(struct svc_rqst_rec *sr_rec, bool finished);
 
 static int
 svc_rqst_expire_cmpf(const struct opr_rbtree_node *lhs,
@@ -287,6 +290,7 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 	struct svc_rqst_rec *sr_rec;
 	uint32_t n_id;
 	int code = 0;
+	work_pool_fun_t fun = svc_rqst_run_task;
 
 	mutex_lock(&svc_rqst_set.mtx);
 	if (!svc_rqst_set.next_id) {
@@ -326,6 +330,7 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 #if defined(TIRPC_EPOLL)
 	if (flags & SVC_RQST_FLAG_EPOLL) {
 		sr_rec->ev_type = SVC_EVENT_EPOLL;
+		fun = svc_rqst_epoll_loop;
 
 		/* XXX improve this too */
 		sr_rec->ev_u.epoll.max_events =
@@ -381,7 +386,7 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 
 	if (!code) {
 		atomic_inc_int32_t(&sr_rec->ev_refcnt);
-		sr_rec->ev_wpe.fun = svc_rqst_run_task;
+		sr_rec->ev_wpe.fun = fun;
 		sr_rec->ev_wpe.arg = u_data;
 		work_pool_submit(&svc_work_pool, &sr_rec->ev_wpe);
 	}
@@ -773,6 +778,77 @@ svc_rqst_xprt_task(struct work_pool_entry *wpe)
 	SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
 }
 
+enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs)
+{
+	enum xprt_stat stat;
+	struct svc_req *req = __svc_params->alloc_cb(xprt, xdrs);
+	struct rpc_dplx_rec *rpc_dplx_rec = REC_XPRT(xprt);
+
+	/* Track the request we are processing */
+	rpc_dplx_rec->svc_req = req;
+
+	/* All decode functions basically do a
+	 * return xprt->xp_dispatch.process_cb(req);
+	 */
+	stat = SVC_DECODE(req);
+
+	if (stat == XPRT_SUSPEND) {
+		/* The rquest is suspended, don't touch the request in any way
+		 * because the resume may already be scheduled and running on
+		 * another thread.
+		 */
+		return XPRT_SUSPEND;
+	}
+
+	if (req->rq_auth)
+		SVCAUTH_RELEASE(req);
+
+	XDR_DESTROY(req->rq_xdrs);
+
+	__svc_params->free_cb(req, stat);
+
+	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+
+	return stat;
+}
+
+static void svc_resume_task(struct work_pool_entry *wpe)
+{
+	struct rpc_dplx_rec *rec =
+			opr_containerof(wpe, struct rpc_dplx_rec, ioq.ioq_wpe);
+	struct svc_req *req = rec->svc_req;
+	SVCXPRT *xprt = &rec->xprt;
+	enum xprt_stat stat;
+
+	/* Resume the request. */
+	stat  = req->rq_xprt->xp_resume_cb(req);
+
+	if (stat == XPRT_SUSPEND) {
+		/* The rquest is suspended, don't touch the request in any way
+		 * because the resume may already be scheduled and running on
+		 * another thread.
+		 */
+		return;
+	}
+
+	if (req->rq_auth)
+		SVCAUTH_RELEASE(req);
+
+	XDR_DESTROY(req->rq_xdrs);
+
+	__svc_params->free_cb(req, stat);
+
+	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+}
+
+void svc_resume(struct svc_req *req)
+{
+	struct rpc_dplx_rec *rpc_dplx_rec = REC_XPRT(req->rq_xprt);
+
+	rpc_dplx_rec->ioq.ioq_wpe.fun = svc_resume_task;
+	work_pool_submit(&svc_work_pool, &(rpc_dplx_rec->ioq.ioq_wpe));
+}
+
 /*
  * Like __svc_clean_idle but event-type independent.  For now no cleanfds.
  */
@@ -904,7 +980,7 @@ svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 /*
  * not locked
  */
-static inline bool
+static inline struct rpc_dplx_rec *
 svc_rqst_epoll_events(struct svc_rqst_rec *sr_rec, int n_events)
 {
 	struct rpc_dplx_rec *rec = NULL;
@@ -919,7 +995,7 @@ svc_rqst_epoll_events(struct svc_rqst_rec *sr_rec, int n_events)
 
 	if (!rec) {
 		/* continue waiting for events with this task */
-		return false;
+		return NULL;
 	}
 
 	while (ix < n_events) {
@@ -936,28 +1012,20 @@ svc_rqst_epoll_events(struct svc_rqst_rec *sr_rec, int n_events)
 	atomic_inc_int32_t(&sr_rec->ev_refcnt);
 	work_pool_submit(&svc_work_pool, &sr_rec->ev_wpe);
 
-	/* in most cases have only one event, use this hot thread */
-	rec->ioq.ioq_wpe.fun = svc_rqst_xprt_task;
-	svc_rqst_xprt_task(&(rec->ioq.ioq_wpe));
-
-	/* failsafe idle processing after work task */
-	if (atomic_postclear_uint32_t_bits(&wakeups, ~SVC_RQST_WAKEUPS)
-	    > SVC_RQST_WAKEUPS) {
-		svc_rqst_clean_idle(__svc_params->idle_timeout);
-	}
-
-	return true;
+	return rec;
 }
 
-static inline bool
-svc_rqst_epoll_loop(struct svc_rqst_rec *sr_rec)
+static void svc_rqst_epoll_loop(struct work_pool_entry *wpe)
 {
+	struct svc_rqst_rec *sr_rec = 
+		opr_containerof(wpe, struct svc_rqst_rec, ev_wpe);
 	struct clnt_req *cc;
 	struct opr_rbtree_node *n;
 	struct timespec ts;
 	int timeout_ms;
 	int expire_ms;
 	int n_events;
+	bool finished;
 
 	for (;;) {
 		timeout_ms = SVC_RQST_TIMEOUT_MS;
@@ -1006,13 +1074,30 @@ svc_rqst_epoll_loop(struct svc_rqst_rec *sr_rec)
 				__func__,
 				sr_rec->ev_u.epoll.epoll_fd,
 				n_events);
-			return true;
+			finished = true;
+			break;
 		}
 		if (n_events > 0) {
 			atomic_add_uint32_t(&wakeups, n_events);
+			struct rpc_dplx_rec *rec;
 
-			if (svc_rqst_epoll_events(sr_rec, n_events))
-				return false;
+			rec = svc_rqst_epoll_events(sr_rec, n_events);
+
+			if (rec != NULL) {
+				/* use this hot thread for the first event */
+				rec->ioq.ioq_wpe.fun = svc_rqst_xprt_task;
+				svc_rqst_xprt_task(&(rec->ioq.ioq_wpe));
+
+				/* failsafe idle processing after work task */
+				if (atomic_postclear_uint32_t_bits(
+					&wakeups, ~SVC_RQST_WAKEUPS)
+				    > SVC_RQST_WAKEUPS) {
+					svc_rqst_clean_idle(
+						__svc_params->idle_timeout);
+				}
+				finished = false;
+				break;
+			}
 			continue;
 		}
 		if (!n_events) {
@@ -1027,45 +1112,23 @@ svc_rqst_epoll_loop(struct svc_rqst_rec *sr_rec)
 				__func__,
 				sr_rec->ev_u.epoll.epoll_fd,
 				n_events);
-			return true;
+			finished = true;
+			break;
 		}
 	}
+	if (finished) {
+		close(sr_rec->ev_u.epoll.epoll_fd);
+		mem_free(sr_rec->ev_u.epoll.events,
+			 sr_rec->ev_u.epoll.max_events *
+			 sizeof(struct epoll_event));
+	}
+
+	svc_complete_task(sr_rec, finished);
 }
 #endif
 
-/*
- * No locking, "there can be only one"
- */
-static void
-svc_rqst_run_task(struct work_pool_entry *wpe)
+static void svc_complete_task(struct svc_rqst_rec *sr_rec, bool finished)
 {
-	struct svc_rqst_rec *sr_rec =
-		opr_containerof(wpe, struct svc_rqst_rec, ev_wpe);
-	bool finished;
-
-	/* enter event loop */
-	switch (sr_rec->ev_type) {
-#if defined(TIRPC_EPOLL)
-	case SVC_EVENT_EPOLL:
-		finished = svc_rqst_epoll_loop(sr_rec);
-		if (finished) {
-			close(sr_rec->ev_u.epoll.epoll_fd);
-			mem_free(sr_rec->ev_u.epoll.events,
-				 sr_rec->ev_u.epoll.max_events *
-				 sizeof(struct epoll_event));
-		}
-		break;
-#endif
-	default:
-		finished = true;
-		/* XXX formerly select/fd_set case, now placeholder for new
-		 * event systems, reworked select, etc. */
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: unsupported event type",
-			__func__);
-		break;
-	}			/* switch */
-
 	if (finished) {
 		/* reference count here should be 2:
 		 *	1	svc_rqst_set
@@ -1075,6 +1138,29 @@ svc_rqst_run_task(struct work_pool_entry *wpe)
 		atomic_dec_int32_t(&sr_rec->ev_refcnt);	/* svc_rqst_set */
 	}
 	svc_rqst_release(sr_rec);
+}
+
+/*
+ * No locking, "there can be only one"
+ */
+static void
+svc_rqst_run_task(struct work_pool_entry *wpe)
+{
+	struct svc_rqst_rec *sr_rec =
+		opr_containerof(wpe, struct svc_rqst_rec, ev_wpe);
+
+	/* enter event loop */
+	switch (sr_rec->ev_type) {
+	default:
+		/* XXX formerly select/fd_set case, now placeholder for new
+		 * event systems, reworked select, etc. */
+		__warnx(TIRPC_DEBUG_FLAG_ERROR,
+			"%s: unsupported event type",
+			__func__);
+		break;
+	}			/* switch */
+
+	svc_complete_task(sr_rec, true);
 }
 
 int
