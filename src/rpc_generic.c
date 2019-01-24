@@ -957,7 +957,7 @@ __rpc_uaddr2taddr_af(int af, const char *uaddr)
 		sun = (struct sockaddr_un *)mem_zalloc(sizeof(*sun));
 
 		sun->sun_family = AF_LOCAL;
-		strncpy(sun->sun_path, addrstr, sizeof(sun->sun_path) - 1);
+		strlcpy(sun->sun_path, addrstr, sizeof(sun->sun_path));
 		ret->len = SUN_LEN(sun);
 		ret->maxlen = sizeof(struct sockaddr_un);
 		ret->buf = sun;
