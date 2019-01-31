@@ -84,14 +84,6 @@ struct rpc_dplx_rec {
 #define RPC_DPLX_LOCKED		0x00100000
 #define RPC_DPLX_UNLOCK		0x00200000
 
-#ifndef HAVE_STRLCAT
-extern size_t strlcat(char *, const char *, size_t);
-#endif
-
-#ifndef HAVE_STRLCPY
-extern size_t strlcpy(char *, const char *src, size_t);
-#endif
-
 /* in clnt_generic.c */
 enum xprt_stat clnt_req_process_reply(SVCXPRT *, struct svc_req *);
 int clnt_req_xid_cmpf(const struct opr_rbtree_node *lhs,

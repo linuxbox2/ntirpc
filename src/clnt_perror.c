@@ -46,6 +46,8 @@
 #include <rpc/auth.h>
 #include <rpc/clnt.h>
 
+#include "strl.h"
+
 static char *auth_errmsg(enum auth_stat);
 
 /*
