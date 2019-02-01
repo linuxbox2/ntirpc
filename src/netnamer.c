@@ -48,6 +48,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "strl.h"
+
 static char *OPSYS = "unix";
 static char *NETID = "netid.byname";
 static char *NETIDFILE = "/etc/netid";

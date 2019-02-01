@@ -58,6 +58,7 @@
 #include <assert.h>
 
 #include "rpc_com.h"
+#include "strl.h"
 
 /* retry timeout default to the moon and back */
 static struct timespec to = { 3, 0 };

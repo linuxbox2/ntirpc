@@ -14,10 +14,11 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef HAVE_STRLCPY
 
 #include "config.h"
+#ifndef HAVE_STRLCPY
 #include <sys/types.h>
+#include "strl.h"
 
 /*
  * Copy src to string dst of size siz.  At most siz-1 characters
