@@ -788,12 +788,16 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 
 	switch (af) {
 	case AF_INET:
-		if (nbuf->len < sizeof(*sin))
+		if (nbuf->len < sizeof(*sin)) {
+			mem_free(ret, RETURN_SIZE);
 			return NULL;
+		}
 		sin = nbuf->buf;
 		if (inet_ntop(af, &sin->sin_addr, namebuf, sizeof(namebuf))
-		    == NULL)
+		    == NULL) {
+			mem_free(ret, RETURN_SIZE);
 			return NULL;
+		}
 		port = ntohs(sin->sin_port);
 		if (sprintf
 		    (ret, "%s.%u.%u", namebuf, ((u_int32_t) port) >> 8,
@@ -804,8 +808,10 @@ __rpc_taddr2uaddr_af(int af, const struct netbuf *nbuf)
 		break;
 #ifdef INET6
 	case AF_INET6:
-		if (nbuf->len < sizeof(*sin6))
+		if (nbuf->len < sizeof(*sin6)) {
+			mem_free(ret, RETURN_SIZE);
 			return NULL;
+		}
 		sin6 = nbuf->buf;
 		if (inet_ntop(af, &sin6->sin6_addr, namebuf6, sizeof(namebuf6))
 		    == NULL) {
