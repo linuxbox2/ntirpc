@@ -664,13 +664,20 @@ xdr_ioq_setpos(XDR *xdrs, u_int pos)
 
 	TAILQ_FOREACH(have, &(XIOQ(xdrs)->ioq_uv.uvqh.qh), q) {
 		struct xdr_ioq_uv *uv = IOQ_(have);
+		struct xdr_ioq_uv *next = IOQ_(TAILQ_NEXT(have, q));
 		u_int len = ioquv_length(uv);
 		u_int full = (uintptr_t)xdrs->x_v.vio_wrap
 			   - (uintptr_t)xdrs->x_v.vio_head;
 
-		if (pos <= full) {
-			/* allow up to the end of the buffer,
-			 * assuming next operation will extend.
+		/* If we have a next buffer and pos would land exactly at the
+		 * tail of this buffer, we want to force positioning in the
+		 * next buffer. The space between the tail of this buffer and
+		 * the wrap of this buffer is unused and MUST be skipped.
+		 */
+		if ((pos < len) || (next == NULL && pos <= full)) {
+			/* allow up to the end of the buffer, unless there is
+			 * a next buffer in which case only allow up to the
+			 * tail assuming next operation will extend.
 			 */
 			xdrs->x_data = uv->v.vio_head + pos;
 			xdrs->x_base = &uv->v;
