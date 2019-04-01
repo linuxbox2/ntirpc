@@ -679,21 +679,8 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		rpcvers_t pmapvers = 2;
 		uint16_t port = 0;
 
-		/*
-		 * Try UDP only - there are some portmappers out
-		 * there that use UDP only.
-		 */
 		if (strcmp(nconf->nc_proto, NC_TCP) == 0) {
-			struct netconfig *newnconf;
-
-			newnconf = getnetconfigent("udp");
-			if (!newnconf) {
-				client = clnt_raw_ncreate(program, version);
-				client->cl_error.re_status = RPC_UNKNOWNPROTO;
-				goto error;
-			}
-			client = getclnthandle(host, newnconf, &parms.r_addr);
-			freenetconfigent(newnconf);
+			client = getclnthandle(host, nconf, &parms.r_addr);
 		} else if (strcmp(nconf->nc_proto, NC_UDP) == 0)
 			client = getclnthandle(host, nconf, &parms.r_addr);
 		else
