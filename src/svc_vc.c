@@ -453,8 +453,10 @@ svc_vc_rendezvous(SVCXPRT *xprt)
 	 */
 	newxprt = makefd_xprt(fd, req_xd->sx_dr.sendsz, req_xd->sx_dr.recvsz,
 			      &si, SVC_XPRT_FLAG_CLOSE);
-	if ((!newxprt) || (!(newxprt->xp_flags & SVC_XPRT_FLAG_INITIAL)))
+	if ((!newxprt) || (!(newxprt->xp_flags & SVC_XPRT_FLAG_INITIAL))) {
+		close(fd);
 		return (XPRT_DIED);
+	}
 
 	svc_vc_override_ops(newxprt, xprt);
 
