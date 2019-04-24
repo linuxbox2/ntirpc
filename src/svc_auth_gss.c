@@ -280,8 +280,8 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 		gss_release_buffer(&min_stat, &gd->checksum);
 
 		maj_stat =
-		    gss_sign(&min_stat, gd->ctx, GSS_C_QOP_DEFAULT, &seqbuf,
-			     &checksum);
+		    gss_get_mic(&min_stat, gd->ctx, GSS_C_QOP_DEFAULT, &seqbuf,
+				&checksum);
 
 		if (maj_stat != GSS_S_COMPLETE) {
 			gss_release_buffer(&min_stat, &gr->gr_token);
