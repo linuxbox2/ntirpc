@@ -291,12 +291,14 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 		/* XXX ref? (assert gd->locked?) */
 		if (checksum.length > MAX_AUTH_BYTES){
 			gss_release_buffer(&min_stat, &gr->gr_token);
+			gss_release_buffer(&min_stat, &checksum);
 			return (false);
 		}
 		req->rq_msg.RPCM_ack.ar_verf.oa_flavor = RPCSEC_GSS;
 		req->rq_msg.RPCM_ack.ar_verf.oa_length = checksum.length;
 		memcpy(req->rq_msg.RPCM_ack.ar_verf.oa_body, checksum.value,
 		       checksum.length);
+		gss_release_buffer(&min_stat, &checksum);
 	}
 	return (true);
 }
@@ -371,12 +373,14 @@ svcauth_gss_nextverf(struct svc_req *req, struct svc_rpc_gss_data *gd,
 	}
 	if (checksum.length > MAX_AUTH_BYTES) {
 		gss_log_status("checksum.length", maj_stat, min_stat);
+		gss_release_buffer(&min_stat, &checksum);
 		return (false);
 	}
 	req->rq_msg.RPCM_ack.ar_verf.oa_flavor = RPCSEC_GSS;
 	req->rq_msg.RPCM_ack.ar_verf.oa_length = checksum.length;
 	memcpy(req->rq_msg.RPCM_ack.ar_verf.oa_body, checksum.value,
 	       checksum.length);
+	gss_release_buffer(&min_stat, &checksum);
 
 	return (true);
 }
