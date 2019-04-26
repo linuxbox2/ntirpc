@@ -314,7 +314,15 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 		mem_free(addr_to_delete.buf, addr_to_delete.len);
 	}
 	if (!__rpc_nconf2sockinfo(nconf, &si)) {
-		assert(client == NULL);
+		if (client != NULL) {
+			/* if client!=NULL then there should
+			 * have been a failure
+			 */
+			assert(CLNT_FAILURE(client));
+			/* destroy the failed client */
+			CLNT_DESTROY(client);
+		}
+
 		__warnx(TIRPC_DEBUG_FLAG_WARN, "%s: %s",
 			__func__, clnt_sperrno(RPC_UNKNOWNPROTO));
 		client = clnt_raw_ncreate(1, 1);
@@ -347,7 +355,15 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 		goto out_err;
 	} else {
 		if (getaddrinfo(host, "sunrpc", &hints, &res) != 0) {
-			assert(client == NULL);
+			if (client != NULL) {
+				/* if client!=NULL then there should
+				 * have been a failure
+				 */
+				assert(CLNT_FAILURE(client));
+				/* destroy the failed client */
+				CLNT_DESTROY(client);
+			}
+
 			__warnx(TIRPC_DEBUG_FLAG_WARN, "%s: %s",
 				__func__, clnt_sperrno(RPC_UNKNOWNHOST));
 			client = clnt_raw_ncreate(1, 1);
