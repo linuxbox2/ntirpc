@@ -401,6 +401,11 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 		goto err;
 	}
 
+	if (flags & CLNT_CREATE_FLAG_CLOSE) {
+		/* We got a new FD; this makes it a local client */
+		cl->cl_flags |= CLNT_FLAG_LOCAL;
+	}
+
 	if (nconf) {
 		cl->cl_netid = mem_strdup(nconf->nc_netid);
 		cl->cl_tp = mem_strdup(nconf->nc_device);
