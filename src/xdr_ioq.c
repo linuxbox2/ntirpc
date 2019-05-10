@@ -53,8 +53,6 @@
 
 #include <rpc/xdr_ioq.h>
 
-static bool xdr_ioq_noop(void) __attribute__ ((unused));
-
 #define VREC_MAXBUFS 24
 
 static uint64_t next_id;
@@ -81,6 +79,10 @@ xdr_ioq_uv_create(size_t size, u_int uio_flags)
 	}
 	uv->u.uio_flags = uio_flags;
 	uv->u.uio_references = 1;	/* starting one */
+
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s() uv %p size %lu",
+		__func__, uv, (unsigned long) size);
 
 	return (uv);
 }
@@ -326,6 +328,13 @@ xdr_ioq_uv_advance(struct xdr_ioq *xioq)
 
 	len = ioquv_length(uv);
 	xioq->ioq_uv.plength += len;
+
+#if 0
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s() uv %p len %lu plength %lu NEXT %p",
+		__func__, uv, (unsigned long) len, (unsigned long) xioq->ioq_uv.plength,
+		IOQ_(TAILQ_NEXT(&uv->uvq, q)));
+#endif
 
 	/* next buffer, if any */
 	return IOQ_(TAILQ_NEXT(&uv->uvq, q));
@@ -669,6 +678,14 @@ xdr_ioq_setpos(XDR *xdrs, u_int pos)
 		u_int full = (uintptr_t)xdrs->x_v.vio_wrap
 			   - (uintptr_t)xdrs->x_v.vio_head;
 
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s Examining xdr_ioq_uv %p (base %p head %p tail %p wrap %p len %lu full %lu) - %s pos %lu",
+			__func__, uv, uv->v.vio_base, uv->v.vio_head,
+			uv->v.vio_tail, uv->v.vio_wrap,
+			(unsigned long) len, (unsigned long) full,
+			next ? "more" : "last",
+			(unsigned long) pos);
+
 		/* If we have a next buffer and pos would land exactly at the
 		 * tail of this buffer, we want to force positioning in the
 		 * next buffer. The space between the tail of this buffer and
@@ -688,6 +705,10 @@ xdr_ioq_setpos(XDR *xdrs, u_int pos)
 		XIOQ(xdrs)->ioq_uv.plength += len;
 		XIOQ(xdrs)->ioq_uv.pcount++;
 	}
+
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s failing with remaining %lu",
+		__func__, (unsigned long) pos);
 
 	return (false);
 }
@@ -767,9 +788,433 @@ xdr_ioq_control(XDR *xdrs, /* const */ int rq, void *in)
 }
 
 static bool
-xdr_ioq_noop(void)
+xdr_ioq_newbuf(XDR *xdrs)
 {
-	return (false);
+	struct xdr_ioq_uv *uv;
+
+	/* We need to start a new buffer whether the current buffer is full or
+	 * not.
+	 */
+	uv = xdr_ioq_uv_advance(XIOQ(xdrs));
+
+	if (!uv)
+		uv = xdr_ioq_uv_append(XIOQ(xdrs), IOQ_FLAG_BALLOC);
+	else
+		xdr_ioq_uv_update(XIOQ(xdrs), uv);
+
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s() uv %p",
+		__func__, uv);
+
+	/* At this point, the position has been updated to point to the
+	 * start of the new buffer since xdr_ioq_uv_update has been called
+	 * (it's called at the end of xdr_ioq_uv_append).
+	 */
+	return true;
+}
+
+static int
+xdr_ioq_iovcount(XDR *xdrs, u_int start, u_int datalen)
+{
+	/* Buffers starts at -1 to indicate start has not yet been found */
+	int buffers = -1;
+	struct poolq_entry *have;
+	struct xdr_ioq_uv *uv;
+
+	/* update the most recent data length, just in case */
+	xdr_tail_update(xdrs);
+
+	TAILQ_FOREACH(have, &(XIOQ(xdrs)->ioq_uv.uvqh.qh), q) {
+		u_int len;
+
+		uv = IOQ_(have);
+		len = ioquv_length(uv);
+
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s Examining xdr_ioq_uv %p (base %p head %p tail %p wrap %p) - start %lu len %lu buffers %d",
+			__func__, uv, uv->v.vio_base, uv->v.vio_head,
+			uv->v.vio_tail, uv->v.vio_wrap,
+			(unsigned long) start, (unsigned long) len, buffers);
+
+		if (buffers > 0) {
+			/* Accumulate another buffer */
+			buffers++;
+			__warnx(TIRPC_DEBUG_FLAG_XDR,
+				"Accumulated another buffer total = %d",
+				buffers);
+		} else if (start < len) {
+			/* We have found the buffer that start begins. */
+			buffers = 1;
+			__warnx(TIRPC_DEBUG_FLAG_XDR,
+				"Starting total = %d", buffers);
+		} else {
+			/* Keep looking, need to reduce start by the length of
+			 * this buffer.
+			 */
+			start -= len;
+		}
+		if (buffers > 0) {
+			/* Now we need to decrement the datalen to see if we're
+			 * done. Note the first time we come in, start may not
+			 * be zero, which represents the fact that start was in
+			 * the middle of this buffer, just subtract the
+			 * remaining start from the length of this buffer.
+			 */
+			u_int buflen = uv->v.vio_tail - uv->v.vio_head - start;
+			if (buflen >= datalen) {
+				/* We have found end. */
+				datalen = 0;
+				break;
+			}
+
+			/* Decrement the datalen, and zero out start for future
+			 * buffers.
+			 */
+			datalen -= buflen;
+			start = 0;
+		}
+	}
+
+	if (datalen != 0) {
+		/* There wasn't enough data... */
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s start %lu remain %lu",
+			__func__, (unsigned long) start,
+			(unsigned long) datalen);
+			return -1;
+	}
+
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s start %lu buffers %d",
+		__func__, (unsigned long) start, buffers);
+
+	/* If start was not within the xdr stream, buffers will still be -1 */
+	return buffers;
+}
+
+static bool
+xdr_ioq_fillbufs(XDR *xdrs, u_int start, xdr_vio *vector, u_int datalen)
+{
+	bool found = false;
+	struct poolq_entry *have;
+	struct xdr_ioq_uv *uv;
+	int idx = 0;
+
+	/* update the most recent data length, just in case */
+	xdr_tail_update(xdrs);
+
+	TAILQ_FOREACH(have, &(XIOQ(xdrs)->ioq_uv.uvqh.qh), q) {
+		u_int len;
+
+		uv = IOQ_(have);
+		len = ioquv_length(uv);
+
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s Examining xdr_ioq_uv %p (base %p head %p tail %p wrap %p len %lu) - %s start %lu remain %lu idx %d",
+			__func__, uv, uv->v.vio_base, uv->v.vio_head,
+			uv->v.vio_tail, uv->v.vio_wrap,
+			(unsigned long) len,
+			found ? "found" : "not found",
+			(unsigned long) start, (unsigned long) datalen, idx);
+
+		if (!found) {
+			if (start < len) {
+				/* We have found the buffer that start begins.
+				 */
+				found = true;
+				__warnx(TIRPC_DEBUG_FLAG_XDR, "found");
+			} else {
+				/* Keep looking, need to reduce start by the
+				 * length of this buffer.
+				 */
+				start -= len;
+			}
+		}
+
+		if (found) {
+			vector[idx] = uv->v;
+			vector[idx].vio_type = VIO_DATA;
+
+			if (start > 0) {
+				/* The start position wasn't at the start of
+				 * a buffer, adjust the vio_head of this buffer
+				 * and len and then zero out start for
+				 * future buffers.
+				 */
+				len -= start;
+				vector[idx].vio_head += start;
+				start = 0;
+			}
+
+			vector[idx].vio_length = len;
+
+			if (datalen < vector[idx].vio_length) {
+				/* This is the last buffer, and we're not using
+				 * all of it, adjust vio_length and vio_tail.
+				 */
+				vector[idx].vio_length = datalen;
+				vector[idx].vio_tail = vector[idx].vio_head
+					+ datalen;
+				datalen = 0;
+				break;
+			} else if (datalen == vector[idx].vio_length) {
+				/* We have reached the end. */
+				datalen = 0;
+				break;
+			}
+
+			datalen -= vector[idx].vio_length;
+
+			idx++;
+		}
+	}
+
+	if (datalen != 0) {
+		/* There wasn't enough data... */
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s start %lu remain %lu",
+			__func__, (unsigned long) start,
+			(unsigned long) datalen);
+			return false;
+	}
+
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s %s start %lu remain %lu idx %d",
+		__func__, found ? "found" : "not found",
+		(unsigned long) start, (unsigned long) datalen, idx);
+
+	return found;
+}
+
+static struct xdr_ioq_uv *
+xdr_ioq_use_or_allocate(struct xdr_ioq *xioq, xdr_vio *v, struct xdr_ioq_uv *uv)
+{
+	struct poolq_entry *have = &uv->uvq, *have2;
+	struct xdr_ioq_uv *uv2;
+
+	/* We have a header or tailer, let's see if it fits in this buffer,
+	 * otherwise allocate and insert a new buffer.
+	 */
+	uint32_t htlen = v->vio_length;
+
+	if (v->vio_type == VIO_TRAILER_LEN) {
+		/* First we need to fit in and encode the length of the trailer
+		 */
+		xdr_vio vlen;
+		
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s Fitting length xdr_ioq_uv %p (base %p head %p tail %p wrap %p) size %lu length %lu has %lu looking for 4",
+			__func__, uv, uv->v.vio_base, uv->v.vio_head,
+			uv->v.vio_tail, uv->v.vio_wrap,
+			(unsigned long) ioquv_size(uv),
+			(unsigned long) ioquv_length(uv),
+			(unsigned long) ioquv_more(uv));
+
+		/* Set up a dummy xdr_vio for the length */
+		memset(&vlen, 0, sizeof(vlen));
+		vlen.vio_type = VIO_TRAILER;
+		vlen.vio_length = 4;
+
+		/* Now recursively call to get space for the length */
+		uv = xdr_ioq_use_or_allocate(xioq, &vlen, uv);
+
+		/* Now we have space, either in the previous buffer or a new
+		 * buffer, go ahead and encode the length into it.
+		 */
+		*((uint32_t *) (vlen.vio_head)) =
+					(uint32_t) htonl(v->vio_length);
+
+		/* Becasue we have already set up the gss_iov, it's ok to
+		 * sneak the length it, it won't be part of the gss_iov but it
+		 * IS part of the xdr_iov.
+		 */
+	}
+
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s Examining xdr_ioq_uv %p (base %p head %p tail %p wrap %p) size %lu length %lu has %lu looking for %lu",
+		__func__, uv, uv->v.vio_base, uv->v.vio_head,
+		uv->v.vio_tail, uv->v.vio_wrap,
+		(unsigned long) ioquv_size(uv), (unsigned long) ioquv_length(uv),
+		(unsigned long) ioquv_more(uv), htlen);
+
+	if (ioquv_more(uv) >= htlen) {
+		/* The HEADER will fit */
+		v->vio_base = uv->v.vio_base;
+		v->vio_head = uv->v.vio_tail;
+		v->vio_tail = uv->v.vio_tail + htlen;
+		v->vio_wrap = uv->v.vio_wrap;
+
+		/* Fixup tail of this buffer */
+		uv->v.vio_tail = v->vio_tail;
+	} else {
+		/* We have to allocate and insert a new buffer */
+		if (xioq->ioq_uv.uvq_fetch) {
+			/** @todo: does this actually work? */
+			/* more of the same kind */
+			have2 =
+				xioq->ioq_uv.uvq_fetch(
+					xioq, uv->u.uio_p1,
+					"next buffer", 1,
+					IOQ_FLAG_NONE);
+
+			/* poolq_entry is the top element of xdr_ioq_uv
+			 */
+			uv2 = IOQ_(have2);
+			assert((void *)uv2 == (void *)have2);
+		} else {
+			uv2 = xdr_ioq_uv_create(xioq->ioq_uv.min_bsize,
+						UIO_FLAG_FREE);
+			have2 = &uv2->uvq;
+			(xioq->ioq_uv.uvqh.qcount)++;
+			TAILQ_INSERT_AFTER(&xioq->ioq_uv.uvqh.qh,
+					   have, have2, q);
+
+			/* Advance to new buffer */
+			uv = uv2;
+			have = have2;
+		}
+
+		/* Now set up for the header in the new buffer */
+		v->vio_base = uv->v.vio_base;
+		v->vio_head = uv->v.vio_head;
+		v->vio_tail = uv->v.vio_head + htlen;
+		v->vio_wrap = uv->v.vio_wrap;
+
+		/* Fixup tail of this buffer */
+		uv->v.vio_tail = v->vio_tail;
+	}
+
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s Produced xdr_ioq_uv %p (base %p head %p tail %p wrap %p) size %lu length %lu",
+		__func__, uv, uv->v.vio_base, uv->v.vio_head,
+		uv->v.vio_tail, uv->v.vio_wrap,
+		(unsigned long) ioquv_size(uv),
+		(unsigned long) ioquv_length(uv));
+
+	return uv;
+}
+
+static bool
+xdr_ioq_allochdrs(XDR *xdrs, u_int start, xdr_vio *vector, int iov_count)
+{
+	bool found = false;
+	struct xdr_ioq_uv *uv;
+	int idx = 0;
+	struct xdr_ioq *xioq = XIOQ(xdrs);
+	struct poolq_entry *have;
+
+	/* update the most recent data length, just in case */
+	xdr_tail_update(xdrs);
+
+	TAILQ_FOREACH(have, &(XIOQ(xdrs)->ioq_uv.uvqh.qh), q) {
+		u_int len;
+
+		uv = IOQ_(have);
+		len = ioquv_length(uv);
+
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s Examining xdr_ioq_uv %p (base %p head %p tail %p wrap %p) - %s start %lu len %lu",
+			__func__, uv, uv->v.vio_base, uv->v.vio_head,
+			uv->v.vio_tail, uv->v.vio_wrap,
+			found ? "found" : "not found",
+			(unsigned long) start, (unsigned long) len);
+
+		if (start < len) {
+			/* start is in this buffer, but not at the start.
+			 * This should be the first data buffer.
+			 */
+			found = true;
+			break;
+		}
+
+		/* Keep looking, need to reduce start by the length of
+		 * this buffer.
+		 */
+		start -= len;
+
+		if (start == 0) {
+			/* We have found the buffer prior to the one
+			 * that begins at start.
+			 */
+			__warnx(TIRPC_DEBUG_FLAG_XDR,
+				"%s found start after %p",
+				__func__, uv);
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		/* Failure */
+		return false;
+	}
+
+	/* uv and have are the buffer just before start */
+
+	if (vector[idx].vio_type == VIO_HEADER) {
+		if (start != 0) {
+			/* We are leading with a HEADER, but this buffer has
+			 * data beyond start, so we can't insert the HEADER in
+			 * the right place...
+			 */
+			__warnx(TIRPC_DEBUG_FLAG_XDR,
+				"Oops, trying to insert HEADER in the middle of a buffer");
+			return false;
+		}
+
+		/* We have a header, let's see if it fits in this buffer,
+		 * otherwise allocate and insert a new buffer.
+		 */
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"Calling xdr_ioq_use_or_allocate for idx %d for VIO_HEADER",
+			idx);
+
+		uv = xdr_ioq_use_or_allocate(xioq, &vector[idx], uv);
+
+		/* Advance to next (DATA) buffer */
+		idx++;
+	}
+
+	if (start == 0) {
+		/* We have the buffer prior to the DATA buffer that should be
+		 * at start, so advance to the next buffer so we will now have
+		 * the first DATA buffer.
+		 */
+		uv = IOQ_(TAILQ_NEXT(&uv->uvq, q));
+	}
+
+	/* Now idx, uv, and have should be the first DATA buffer */
+	while (idx < iov_count && vector[idx].vio_type == VIO_DATA) {
+		/* Advance to next buffer */
+		have = TAILQ_NEXT(have, q);
+
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"Skipping idx %d for VIO_DATA",
+			idx);
+
+		if (have != NULL) {
+			/* Next buffer exists */
+			uv = IOQ_(have);
+		} /* else leave the last DATA buffer */
+
+		idx++;
+	}
+
+	/* Now idx, uv, and have are the last DATA buffer */
+
+	while (idx < iov_count) {
+		/* Another TRAILER buffer to manage */
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"Calling xdr_ioq_use_or_allocate for idx %d for VIO_TRAILER",
+			idx);
+
+		uv = xdr_ioq_use_or_allocate(xioq, &vector[idx], uv);
+
+		/* Next vector buffer */
+		idx++;
+	}		
+
+	return true;
 }
 
 const struct xdr_ops xdr_ioq_ops = {
@@ -782,5 +1227,9 @@ const struct xdr_ops xdr_ioq_ops = {
 	xdr_ioq_destroy_internal,
 	xdr_ioq_control,
 	xdr_ioq_getbufs,
-	xdr_ioq_putbufs
+	xdr_ioq_putbufs,
+	xdr_ioq_newbuf,		/* x_newbuf */
+	xdr_ioq_iovcount,	/* x_iovcount */
+	xdr_ioq_fillbufs,	/* x_fillbufs */
+	xdr_ioq_allochdrs,	/* x_allochdrs */
 };
