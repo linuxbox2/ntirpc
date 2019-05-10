@@ -117,12 +117,23 @@ enum xdr_op {
 		   * BYTES_PER_XDR_UNIT)
 #endif
 
+/* XDR vector buffer types */
+typedef enum vio_type {
+	VIO_HEADER,             /* header buffer before data */
+	VIO_DATA,               /* data buffer */
+	VIO_TRAILER,            /* trailer buffer after data */
+	VIO_TRAILER_LEN,	/* trailer buffer that needs a length ahead */
+} vio_type;
+
 /* XDR buffer vector descriptors */
 typedef struct xdr_vio {
 	uint8_t *vio_base;
 	uint8_t *vio_head;	/* minimum vio_tail (header offset) */
-	uint8_t *vio_tail;
+	uint8_t *vio_tail;	/* end of the used part of the buffer */
 	uint8_t *vio_wrap;	/* maximum vio_tail */
+	uint32_t vio_length;	/* length of buffer, used for vector
+				   pre-allocation */
+	vio_type vio_type;	/* type of buffer */   
 } xdr_vio;
 
 /* vio_wrap >= vio_tail >= vio_head >= vio_base */
@@ -188,6 +199,14 @@ typedef struct rpc_xdr {
 		/* new vector and refcounted interfaces */
 		bool (*x_getbufs)(struct rpc_xdr *, xdr_uio *, u_int);
 		bool (*x_putbufs)(struct rpc_xdr *, xdr_uio *, u_int);
+		/* Force a new buffer to start (or fail) */
+		bool (*x_newbuf)(struct rpc_xdr *);
+		/* Return the count of buffers in the vector from pos */
+		int (*x_iovcount)(struct rpc_xdr *, u_int, u_int);
+		/* Fill xdr_vio with buffers from pos */
+		bool (*x_fillbufs)(struct rpc_xdr *, u_int , xdr_vio *, u_int);
+		/* Allocate bufs for headers and trailers and insert into vio */
+		bool (*x_allochdrs)(struct rpc_xdr *, u_int , xdr_vio *, int);
 	} *x_ops;
 	void *x_public; /* users' data */
 	void *x_private; /* pointer to private data */
@@ -330,6 +349,23 @@ xdr_putlong(XDR *xdrs, const long *lp)
 	if ((xdrs)->x_ops->x_control)				\
 		(*(xdrs)->x_ops->x_control)(xdrs, req, op)
 #define xdr_control(xdrs, req, op) XDR_CONTROL(xdrs, req, op)
+
+#define XDR_NEWBUF(xdrs)	\
+	(*(xdrs)->x_ops->x_newbuf)(xdrs)
+#define xdr_newbuf(xdrs, pos) XDR_NEWBUF(xdrs)
+
+#define XDR_IOVCOUNT(xdrs, pos, len) \
+	(*(xdrs)->x_ops->x_iovcount)(xdrs, pos, len)
+#define xdr_iovcount(xdrs, pos, len) XDR_IOVCOUNT(xdrs, pos, len)
+
+#define XDR_FILLBUFS(xdrs, pos, iov, len)	\
+	(*(xdrs)->x_ops->x_fillbufs)(xdrs, pos, iov, len)
+#define xdr_fillbufs(xdrs, pos, iov, len) XDR_FILLBUFS(xdrs, pos, iov, len)
+
+#define XDR_ALLOCHDRS(xdrs, pos, iov, iov_count)	\
+	(*(xdrs)->x_ops->x_allochdrs)(xdrs, pos, iov, iov_count)
+#define xdr_allochdrs(xdrs, pos, iov, iov_count) \
+	XDR_ALLOCHDRS(xdrs, pos, iov, iov_count)
 
 /*
  * Support struct for discriminated unions.
