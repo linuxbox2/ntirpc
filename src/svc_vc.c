@@ -934,18 +934,12 @@ svc_vc_reply(struct svc_req *req)
 	SVCXPRT *xprt = req->rq_xprt;
 	struct xdr_ioq *xioq;
 
-	/* XXX Until gss_get_mic and gss_wrap can be replaced with
-	 * iov equivalents, replies with RPCSEC_GSS security must be
-	 * encoded in a contiguous buffer.
-	 *
-	 * Nb, we should probably use getpagesize() on Unix.  Need
+	/* Nb, we should probably use getpagesize() on Unix.  Need
 	 * an equivalent for Windows.
 	 */
 	xioq = xdr_ioq_create(RPC_MAXDATA_DEFAULT,
 			      __svc_params->ioq.send_max + RPC_MAXDATA_DEFAULT,
-			      (req->rq_msg.cb_cred.oa_flavor == RPCSEC_GSS)
-			      ? UIO_FLAG_REALLOC | UIO_FLAG_FREE
-			      : UIO_FLAG_FREE);
+			      UIO_FLAG_FREE);
 
 	if (!xdr_reply_encode(xioq->xdrs, &req->rq_msg)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
