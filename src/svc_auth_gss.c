@@ -395,7 +395,6 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 	struct rpc_gss_init_res gr;
 	int call_stat, offset;
 	OM_uint32 min_stat;
-	bool gd_hashed = false;
 	enum auth_stat rc = AUTH_OK;
 
 	/* Initialize reply. */
@@ -403,8 +402,7 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 
 	/* Unserialize client credentials. */
 	if (req->rq_msg.cb_cred.oa_length <= 0) {
-		rc = AUTH_BADCRED;
-		goto out;
+		return AUTH_BADCRED;
 	}
 
 	gc = (struct rpc_gss_cred *)req->rq_msg.rq_cred_body;
@@ -458,7 +456,6 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 			rc = RPCSEC_GSS_CREDPROBLEM;
 			goto cred_free;
 		}
-		gd_hashed = true;
 		if (gc->gc_svc != gd->sec.svc)
 			gd->sec.svc = gc->gc_svc;
 	}
@@ -496,8 +493,7 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 			offset = 0;
 		} else if (offset >= gd->win || (gd->seqmask & (1 << offset))) {
 			*no_dispatch = true;
-			mutex_unlock(&gd->lock);
-			goto cred_free;
+			goto gd_free;
 		}
 		gd->seqmask |= (1 << offset);	/* XXX harmless */
 
@@ -556,40 +552,38 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 
 		if (gr.gr_major == GSS_S_COMPLETE) {
 			gd->established = true;
-			if (!gd_hashed) {
 
-				/* krb5 pac -- try all that apply */
-				gss_buffer_desc attr, display_buffer;
+			/* krb5 pac -- try all that apply */
+			gss_buffer_desc attr, display_buffer;
 
-				/* completely generic */
-				int auth = 1, comp = 0, more = -1;
+			/* completely generic */
+			int auth = 1, comp = 0, more = -1;
 
-				memset(&gd->pac.ms_pac, 0,
-				       sizeof(gss_buffer_desc));
-				memset(&display_buffer, 0,
-				       sizeof(gss_buffer_desc));
+			memset(&gd->pac.ms_pac, 0,
+			       sizeof(gss_buffer_desc));
+			memset(&display_buffer, 0,
+			       sizeof(gss_buffer_desc));
 
-				/* MS AD */
-				attr.value = "urn:mspac:";
-				attr.length = 10;
+			/* MS AD */
+			attr.value = "urn:mspac:";
+			attr.length = 10;
 
-				gr.gr_major =
-				    gss_get_name_attribute(&gr.gr_minor,
-							   gd->client_name,
-							   &attr, &auth, &comp,
-							   &gd->pac.ms_pac,
-							   &display_buffer,
-							   &more);
+			gr.gr_major =
+				gss_get_name_attribute(&gr.gr_minor,
+						       gd->client_name,
+						       &attr, &auth, &comp,
+						       &gd->pac.ms_pac,
+						       &display_buffer,
+						       &more);
 
-				if (gr.gr_major == GSS_S_COMPLETE) {
-					/* dont need it */
-					gss_release_buffer(&gr.gr_minor,
-							   &display_buffer);
-					gd->flags |= SVC_RPC_GSS_FLAG_MSPAC;
-				}
-
-				(void)authgss_ctx_hash_set(gd);
+			if (gr.gr_major == GSS_S_COMPLETE) {
+				/* dont need it */
+				gss_release_buffer(&gr.gr_minor,
+						   &display_buffer);
+				gd->flags |= SVC_RPC_GSS_FLAG_MSPAC;
 			}
+
+			(void)authgss_ctx_hash_set(gd);
 		}
 		break;
 
@@ -660,13 +654,15 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 	}
 gd_free:
 	mutex_unlock(&gd->lock);
-	if (gd_hashed) {
+
+	if (rc != AUTH_OK) {
+		/* On success, the ref gets returned to the caller */
 		unref_svc_rpc_gss_data(gd);
-		gd_hashed = false;
 	}
+
 cred_free:
 	xdr_free((xdrproc_t) xdr_rpc_gss_cred, gc);	
-out:
+
 	return rc;
 }
 
