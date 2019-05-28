@@ -117,7 +117,7 @@ svc_ioq_init(void)
 #define LAST_FRAG ((u_int32_t)(1 << 31))
 #define MAXALLOCA (256)
 
-static inline void
+static inline int
 svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 {
 	struct iovec *iov, *tiov, *wiov;
@@ -130,6 +130,7 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 	u_int32_t vsize = (xioq->ioq_uv.uvqh.qcount + 1) * sizeof(struct iovec);
 	int iw = 0;
 	int ix = 1;
+	int rc = 0;
 
 	if (unlikely(vsize > MAXALLOCA)) {
 		iov = mem_alloc(vsize);
@@ -195,7 +196,7 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s() writev failed (%d)\n",
 				__func__, errno);
-			SVC_DESTROY(xprt);
+			rc = -1;
 			break;
 		}
 		fbytes -= result;
@@ -216,6 +217,8 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 	if (unlikely(vsize > MAXALLOCA)) {
 		mem_free(iov, vsize);
 	}
+
+	return rc;
 }
 
 static void
@@ -224,13 +227,22 @@ svc_ioq_write(SVCXPRT *xprt, struct xdr_ioq *xioq, struct poolq_head *ifph)
 	struct poolq_entry *have;
 
 	for (;;) {
+		int rc = 0;
+
 		/* do i/o unlocked */
 		if (svc_work_pool.params.thrd_max
 		 && !(xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)) {
 			/* all systems are go! */
-			svc_ioq_flushv(xprt, xioq);
+			rc = svc_ioq_flushv(xprt, xioq);
 		}
-		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+
+		if (rc < 0) {
+			/* IO failed, destroy rather than releasing */
+			SVC_DESTROY(xprt);
+		} else {
+			SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+		}
+
 		XDR_DESTROY(xioq->xdrs);
 
 		mutex_lock(&ifph->qmutex);
