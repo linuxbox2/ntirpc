@@ -658,6 +658,7 @@ gd_free:
 	if (rc != AUTH_OK) {
 		/* On success, the ref gets returned to the caller */
 		unref_svc_rpc_gss_data(gd);
+		req->rq_auth = NULL;
 	}
 
 cred_free:
