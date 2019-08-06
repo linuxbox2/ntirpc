@@ -48,6 +48,8 @@ typedef struct rpc_dplx_lock {
 	} locktrace;
 } rpc_dplx_lock_t;
 
+struct svc_rqst_rec;
+
 /* new unified state */
 struct rpc_dplx_rec {
 	struct svc_xprt xprt;		/**< Transport Independent handle */
@@ -66,11 +68,13 @@ struct rpc_dplx_rec {
 	union {
 #if defined(TIRPC_EPOLL)
 		struct {
-			struct epoll_event event;
+			struct epoll_event event_recv;
+			struct epoll_event event_send;
+			struct xdr_ioq *xioq_send;
 		} epoll;
 #endif
 	} ev_u;
-	void *ev_p;			/* struct svc_rqst_rec (internal) */
+	struct svc_rqst_rec *ev_p;	/* struct svc_rqst_rec (internal) */
 
 	size_t maxrec;
 	long pagesz;

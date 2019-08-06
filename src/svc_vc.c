@@ -538,6 +538,9 @@ svc_vc_destroy_task(struct work_pool_entry *wpe)
 	if ((xp_flags & SVC_XPRT_FLAG_CLOSE)
 	    && rec->xprt.xp_fd != RPC_ANYFD) {
 		(void)close(rec->xprt.xp_fd);
+		__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+			"%s: fd %d closed",
+			 __func__, rec->xprt.xp_fd);
 		rec->xprt.xp_fd = RPC_ANYFD;
 	}
 
