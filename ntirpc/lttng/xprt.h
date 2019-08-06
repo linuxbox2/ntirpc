@@ -79,6 +79,314 @@ TRACEPOINT_LOGLEVEL(
 	unref,
 	TRACE_INFO)
 
+TRACEPOINT_EVENT(
+	xprt,
+	destroy,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt,
+		uint16_t, flags),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+		ctf_integer(uint16_t, count, flags)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	destroy,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	unhook,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt,
+		uint32_t, flags),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+		ctf_integer_hex(uint32_t, flags, flags)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	unhook,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	rearm,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt,
+		uint32_t, flags),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+		ctf_integer_hex(uint32_t, flags, flags)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	rearm,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	hook,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt,
+		uint32_t, flags),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+		ctf_integer_hex(uint32_t, flags, flags)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	hook,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	event,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt,
+		uint32_t, xp_flags,
+		uint32_t, ev_flag),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+		ctf_integer_hex(uint32_t, xp_flags, xp_flags)
+		ctf_integer_hex(uint32_t, ev_flag, ev_flag)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	event,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	recv,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt,
+		unsigned int, destroyed,
+		unsigned int, count),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+		ctf_integer(unsigned int, destroyed, destroyed)
+		ctf_integer(unsigned int, count, count)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	recv,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	send,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt,
+		unsigned int, destroyed,
+		unsigned int, count),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+		ctf_integer(unsigned int, destroyed, destroyed)
+		ctf_integer(unsigned int, count, count)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	send,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	write_blocked,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	write_blocked,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	write_complete,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt,
+		unsigned int, has_blocked),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+		ctf_integer(unsigned int, has_blocked, has_blocked)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	write_complete,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	sendmsg,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt,
+		unsigned int, remaining,
+		unsigned int, frag_needed,
+		unsigned int, iov_count),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+		ctf_integer(unsigned int, remaining, remaining)
+		ctf_integer(unsigned int, frag_needed, frag_needed)
+		ctf_integer(unsigned int, iov_count, iov_count)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	sendmsg,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	mutex,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	mutex,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	funcin,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	funcin,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	recv_frag,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt,
+		int32_t, frag_len),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+		ctf_integer_hex(int32_t, frag_len, frag_len)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	recv_frag,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	recv_bytes,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt,
+		int32_t, frag_remain,
+		ssize_t, bytes),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+		ctf_integer_hex(int32_t, frag_remain, frag_remain)
+		ctf_integer_hex(ssize_t, bytes, bytes)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	recv_bytes,
+	TRACE_INFO)
+
+TRACEPOINT_EVENT(
+	xprt,
+	recv_exit,
+	TP_ARGS(const char *, function,
+		unsigned int, line,
+		void *, xprt,
+		const char *, reason,
+		int, code),
+	TP_FIELDS(
+		ctf_string(fnc, function)
+		ctf_integer(unsigned int, line, line)
+		ctf_integer_hex(void *, xprt, xprt)
+		ctf_string(reason, reason)
+		ctf_integer(int, code, code)
+	)
+)
+
+TRACEPOINT_LOGLEVEL(
+	xprt,
+	recv_exit,
+	TRACE_INFO)
+
 #endif /* GANESHA_LTTNG_XPRT_TP_H */
 
 #undef TRACEPOINT_INCLUDE
