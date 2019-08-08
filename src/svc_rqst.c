@@ -195,7 +195,6 @@ svc_rqst_lookup_chan(uint32_t chan_id)
 }
 
 /* forward declaration in lieu of moving code {WAS} */
-static void svc_rqst_run_task(struct work_pool_entry *);
 static void svc_rqst_epoll_loop(struct work_pool_entry *wpe);
 static void svc_complete_task(struct svc_rqst_rec *sr_rec, bool finished);
 
@@ -290,7 +289,7 @@ svc_rqst_new_evchan(uint32_t *chan_id /* OUT */, void *u_data, uint32_t flags)
 	struct svc_rqst_rec *sr_rec;
 	uint32_t n_id;
 	int code = 0;
-	work_pool_fun_t fun = svc_rqst_run_task;
+	work_pool_fun_t fun = NULL;
 
 	mutex_lock(&svc_rqst_set.mtx);
 	if (!svc_rqst_set.next_id) {
@@ -1138,29 +1137,6 @@ static void svc_complete_task(struct svc_rqst_rec *sr_rec, bool finished)
 		atomic_dec_int32_t(&sr_rec->ev_refcnt);	/* svc_rqst_set */
 	}
 	svc_rqst_release(sr_rec);
-}
-
-/*
- * No locking, "there can be only one"
- */
-static void
-svc_rqst_run_task(struct work_pool_entry *wpe)
-{
-	struct svc_rqst_rec *sr_rec =
-		opr_containerof(wpe, struct svc_rqst_rec, ev_wpe);
-
-	/* enter event loop */
-	switch (sr_rec->ev_type) {
-	default:
-		/* XXX formerly select/fd_set case, now placeholder for new
-		 * event systems, reworked select, etc. */
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: unsupported event type",
-			__func__);
-		break;
-	}			/* switch */
-
-	svc_complete_task(sr_rec, true);
 }
 
 int
