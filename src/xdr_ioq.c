@@ -190,16 +190,16 @@ xdr_ioq_uv_recycle(struct poolq_head *ioqh, struct poolq_entry *have)
 void
 xdr_ioq_uv_release(struct xdr_ioq_uv *uv)
 {
-	if (uv->u.uio_refer) {
-		/* not optional in this case! */
-		uv->u.uio_refer->uio_release(uv->u.uio_refer, UIO_FLAG_NONE);
-		uv->u.uio_refer = NULL;
-	}
-
 	if (!(--uv->u.uio_references)) {
 		if (uv->u.uio_release) {
 			/* handle both xdr_ioq_uv and vio */
 			uv->u.uio_release(&uv->u, UIO_FLAG_NONE);
+		} else if (uv->u.uio_flags & UIO_FLAG_REFER) {
+			/* not optional in this case! */
+			__warnx(TIRPC_DEBUG_FLAG_XDR, "Call uio_release");
+			uv->u.uio_refer->uio_release(uv->u.uio_refer,
+						     UIO_FLAG_NONE);
+			mem_free(uv, sizeof(*uv));
 		} else if (uv->u.uio_flags & UIO_FLAG_FREE) {
 			free_buffer(uv->v.vio_base, ioquv_size(uv));
 			mem_free(uv, sizeof(*uv));
@@ -583,6 +583,13 @@ xdr_ioq_putbufs(XDR *xdrs, xdr_uio *uio, u_int flags)
 	xdr_vio *v;
 	int ix;
 
+	/* update the most recent data length, just in case */
+	xdr_tail_update(xdrs);
+
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s Before putbufs - pos %lu",
+		__func__, (unsigned long) XDR_GETPOS(xdrs));
+
 	for (ix = 0; ix < uio->uio_count; ++ix) {
 		/* advance fill pointer, do not allocate buffers, refs =1 */
 		uv = xdr_ioq_uv_advance(XIOQ(xdrs));
@@ -592,9 +599,29 @@ xdr_ioq_putbufs(XDR *xdrs, xdr_uio *uio, u_int flags)
 			xdr_ioq_uv_update(XIOQ(xdrs), uv);
 
 		v = &(uio->uio_vio[ix]);
-		uv->u.uio_flags = UIO_FLAG_NONE; /* !RECLAIM */
+		uv->u.uio_flags = UIO_FLAG_REFER;
 		uv->v = *v;
 
+		/* save original buffer sequence for rele */
+		uv->u.uio_refer = uio;
+		(uio->uio_references)++;
+
+		/* Now update the XDR position */
+		xdrs->x_data = uv->v.vio_tail;
+		xdrs->x_base = &uv->v;
+		xdrs->x_v = uv->v;
+
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s After putbufs Examining xdr_ioq_uv %p (base %p head %p tail %p wrap %p len %lu full %lu) pos %lu",
+			__func__, uv, uv->v.vio_base, uv->v.vio_head,
+			uv->v.vio_tail, uv->v.vio_wrap,
+			(unsigned long) ioquv_length(uv),
+			(unsigned long) (uintptr_t)xdrs->x_v.vio_wrap
+					- (uintptr_t)xdrs->x_v.vio_head,
+			(unsigned long) XDR_GETPOS(xdrs));
+	}
+
+	return (TRUE);
 #if 0
 Saved for later golden buttery results -- Matt
 	if (flags & XDR_PUTBUFS_FLAG_BRELE) {
@@ -626,7 +653,6 @@ Saved for later golden buttery results -- Matt
 			uv->v.vio_head = 0;
 		}
 	}
-#endif
 		/* save original buffer sequence for rele */
 		if (ix == 0) {
 			uv->u.uio_refer = uio;
@@ -635,6 +661,7 @@ Saved for later golden buttery results -- Matt
 	}
 
 	return (TRUE);
+#endif
 }
 
 /*
@@ -1001,7 +1028,7 @@ xdr_ioq_use_or_allocate(struct xdr_ioq *xioq, xdr_vio *v, struct xdr_ioq_uv *uv)
 		/* First we need to fit in and encode the length of the trailer
 		 */
 		xdr_vio vlen;
-		
+
 		__warnx(TIRPC_DEBUG_FLAG_XDR,
 			"%s Fitting length xdr_ioq_uv %p (base %p head %p tail %p wrap %p) size %lu length %lu has %lu looking for 4",
 			__func__, uv, uv->v.vio_base, uv->v.vio_head,
@@ -1212,7 +1239,7 @@ xdr_ioq_allochdrs(XDR *xdrs, u_int start, xdr_vio *vector, int iov_count)
 
 		/* Next vector buffer */
 		idx++;
-	}		
+	}
 
 	return true;
 }

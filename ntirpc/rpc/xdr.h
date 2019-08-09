@@ -144,6 +144,7 @@ typedef struct xdr_vio {
 #define UIO_FLAG_GIFT		0x0004
 #define UIO_FLAG_MORE		0x0008
 #define UIO_FLAG_REALLOC	0x0010
+#define UIO_FLAG_REFER		0x0020
 
 struct xdr_uio;
 typedef void (*xdr_uio_release)(struct xdr_uio *, u_int);
