@@ -740,98 +740,17 @@ svcauth_gss_unwrap(struct svc_req *req)
 	mutex_lock(&gd->lock);
 	result = xdr_rpc_gss_unwrap(req->rq_xdrs, req->rq_msg.rm_xdr.proc,
 				    req->rq_msg.rm_xdr.where, gd->ctx,
-				    gd->sec.qop, gd->sec.svc, gc_seq);
+				    gd->sec.qop, gd->sec.svc, gc_seq,
+				    NULL, NULL);
 	mutex_unlock(&gd->lock);
 	return (result);
 }
 
-static inline bool
-xdr_rpc_gss_checksum(struct svc_req *req, gss_ctx_id_t ctx, gss_qop_t qop,
-		     rpc_gss_svc_t svc, u_int seq)
+void svcauth_gss_svc_checksum(void *priv, void *databuf, size_t length)
 {
-	XDR *xdrs = req->rq_xdrs;
-	XDR tmpxdrs;
-	gss_buffer_desc databuf, wrapbuf;
-	OM_uint32 maj_stat, min_stat;
-	u_int qop_state;
-	int conf_state;
-	uint32_t seq_num;
-	bool xdr_stat;
+	struct svc_req *req = priv;	
 
-	if (req->rq_msg.rm_xdr.proc == (xdrproc_t) xdr_void
-	 || req->rq_msg.rm_xdr.where == NULL)
-		return (TRUE);
-
-	memset(&databuf, 0, sizeof(databuf));
-	memset(&wrapbuf, 0, sizeof(wrapbuf));
-
-	if (svc == RPCSEC_GSS_SVC_INTEGRITY) {
-		/* Decode databody_integ. */
-		if (!xdr_rpc_gss_decode(xdrs, &databuf)) {
-			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-				"%s() xdr_rpc_gss_decode databody_integ failed",
-				__func__);
-			return (FALSE);
-		}
-		/* Decode checksum. */
-		if (!xdr_rpc_gss_decode(xdrs, &wrapbuf)) {
-			gss_release_buffer(&min_stat, &databuf);
-			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-				"%s() xdr_rpc_gss_decode checksum failed",
-				__func__);
-			return (FALSE);
-		}
-		/* Verify checksum and QOP. */
-		maj_stat =
-		    gss_verify_mic(&min_stat, ctx, &databuf, &wrapbuf,
-				   &qop_state);
-		gss_release_buffer(&min_stat, &wrapbuf);
-
-		if (maj_stat != GSS_S_COMPLETE || qop_state != qop) {
-			gss_release_buffer(&min_stat, &databuf);
-			gss_log_status("gss_verify_mic", maj_stat, min_stat);
-			return (FALSE);
-		}
-	} else if (svc == RPCSEC_GSS_SVC_PRIVACY) {
-		/* Decode databody_priv. */
-		if (!xdr_rpc_gss_decode(xdrs, &wrapbuf)) {
-			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-				"%s() xdr_rpc_gss_decode databody_priv failed",
-				__func__);
-			return (FALSE);
-		}
-		/* Decrypt databody. */
-		maj_stat =
-		    gss_unwrap(&min_stat, ctx, &wrapbuf, &databuf, &conf_state,
-			       &qop_state);
-
-		gss_release_buffer(&min_stat, &wrapbuf);
-
-		/* Verify encryption and QOP. */
-		if (maj_stat != GSS_S_COMPLETE || qop_state != qop
-		    || conf_state != TRUE) {
-			gss_release_buffer(&min_stat, &databuf);
-			gss_log_status("gss_unwrap", maj_stat, min_stat);
-			return (FALSE);
-		}
-	}
-	/* Decode rpc_gss_data_t (sequence number + arguments). */
-	xdrmem_create(&tmpxdrs, databuf.value, databuf.length, XDR_DECODE);
-	SVC_CHECKSUM(req, databuf.value, databuf.length);
-	xdr_stat = (XDR_GETUINT32(&tmpxdrs, &seq_num)
-		    && (*req->rq_msg.rm_xdr.proc)
-			(&tmpxdrs, req->rq_msg.rm_xdr.where));
-	XDR_DESTROY(&tmpxdrs);
-	gss_release_buffer(&min_stat, &databuf);
-
-	/* Verify sequence number. */
-	if (xdr_stat == TRUE && seq_num != seq) {
-		__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-			"%s() wrong sequence number in databody",
-			__func__);
-		return (FALSE);
-	}
-	return (xdr_stat);
+	SVC_CHECKSUM(req, databuf, length);
 }
 
 static bool
@@ -846,8 +765,10 @@ svcauth_gss_checksum(struct svc_req *req)
 	}
 
 	mutex_lock(&gd->lock);
-	result = xdr_rpc_gss_checksum(req, gd->ctx, gd->sec.qop, gd->sec.svc,
-				      gc_seq);
+	result = xdr_rpc_gss_unwrap(req->rq_xdrs, req->rq_msg.rm_xdr.proc,
+				    req->rq_msg.rm_xdr.where, gd->ctx,
+				    gd->sec.qop, gd->sec.svc, gc_seq,
+				    svcauth_gss_svc_checksum, req);
 	mutex_unlock(&gd->lock);
 	return (result);
 }

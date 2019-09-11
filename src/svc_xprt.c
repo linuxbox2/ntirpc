@@ -172,6 +172,7 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 			}
 			(*setup)(&xprt); /* zalloc, xp_refcnt = 1 */
 			xprt->xp_fd = fd;
+			xprt->xp_fd_send = -1;
 			xprt->xp_flags = SVC_XPRT_FLAG_INITIAL;
 
 			/* Get ref for caller */

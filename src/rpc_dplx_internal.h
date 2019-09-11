@@ -32,6 +32,7 @@
 #include <misc/wait_queue.h>
 #include <rpc/svc.h>
 #include <rpc/xdr_ioq.h>
+#include <rpc/pool_queue.h>
 
 /* Svc event strategy */
 enum svc_event_type {
@@ -47,10 +48,13 @@ typedef struct rpc_dplx_lock {
 	} locktrace;
 } rpc_dplx_lock_t;
 
+struct svc_rqst_rec;
+
 /* new unified state */
 struct rpc_dplx_rec {
 	struct svc_xprt xprt;		/**< Transport Independent handle */
 	struct xdr_ioq ioq;
+	struct poolq_head writeq;	/**< poolq for write requests */
 	struct opr_rbtree call_replies;
 	struct opr_rbtree_node fd_node;
 	struct {
@@ -64,11 +68,13 @@ struct rpc_dplx_rec {
 	union {
 #if defined(TIRPC_EPOLL)
 		struct {
-			struct epoll_event event;
+			struct epoll_event event_recv;
+			struct epoll_event event_send;
+			struct xdr_ioq *xioq_send;
 		} epoll;
 #endif
 	} ev_u;
-	void *ev_p;			/* struct svc_rqst_rec (internal) */
+	struct svc_rqst_rec *ev_p;	/* struct svc_rqst_rec (internal) */
 
 	size_t maxrec;
 	long pagesz;
@@ -109,6 +115,9 @@ rpc_dplx_rec_init(struct rpc_dplx_rec *rec)
 	rpc_dplx_lock_init(&rec->recv.lock);
 	opr_rbtree_init(&rec->call_replies, clnt_req_xid_cmpf);
 	mutex_init(&rec->xprt.xp_lock, NULL);
+	TAILQ_INIT(&rec->writeq.qh);
+	mutex_init(&rec->writeq.qmutex, NULL);
+	rec->writeq.qcount = 0;
 	/* Stop this xprt being cleaned immediately */
 	(void)clock_gettime(CLOCK_MONOTONIC_FAST, &(rec->recv.ts));
 
@@ -120,6 +129,7 @@ rpc_dplx_rec_destroy(struct rpc_dplx_rec *rec)
 {
 	rpc_dplx_lock_destroy(&rec->recv.lock);
 	mutex_destroy(&rec->xprt.xp_lock);
+	mutex_destroy(&rec->writeq.qmutex);
 
 #if defined(HAVE_BLKIN)
 	if (rec->xprt.blkin.svc_name)

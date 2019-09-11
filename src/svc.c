@@ -189,7 +189,6 @@ svc_init(svc_init_params *params)
 	if (work_pool_params.thrd_max < work_pool_params.thrd_min)
 		work_pool_params.thrd_max = work_pool_params.thrd_min;
 
-	svc_ioq_init();
 	if (work_pool_init(&svc_work_pool, "svc_", &work_pool_params)) {
 		mutex_unlock(&__svc_params->mtx);
 		return false;

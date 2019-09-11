@@ -642,5 +642,5 @@ authgss_unwrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr)
 
 	return (xdr_rpc_gss_unwrap
 		(xdrs, xdr_func, xdr_ptr, gd->ctx, gd->sec.qop, gd->sec.svc,
-		 gd->gc.gc_seq));
+		 gd->gc.gc_seq, NULL, NULL));
 }

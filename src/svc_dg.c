@@ -271,7 +271,7 @@ svc_dg_rendezvous(SVCXPRT *xprt)
 		return (XPRT_DIED);
 	}
 
-	if (unlikely(svc_rqst_rearm_events(xprt))) {
+	if (unlikely(svc_rqst_rearm_events(xprt, SVC_XPRT_FLAG_ADDED_RECV))) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
 			__func__, xprt, xprt->xp_fd);
