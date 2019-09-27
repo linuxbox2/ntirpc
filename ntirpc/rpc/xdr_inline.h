@@ -482,12 +482,8 @@ xdr_opaque_encode(XDR *xdrs, const char *cp, u_int cnt)
 	 * XDR_INLINE is just as likely to do a function call,
 	 * so don't bother with it here.
 	 */
-	if (!XDR_PUTBYTES(xdrs, cp, cnt)) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s:%u ERROR opaque",
-			__func__, __LINE__);
+	if (!XDR_PUTBYTES(xdrs, cp, cnt))
 		return (false);
-	}
 
 	/*
 	 * round byte count to full xdr units
@@ -498,12 +494,8 @@ xdr_opaque_encode(XDR *xdrs, const char *cp, u_int cnt)
 		uint32_t zero = 0;
 
 		if (!XDR_PUTBYTES(xdrs, (char *) &zero,
-				  BYTES_PER_XDR_UNIT - rndup)) {
-			__warnx(TIRPC_DEBUG_FLAG_ERROR,
-				"%s:%u ERROR zero",
-				__func__, __LINE__);
+				  BYTES_PER_XDR_UNIT - rndup))
 			return (false);
-		}
 	}
 
 	return (true);
@@ -640,12 +632,8 @@ xdr_bytes_encode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 		return (false);
 	}
 
-	if (!XDR_PUTUINT32(xdrs, size)) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s:%u ERROR size",
-			__func__, __LINE__);
+	if (!XDR_PUTUINT32(xdrs, size))
 		return (false);
-	}
 
 	return (xdr_opaque_encode(xdrs, sp, size));
 }
@@ -840,12 +828,8 @@ xdr_array_encode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize,
 		return (false);
 	}
 
-	if (!XDR_PUTUINT32(xdrs, size)) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s:%u ERROR size",
-			__func__, __LINE__);
+	if (!XDR_PUTUINT32(xdrs, size))
 		return (false);
-	}
 
 	for (; (i < size) && stat; i++) {
 		stat = (*xdr_elem) (xdrs, target);
@@ -1002,12 +986,8 @@ xdr_string_encode(XDR *xdrs, char **cpp, u_int maxsize)
 		return (false);
 	}
 
-	if (!XDR_PUTUINT32(xdrs, size)) {
-		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s:%u ERROR size",
-			__func__, __LINE__);
+	if (!XDR_PUTUINT32(xdrs, size))
 		return (false);
-	}
 
 	return (xdr_opaque_encode(xdrs, *cpp, size));
 }
