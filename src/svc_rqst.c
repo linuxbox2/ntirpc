@@ -1219,8 +1219,6 @@ enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs)
 
 	__svc_params->free_cb(req, stat);
 
-	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-
 	return stat;
 }
 
