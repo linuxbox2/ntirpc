@@ -665,6 +665,8 @@ svc_rqst_rearm_events_locked(SVCXPRT *xprt, uint16_t ev_flags)
 	if (sr_rec->ev_flags & SVC_RQST_FLAG_SHUTDOWN)
 		return (0);
 
+	/* Currently, can only be called with one of ADDED_RECV or ADDED_SEND, so we
+	 * only need to take one ref. */
 	SVC_REF(xprt, SVC_REF_FLAG_NONE);
 
 	/* assuming success */
@@ -993,6 +995,8 @@ svc_rqst_evchan_write(SVCXPRT *xprt, struct xdr_ioq *xioq, bool has_blocked)
 		code = svc_rqst_rearm_events_locked(xprt,
 						    SVC_XPRT_FLAG_ADDED_SEND);
 	} else {
+		/* svc_rqst_hook_events doesn't take a ref, so take one here */
+		SVC_REF(xprt, SVC_REF_FLAG_NONE);
 		code = svc_rqst_hook_events(rec, sr_rec,
 					    SVC_XPRT_FLAG_ADDED_SEND);
 	}
