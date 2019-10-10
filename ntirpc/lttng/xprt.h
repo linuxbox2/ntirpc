@@ -1,7 +1,7 @@
 /*
  * vim:noexpandtab:shiftwidth=8:tabstop=8:
  *
- * Copyright 2018 Red Hat, Inc. and/or its affiliates.
+ * Copyright 2018-2019 Red Hat, Inc. and/or its affiliates.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -90,7 +90,7 @@ TRACEPOINT_EVENT(
 		ctf_string(fnc, function)
 		ctf_integer(unsigned int, line, line)
 		ctf_integer_hex(void *, xprt, xprt)
-		ctf_integer(uint16_t, count, flags)
+		ctf_integer_hex(uint16_t, flags, flags)
 	)
 )
 
