@@ -70,6 +70,7 @@
 #define LAST_FRAG_XDR_UNITS ((LAST_FRAG - 1) & ~(BYTES_PER_XDR_UNIT - 1))
 #define MAXALLOCA (256)
 
+/* Returns 0 on success, EWOULDBLOCK if would block, <0 on error */
 static inline int
 svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 {
@@ -192,7 +193,7 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 		if (!XDR_FILLBUFS(xioq->xdrs, xioq->write_start, vio, fbytes)) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s() XDR_FILLBUFS failed", __func__);
-			SVC_DESTROY(xprt);
+			error = -1;
 			break;
 		}
 
@@ -244,6 +245,8 @@ again:
 				/* Socket buffer full; don't destroy */
 				error = EWOULDBLOCK;
 				xioq->has_blocked = true;
+			} else {
+				error = result;
 			}
 			break;
 		}
