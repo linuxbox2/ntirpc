@@ -1106,6 +1106,7 @@ xdr_ioq_allochdrs(XDR *xdrs, u_int start, xdr_vio *vector, int iov_count)
 	int idx = 0;
 	struct xdr_ioq *xioq = XIOQ(xdrs);
 	struct poolq_entry *have;
+	u_int totlen = start;
 
 	/* update the most recent data length, just in case */
 	xdr_tail_update(xdrs);
@@ -1175,6 +1176,9 @@ xdr_ioq_allochdrs(XDR *xdrs, u_int start, xdr_vio *vector, int iov_count)
 
 		uv = xdr_ioq_use_or_allocate(xioq, &vector[idx], uv);
 
+		/* Record used space */
+		totlen += vector[idx].vio_length;
+
 		/* Advance to next (DATA) buffer */
 		idx++;
 	}
@@ -1195,6 +1199,9 @@ xdr_ioq_allochdrs(XDR *xdrs, u_int start, xdr_vio *vector, int iov_count)
 		__warnx(TIRPC_DEBUG_FLAG_XDR,
 			"Skipping idx %d for VIO_DATA",
 			idx);
+
+		/* Record used space */
+		totlen += vector[idx].vio_length;
 
 		if (have != NULL) {
 			/* Next buffer exists */
@@ -1235,9 +1242,15 @@ xdr_ioq_allochdrs(XDR *xdrs, u_int start, xdr_vio *vector, int iov_count)
 
 		uv = xdr_ioq_use_or_allocate(xioq, &vector[idx], uv);
 
+		/* Record used space */
+		totlen += vector[idx].vio_length;
+
 		/* Next vector buffer */
 		idx++;
 	}
+
+	/* Update position to end of the last buffer */
+	XDR_SETPOS(xdrs, start + totlen);
 
 	return true;
 }
