@@ -716,6 +716,15 @@ svcauth_gss_wrap(struct svc_req *req, XDR *xdrs)
 					req->rq_msg.rq_cred_body;
 	bool result;
 
+
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s() %d %s", __func__,
+		!gd->established ? 0 : gc->gc_svc,
+		!gd->established ? "not established"
+		: gc->gc_svc == RPCSEC_GSS_SVC_NONE ? "krb5"
+		: gc->gc_svc == RPCSEC_GSS_SVC_INTEGRITY ? "krb5i"
+		: gc->gc_svc == RPCSEC_GSS_SVC_PRIVACY ? "krb5p"
+		: "unknown");
+
 	if (!gd->established || gc->gc_svc == RPCSEC_GSS_SVC_NONE)
 		return (svc_auth_none.svc_ah_ops->svc_ah_wrap(req, xdrs));
 
