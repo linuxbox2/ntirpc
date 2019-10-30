@@ -320,13 +320,12 @@ void svc_ioq_write(SVCXPRT *xprt)
 	tracepoint(xprt, mutex, __func__, __LINE__, xprt);
 #endif /* USE_LTTNG_NTIRPC */
 	mutex_lock(&rec->writeq.qmutex);
-
+	/* Process the xioq from the head of the xprt queue */
 	have = TAILQ_FIRST(&rec->writeq.qh);
+	mutex_unlock(&rec->writeq.qmutex);
 
 	while (have != NULL) {
 		int rc = 0;
-		/* Process the xioq from the head of the xprt queue */
-		mutex_unlock(&rec->writeq.qmutex);
 
 		xioq = _IOQ(have);
 
@@ -340,29 +339,22 @@ void svc_ioq_write(SVCXPRT *xprt)
 			rc = svc_ioq_flushv(xprt, xioq);
 		}
 
-		if (rc != EWOULDBLOCK) {
-			if (rc < 0) {
-				/* IO failed, destroy rather than releasing */
-				__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-					"%s: %p fd %d About to destroy - rc = %d",
-					__func__, xprt, xprt->xp_fd, rc);
-				SVC_DESTROY(xprt);
-			} else {
-				__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-					"%s: %p fd %d About to release",
-					__func__, xprt, xprt->xp_fd);
-				SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
-			}
-
-			XDR_DESTROY(xioq->xdrs);
-		}
-
 #ifdef USE_LTTNG_NTIRPC
 		tracepoint(xprt, mutex, __func__, __LINE__, &rec->xprt);
 #endif /* USE_LTTNG_NTIRPC */
 		mutex_lock(&rec->writeq.qmutex);
+		if (rc < 0) {
+			/* Dequeue the failed request */
+			TAILQ_REMOVE(&rec->writeq.qh, have, q);
+			mutex_unlock(&rec->writeq.qmutex);
 
-		if (rc == EWOULDBLOCK) {
+			/* IO failed, destroy rather than releasing */
+			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+				"%s: %p fd %d About to destroy - rc = %d",
+				__func__, xprt, xprt->xp_fd, rc);
+			SVC_DESTROY(xprt);
+			break;
+		} else if (rc == EWOULDBLOCK){
 			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
 				"%s: %p fd %d EWOULDBLOCK",
 				__func__, xprt, xprt->xp_fd);
@@ -372,34 +364,42 @@ void svc_ioq_write(SVCXPRT *xprt)
 				   &rec->xprt);
 #endif /* USE_LTTNG_NTIRPC */
 			svc_rqst_evchan_write(xprt, xioq, has_blocked);
+			mutex_unlock(&rec->writeq.qmutex);
 			break;
-		} else if (xioq->has_blocked) {
-			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-				"%s: %p fd %d COMPLETED AFTER BLOCKING",
-				__func__, xprt, xprt->xp_fd);
-#ifdef USE_LTTNG_NTIRPC
-			tracepoint(xprt, write_complete, __func__, __LINE__,
-				   &rec->xprt, (int) xioq->has_blocked);
-#endif /* USE_LTTNG_NTIRPC */
-			svc_rqst_xprt_send_complete(xprt);
 		} else {
-			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
-				"%s: %p fd %d COMPLETED",
-				__func__, xprt, xprt->xp_fd);
+			if (xioq->has_blocked) {
+				__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+					"%s: %p fd %d COMPLETED AFTER BLOCKING",
+					__func__, xprt, xprt->xp_fd);
 #ifdef USE_LTTNG_NTIRPC
-			tracepoint(xprt, write_complete, __func__, __LINE__,
-				   &rec->xprt, (int) xioq->has_blocked);
+				tracepoint(xprt, write_complete, __func__, __LINE__,
+					   &rec->xprt, (int) xioq->has_blocked);
 #endif /* USE_LTTNG_NTIRPC */
+				svc_rqst_xprt_send_complete(xprt);
+			} else {
+				__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+					"%s: %p fd %d COMPLETED",
+					__func__, xprt, xprt->xp_fd);
+#ifdef USE_LTTNG_NTIRPC
+				tracepoint(xprt, write_complete, __func__, __LINE__,
+					   &rec->xprt, (int) xioq->has_blocked);
+#endif /* USE_LTTNG_NTIRPC */
+			}
+
+			/* Dequeue the completed request */
+			TAILQ_REMOVE(&rec->writeq.qh, have, q);
+
+			/* Fetch the next request */
+			have = TAILQ_FIRST(&rec->writeq.qh);
+			mutex_unlock(&rec->writeq.qmutex);
+
+			__warnx(TIRPC_DEBUG_FLAG_SVC_VC,
+				"%s: %p fd %d About to release",
+				__func__, xprt, xprt->xp_fd);
+			SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
+			XDR_DESTROY(xioq->xdrs);
 		}
-
-		/* Dequeue the completed request */
-		TAILQ_REMOVE(&rec->writeq.qh, have, q);
-
-		/* Fetch the next request */
-		have = TAILQ_FIRST(&rec->writeq.qh);
 	}
-
-	mutex_unlock(&rec->writeq.qmutex);
 }
 
 static void
