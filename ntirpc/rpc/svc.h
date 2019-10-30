@@ -60,6 +60,7 @@ typedef struct svc_xprt SVCXPRT;
 enum xprt_stat {
 	XPRT_IDLE = 0,
 	XPRT_MOREREQS,
+	XPRT_SUSPEND,
 	/* always last in this order for comparisons */
 	XPRT_DIED,
 	XPRT_DESTROYED
@@ -118,11 +119,13 @@ enum xprt_stat {
 #define RPC_SVC_FDSET_SET       5
 
 typedef enum xprt_stat (*svc_xprt_fun_t) (SVCXPRT *);
-typedef enum xprt_stat (*svc_xprt_xdr_fun_t) (SVCXPRT *, XDR *);
+typedef struct svc_req *(*svc_xprt_alloc_fun_t) (SVCXPRT *, XDR *);
+typedef void (*svc_xprt_free_fun_t) (struct svc_req *, enum xprt_stat);
 
 typedef struct svc_init_params {
 	svc_xprt_fun_t disconnect_cb;
-	svc_xprt_xdr_fun_t request_cb;
+	svc_xprt_alloc_fun_t alloc_cb;
+	svc_xprt_free_fun_t free_cb;
 
 	u_long flags;
 	u_int max_connections;	/* xprts */
@@ -148,7 +151,8 @@ typedef struct svc_init_params {
 
 #define SVC_XPRT_FLAG_NONE		0x0000
 /* uint16_t actually used */
-#define SVC_XPRT_FLAG_ADDED		0x0001
+#define SVC_XPRT_FLAG_ADDED_RECV	0x0001
+#define SVC_XPRT_FLAG_ADDED_SEND	0x0002
 
 #define SVC_XPRT_FLAG_INITIAL		0x0004
 #define SVC_XPRT_FLAG_INITIALIZED	0x0008
@@ -235,6 +239,8 @@ struct svc_xprt {
 		svc_req_fun_t process_cb;
 		svc_xprt_fun_t rendezvous_cb;
 	}  xp_dispatch;
+	/* Handle resumed requests */
+	svc_req_fun_t xp_resume_cb;
 	SVCXPRT *xp_parent;
 
 	char *xp_tp;		/* transport provider device name */
@@ -260,6 +266,7 @@ struct svc_xprt {
 	mutex_t xp_lock;
 
 	int xp_fd;
+	int xp_fd_send;		/* Sometimes a dup of xp_fd needed for send */
 	int xp_ifindex;		/* interface index */
 	int xp_si_type;		/* si type */
 	int xp_type;		/* xprt type */
@@ -327,6 +334,8 @@ struct svc_req {
 #define svc_getlocal_netbuf(x) (&(x)->xp_local.nb)
 #define svc_getrpccaller(x) (&(x)->xp_remote.ss)
 #define svc_getrpclocal(x) (&(x)->xp_local.ss)
+
+extern void svc_resume(struct svc_req *req);
 
 /*
  * Ganesha.  Get connected transport type.
@@ -448,6 +457,10 @@ static inline void svc_destroy_it(SVCXPRT *xprt,
 						      SVC_XPRT_FLAG_DESTROYING);
 
 	XPRT_TRACE(xprt, __func__, tag, line);
+
+#ifdef USE_LTTNG_NTIRPC
+	tracepoint(xprt, destroy, tag, line, xprt, flags);
+#endif /* USE_LTTNG_NTIRPC */
 
 	if (flags & SVC_XPRT_FLAG_DESTROYING) {
 		/* previously set, do nothing */

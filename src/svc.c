@@ -139,7 +139,8 @@ svc_init(svc_init_params *params)
 		return true;
 	}
 	__svc_params->disconnect_cb = params->disconnect_cb;
-	__svc_params->request_cb = params->request_cb;
+	__svc_params->alloc_cb = params->alloc_cb;
+	__svc_params->free_cb = params->free_cb;
 
 	__svc_params->max_connections =
 	    (params->max_connections) ? params->max_connections : FD_SETSIZE;
@@ -188,7 +189,6 @@ svc_init(svc_init_params *params)
 	if (work_pool_params.thrd_max < work_pool_params.thrd_min)
 		work_pool_params.thrd_max = work_pool_params.thrd_min;
 
-	svc_ioq_init();
 	if (work_pool_init(&svc_work_pool, "svc_", &work_pool_params)) {
 		mutex_unlock(&__svc_params->mtx);
 		return false;

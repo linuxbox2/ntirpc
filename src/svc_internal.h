@@ -56,7 +56,8 @@ struct svc_params {
 	} ev_u;
 
 	svc_xprt_fun_t disconnect_cb;
-	svc_xprt_xdr_fun_t request_cb;
+	svc_xprt_alloc_fun_t alloc_cb;
+	svc_xprt_free_fun_t free_cb;
 
 	struct {
 		int ctx_hash_partitions;
@@ -75,6 +76,8 @@ struct svc_params {
 	u_int max_connections;
 	int32_t idle_timeout;
 };
+
+enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs);
 
 extern struct svc_params __svc_params[1];
 
@@ -149,8 +152,25 @@ svc_override_ops(struct xp_ops *ops, SVCXPRT *rendezvous)
 }
 
 /* in svc_rqst.c */
-int svc_rqst_rearm_events(SVCXPRT *);
+int svc_rqst_rearm_events_locked(SVCXPRT *, uint16_t);
+
+static inline int svc_rqst_rearm_events(SVCXPRT *xprt, uint16_t ev_flags)
+{
+	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
+	int code;
+
+	rpc_dplx_rli(rec);
+
+	code = svc_rqst_rearm_events_locked(xprt, ev_flags);
+
+	rpc_dplx_rui(rec);
+
+	return code;
+}
+
 int svc_rqst_xprt_register(SVCXPRT *, SVCXPRT *);
 void svc_rqst_xprt_unregister(SVCXPRT *, uint32_t);
+int svc_rqst_evchan_write(SVCXPRT *, struct xdr_ioq *, bool);
+void svc_rqst_xprt_send_complete(SVCXPRT *);
 
 #endif				/* TIRPC_SVC_INTERNAL_H */

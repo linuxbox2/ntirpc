@@ -620,7 +620,13 @@ authgss_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr)
 {
 	struct rpc_gss_data *gd = AUTH_PRIVATE(auth);
 
-	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s() %d %s", __func__,
+		!gd->established ? 0 : gd->sec.svc,
+		!gd->established ? "not established"
+		: gd->sec.svc == RPCSEC_GSS_SVC_NONE ? "krb5"
+		: gd->sec.svc == RPCSEC_GSS_SVC_INTEGRITY ? "krb5i"
+		: gd->sec.svc == RPCSEC_GSS_SVC_PRIVACY ? "krb5p"
+		: "unknown");
 
 	if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE)
 		return ((*xdr_func) (xdrs, xdr_ptr));
@@ -642,5 +648,5 @@ authgss_unwrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr)
 
 	return (xdr_rpc_gss_unwrap
 		(xdrs, xdr_func, xdr_ptr, gd->ctx, gd->sec.qop, gd->sec.svc,
-		 gd->gc.gc_seq));
+		 gd->gc.gc_seq, NULL, NULL));
 }

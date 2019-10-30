@@ -58,6 +58,7 @@
 #include <assert.h>
 
 #include "rpc_com.h"
+#include "strl.h"
 
 /* retry timeout default to the moon and back */
 static struct timespec to = { 3, 0 };
@@ -313,7 +314,15 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 		mem_free(addr_to_delete.buf, addr_to_delete.len);
 	}
 	if (!__rpc_nconf2sockinfo(nconf, &si)) {
-		assert(client == NULL);
+		if (client != NULL) {
+			/* if client!=NULL then there should
+			 * have been a failure
+			 */
+			assert(CLNT_FAILURE(client));
+			/* destroy the failed client */
+			CLNT_DESTROY(client);
+		}
+
 		__warnx(TIRPC_DEBUG_FLAG_WARN, "%s: %s",
 			__func__, clnt_sperrno(RPC_UNKNOWNPROTO));
 		client = clnt_raw_ncreate(1, 1);
@@ -338,7 +347,7 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 
 			if (targaddr) {
 				*targaddr = mem_zalloc(sizeof(sun.sun_path));
-				strncpy(*targaddr, _PATH_RPCBINDSOCK,
+				strlcpy(*targaddr, _PATH_RPCBINDSOCK,
 					sizeof(sun.sun_path));
 			}
 			return (client);
@@ -346,7 +355,15 @@ static CLIENT *getclnthandle(const char *host, const struct netconfig *nconf,
 		goto out_err;
 	} else {
 		if (getaddrinfo(host, "sunrpc", &hints, &res) != 0) {
-			assert(client == NULL);
+			if (client != NULL) {
+				/* if client!=NULL then there should
+				 * have been a failure
+				 */
+				assert(CLNT_FAILURE(client));
+				/* destroy the failed client */
+				CLNT_DESTROY(client);
+			}
+
 			__warnx(TIRPC_DEBUG_FLAG_WARN, "%s: %s",
 				__func__, clnt_sperrno(RPC_UNKNOWNHOST));
 			client = clnt_raw_ncreate(1, 1);
@@ -598,7 +615,7 @@ __rpcbind_is_up(void)
 	if (sock < 0)
 		return (false);
 	sun.sun_family = AF_LOCAL;
-	strncpy(sun.sun_path, _PATH_RPCBINDSOCK, sizeof(sun.sun_path));
+	strlcpy(sun.sun_path, _PATH_RPCBINDSOCK, sizeof(sun.sun_path));
 
 	if (connect(sock, (struct sockaddr *)&sun, sizeof(sun)) < 0) {
 		close(sock);
@@ -678,21 +695,8 @@ __rpcb_findaddr_timed(rpcprog_t program, rpcvers_t version,
 		rpcvers_t pmapvers = 2;
 		uint16_t port = 0;
 
-		/*
-		 * Try UDP only - there are some portmappers out
-		 * there that use UDP only.
-		 */
 		if (strcmp(nconf->nc_proto, NC_TCP) == 0) {
-			struct netconfig *newnconf;
-
-			newnconf = getnetconfigent("udp");
-			if (!newnconf) {
-				client = clnt_raw_ncreate(program, version);
-				client->cl_error.re_status = RPC_UNKNOWNPROTO;
-				goto error;
-			}
-			client = getclnthandle(host, newnconf, &parms.r_addr);
-			freenetconfigent(newnconf);
+			client = getclnthandle(host, nconf, &parms.r_addr);
 		} else if (strcmp(nconf->nc_proto, NC_UDP) == 0)
 			client = getclnthandle(host, nconf, &parms.r_addr);
 		else
@@ -1311,6 +1315,8 @@ static CLIENT *local_rpcb(const char *tag)
 				  CLNT_CREATE_FLAG_CONNECT);
 
 	if (CLNT_SUCCESS(client)) {
+		/* This is a local client (we created the fd above) */
+		client->cl_flags |= CLNT_FLAG_LOCAL;
 		return client;
 	}
 	t = rpc_sperror(&client->cl_error, tag);

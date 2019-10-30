@@ -172,7 +172,11 @@ svc_xprt_lookup(int fd, svc_xprt_setup_t setup)
 			}
 			(*setup)(&xprt); /* zalloc, xp_refcnt = 1 */
 			xprt->xp_fd = fd;
+			xprt->xp_fd_send = -1;
 			xprt->xp_flags = SVC_XPRT_FLAG_INITIAL;
+
+			/* Get ref for caller */
+			SVC_REF(xprt, SVC_REF_FLAG_NONE);
 
 			rec = REC_XPRT(xprt);
 			rpc_dplx_rli(rec);

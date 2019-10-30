@@ -14,8 +14,8 @@ project(NTIRPC C)
 
 # version numbers
 set(NTIRPC_MAJOR_VERSION 1)
-set(NTIRPC_MINOR_VERSION 7)
-set(NTIRPC_PATCH_LEVEL 1)
+set(NTIRPC_MINOR_VERSION 8)
+set(NTIRPC_PATCH_LEVEL 0)
 set(VERSION_COMMENT
   "Full-duplex and bi-directional ONC RPC on TCP."
 )
@@ -180,6 +180,8 @@ include_directories(BEFORE
   "${EXTRA_INCLUDE_DIR}"
 )
 
+find_library(LIBURCU urcu-bp)
+
 # Find misc system libs
 find_library(LIBRT rt)   # extended Pthreads functions
 
@@ -188,6 +190,7 @@ set(SYSTEM_LIBRARIES
   ${KRB5_LIBRARIES}
   ${SYSTEM_LIBRARIES}
   ${LIBRT}
+  ${LIBURCU}
 )
 
 if (NOT FREEBSD)

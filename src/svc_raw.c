@@ -141,7 +141,7 @@ svc_raw_recv(SVCXPRT *xprt)
 	}
 	mutex_unlock(&svcraw_lock);
 
-	return (__svc_params->request_cb(xprt, srp->raw_dr.ioq.xdrs));
+	return svc_request(xprt, srp->raw_dr.ioq.xdrs);
 }
 
 static enum xprt_stat

@@ -94,6 +94,8 @@ svc_dg_xprt_zalloc(size_t iosz)
 
 	/* Init SVCXPRT locks, etc */
 	rpc_dplx_rec_init(&su->su_dr);
+	/* Extra ref to match TCP */
+	SVC_REF(&su->su_dr.xprt, SVC_REF_FLAG_NONE);
 	xdr_ioq_setup(&su->su_dr.ioq);
 	return (su);
 }
@@ -269,7 +271,7 @@ svc_dg_rendezvous(SVCXPRT *xprt)
 		return (XPRT_DIED);
 	}
 
-	if (unlikely(svc_rqst_rearm_events(xprt))) {
+	if (unlikely(svc_rqst_rearm_events(xprt, SVC_XPRT_FLAG_ADDED_RECV))) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
 			__func__, xprt, xprt->xp_fd);
@@ -310,7 +312,7 @@ svc_dg_recv(SVCXPRT *xprt)
 	/* pass the xdrs to user to store in struct svc_req, as most of
 	 * the work has already been done on rendezvous
 	 */
-	stat = __svc_params->request_cb(xprt, REC_XPRT(xprt)->ioq.xdrs);
+	stat = svc_request(xprt, REC_XPRT(xprt)->ioq.xdrs);
 
 	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
 		return (XPRT_DESTROYED);
@@ -318,6 +320,7 @@ svc_dg_recv(SVCXPRT *xprt)
 	/* Only after checking SVC_XPRT_FLAG_DESTROYED:
 	 * because SVC_DESTROY() has decremented already.
 	 */
+	SVC_DESTROY(xprt);
 	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 	return (stat);
 }

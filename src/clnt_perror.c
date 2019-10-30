@@ -46,6 +46,8 @@
 #include <rpc/auth.h>
 #include <rpc/clnt.h>
 
+#include "strl.h"
+
 static char *auth_errmsg(enum auth_stat);
 
 /*
@@ -72,7 +74,7 @@ rpc_sperror(const struct rpc_err *e, const char *s)
 		len -= i;
 	}
 
-	(void)strncpy(str, clnt_sperrno(e->re_status), len - 1);
+	(void)strlcpy(str, clnt_sperrno(e->re_status), len);
 	i = strlen(str);
 	str += i;
 	len -= i;
