@@ -1250,7 +1250,7 @@ xdr_ioq_allochdrs(XDR *xdrs, u_int start, xdr_vio *vector, int iov_count)
 	}
 
 	/* Update position to end of the last buffer */
-	XDR_SETPOS(xdrs, start + totlen);
+	XDR_SETPOS(xdrs, totlen);
 
 	return true;
 }
