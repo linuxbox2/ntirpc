@@ -1024,39 +1024,6 @@ xdr_ioq_use_or_allocate(struct xdr_ioq *xioq, xdr_vio *v, struct xdr_ioq_uv *uv)
 	 */
 	uint32_t htlen = v->vio_length;
 
-	if (v->vio_type == VIO_TRAILER_LEN) {
-		/* First we need to fit in and encode the length of the trailer
-		 */
-		xdr_vio vlen;
-
-		__warnx(TIRPC_DEBUG_FLAG_XDR,
-			"%s Fitting length xdr_ioq_uv %p (base %p head %p tail %p wrap %p) size %lu length %lu has %lu looking for 4",
-			__func__, uv, uv->v.vio_base, uv->v.vio_head,
-			uv->v.vio_tail, uv->v.vio_wrap,
-			(unsigned long) ioquv_size(uv),
-			(unsigned long) ioquv_length(uv),
-			(unsigned long) ioquv_more(uv));
-
-		/* Set up a dummy xdr_vio for the length */
-		memset(&vlen, 0, sizeof(vlen));
-		vlen.vio_type = VIO_TRAILER;
-		vlen.vio_length = 4;
-
-		/* Now recursively call to get space for the length */
-		uv = xdr_ioq_use_or_allocate(xioq, &vlen, uv);
-
-		/* Now we have space, either in the previous buffer or a new
-		 * buffer, go ahead and encode the length into it.
-		 */
-		*((uint32_t *) (vlen.vio_head)) =
-					(uint32_t) htonl(v->vio_length);
-
-		/* Becasue we have already set up the gss_iov, it's ok to
-		 * sneak the length it, it won't be part of the gss_iov but it
-		 * IS part of the xdr_iov.
-		 */
-	}
-
 	__warnx(TIRPC_DEBUG_FLAG_XDR,
 		"%s Examining xdr_ioq_uv %p (base %p head %p tail %p wrap %p) size %lu length %lu has %lu looking for %lu",
 		__func__, uv, uv->v.vio_base, uv->v.vio_head,
@@ -1065,7 +1032,7 @@ xdr_ioq_use_or_allocate(struct xdr_ioq *xioq, xdr_vio *v, struct xdr_ioq_uv *uv)
 		(unsigned long) ioquv_more(uv), htlen);
 
 	if (ioquv_more(uv) >= htlen) {
-		/* The HEADER will fit */
+		/* The HEADER or TRAILER will fit */
 		v->vio_base = uv->v.vio_base;
 		v->vio_head = uv->v.vio_tail;
 		v->vio_tail = uv->v.vio_tail + htlen;
@@ -1111,6 +1078,16 @@ xdr_ioq_use_or_allocate(struct xdr_ioq *xioq, xdr_vio *v, struct xdr_ioq_uv *uv)
 		uv->v.vio_tail = v->vio_tail;
 	}
 
+	if (v->vio_type == VIO_TRAILER_LEN) {
+		/* Now that we have buffer space for the trailer len, we can
+		 * peek ahead to the next buffer and get it's length and fill
+		 * the length into the buffer. Note that this buffer is not
+		 * part of the gss_iov.
+		 */
+		*((uint32_t *) (v[0].vio_head)) =
+					(uint32_t) htonl(v[1].vio_length);
+	}
+
 	__warnx(TIRPC_DEBUG_FLAG_XDR,
 		"%s Produced xdr_ioq_uv %p (base %p head %p tail %p wrap %p) size %lu length %lu",
 		__func__, uv, uv->v.vio_base, uv->v.vio_head,
@@ -1129,6 +1106,7 @@ xdr_ioq_allochdrs(XDR *xdrs, u_int start, xdr_vio *vector, int iov_count)
 	int idx = 0;
 	struct xdr_ioq *xioq = XIOQ(xdrs);
 	struct poolq_entry *have;
+	u_int totlen = start;
 
 	/* update the most recent data length, just in case */
 	xdr_tail_update(xdrs);
@@ -1198,6 +1176,9 @@ xdr_ioq_allochdrs(XDR *xdrs, u_int start, xdr_vio *vector, int iov_count)
 
 		uv = xdr_ioq_use_or_allocate(xioq, &vector[idx], uv);
 
+		/* Record used space */
+		totlen += vector[idx].vio_length;
+
 		/* Advance to next (DATA) buffer */
 		idx++;
 	}
@@ -1219,6 +1200,9 @@ xdr_ioq_allochdrs(XDR *xdrs, u_int start, xdr_vio *vector, int iov_count)
 			"Skipping idx %d for VIO_DATA",
 			idx);
 
+		/* Record used space */
+		totlen += vector[idx].vio_length;
+
 		if (have != NULL) {
 			/* Next buffer exists */
 			uv = IOQ_(have);
@@ -1231,15 +1215,42 @@ xdr_ioq_allochdrs(XDR *xdrs, u_int start, xdr_vio *vector, int iov_count)
 
 	while (idx < iov_count) {
 		/* Another TRAILER buffer to manage */
+		vio_type vt = vector[idx].vio_type;
+
 		__warnx(TIRPC_DEBUG_FLAG_XDR,
-			"Calling xdr_ioq_use_or_allocate for idx %d for VIO_TRAILER",
-			idx);
+			"Calling xdr_ioq_use_or_allocate for idx %d for %s",
+			idx,
+			vt == VIO_HEADER ? "VIO_HEADER"
+			: vt == VIO_DATA ? "VIO_DATA"
+			: vt == VIO_TRAILER_LEN ? "VIO_TRAILER_LEN"
+			: vt == VIO_TRAILER ? "VIO_TRAILER"
+			: "UNKNOWN");
+
+		if (vt != VIO_TRAILER && vt != VIO_TRAILER_LEN) {
+			__warnx(TIRPC_DEBUG_FLAG_XDR,
+				"Oops, buffer other than a trailer found after all data");
+			return false;
+		}
+
+		if (vt == VIO_TRAILER_LEN &&
+		    ((idx + 1) == iov_count ||
+		     vector[idx + 1].vio_type != VIO_TRAILER)) {
+			__warnx(TIRPC_DEBUG_FLAG_XDR,
+				"Oops, VIO_TRAILER_LEN not followed by VIO_TRAILER");
+			return false;
+		}
 
 		uv = xdr_ioq_use_or_allocate(xioq, &vector[idx], uv);
+
+		/* Record used space */
+		totlen += vector[idx].vio_length;
 
 		/* Next vector buffer */
 		idx++;
 	}
+
+	/* Update position to end of the last buffer */
+	XDR_SETPOS(xdrs, start + totlen);
 
 	return true;
 }

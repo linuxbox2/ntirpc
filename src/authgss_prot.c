@@ -228,7 +228,7 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 {
 	gss_buffer_desc databuf, wrapbuf;
 	OM_uint32 maj_stat, min_stat;
-	int start, end, conf_state, iov_count, data_count, after_data, i;
+	int start, end, conf_state, xv_count, gv_count, data_count, after_data, i;
 	bool xdr_stat, vector;
 	u_int databuflen, maxwrapsz;
 	gss_iov_buffer_desc *gss_iov = NULL;
@@ -299,22 +299,26 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 		}
 
 		if (svc == RPCSEC_GSS_SVC_INTEGRITY) {
-			/* Add a trailer buffer for the MIC */
-			iov_count = data_count + 1;
+			/* Add a trailer length (which won't be part of the gss_iov
+			 * and trailer buffer for the MIC
+			 */
+			xv_count = data_count + 2;
+			gv_count = data_count + 1;
 			after_data = data_count;
 		} else if (svc == RPCSEC_GSS_SVC_PRIVACY) {
 			/* Add header, padding, and trailer for the wrap */
-			iov_count = data_count + 3;
+			xv_count = data_count + 3;
+			gv_count = data_count + 3;
 			after_data = data_count + 1;
 		}
 
 		__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-			"data_count=%d, iov_count=%d, after_data=%d",
-			data_count, iov_count, after_data);
+			"data_count=%d, gv_count=%d, xv_count=%d, after_data=%d",
+			data_count, gv_count, xv_count, after_data);
 
 		/* Determine the size of the gss_iov */
-		gvsize = iov_count * sizeof(gss_iov_buffer_desc);
-		xvsize = iov_count * sizeof(xdr_vio);
+		gvsize = gv_count * sizeof(gss_iov_buffer_desc);
+		xvsize = xv_count * sizeof(xdr_vio);
 
 		/* Allocate the gss_iov */
 		if (unlikely(gvsize > MAXALLOCA)) {
@@ -322,13 +326,13 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
 				"mem_alloc gss_iov=%p size %llu count %d",
 				gss_iov, (unsigned long long) gvsize,
-				iov_count);
+				gv_count);
 		} else {
 			gss_iov = alloca(gvsize);
 			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
 				"alloca gss_iov=%p size %llu count %d",
 				gss_iov, (unsigned long long) gvsize,
-				iov_count);
+				gv_count);
 		}
 
 		/* Allocate the xdr_iov */
@@ -337,13 +341,13 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
 				"mem_alloc xdr_iov=%p size %llu count %d",
 				xdr_iov, (unsigned long long) xvsize,
-				iov_count);
+				xv_count);
 		} else {
 			xdr_iov = alloca(xvsize);
 			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
 				"alloca xdr_iov=%p size %llu count %d",
 				xdr_iov, (unsigned long long) xvsize,
-				iov_count);
+				xv_count);
 		}
 
 		memset(gss_iov, 0, gvsize);
@@ -361,12 +365,12 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 		xdr_stat = XDR_FILLBUFS(xdrs, start + 4, data, databuflen);
 
 		/* Now show the gss_iov and xdr_iov */
-		show_gss_xdr_iov(gss_iov, iov_count, xdr_iov, iov_count,
+		show_gss_xdr_iov(gss_iov, gv_count, xdr_iov, xv_count,
 				 "after XDR_FILLBUFS");
 
 		/* Now set up the gss_iov */
 		__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "Set up gss_iov");
-		for (i = 0; i < iov_count; i++) {
+		for (i = 0; i < gv_count; i++) {
 			if (i == 0 && svc == RPCSEC_GSS_SVC_PRIVACY) {
 				/* Fill in HEADER buffer */
 				gss_iov[i].type = GSS_IOV_BUFFER_TYPE_HEADER;
@@ -394,7 +398,7 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 		}
 
 		/* Now show the gss_iov and xdr_iov */
-		show_gss_xdr_iov(gss_iov, iov_count, xdr_iov, iov_count,
+		show_gss_xdr_iov(gss_iov, gv_count, xdr_iov, xv_count,
 				 "after setting up gss_iov");
 
 		/* At this point gss_iov HEADER, PADDING, and TRAILER have
@@ -407,7 +411,7 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 		if (svc == RPCSEC_GSS_SVC_INTEGRITY) {
 			/* Now call gss_get_mic_iov_length */
 			maj_stat = gss_get_mic_iov_length(&min_stat, ctx, qop,
-							  gss_iov, iov_count);
+							  gss_iov, gv_count);
 
 			if (maj_stat != GSS_S_COMPLETE) {
 				__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
@@ -419,10 +423,14 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 				goto out;
 			}
 
-			/* Copy the TRAILER buffer length into the xdr_iov */
-			xdr_iov[after_data].vio_length =
-				gss_iov[after_data].buffer.length;
+			/* Set up the VIO_TRAILER_LEN buffer in the xdr_iov */
+			xdr_iov[after_data].vio_length = BYTES_PER_XDR_UNIT;
 			xdr_iov[after_data].vio_type = VIO_TRAILER_LEN;
+
+			/* Copy the TRAILER buffer length into the xdr_iov */
+			xdr_iov[after_data + 1].vio_length =
+				gss_iov[after_data].buffer.length;
+			xdr_iov[after_data + 1].vio_type = VIO_TRAILER;
 
 			/* Marshal databody_integ length. Note tha this will
 			 * leave the cursor position at start + 4 but the
@@ -444,7 +452,7 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 			/* Now call gss_wrap_iov_length */
 			maj_stat = gss_wrap_iov_length(&min_stat, ctx, true,
 						       qop, GSS_C_QOP_DEFAULT,
-						       gss_iov, iov_count);
+						       gss_iov, gv_count);
 
 			if (maj_stat != GSS_S_COMPLETE) {
 				__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
@@ -500,7 +508,7 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 		}
 
 		/* Now show the gss_iov and xdr_iov */
-		show_gss_xdr_iov(gss_iov, iov_count, xdr_iov, iov_count,
+		show_gss_xdr_iov(gss_iov, gv_count, xdr_iov, xv_count,
 				 "after gss_...length");
 
 		/* At this point:
@@ -513,31 +521,33 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 		 * The cursor position will be updated to the end of the
 		 * TRAILER.
 		 */
-		xdr_stat = XDR_ALLOCHDRS(xdrs, start + 4, xdr_iov, iov_count);
+		xdr_stat = XDR_ALLOCHDRS(xdrs, start + 4, xdr_iov, xv_count);
 
 		if (!xdr_stat)
 			goto out;
 
 		/* Now show the gss_iov and xdr_iov */
-		show_gss_xdr_iov(gss_iov, iov_count, xdr_iov, iov_count,
+		show_gss_xdr_iov(gss_iov, gv_count, xdr_iov, xv_count,
 				 "after XDR_ALLOCHDRS");
 
 		/* At this point the xdr_iov is completely filled in. */
 
 		if (svc == RPCSEC_GSS_SVC_INTEGRITY) {
-			/* Copy the TRAILER buffer into the gss_iov */
+			/* Copy the TRAILER buffer into the gss_iov (remember
+			 * it's AFTER the VIO_TRAILER_LEN buffer.
+			 */
 			gss_iov[after_data].buffer.value =
-				xdr_iov[after_data].vio_head;
+				xdr_iov[after_data + 1].vio_head;
 
 			/* At this point the gss_iov is completely filled in */
 
 			/* Now show the gss_iov and xdr_iov */
-			show_gss_xdr_iov(gss_iov, iov_count, xdr_iov, iov_count,
+			show_gss_xdr_iov(gss_iov, gv_count, xdr_iov, xv_count,
 					 "just before gss_get_mic_iov");
 
 			/* Now call gss_get_mic_iov */
 			maj_stat = gss_get_mic_iov(&min_stat, ctx, qop,
-						   gss_iov, iov_count);
+						   gss_iov, gv_count);
 
 			if (maj_stat != GSS_S_COMPLETE) {
 				__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
@@ -563,13 +573,13 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 			/* At this point the gss_iov is completely filled in */
 
 			/* Now show the gss_iov and xdr_iov */
-			show_gss_xdr_iov(gss_iov, iov_count, xdr_iov, iov_count,
+			show_gss_xdr_iov(gss_iov, gv_count, xdr_iov, xv_count,
 					 "just before gss_wrap_iov");
 
 			/* Now call gss_wrap_iov */
 			maj_stat = gss_wrap_iov(&min_stat, ctx, true,
 						GSS_C_QOP_DEFAULT, NULL,
-						gss_iov, iov_count);
+						gss_iov, gv_count);
 
 			if (maj_stat != GSS_S_COMPLETE) {
 				__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,

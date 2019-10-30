@@ -121,8 +121,8 @@ enum xdr_op {
 typedef enum vio_type {
 	VIO_HEADER,             /* header buffer before data */
 	VIO_DATA,               /* data buffer */
+	VIO_TRAILER_LEN,	/* length field for following TRAILER buffer */
 	VIO_TRAILER,            /* trailer buffer after data */
-	VIO_TRAILER_LEN,	/* trailer buffer that needs a length ahead */
 } vio_type;
 
 /* XDR buffer vector descriptors */
