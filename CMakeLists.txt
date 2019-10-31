@@ -19,7 +19,7 @@ set(NTIRPC_MINOR_VERSION 0)
 set(NTIRPC_PATCH_LEVEL )
 # This is the dev/RC version.  Should be blank on release/stable.  Format is
 # -something
-set(NTIRPC_VERSION_EXTRA -rc1)
+set(NTIRPC_VERSION_EXTRA -rc2)
 set(VERSION_COMMENT
   "Full-duplex and bi-directional ONC RPC on TCP."
 )
