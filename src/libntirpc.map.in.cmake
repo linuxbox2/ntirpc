@@ -1,4 +1,4 @@
-NTIRPC_${NTIRPC_VERSION} {
+NTIRPC_${NTIRPC_VERSION_BASE} {
   global:
     # __*
     __ntirpc_pkg_params;
