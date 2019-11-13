@@ -13,18 +13,24 @@ include(${CMAKE_SOURCE_DIR}/cmake/maintainer_mode.cmake)
 project(NTIRPC C)
 
 # version numbers
-set(NTIRPC_MAJOR_VERSION 1)
-set(NTIRPC_MINOR_VERSION 7)
-set(NTIRPC_PATCH_LEVEL 1)
+set(NTIRPC_MAJOR_VERSION 3)
+# This is .0 for a release, .N for a stable branch, blank for development
+set(NTIRPC_MINOR_VERSION .0)
+# -something for dev releases
+set(NTIRPC_VERSION_EXTRA )
 set(VERSION_COMMENT
   "Full-duplex and bi-directional ONC RPC on TCP."
 )
 # version string used for packaging
 set(NTIRPC_VERSION
-  "${NTIRPC_MAJOR_VERSION}.${NTIRPC_MINOR_VERSION}.${NTIRPC_PATCH_LEVEL}")
+  "${NTIRPC_MAJOR_VERSION}${NTIRPC_MINOR_VERSION}${NTIRPC_VERSION_EXTRA}")
+set(NTIRPC_VERSION_BASE
+  "${NTIRPC_MAJOR_VERSION}${NTIRPC_MINOR_VERSION}")
 # Up scope for embedding in ganesha
 set(NTIRPC_VERSION_EMBED "${NTIRPC_VERSION}" PARENT_SCOPE)
-set(NTIRPC_ABI_EMBED "${NTIRPC_MAJOR_VERSION}.${NTIRPC_MINOR_VERSION}" PARENT_SCOPE)
+set(NTIRPC_VERSION_BASE_EMBED "${NTIRPC_VERSION_BASE}" PARENT_SCOPE)
+set(NTIRPC_VERSION_EXTRA_EMBED "${NTIRPC_VERSION_EXTRA}" PARENT_SCOPE)
+set(NTIRPC_ABI_EMBED "${NTIRPC_MAJOR_VERSION}${NTIRPC_MINOR_VERSION}" PARENT_SCOPE)
 
 set( PACKNAME "${NTIRPC_VERSION}" )
 
@@ -180,6 +186,8 @@ include_directories(BEFORE
   "${EXTRA_INCLUDE_DIR}"
 )
 
+find_library(LIBURCU urcu-bp)
+
 # Find misc system libs
 find_library(LIBRT rt)   # extended Pthreads functions
 
@@ -188,6 +196,7 @@ set(SYSTEM_LIBRARIES
   ${KRB5_LIBRARIES}
   ${SYSTEM_LIBRARIES}
   ${LIBRT}
+  ${LIBURCU}
 )
 
 if (NOT FREEBSD)

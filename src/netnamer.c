@@ -48,6 +48,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "strl.h"
+
 static char *OPSYS = "unix";
 static char *NETID = "netid.byname";
 static char *NETIDFILE = "/etc/netid";
@@ -190,7 +192,7 @@ int netname2host(char netname[MAXNETNAMELEN + 1], char *hostname, int hostlen)
 	if (getnetid(netname, valbuf)) {
 		val = valbuf;
 		if ((*val == '0') && (val[1] == ':')) {
-			(void)strncpy(hostname, val + 2, hostlen);
+			(void)strlcpy(hostname, val + 2, hostlen);
 			return (1);
 		}
 	}

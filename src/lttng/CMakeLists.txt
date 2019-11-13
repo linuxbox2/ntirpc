@@ -16,7 +16,7 @@ target_link_libraries(ntirpc_tracepoints
 
 set_target_properties(ntirpc_tracepoints PROPERTIES
   VERSION ${NTIRPC_VERSION}
-  SOVERSION "${NTIRPC_MAJOR_VERSION}.${NTIRPC_MINOR_VERSION}"
+  SOVERSION "${NTIRPC_MAJOR_VERSION}${NTIRPC_MINOR_VERSION}"
   )
 
 install(TARGETS ntirpc_tracepoints COMPONENT tracing DESTINATION ${LIB_INSTALL_DIR} )

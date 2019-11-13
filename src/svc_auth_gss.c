@@ -280,8 +280,8 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 		gss_release_buffer(&min_stat, &gd->checksum);
 
 		maj_stat =
-		    gss_sign(&min_stat, gd->ctx, GSS_C_QOP_DEFAULT, &seqbuf,
-			     &checksum);
+		    gss_get_mic(&min_stat, gd->ctx, GSS_C_QOP_DEFAULT, &seqbuf,
+				&checksum);
 
 		if (maj_stat != GSS_S_COMPLETE) {
 			gss_release_buffer(&min_stat, &gr->gr_token);
@@ -291,12 +291,14 @@ svcauth_gss_accept_sec_context(struct svc_req *req,
 		/* XXX ref? (assert gd->locked?) */
 		if (checksum.length > MAX_AUTH_BYTES){
 			gss_release_buffer(&min_stat, &gr->gr_token);
+			gss_release_buffer(&min_stat, &checksum);
 			return (false);
 		}
 		req->rq_msg.RPCM_ack.ar_verf.oa_flavor = RPCSEC_GSS;
 		req->rq_msg.RPCM_ack.ar_verf.oa_length = checksum.length;
 		memcpy(req->rq_msg.RPCM_ack.ar_verf.oa_body, checksum.value,
 		       checksum.length);
+		gss_release_buffer(&min_stat, &checksum);
 	}
 	return (true);
 }
@@ -371,24 +373,17 @@ svcauth_gss_nextverf(struct svc_req *req, struct svc_rpc_gss_data *gd,
 	}
 	if (checksum.length > MAX_AUTH_BYTES) {
 		gss_log_status("checksum.length", maj_stat, min_stat);
+		gss_release_buffer(&min_stat, &checksum);
 		return (false);
 	}
 	req->rq_msg.RPCM_ack.ar_verf.oa_flavor = RPCSEC_GSS;
 	req->rq_msg.RPCM_ack.ar_verf.oa_length = checksum.length;
 	memcpy(req->rq_msg.RPCM_ack.ar_verf.oa_body, checksum.value,
 	       checksum.length);
+	gss_release_buffer(&min_stat, &checksum);
 
 	return (true);
 }
-
-#define svcauth_gss_return(code) \
-	do { \
-		if (gc) \
-			xdr_free((xdrproc_t) xdr_rpc_gss_cred, gc); \
-		if (gd_locked) \
-			mutex_unlock(&gd->lock); \
-		return (code); \
-	} while (0)
 
 enum auth_stat
 _svcauth_gss(struct svc_req *req, bool *no_dispatch)
@@ -400,15 +395,15 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 	struct rpc_gss_init_res gr;
 	int call_stat, offset;
 	OM_uint32 min_stat;
-	bool gd_locked = false;
-	bool gd_hashed = false;
+	enum auth_stat rc = AUTH_OK;
 
 	/* Initialize reply. */
 	req->rq_msg.RPCM_ack.ar_verf = _null_auth;
 
 	/* Unserialize client credentials. */
-	if (req->rq_msg.cb_cred.oa_length <= 0)
-		svcauth_gss_return(AUTH_BADCRED);
+	if (req->rq_msg.cb_cred.oa_length <= 0) {
+		return AUTH_BADCRED;
+	}
 
 	gc = (struct rpc_gss_cred *)req->rq_msg.rq_cred_body;
 	memset(gc, 0, sizeof(struct rpc_gss_cred));
@@ -418,25 +413,34 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 
 	if (!xdr_rpc_gss_cred(xdrs, gc)) {
 		XDR_DESTROY(xdrs);
-		svcauth_gss_return(AUTH_BADCRED);
+		rc = AUTH_BADCRED;
+		goto cred_free;
 	}
 	XDR_DESTROY(xdrs);
 
 	/* Check version. */
-	if (gc->gc_v != RPCSEC_GSS_VERSION)
-		svcauth_gss_return(AUTH_BADCRED);
+	if (gc->gc_v != RPCSEC_GSS_VERSION) {
+		rc = AUTH_BADCRED;
+		goto cred_free;
+	}
 
-	if (gc->gc_seq > RPCSEC_GSS_MAXSEQ)
-		svcauth_gss_return(RPCSEC_GSS_CTXPROBLEM);
+	if (gc->gc_seq > RPCSEC_GSS_MAXSEQ) {
+		rc = RPCSEC_GSS_CTXPROBLEM;
+		goto cred_free;
+	}
 
-	if (gc->gc_proc > RPCSEC_GSS_MAXPROC)
-		svcauth_gss_return(AUTH_BADCRED);
+	if (gc->gc_proc > RPCSEC_GSS_MAXPROC) {
+		rc = AUTH_BADCRED;
+		goto cred_free;
+	}
 
 	/* Check RPCSEC_GSS service. */
 	if (gc->gc_svc != RPCSEC_GSS_SVC_NONE
 	    && gc->gc_svc != RPCSEC_GSS_SVC_INTEGRITY
-	    && gc->gc_svc != RPCSEC_GSS_SVC_PRIVACY)
-		svcauth_gss_return(AUTH_BADCRED);
+	    && gc->gc_svc != RPCSEC_GSS_SVC_PRIVACY) {
+		rc = AUTH_BADCRED;
+		goto cred_free;
+	}
 
 	/* Context lookup. */
 	if ((gc->gc_proc == RPCSEC_GSS_DATA)
@@ -448,9 +452,10 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 		 * N.B., we are explicitly allowed to discard contexts
 		 * for any reason (e.g., to save space). */
 		gd = authgss_ctx_hash_get(gc);
-		if (!gd)
-			svcauth_gss_return(RPCSEC_GSS_CREDPROBLEM);
-		gd_hashed = true;
+		if (!gd) {
+			rc = RPCSEC_GSS_CREDPROBLEM;
+			goto cred_free;
+		}
 		if (gc->gc_svc != gd->sec.svc)
 			gd->sec.svc = gc->gc_svc;
 	}
@@ -466,7 +471,6 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 
 	/* Serialize context. */
 	mutex_lock(&gd->lock);
-	gd_locked = true;
 
 	/* thread auth */
 	req->rq_auth = gd->auth;
@@ -475,7 +479,8 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 	if (gd->established) {
 		if (get_time_fast() >= gd->endtime) {
 			*no_dispatch = true;
-			svcauth_gss_return(RPCSEC_GSS_CREDPROBLEM);
+			 rc = RPCSEC_GSS_CREDPROBLEM;
+			 goto gd_free;
 		}
 
 		/* XXX implied serialization?  or just fudging?  advance if
@@ -488,7 +493,8 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 			offset = 0;
 		} else if (offset >= gd->win || (gd->seqmask & (1 << offset))) {
 			*no_dispatch = true;
-			svcauth_gss_return(AUTH_OK);
+			rc = RPCSEC_GSS_CREDPROBLEM;
+			goto gd_free;
 		}
 		gd->seqmask |= (1 << offset);	/* XXX harmless */
 
@@ -504,21 +510,28 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 	case RPCSEC_GSS_INIT:
 	case RPCSEC_GSS_CONTINUE_INIT:
 
-		if (req->rq_msg.cb_proc != NULLPROC)
-			svcauth_gss_return(AUTH_FAILED); /* XXX ? */
+		if (req->rq_msg.cb_proc != NULLPROC) {
+			rc = AUTH_FAILED; /* XXX ? */
+			goto gd_free;
+		}
 
 		/* XXX why unconditionally acquire creds? */
-		if (!svcauth_gss_acquire_cred())
-			svcauth_gss_return(AUTH_FAILED);
+		if (!svcauth_gss_acquire_cred()) {
+			rc = AUTH_FAILED;
+			goto gd_free;
+		}
 
-		if (!svcauth_gss_accept_sec_context(req, gd, &gr))
-			svcauth_gss_return(AUTH_REJECTEDCRED);
+		if (!svcauth_gss_accept_sec_context(req, gd, &gr)) {
+			rc = AUTH_REJECTEDCRED;
+			goto gd_free;
+		}
 
 		if (!svcauth_gss_nextverf(req, gd, htonl(gr.gr_win))) {
 			/* XXX check */
 			gss_release_buffer(&min_stat, &gr.gr_token);
 			mem_free(gr.gr_ctx.value, 0);
-			svcauth_gss_return(AUTH_FAILED);
+			rc = AUTH_FAILED;
+			goto gd_free;
 		}
 
 		*no_dispatch = true;
@@ -533,45 +546,45 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 		gss_release_buffer(&min_stat, &gd->checksum);
 		mem_free(gr.gr_ctx.value, 0);
 
-		if (call_stat >= XPRT_DIED)
-			svcauth_gss_return(AUTH_FAILED);
+		if (call_stat >= XPRT_DIED) {
+			rc = AUTH_FAILED;
+			goto gd_free;
+		}
 
 		if (gr.gr_major == GSS_S_COMPLETE) {
 			gd->established = true;
-			if (!gd_hashed) {
 
-				/* krb5 pac -- try all that apply */
-				gss_buffer_desc attr, display_buffer;
+			/* krb5 pac -- try all that apply */
+			gss_buffer_desc attr, display_buffer;
 
-				/* completely generic */
-				int auth = 1, comp = 0, more = -1;
+			/* completely generic */
+			int auth = 1, comp = 0, more = -1;
 
-				memset(&gd->pac.ms_pac, 0,
-				       sizeof(gss_buffer_desc));
-				memset(&display_buffer, 0,
-				       sizeof(gss_buffer_desc));
+			memset(&gd->pac.ms_pac, 0,
+			       sizeof(gss_buffer_desc));
+			memset(&display_buffer, 0,
+			       sizeof(gss_buffer_desc));
 
-				/* MS AD */
-				attr.value = "urn:mspac:";
-				attr.length = 10;
+			/* MS AD */
+			attr.value = "urn:mspac:";
+			attr.length = 10;
 
-				gr.gr_major =
-				    gss_get_name_attribute(&gr.gr_minor,
-							   gd->client_name,
-							   &attr, &auth, &comp,
-							   &gd->pac.ms_pac,
-							   &display_buffer,
-							   &more);
+			gr.gr_major =
+				gss_get_name_attribute(&gr.gr_minor,
+						       gd->client_name,
+						       &attr, &auth, &comp,
+						       &gd->pac.ms_pac,
+						       &display_buffer,
+						       &more);
 
-				if (gr.gr_major == GSS_S_COMPLETE) {
-					/* dont need it */
-					gss_release_buffer(&gr.gr_minor,
-							   &display_buffer);
-					gd->flags |= SVC_RPC_GSS_FLAG_MSPAC;
-				}
-
-				(void)authgss_ctx_hash_set(gd);
+			if (gr.gr_major == GSS_S_COMPLETE) {
+				/* dont need it */
+				gss_release_buffer(&gr.gr_minor,
+						   &display_buffer);
+				gd->flags |= SVC_RPC_GSS_FLAG_MSPAC;
 			}
+
+			(void)authgss_ctx_hash_set(gd);
 		}
 		break;
 
@@ -582,30 +595,38 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 		call_stat = svcauth_gss_validate(req, gd);
 		switch (call_stat) {
 		default:
-			svcauth_gss_return(RPCSEC_GSS_CREDPROBLEM);
+			rc = RPCSEC_GSS_CREDPROBLEM;
+			goto gd_free;
 		case 0:
 			break;
 		}
 
-		if (!svcauth_gss_nextverf(req, gd, htonl(gc->gc_seq)))
-			svcauth_gss_return(AUTH_FAILED);
+		if (!svcauth_gss_nextverf(req, gd, htonl(gc->gc_seq))) {
+			rc = AUTH_FAILED;
+			goto gd_free;
+		}
 		break;
 
 	case RPCSEC_GSS_DESTROY:
-		if (req->rq_msg.cb_proc != NULLPROC)
-			svcauth_gss_return(AUTH_FAILED);	/* XXX ? */
+		if (req->rq_msg.cb_proc != NULLPROC) {
+			rc = AUTH_FAILED;	/* XXX ? */
+			goto gd_free;
+		}
 
-		if (svcauth_gss_validate(req, gd))
-			svcauth_gss_return(RPCSEC_GSS_CREDPROBLEM);
+		if (svcauth_gss_validate(req, gd)) {
+			rc = RPCSEC_GSS_CREDPROBLEM;
+			goto gd_free;
+		}
 
-		if (!svcauth_gss_nextverf(req, gd, htonl(gc->gc_seq)))
-			svcauth_gss_return(AUTH_FAILED);
+		if (!svcauth_gss_nextverf(req, gd, htonl(gc->gc_seq))) {
+			rc = AUTH_FAILED;
+			goto gd_free;
+		}
 
 		*no_dispatch = true;
 
 		/* avoid lock order reversal gd->lock, xprt->xp_lock */
 		mutex_unlock(&gd->lock);
-		gd_locked = false;
 
 		/* This takes gd->lock, so call it after we unlock */
 		(void)authgss_ctx_hash_del(gd);
@@ -624,15 +645,27 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 		 */
 		unref_svc_rpc_gss_data(gd);
 		req->rq_auth = &svc_auth_none;
+		goto cred_free;
 
 		break;
 
 	default:
-		svcauth_gss_return(AUTH_REJECTEDCRED);
+		rc = AUTH_REJECTEDCRED;
 		break;
 	}
+gd_free:
+	mutex_unlock(&gd->lock);
 
-	svcauth_gss_return(AUTH_OK);
+	if (rc != AUTH_OK) {
+		/* On success, the ref gets returned to the caller */
+		unref_svc_rpc_gss_data(gd);
+		req->rq_auth = NULL;
+	}
+
+cred_free:
+	xdr_free((xdrproc_t) xdr_rpc_gss_cred, gc);	
+
+	return rc;
 }
 
 static bool
@@ -684,6 +717,15 @@ svcauth_gss_wrap(struct svc_req *req, XDR *xdrs)
 					req->rq_msg.rq_cred_body;
 	bool result;
 
+
+	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s() %d %s", __func__,
+		!gd->established ? 0 : gc->gc_svc,
+		!gd->established ? "not established"
+		: gc->gc_svc == RPCSEC_GSS_SVC_NONE ? "krb5"
+		: gc->gc_svc == RPCSEC_GSS_SVC_INTEGRITY ? "krb5i"
+		: gc->gc_svc == RPCSEC_GSS_SVC_PRIVACY ? "krb5p"
+		: "unknown");
+
 	if (!gd->established || gc->gc_svc == RPCSEC_GSS_SVC_NONE)
 		return (svc_auth_none.svc_ah_ops->svc_ah_wrap(req, xdrs));
 
@@ -708,98 +750,17 @@ svcauth_gss_unwrap(struct svc_req *req)
 	mutex_lock(&gd->lock);
 	result = xdr_rpc_gss_unwrap(req->rq_xdrs, req->rq_msg.rm_xdr.proc,
 				    req->rq_msg.rm_xdr.where, gd->ctx,
-				    gd->sec.qop, gd->sec.svc, gc_seq);
+				    gd->sec.qop, gd->sec.svc, gc_seq,
+				    NULL, NULL);
 	mutex_unlock(&gd->lock);
 	return (result);
 }
 
-static inline bool
-xdr_rpc_gss_checksum(struct svc_req *req, gss_ctx_id_t ctx, gss_qop_t qop,
-		     rpc_gss_svc_t svc, u_int seq)
+void svcauth_gss_svc_checksum(void *priv, void *databuf, size_t length)
 {
-	XDR *xdrs = req->rq_xdrs;
-	XDR tmpxdrs;
-	gss_buffer_desc databuf, wrapbuf;
-	OM_uint32 maj_stat, min_stat;
-	u_int qop_state;
-	int conf_state;
-	uint32_t seq_num;
-	bool xdr_stat;
+	struct svc_req *req = priv;	
 
-	if (req->rq_msg.rm_xdr.proc == (xdrproc_t) xdr_void
-	 || req->rq_msg.rm_xdr.where == NULL)
-		return (TRUE);
-
-	memset(&databuf, 0, sizeof(databuf));
-	memset(&wrapbuf, 0, sizeof(wrapbuf));
-
-	if (svc == RPCSEC_GSS_SVC_INTEGRITY) {
-		/* Decode databody_integ. */
-		if (!xdr_rpc_gss_decode(xdrs, &databuf)) {
-			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-				"%s() xdr_rpc_gss_decode databody_integ failed",
-				__func__);
-			return (FALSE);
-		}
-		/* Decode checksum. */
-		if (!xdr_rpc_gss_decode(xdrs, &wrapbuf)) {
-			gss_release_buffer(&min_stat, &databuf);
-			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-				"%s() xdr_rpc_gss_decode checksum failed",
-				__func__);
-			return (FALSE);
-		}
-		/* Verify checksum and QOP. */
-		maj_stat =
-		    gss_verify_mic(&min_stat, ctx, &databuf, &wrapbuf,
-				   &qop_state);
-		gss_release_buffer(&min_stat, &wrapbuf);
-
-		if (maj_stat != GSS_S_COMPLETE || qop_state != qop) {
-			gss_release_buffer(&min_stat, &databuf);
-			gss_log_status("gss_verify_mic", maj_stat, min_stat);
-			return (FALSE);
-		}
-	} else if (svc == RPCSEC_GSS_SVC_PRIVACY) {
-		/* Decode databody_priv. */
-		if (!xdr_rpc_gss_decode(xdrs, &wrapbuf)) {
-			__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-				"%s() xdr_rpc_gss_decode databody_priv failed",
-				__func__);
-			return (FALSE);
-		}
-		/* Decrypt databody. */
-		maj_stat =
-		    gss_unwrap(&min_stat, ctx, &wrapbuf, &databuf, &conf_state,
-			       &qop_state);
-
-		gss_release_buffer(&min_stat, &wrapbuf);
-
-		/* Verify encryption and QOP. */
-		if (maj_stat != GSS_S_COMPLETE || qop_state != qop
-		    || conf_state != TRUE) {
-			gss_release_buffer(&min_stat, &databuf);
-			gss_log_status("gss_unwrap", maj_stat, min_stat);
-			return (FALSE);
-		}
-	}
-	/* Decode rpc_gss_data_t (sequence number + arguments). */
-	xdrmem_create(&tmpxdrs, databuf.value, databuf.length, XDR_DECODE);
-	SVC_CHECKSUM(req, databuf.value, databuf.length);
-	xdr_stat = (XDR_GETUINT32(&tmpxdrs, &seq_num)
-		    && (*req->rq_msg.rm_xdr.proc)
-			(&tmpxdrs, req->rq_msg.rm_xdr.where));
-	XDR_DESTROY(&tmpxdrs);
-	gss_release_buffer(&min_stat, &databuf);
-
-	/* Verify sequence number. */
-	if (xdr_stat == TRUE && seq_num != seq) {
-		__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
-			"%s() wrong sequence number in databody",
-			__func__);
-		return (FALSE);
-	}
-	return (xdr_stat);
+	SVC_CHECKSUM(req, databuf, length);
 }
 
 static bool
@@ -814,8 +775,10 @@ svcauth_gss_checksum(struct svc_req *req)
 	}
 
 	mutex_lock(&gd->lock);
-	result = xdr_rpc_gss_checksum(req, gd->ctx, gd->sec.qop, gd->sec.svc,
-				      gc_seq);
+	result = xdr_rpc_gss_unwrap(req->rq_xdrs, req->rq_msg.rm_xdr.proc,
+				    req->rq_msg.rm_xdr.where, gd->ctx,
+				    gd->sec.qop, gd->sec.svc, gc_seq,
+				    svcauth_gss_svc_checksum, req);
 	mutex_unlock(&gd->lock);
 	return (result);
 }
