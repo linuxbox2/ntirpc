@@ -493,6 +493,7 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 			offset = 0;
 		} else if (offset >= gd->win || (gd->seqmask & (1 << offset))) {
 			*no_dispatch = true;
+			rc = RPCSEC_GSS_CREDPROBLEM;
 			goto gd_free;
 		}
 		gd->seqmask |= (1 << offset);	/* XXX harmless */
