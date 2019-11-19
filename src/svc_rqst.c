@@ -1224,14 +1224,13 @@ enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs)
 
 static void svc_resume_task(struct work_pool_entry *wpe)
 {
-	struct rpc_dplx_rec *rec =
-			opr_containerof(wpe, struct rpc_dplx_rec, ioq.ioq_wpe);
-	struct svc_req *req = rec->svc_req;
-	SVCXPRT *xprt = &rec->xprt;
+	struct svc_req *req =
+			opr_containerof(wpe, struct svc_req, rq_wpe);
+	SVCXPRT *xprt = req->rq_xprt;
 	enum xprt_stat stat;
 
 	/* Resume the request. */
-	stat  = req->rq_xprt->xp_resume_cb(req);
+	stat  = req->rq_resume_cb(req);
 
 	if (stat == XPRT_SUSPEND) {
 		/* The rquest is suspended, don't touch the request in any way
@@ -1253,10 +1252,8 @@ static void svc_resume_task(struct work_pool_entry *wpe)
 
 void svc_resume(struct svc_req *req)
 {
-	struct rpc_dplx_rec *rpc_dplx_rec = REC_XPRT(req->rq_xprt);
-
-	rpc_dplx_rec->ioq.ioq_wpe.fun = svc_resume_task;
-	work_pool_submit(&svc_work_pool, &(rpc_dplx_rec->ioq.ioq_wpe));
+	req->rq_wpe.fun = svc_resume_task;
+	work_pool_submit(&svc_work_pool, &req->rq_wpe);
 }
 
 /*static*/ void
