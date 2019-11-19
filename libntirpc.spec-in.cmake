@@ -53,8 +53,8 @@ install -p -m 0755 src/%{name}.so.%{version} %{buildroot}%{_libdir}/
 ln -s %{name}.so.%{version} %{buildroot}%{_libdir}/%{name}.so.1
 ln -s %{name}.so.%{version} %{buildroot}%{_libdir}/%{name}.so
 mkdir -p %{buildroot}%{_includedir}/ntirpc
-cp -a ntirpc %{buildroot}%{_includedir}/
-install -p -m 644 libntirpc.pc %{buildroot}%{_libdir}/pkgconfig/
+
+make DESTDIR=%{buildroot} install
 
 %post -p /sbin/ldconfig
 
