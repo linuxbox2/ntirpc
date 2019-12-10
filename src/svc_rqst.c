@@ -1166,6 +1166,7 @@ svc_rqst_xprt_task_recv(struct work_pool_entry *wpe)
 	struct xdr_ioq *ioq =
 			opr_containerof(wpe, struct xdr_ioq, ioq_wpe);
 	struct rpc_dplx_rec *rec = ioq->rec;
+	enum xprt_stat stat = XPRT_IDLE;
 
 	atomic_clear_uint16_t_bits(&ioq->ioq_s.qflags, IOQ_FLAG_WORKING);
 
@@ -1183,11 +1184,13 @@ svc_rqst_xprt_task_recv(struct work_pool_entry *wpe)
 		 * xp_refcnt need more than 1 (this task).
 		 */
 		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &rec->recv.ts);
-		(void)SVC_RECV(&rec->xprt);
+		stat = SVC_RECV(&rec->xprt);
 	}
 
-	/* If tests fail, log non-fatal "WARNING! already destroying!" */
-	SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
+	if (stat != XPRT_SUSPEND) {
+		/* If tests fail, log non-fatal "WARNING! already destroying!" */
+		SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
+	}
 }
 
 enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs)
