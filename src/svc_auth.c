@@ -92,6 +92,7 @@ svc_auth_authenticate(struct svc_req *req, bool *no_dispatch)
 	/* VARIABLES PROTECTED BY authsvc_lock: asp, Auths */
 	req->rq_msg.RPCM_ack.ar_verf = _null_auth;
 	cred_flavor = req->rq_msg.cb_cred.oa_flavor;
+	req->rq_msg.RPCM_ack.ar_verf.oa_flavor = cred_flavor;
 	switch (cred_flavor) {
 #ifdef _HAVE_GSSAPI
 	case RPCSEC_GSS:
