@@ -98,10 +98,11 @@ union pktinfo_u {
  * Replaces old struct svc_dg_data by locally wrapping struct rpc_dplx_rec,
  * which wraps struct svc_xprt indexed by fd.
  */
+#define DG_NUM_PKTINFO 4 /* s/b enough space for all pktinfos in normal case*/
 struct svc_dg_xprt {
 	struct rpc_dplx_rec su_dr;	/* SVCXPRT indexed by fd */
 	struct msghdr su_msghdr;	/* msghdr received from clnt */
-	unsigned char su_cmsg[SVC_CMSG_SIZE];	/* cmsghdr received from clnt */
+	union pktinfo_u su_cmsg[DG_NUM_PKTINFO]; /* cmsghdr recv'd from clnt */
 };
 #define DG_DR(p) (opr_containerof((p), struct svc_dg_xprt, su_dr))
 #define su_data(xprt) (DG_DR(REC_XPRT(xprt)))
