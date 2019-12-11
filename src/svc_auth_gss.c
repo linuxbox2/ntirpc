@@ -397,9 +397,6 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 	OM_uint32 min_stat;
 	enum auth_stat rc = AUTH_OK;
 
-	/* Initialize reply. */
-	req->rq_msg.RPCM_ack.ar_verf = _null_auth;
-
 	/* Unserialize client credentials. */
 	if (req->rq_msg.cb_cred.oa_length <= 0) {
 		return AUTH_BADCRED;
