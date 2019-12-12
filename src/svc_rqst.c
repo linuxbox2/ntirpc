@@ -978,7 +978,7 @@ svc_rqst_evchan_write(SVCXPRT *xprt, struct xdr_ioq *xioq, bool has_blocked)
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
 					"%s: failed duplicating fd (%d)",
 					__func__, code);
-				goto out;
+				return (code);
 			}
 
 			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
@@ -1001,25 +1001,16 @@ svc_rqst_evchan_write(SVCXPRT *xprt, struct xdr_ioq *xioq, bool has_blocked)
 					    SVC_XPRT_FLAG_ADDED_SEND);
 	}
 
-	if (code) {
+	if (unlikely(code)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: failed hooking events (%d)",
+			"%s: failed evchan write control (%d)",
 			__func__, code);
-		goto out;
-	}
-
-	atomic_inc_int32_t(&sr_rec->ev_refcnt);
-	work_pool_submit(&svc_work_pool, &sr_rec->ev_wpe);
-
-	__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-		"%s: create evchan write control fd pair (%d:%d)",
-		__func__,
-		sr_rec->sv[0], sr_rec->sv[1]);
-
-out:
-
-	if (code != 0) {
-		svc_rqst_release(sr_rec);
+	} else {
+		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+			"%s: create evchan write control fd pair (%d:%d)",
+			__func__,
+			sr_rec->sv[0], sr_rec->sv[1]);
+		}
 	}
 
 	rpc_dplx_rui(rec);
