@@ -273,6 +273,13 @@ struct svc_xprt {
 
 	int32_t xp_refcnt;	/* handle reference count */
 	uint16_t xp_flags;	/* flags */
+
+	union {
+		struct in_pktinfo in;
+#ifdef INET6
+		struct in6_pktinfo in6;
+#endif
+	} xp_pktinfo;
 };
 
 /* Service record used by exported search routines */
