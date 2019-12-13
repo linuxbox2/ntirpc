@@ -1010,7 +1010,6 @@ svc_rqst_evchan_write(SVCXPRT *xprt, struct xdr_ioq *xioq, bool has_blocked)
 			"%s: create evchan write control fd pair (%d:%d)",
 			__func__,
 			sr_rec->sv[0], sr_rec->sv[1]);
-		}
 	}
 
 	rpc_dplx_rui(rec);
