@@ -239,8 +239,6 @@ struct svc_xprt {
 		svc_req_fun_t process_cb;
 		svc_xprt_fun_t rendezvous_cb;
 	}  xp_dispatch;
-	/* Handle resumed requests */
-	svc_req_fun_t xp_resume_cb;
 	SVCXPRT *xp_parent;
 
 	char *xp_tp;		/* transport provider device name */
@@ -323,6 +321,10 @@ struct svc_req {
 	struct SVCAUTH *rq_auth;	/* auth handle */
 	void *rq_ap1;		/* auth private */
 	void *rq_ap2;		/* auth private */
+
+	/* Handle resumed requests */
+	svc_req_fun_t rq_resume_cb;
+	struct work_pool_entry rq_wpe;
 
 	/* avoid separate alloc/free */
 	struct rpc_msg rq_msg;
