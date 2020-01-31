@@ -530,6 +530,11 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 			goto gd_free;
 		}
 
+		if (gr.gr_major == GSS_S_COMPLETE) {
+			gd->established = true;
+			(void)authgss_ctx_hash_set(gd);
+		}
+
 		*no_dispatch = true;
 
 		req->rq_msg.RPCM_ack.ar_results.where = &gr;
@@ -544,12 +549,11 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 
 		if (call_stat >= XPRT_DIED) {
 			rc = AUTH_FAILED;
+			(void)authgss_ctx_hash_del(gd);
 			goto gd_free;
 		}
 
 		if (gr.gr_major == GSS_S_COMPLETE) {
-			gd->established = true;
-
 			/* krb5 pac -- try all that apply */
 			gss_buffer_desc attr, display_buffer;
 
@@ -579,8 +583,6 @@ _svcauth_gss(struct svc_req *req, bool *no_dispatch)
 						   &display_buffer);
 				gd->flags |= SVC_RPC_GSS_FLAG_MSPAC;
 			}
-
-			(void)authgss_ctx_hash_set(gd);
 		}
 		break;
 
