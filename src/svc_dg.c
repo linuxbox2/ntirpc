@@ -491,17 +491,21 @@ svc_dg_destroy_task(struct work_pool_entry *wpe)
 }
 
 static void
+svc_dg_unlink_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
+{
+	if (!xprt->xp_parent) {
+		/* only original parent is registered */
+		svc_rqst_xprt_unregister(xprt, flags);
+	}
+}
+
+static void
 svc_dg_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
 	struct timespec ts = {
 		.tv_sec = 0,
 		.tv_nsec = 0,
 	};
-
-	if (!xprt->xp_parent) {
-		/* only original parent is registered */
-		svc_rqst_xprt_unregister(xprt, flags);
-	}
 
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 		"%s() %p fd %d xp_refcnt %" PRId32 " @%s:%d",
@@ -515,12 +519,6 @@ svc_dg_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 
 	REC_XPRT(xprt)->ioq.ioq_wpe.fun = svc_dg_destroy_task;
 	work_pool_submit(&svc_work_pool, &(REC_XPRT(xprt)->ioq.ioq_wpe));
-}
-
-static void
-svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
-{
-	svc_dg_destroy_it(xprt, flags, tag, line);
 }
 
 extern mutex_t ops_lock;
@@ -569,7 +567,8 @@ svc_dg_override_ops(SVCXPRT *xprt, SVCXPRT *rendezvous)
 		ops.xp_decode = svc_dg_decode;
 		ops.xp_reply = svc_dg_reply;
 		ops.xp_checksum = svc_dg_checksum;
-		ops.xp_destroy = svc_dg_destroy;
+		ops.xp_unlink = svc_dg_unlink_it;
+		ops.xp_destroy = svc_dg_destroy_it;
 		ops.xp_control = svc_dg_control;
 		ops.xp_free_user_data = NULL;	/* no default */
 	}
@@ -593,6 +592,7 @@ svc_dg_rendezvous_ops(SVCXPRT *xprt)
 		ops.xp_decode = (svc_req_fun_t)abort;
 		ops.xp_reply = (svc_req_fun_t)abort;
 		ops.xp_checksum = NULL;		/* not used */
+		ops.xp_unlink = svc_dg_unlink_it;
 		ops.xp_destroy = svc_dg_destroy_it;
 		ops.xp_control = svc_dg_control;
 		ops.xp_free_user_data = NULL;	/* no default */

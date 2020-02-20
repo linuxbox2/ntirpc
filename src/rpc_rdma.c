@@ -2207,6 +2207,12 @@ rpc_rdma_connect(RDMAXPRT *xprt)
 }
 
 static void
+rpc_rdma_unlink_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
+{
+	return;
+}
+
+static void
 rpc_rdma_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
 	if (xprt->xp_ops->xp_free_user_data) {
@@ -2245,6 +2251,7 @@ static struct xp_ops rpc_rdma_ops = {
 	.xp_decode = (svc_req_fun_t)abort,
 	.xp_reply = (svc_req_fun_t)abort,
 	.xp_checksum = NULL,		/* not used */
+	.xp_unlink = rpc_rdma_unlink_it,
 	.xp_destroy = rpc_rdma_destroy_it,
 	.xp_control = rpc_rdma_control,
 	.xp_free_user_data = NULL,	/* no default */

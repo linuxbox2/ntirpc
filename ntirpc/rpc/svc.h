@@ -204,33 +204,35 @@ struct svc_req;			/* forward decl. */
 
 typedef enum xprt_stat (*svc_req_fun_t) (struct svc_req *);
 
-/*
+/**
  * Server side transport handle
  */
 struct svc_xprt {
 	struct xp_ops {
-		/* receive incoming requests */
+		/** receive incoming requests */
 		svc_xprt_fun_t xp_recv;
 
-		/* get transport status */
+		/** get transport status */
 		svc_xprt_fun_t xp_stat;
 
-		/* decode incoming message header (called by request_cb) */
+		/** decode incoming message header (called by request_cb) */
 		svc_req_fun_t xp_decode;
 
-		/* send reply */
+		/** send reply */
 		svc_req_fun_t xp_reply;
 
-		/* optional checksum (after authentication/decryption) */
+		/** optional checksum (after authentication/decryption) */
 		void (*xp_checksum) (struct svc_req *, void *, size_t);
 
-		/* actually destroy after xp_destroy_it and xp_release_it */
+		/** Unlink xprt from it's lookup table. */
+		void (*xp_unlink) (SVCXPRT *, u_int, const char *, const int);
+		/** actually destroy after xp_destroy_it and xp_release_it */
 		void (*xp_destroy) (SVCXPRT *, u_int, const char *, const int);
 
-		/* catch-all function */
+		/** catch-all function */
 		bool (*xp_control) (SVCXPRT *, const u_int, void *);
 
-		/* free client user data */
+		/** free client user data */
 		svc_xprt_fun_t xp_free_user_data;
 	} *xp_ops;
 
@@ -475,6 +477,9 @@ static inline void svc_destroy_it(SVCXPRT *xprt,
 		/* previously set, do nothing */
 		return;
 	}
+
+	/* unlink before dropping last ref */
+	(*(xprt)->xp_ops->xp_unlink)(xprt, flags, tag, line);
 
 	svc_release_it(xprt, SVC_RELEASE_FLAG_NONE, tag, line);
 }
