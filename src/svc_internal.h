@@ -173,5 +173,6 @@ int svc_rqst_xprt_register(SVCXPRT *, SVCXPRT *);
 void svc_rqst_xprt_unregister(SVCXPRT *, uint32_t);
 int svc_rqst_evchan_write(SVCXPRT *, struct xdr_ioq *, bool);
 void svc_rqst_xprt_send_complete(SVCXPRT *);
+void svc_rqst_unhook(SVCXPRT *);
 
 #endif				/* TIRPC_SVC_INTERNAL_H */

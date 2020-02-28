@@ -515,8 +515,13 @@ svc_vc_rendezvous(SVCXPRT *xprt)
 		SVC_DESTROY(newxprt);
 		/* Was never added to epoll */
 		SVC_RELEASE(newxprt, SVC_RELEASE_FLAG_NONE);
+		SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 		return (XPRT_DESTROYED);
 	}
+
+	/* We're not using a ref for the hook anymore, since epoll doesn't store
+	 * the transport pointer.  Drop the extra ref here. */
+	SVC_RELEASE(newxprt, SVC_RELEASE_FLAG_NONE);
 	return (XPRT_IDLE);
 }
 
