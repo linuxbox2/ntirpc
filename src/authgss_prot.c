@@ -305,7 +305,7 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 			xv_count = data_count + 2;
 			gv_count = data_count + 1;
 			after_data = data_count;
-		} else if (svc == RPCSEC_GSS_SVC_PRIVACY) {
+		} else /* svc == RPCSEC_GSS_SVC_PRIVACY */ {
 			/* Add header, padding, and trailer for the wrap */
 			xv_count = data_count + 3;
 			gv_count = data_count + 3;
