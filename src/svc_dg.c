@@ -496,6 +496,9 @@ svc_dg_unlink_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 	if (!xprt->xp_parent) {
 		/* only original parent is registered */
 		svc_rqst_xprt_unregister(xprt, flags);
+	} else {
+		/* Still need to unhook it */
+		svc_rqst_unhook(xprt);
 	}
 }
 

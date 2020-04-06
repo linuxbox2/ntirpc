@@ -665,9 +665,8 @@ svc_rqst_rearm_events_locked(SVCXPRT *xprt, uint16_t ev_flags)
 	if (sr_rec->ev_flags & SVC_RQST_FLAG_SHUTDOWN)
 		return (0);
 
-	/* Currently, can only be called with one of ADDED_RECV or ADDED_SEND, so we
-	 * only need to take one ref. */
-	SVC_REF(xprt, SVC_REF_FLAG_NONE);
+	/* Don't take a ref on the xprt.  We take a ref in hook, and release it
+	 * in unhook. */
 
 	/* assuming success */
 	atomic_set_uint16_t_bits(&xprt->xp_flags, ev_flags);
@@ -736,10 +735,10 @@ svc_rqst_rearm_events_locked(SVCXPRT *xprt, uint16_t ev_flags)
 						&xprt->xp_flags,
 						SVC_XPRT_FLAG_ADDED_SEND);
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
-					"%s: %p fd %d xp_refcnt %" PRId32
+					"%s: %p fd_send %d xp_refcnt %" PRId32
 					" sr_rec %p evchan %d ev_refcnt %" PRId32
 					" epoll_fd %d control fd pair (%d:%d) rearm failed (%d)",
-					__func__, rec, rec->xprt.xp_fd,
+					__func__, rec, rec->xprt.xp_fd_send,
 					rec->xprt.xp_refcnt,
 					sr_rec, sr_rec->id_k, sr_rec->ev_refcnt,
 					sr_rec->ev_u.epoll.epoll_fd,
@@ -748,10 +747,10 @@ svc_rqst_rearm_events_locked(SVCXPRT *xprt, uint16_t ev_flags)
 			} else {
 				__warnx(TIRPC_DEBUG_FLAG_SVC_RQST |
 					TIRPC_DEBUG_FLAG_REFCNT,
-					"%s: %p fd %d xp_refcnt %" PRId32
+					"%s: %p fd_send %d xp_refcnt %" PRId32
 					" sr_rec %p evchan %d ev_refcnt %"PRId32
 					" epoll_fd %d control fd pair (%d:%d) rearm event %p",
-					__func__, rec, rec->xprt.xp_fd,
+					__func__, rec, rec->xprt.xp_fd_send,
 					rec->xprt.xp_refcnt,
 					sr_rec, sr_rec->id_k, sr_rec->ev_refcnt,
 					sr_rec->ev_u.epoll.epoll_fd,
@@ -806,11 +805,16 @@ svc_rqst_hook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec,
 	{
 		struct epoll_event *ev;
 
+		/* For epoll, we no longer need a ref on the xprt.  epoll uses
+		 * the FD as a key now, and the xprt is looked up, which gets a
+		 * ref for the event.  The xprt can therefore be freed while in
+		 * epoll, with no consequences. */
+
 		if (ev_flags & SVC_XPRT_FLAG_ADDED_RECV) {
 			ev = &rec->ev_u.epoll.event_recv;
 
 			/* set up epoll user data */
-			ev->data.ptr = rec;
+			ev->data.fd = rec->xprt.xp_fd;
 
 			/* wait for read events, level triggered, oneshot */
 			ev->events = EPOLLONESHOT | EPOLLIN;
@@ -849,8 +853,8 @@ svc_rqst_hook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec,
 		if (ev_flags & SVC_XPRT_FLAG_ADDED_SEND) {
 			ev = &rec->ev_u.epoll.event_send;
 
-			/* set up epoll user data */
-			ev->data.ptr = rec;
+			/* set up epoll user data.  Lookup needs the primary FD */
+			ev->data.fd = rec->xprt.xp_fd;
 
 			/* wait for write events, edge triggered, oneshot */
 			ev->events = EPOLLONESHOT | EPOLLOUT | EPOLLET;
@@ -865,10 +869,10 @@ svc_rqst_hook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec,
 						&rec->xprt.xp_flags,
 						SVC_XPRT_FLAG_ADDED_SEND);
 				__warnx(TIRPC_DEBUG_FLAG_ERROR,
-					"%s: %p fd %d xp_refcnt %" PRId32
+					"%s: %p fd_send %d xp_refcnt %" PRId32
 					" sr_rec %p evchan %d ev_refcnt %" PRId32
 					" epoll_fd %d control fd pair (%d:%d) direction out hook failed (%d)",
-					__func__, rec, rec->xprt.xp_fd,
+					__func__, rec, rec->xprt.xp_fd_send,
 					rec->xprt.xp_refcnt,
 					sr_rec, sr_rec->id_k, sr_rec->ev_refcnt,
 					sr_rec->ev_u.epoll.epoll_fd,
@@ -876,10 +880,10 @@ svc_rqst_hook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec,
 			} else {
 				__warnx(TIRPC_DEBUG_FLAG_SVC_RQST |
 					TIRPC_DEBUG_FLAG_REFCNT,
-					"%s: %p fd %d xp_refcnt %" PRId32
+					"%s: %p fd_send %d xp_refcnt %" PRId32
 					" sr_rec %p evchan %d ev_refcnt %" PRId32
 					" epoll_fd %d control fd pair (%d:%d) direction out hook event %p",
-					__func__, rec, rec->xprt.xp_fd,
+					__func__, rec, rec->xprt.xp_fd_send,
 					rec->xprt.xp_refcnt,
 					sr_rec, sr_rec->id_k, sr_rec->ev_refcnt,
 					sr_rec->ev_u.epoll.epoll_fd,
@@ -904,20 +908,28 @@ svc_rqst_hook_events(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec,
 	return (code);
 }
 
-/*
- * RPC_DPLX_LOCKED
- */
-static void
-svc_rqst_unreg(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
+void
+svc_rqst_unhook(SVCXPRT *xprt)
 {
+	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
+	struct svc_rqst_rec *sr_rec = (struct svc_rqst_rec *)rec->ev_p;
 	uint16_t xp_flags =
-		atomic_postclear_uint16_t_bits(&rec->xprt.xp_flags,
+		atomic_postclear_uint16_t_bits(&xprt->xp_flags,
 					       SVC_XPRT_FLAG_ADDED_RECV |
 					       SVC_XPRT_FLAG_ADDED_SEND);
 
 	/* clear events */
 	if (xp_flags & (SVC_XPRT_FLAG_ADDED_RECV | SVC_XPRT_FLAG_ADDED_SEND))
 		(void)svc_rqst_unhook_events(rec, sr_rec, xp_flags);
+}
+
+/*
+ * RPC_DPLX_LOCKED
+ */
+static void
+svc_rqst_unreg(struct rpc_dplx_rec *rec, struct svc_rqst_rec *sr_rec)
+{
+	svc_rqst_unhook(&rec->xprt);
 
 	/* Unlinking after debug message ensures both the xprt and the sr_rec
 	 * are still present, as the xprt unregisters before release.
@@ -982,7 +994,7 @@ svc_rqst_evchan_write(SVCXPRT *xprt, struct xdr_ioq *xioq, bool has_blocked)
 			}
 
 			__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
-				"%s: xp_fd_send fd %d dup of xp_fd %d",
+				"%s: xp_fd_send %d dup of xp_fd %d",
 				__func__, xprt->xp_fd_send, xprt->xp_fd);
 		}
 	}
@@ -995,8 +1007,6 @@ svc_rqst_evchan_write(SVCXPRT *xprt, struct xdr_ioq *xioq, bool has_blocked)
 		code = svc_rqst_rearm_events_locked(xprt,
 						    SVC_XPRT_FLAG_ADDED_SEND);
 	} else {
-		/* svc_rqst_hook_events doesn't take a ref, so take one here */
-		SVC_REF(xprt, SVC_REF_FLAG_NONE);
 		code = svc_rqst_hook_events(rec, sr_rec,
 					    SVC_XPRT_FLAG_ADDED_SEND);
 	}
@@ -1156,7 +1166,6 @@ svc_rqst_xprt_task_recv(struct work_pool_entry *wpe)
 	struct xdr_ioq *ioq =
 			opr_containerof(wpe, struct xdr_ioq, ioq_wpe);
 	struct rpc_dplx_rec *rec = ioq->rec;
-	enum xprt_stat stat = XPRT_IDLE;
 
 	atomic_clear_uint16_t_bits(&ioq->ioq_s.qflags, IOQ_FLAG_WORKING);
 
@@ -1174,13 +1183,11 @@ svc_rqst_xprt_task_recv(struct work_pool_entry *wpe)
 		 * xp_refcnt need more than 1 (this task).
 		 */
 		(void)clock_gettime(CLOCK_MONOTONIC_FAST, &rec->recv.ts);
-		stat = SVC_RECV(&rec->xprt);
+		(void)SVC_RECV(&rec->xprt);
 	}
 
-	if (stat != XPRT_SUSPEND) {
-		/* If tests fail, log non-fatal "WARNING! already destroying!" */
-		SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
-	}
+	/* Release the ref taken on the event */
+	SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
 }
 
 enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs)
@@ -1274,8 +1281,6 @@ svc_rqst_xprt_task_send(struct work_pool_entry *wpe)
 		svc_ioq_write(&rec->xprt);
 	}
 
-	/* If tests fail, log non-fatal "WARNING! already destroying!"
-	 */
 	SVC_RELEASE(&rec->xprt, SVC_RELEASE_FLAG_NONE);
 }
 
@@ -1351,7 +1356,8 @@ svc_rqst_clean_idle(int timeout)
 static struct xdr_ioq *
 svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 {
-	struct rpc_dplx_rec *rec = (struct rpc_dplx_rec *) ev->data.ptr;
+	SVCXPRT *xprt;
+	struct rpc_dplx_rec *rec;
 	uint16_t xp_flags, ev_flag = 0;
 	struct xdr_ioq *ioq = NULL;
 	work_pool_fun_t fun;
@@ -1371,11 +1377,15 @@ svc_rqst_epoll_event(struct svc_rqst_rec *sr_rec, struct epoll_event *ev)
 		return (NULL);
 	}
 
-	/* Another task may release transport in parallel.
-	 * We have a ref from being in epoll, but since epoll is one-shot, a new ref
-	 * will be taken when we re-enter epoll.  Use this ref for the processor
-	 * without taking another one.
-	 */
+	xprt = svc_xprt_lookup(ev->data.fd, NULL);
+	if (!xprt) {
+		__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
+			"%s: fd %d no associated xprt",
+			__func__, ev->data.fd);
+		return (NULL);
+	}
+	/* At this point, we have a ref on the xprt, and know it's valid */
+	rec = REC_XPRT(xprt);
 
 	__warnx(TIRPC_DEBUG_FLAG_SVC_RQST,
 		"%s: event %p %08x%s%s rpc_dplx_rec %p (sr_rec %p)",
