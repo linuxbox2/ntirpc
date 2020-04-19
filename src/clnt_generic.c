@@ -401,6 +401,9 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 		goto err;
 	}
 
+	if (CLNT_FAILURE(cl))
+		goto err1;
+
 	if (flags & CLNT_CREATE_FLAG_CLOSE) {
 		/* We got a new FD; this makes it a local client */
 		cl->cl_flags |= CLNT_FLAG_LOCAL;
