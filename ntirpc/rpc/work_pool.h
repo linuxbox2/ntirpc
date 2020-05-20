@@ -72,6 +72,7 @@ struct work_pool_thread {
 	char worker_name[16];
 	pthread_t pt;
 	uint32_t worker_index;
+	bool wakeup;
 };
 
 typedef void (*work_pool_fun_t) (struct work_pool_entry *);

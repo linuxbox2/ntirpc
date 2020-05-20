@@ -154,7 +154,6 @@ work_pool_thread(void *arg)
 
 	pthread_cond_init(&wpt->pqcond, NULL);
 	pthread_mutex_lock(&pool->pqh.qmutex);
-	TAILQ_INSERT_TAIL(&pool->wptqh, wpt, wptq);
 
 	wpt->worker_index = atomic_inc_uint32_t(&pool->worker_index);
 	snprintf(wpt->worker_name, sizeof(wpt->worker_name), "%.5s%" PRIu32,
@@ -185,21 +184,21 @@ work_pool_thread(void *arg)
 			wpt->work = NULL;
 			pthread_mutex_lock(&pool->pqh.qmutex);
 		}
-
-		if (0 > pool->pqh.qcount++) {
-			/* negative for task(s) */
-			have = TAILQ_FIRST(&pool->pqh.qh);
+		/*
+		 * Check for any queued work to avoid scheduling.
+		 */
+		have = TAILQ_FIRST(&pool->pqh.qh);
+		if (have) {
 			TAILQ_REMOVE(&pool->pqh.qh, have, q);
-
 			wpt->work = (struct work_pool_entry *)have;
 			continue;
 		}
 
-		/* positive for waiting worker(s):
-		 * use the otherwise empty pool to hold them,
-		 * simplifying mutex and pointer setup.
+		/*
+		 * Add myself to waiting queue.
 		 */
-		TAILQ_INSERT_TAIL(&pool->pqh.qh, &wpt->pqe, q);
+		pool->pqh.qcount++;
+		TAILQ_INSERT_TAIL(&pool->wptqh, wpt, wptq);
 
 		__warnx(TIRPC_DEBUG_FLAG_WORKER,
 			"%s() %s waiting",
@@ -208,32 +207,46 @@ work_pool_thread(void *arg)
 		clock_gettime(CLOCK_REALTIME_FAST, &ts);
 		timespec_addms(&ts, pool->timeout_ms);
 
+		wpt->wakeup = false;
+
 		/* Note: the mutex is the pool _head,
 		 * but the condition is per worker,
 		 * making the signal efficient!
 		 */
 		rc = pthread_cond_timedwait(&wpt->pqcond, &pool->pqh.qmutex,
 					    &ts);
-		if (!wpt->work) {
-			/* Allow for possible timing race:
-			 * work entry can be submitted by another
-			 * thread during the thread task switch
-			 * after shutdown or timeout?
-			 * Then, has already been removed there.
-			 */
-			pool->pqh.qcount--;
-			TAILQ_REMOVE(&pool->pqh.qh, &wpt->pqe, q);
+
+		/*
+		 * Wokeup after work submit.
+		 * It could be shutdown also.
+		 */
+		if (!rc) {
+			if (wpt->wakeup)
+				continue;
 		}
+
+		/*
+		 * It could be timeout.
+		 * There could be race if submit got lock and
+		 * it will try to wakeup me.
+		 */
+		if (!wpt->wakeup) {
+			pool->pqh.qcount--;
+			TAILQ_REMOVE(&pool->wptqh, wpt, wptq);
+		} else {
+			continue;
+		}
+
 		if (rc && rc != ETIMEDOUT) {
 			__warnx(TIRPC_DEBUG_FLAG_ERROR,
 				"%s() cond_timedwait failed (%d)\n",
 				__func__, rc);
 			break;
 		}
-	} while (wpt->work || pool->pqh.qcount < pool->params.thrd_min);
+	} while (wpt->work || wpt->wakeup ||
+		 pool->pqh.qcount < pool->params.thrd_min);
 
 	pool->n_threads--;
-	TAILQ_REMOVE(&pool->wptqh, wpt, wptq);
 	pthread_mutex_unlock(&pool->pqh.qmutex);
 
 	__warnx(TIRPC_DEBUG_FLAG_WORKER,
@@ -274,26 +287,23 @@ work_pool_submit(struct work_pool *pool, struct work_pool_entry *work)
 		/* queue is draining */
 		return (0);
 	}
+
 	pthread_mutex_lock(&pool->pqh.qmutex);
-
-	if (0 < pool->pqh.qcount--) {
-		struct work_pool_thread *wpt = (struct work_pool_thread *)
-			TAILQ_FIRST(&pool->pqh.qh);
-
-		/* positive for waiting worker(s) */
-		TAILQ_REMOVE(&pool->pqh.qh, &wpt->pqe, q);
-		wpt->work = work;
-
-		/* Note: the mutex is the pool _head,
-		 * but the condition is per worker,
-		 * making the signal efficient!
-		 */
+	/*
+	 * Insert in work queue so that running thread can
+	 * pickup without scheduling.
+	 */
+	TAILQ_INSERT_TAIL(&pool->pqh.qh, &work->pqe, q);
+	struct work_pool_thread *wpt = TAILQ_LAST(&pool->wptqh, work_pool_s);
+	if (wpt) {
+		pool->pqh.qcount--;
+		TAILQ_REMOVE(&pool->wptqh, wpt, wptq);
+		assert(!wpt->wakeup);
+		wpt->wakeup = true;
 		pthread_cond_signal(&wpt->pqcond);
 	} else {
-		/* negative for task(s) */
-		TAILQ_INSERT_TAIL(&pool->pqh.qh, &work->pqe, q);
+		assert(pool->pqh.qcount == 0);
 	}
-
 	pthread_mutex_unlock(&pool->pqh.qmutex);
 	return rc;
 }
