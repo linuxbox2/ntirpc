@@ -718,9 +718,6 @@ svc_rqst_rearm_events_locked(SVCXPRT *xprt, uint16_t ev_flags)
 		if (ev_flags & SVC_XPRT_FLAG_ADDED_SEND) {
 			ev = &rec->ev_u.epoll.event_send;
 
-			/* set up epoll user data */
-			ev->data.ptr = rec;
-
 			/* wait for write events, edge triggered, oneshot */
 			ev->events = EPOLLONESHOT | EPOLLOUT | EPOLLET;
 
