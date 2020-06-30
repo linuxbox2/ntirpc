@@ -101,6 +101,7 @@ xdr_rpc_gss_buf(XDR *xdrs, gss_buffer_t buf, u_int maxsize)
 	case XDR_DECODE:
 		return (xdr_rpc_gss_decode(xdrs, buf));
 	case XDR_FREE:
+		mem_free(buf->value, buf->length);
 		return (TRUE);
 	};
 	return (FALSE);
