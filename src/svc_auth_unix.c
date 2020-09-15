@@ -93,7 +93,8 @@ _svcauth_unix(struct svc_req *req)
 		aup->aup_uid = (int)IXDR_GET_INT32(buf);
 		aup->aup_gid = (int)IXDR_GET_INT32(buf);
 		gid_len = (size_t) IXDR_GET_U_INT32(buf);
-		if (gid_len > NGRPS) {
+		if (gid_len > NGRPS || aup->aup_uid == (uid_t)-1 ||
+				aup->aup_gid == (gid_t)-1) {
 			stat = AUTH_BADCRED;
 			goto done;
 		}
@@ -101,6 +102,10 @@ _svcauth_unix(struct svc_req *req)
 		for (i = 0; i < gid_len; i++) {
 			/* suppress block warning */
 			aup->aup_gids[i] = (int)IXDR_GET_INT32(buf);
+			if (aup->aup_gids[i] == (gid_t)-1) {
+				stat = AUTH_BADCRED;
+				goto done;
+			}
 		}
 		/*
 		 * five is the smallest unix credentials structure -
