@@ -70,7 +70,7 @@ typedef gss_union_ctx_id_desc *gss_union_ctx_id_t;
 
 struct svc_rpc_gss_data {
 	struct opr_rbtree_node node_k;
-	 TAILQ_ENTRY(svc_rpc_gss_data) lru_q;
+	TAILQ_ENTRY(svc_rpc_gss_data) lru_q;
 	mutex_t lock;
 	uint32_t flags;
 	uint32_t refcnt;

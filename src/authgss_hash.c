@@ -83,17 +83,36 @@ svc_rpc_gss_cmpf(const struct opr_rbtree_node *lhs,
 		 const struct opr_rbtree_node *rhs)
 {
 	struct svc_rpc_gss_data *lk, *rk;
+	gss_union_ctx_id_desc *gss_ctx_lk, *gss_ctx_rk;
+	uint64_t mech_type_lk, internal_ctx_id_lk;
+	uint64_t mech_type_rk, internal_ctx_id_rk;
+
 
 	lk = opr_containerof(lhs, struct svc_rpc_gss_data, node_k);
 	rk = opr_containerof(rhs, struct svc_rpc_gss_data, node_k);
+	gss_ctx_lk = (gss_union_ctx_id_desc *) (lk->ctx);
+	gss_ctx_rk = (gss_union_ctx_id_desc *) (rk->ctx);
+	mech_type_lk = (uint64_t)(uintptr_t)gss_ctx_lk->mech_type;
+	mech_type_rk = (uint64_t)(uintptr_t)gss_ctx_rk->mech_type;
+	internal_ctx_id_lk = (uint64_t)(uintptr_t)gss_ctx_lk->internal_ctx_id;
+	internal_ctx_id_rk = (uint64_t)(uintptr_t)gss_ctx_rk->internal_ctx_id;
 
-	if (lk->hk.k < rk->hk.k)
-		return (-1);
+	/* Move left OR right based on mech type */
+	if (mech_type_lk < mech_type_rk)
+		return -1;
 
-	if (lk->hk.k == rk->hk.k)
-		return (0);
+	if (mech_type_lk > mech_type_rk)
+		return 1;
 
-	return (1);
+	/* If mech_type are equal, move based on internal_ctx_id */
+	if (internal_ctx_id_lk < internal_ctx_id_rk)
+		return -1;
+
+	if (internal_ctx_id_lk > internal_ctx_id_rk)
+		return 1;
+
+	/* If we have reached here, both mech_type and id are equal */
+	return 0;
 }
 
 static void
@@ -151,6 +170,7 @@ authgss_ctx_hash_get(struct rpc_gss_cred *gc)
 
 	gss_ctx = (gss_union_ctx_id_desc *) (gc->gc_ctx.value);
 	gk.hk.k = gss_ctx_hash(gss_ctx);
+	gk.ctx = (gc->gc_ctx.value);
 
 	t = rbtx_partition_of_scalar(&authgss_hash_st.xt, gk.hk.k);
 	mutex_lock(&t->mtx);
