@@ -115,6 +115,11 @@ else(USE_LTTNG)
   set(USE_LTTNG_NTIRPC OFF)
 endif(USE_LTTNG)
 
+find_library(LIBURCU_LIB urcu-bp)
+find_path(LIBURCU_INC urcu-bp.h)
+include_directories(${LIBURCU_INC})
+set(SYSTEM_LIBRARIES ${SYSTEM_LIBRARIES} ${LIBURCU_LIB})
+
 # Choose a shortcut build config
 
 IF(BUILD_CONFIG)
@@ -186,8 +191,6 @@ include_directories(BEFORE
   "${EXTRA_INCLUDE_DIR}"
 )
 
-find_library(LIBURCU urcu-bp)
-
 # Find misc system libs
 find_library(LIBRT rt)   # extended Pthreads functions
 
@@ -196,7 +199,6 @@ set(SYSTEM_LIBRARIES
   ${KRB5_LIBRARIES}
   ${SYSTEM_LIBRARIES}
   ${LIBRT}
-  ${LIBURCU}
 )
 
 if (NOT FREEBSD)
