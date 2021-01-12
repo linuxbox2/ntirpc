@@ -1223,7 +1223,6 @@ static void svc_resume_task(struct work_pool_entry *wpe)
 {
 	struct svc_req *req =
 			opr_containerof(wpe, struct svc_req, rq_wpe);
-	SVCXPRT *xprt = req->rq_xprt;
 	enum xprt_stat stat;
 
 	/* Resume the request. */
@@ -1243,8 +1242,6 @@ static void svc_resume_task(struct work_pool_entry *wpe)
 	XDR_DESTROY(req->rq_xdrs);
 
 	__svc_params->free_cb(req, stat);
-
-	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 }
 
 void svc_resume(struct svc_req *req)
