@@ -259,17 +259,8 @@ svc_dg_rendezvous(SVCXPRT *xprt)
 
 	rlen = recvmsg(newxprt->xp_fd, mesgp, 0);
 
-	if (sp->sa_family == (sa_family_t) 0xffff) {
-		svc_dg_xprt_free(su);
-		return (XPRT_DIED);
-	}
-
 	if (rlen == -1 && errno == EINTR)
 		goto again;
-	if (rlen == -1 || (rlen < (ssize_t) (4 * sizeof(u_int32_t)))) {
-		svc_dg_xprt_free(su);
-		return (XPRT_DIED);
-	}
 
 	if (unlikely(svc_rqst_rearm_events(xprt, SVC_XPRT_FLAG_ADDED_RECV))) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
@@ -278,6 +269,20 @@ svc_dg_rendezvous(SVCXPRT *xprt)
 		svc_dg_xprt_free(su);
 		return (XPRT_DIED);
 	}
+
+        if (sp->sa_family == (sa_family_t) 0xffff) {
+                __warnx(TIRPC_DEBUG_FLAG_ERROR,
+                        "%s: Bad message sa_family is 0xffff",
+                        __func__);
+                return SVC_STAT(xprt);
+        }
+
+        if (rlen == -1 || (rlen < (ssize_t) (4 * sizeof(u_int32_t)))) {
+                __warnx(TIRPC_DEBUG_FLAG_ERROR,
+                        "%s: Bad message rlen: %d",
+                        __func__, rlen);
+                return SVC_STAT(xprt);
+        }
 
 	__rpc_address_setup(&newxprt->xp_local);
 	__rpc_address_setup(&newxprt->xp_remote);
