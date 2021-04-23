@@ -612,13 +612,13 @@ xdr_putint8(XDR *xdrs, int32_t int8v)
 static inline bool
 xdr_getenum(XDR *xdrs, enum_t *ip)
 {
-	return xdr_getuint32(xdrs, (uint32_t *)ip);
+	return xdr_getint32(xdrs, (int32_t *)ip);
 }
 
 static inline bool
 xdr_putenum(XDR *xdrs, enum_t enumv)
 {
-	return xdr_putuint16(xdrs, (uint32_t)enumv);
+	return xdr_putint32(xdrs, (int32_t)enumv);
 }
 
 #define XDR_GETENUM(xdrs, enump) xdr_getenum(xdrs, enump)
