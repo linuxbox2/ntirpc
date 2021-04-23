@@ -627,9 +627,9 @@ xdr_putenum(XDR *xdrs, enum_t enumv)
 static inline bool
 xdr_getbool(XDR *xdrs, bool_t *ip)
 {
-	uint32_t lv;
+	int32_t lv;
 
-	if (!xdr_getuint32(xdrs, &lv))
+	if (!xdr_getint32(xdrs, &lv))
 		return (false);
 	*ip = lv ? XDR_TRUE : XDR_FALSE;
 	return (true);
@@ -638,7 +638,7 @@ xdr_getbool(XDR *xdrs, bool_t *ip)
 static inline bool
 xdr_putbool(XDR *xdrs, bool_t boolv)
 {
-	return xdr_putuint16(xdrs, boolv ? XDR_TRUE : XDR_FALSE);
+	return xdr_putint32(xdrs, boolv ? XDR_TRUE : XDR_FALSE);
 }
 
 #define XDR_GETBOOL(xdrs, boolp) xdr_getbool(xdrs, boolp)
