@@ -37,6 +37,13 @@
 extern int __svc_maxiov;
 extern int __svc_maxrec;
 
+#if defined(UIO_MAXIOV)
+# define PRESUMED_UIO_MAXIOV UIO_MAXIOV
+#else
+/* On macOS, the non-kernel sys/uio.h header does not define UIO_MAXIOV. */
+# define PRESUMED_UIO_MAXIOV 1024
+#endif
+
 /* threading fdsets around is annoying */
 struct svc_params {
 	mutex_t mtx;

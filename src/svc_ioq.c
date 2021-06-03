@@ -197,9 +197,9 @@ svc_ioq_flushv(SVCXPRT *xprt, struct xdr_ioq *xioq)
 			break;
 		}
 
-		if (iov_count + frag_needed > UIO_MAXIOV) {
+		if (iov_count + frag_needed > PRESUMED_UIO_MAXIOV) {
 			/* sendmsg can only take UIO_MAXIOV iovecs */
-			iov_count = UIO_MAXIOV - frag_needed;
+			iov_count = PRESUMED_UIO_MAXIOV - frag_needed;
 		}
 
 		/* Convert the xdr_vio to an iovec */

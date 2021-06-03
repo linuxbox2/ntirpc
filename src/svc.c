@@ -86,7 +86,7 @@
 #ifdef IOV_MAX
 int __svc_maxiov = IOV_MAX;
 #else
-int __svc_maxiov = 1024; /* UIO_MAXIOV value from sys/uio.h */
+int __svc_maxiov = PRESUMED_UIO_MAXIOV;
 #endif
 int __svc_maxrec = RPC_MAXDATA_LEGACY;
 
