@@ -58,10 +58,8 @@ void warnx(const char *fmt, ...);
 #endif				/* !_WIN32 */
 
 #ifdef __APPLE__
-#include <sys/time.h>
-typedef unsigned int clockid_t;
-#define CLOCK_MONOTONIC_FAST 6
-extern int clock_gettime(clockid_t clock, struct timespec *ts);
+#include <time.h>
+#define CLOCK_MONOTONIC_FAST CLOCK_MONOTONIC
 #endif
 
 #ifndef max
