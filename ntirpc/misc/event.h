@@ -29,6 +29,8 @@
 #ifndef _TIRPC_EVENT_H_
 #define _TIRPC_EVENT_H_
 
+#include <sys/types.h>
+
 #define EVFILT_READ		(-1)
 #define EVFILT_WRITE		(-2)
 #define EVFILT_AIO		(-3)	/* attached to aio requests */

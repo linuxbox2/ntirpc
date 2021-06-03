@@ -54,6 +54,8 @@
 #ifndef __BSD_EPOLL_H__
 #define __BSD_EPOLL_H__
 
+#include <stdint.h>
+
 union epoll_data {
 	int fd;
 	uint32_t u32;
