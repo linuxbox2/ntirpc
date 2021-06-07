@@ -32,6 +32,17 @@
  * Copyright (c) 1986-1991 by Sun Microsystems Inc.
  */
 
+#ifdef __APPLE__
+/*
+ * This #define causes netinet/in.h to pull in definitions for IPV6_PKTINFO and
+ * IPV6_RECVPKTINFO
+ */
+#define __APPLE_USE_RFC_3542
+
+#define SOL_IP		IPPROTO_IP
+#define SOL_IPV6	IPPROTO_IPV6
+#endif
+
 #include "config.h"
 
 /*
@@ -52,6 +63,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netconfig.h>
+#include <netinet/in.h>
 #include <err.h>
 
 #include "rpc_com.h"
@@ -619,21 +631,15 @@ svc_dg_enable_pktinfo(int fd, const struct __rpc_sockinfo *si)
 
 	switch (si->si_af) {
 	case AF_INET:
-#ifdef SOL_IP
 		(void)setsockopt(fd, SOL_IP, IP_PKTINFO, &on, sizeof(on));
-#endif
 		break;
 
 	case AF_INET6:
-#ifdef SOL_IP
 		(void)setsockopt(fd, SOL_IP, IP_PKTINFO, &on, sizeof(on));
-#endif
-#ifdef SOL_IPV6
 		(void)setsockopt(fd, SOL_IPV6, IPV6_RECVPKTINFO,
 				 &on, sizeof(on));
 		(void)setsockopt(fd, SOL_IPV6, IPV6_V6ONLY,
 				 &off, sizeof(off));
-#endif
 		break;
 	}
 }
@@ -689,19 +695,15 @@ svc_dg_store_pktinfo(struct msghdr *msg, SVCXPRT *xprt)
 	     cmsg = CMSG_NXTHDR(msg, cmsg)) {
 
 		if (cmsg->cmsg_level == IPPROTO_IP) {
-#ifdef IP_PKTINFO
 			if (cmsg->cmsg_type == IP_PKTINFO) {
 				if (svc_dg_store_in_pktinfo(cmsg, xprt))
 					return 1;
 			}
-#endif
 
-#ifdef IPV6_PKTINFO
 			if (cmsg->cmsg_type == IPV6_PKTINFO) {
 				if (svc_dg_store_in6_pktinfo(cmsg, xprt))
 					return 1;
 			}
-#endif
 		}
 		
 	}

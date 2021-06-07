@@ -45,7 +45,7 @@
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-#if defined(__FreeBSD__)
+#if defined(__FreeBSD__) || defined(__APPLE__)
 
 #include <sys/types.h>
 #include <sys/event.h>
@@ -213,4 +213,4 @@ epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 	return rc;
 }
 
-#endif				/* __FreeBSD__ */
+#endif				/* __FreeBSD__ || __APPLE__ */

@@ -59,6 +59,7 @@ void warnx(const char *fmt, ...);
 
 #ifdef __APPLE__
 #include <time.h>
+#define CLOCK_REALTIME_FAST CLOCK_REALTIME
 #define CLOCK_MONOTONIC_FAST CLOCK_MONOTONIC
 #endif
 
