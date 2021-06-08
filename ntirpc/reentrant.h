@@ -40,6 +40,8 @@
 
 #if defined(_WIN32)
 #include <misc/winpthreads.h>
+#elif defined(__APPLE__)
+#include <misc/macpthreads.h>
 #else
 #include <pthread.h>
 #endif
