@@ -77,4 +77,34 @@ void warnx(const char *fmt, ...);
 
 #define CACHE_PAD(_n) char __pad ## _n [CACHE_LINE_SIZE]
 
+/* Define bswap_## on non-GNU systems. */
+#if defined(_MSC_VER)
+
+#include <stdlib.h>
+#define bswap_16(x) _byteswap_ushort(x)
+#define bswap_32(x) _byteswap_ulong(x)
+#define bswap_64(x) _byteswap_uint64(x)
+
+#elif defined(__APPLE__)
+
+/* macOS / Darwin features */
+#include <libkern/OSByteOrder.h>
+#define bswap_16(x) OSSwapInt16(x)
+#define bswap_32(x) OSSwapInt32(x)
+#define bswap_64(x) OSSwapInt64(x)
+
+#elif defined(__FreeBSD__)
+
+#include <sys/endian.h>
+#define bswap_16(x)     bswap16((x))
+#define bswap_32(x)     bswap32((x))
+#define bswap_64(x)     bswap64((x))
+
+#else
+
+/* Must be on Linux. GNU supplies bswap_## directly. */
+#include <byteswap.h>
+
+#endif				/* bswap_## */
+
 #endif				/* NTIRPC_PORTABLE_H */
