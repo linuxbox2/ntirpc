@@ -36,6 +36,7 @@
 #include "config.h"
 #include <string.h>
 #include <misc/city.h>
+#include <misc/portable.h>
 
 static uint64 UNALIGNED_LOAD64(const char *p)
 {
@@ -57,21 +58,6 @@ static uint32 UNALIGNED_LOAD32(const char *p)
 #define uint64_in_expected_order(x) (x)
 
 #else
-
-#ifdef _MSC_VER
-#include <stdlib.h>
-#define bswap_32(x) _byteswap_ulong(x)
-#define bswap_64(x) _byteswap_uint64(x)
-
-#elif defined(__APPLE__)
-/* Mac OS X / Darwin features */
-#include <libkern/OSByteOrder.h>
-#define bswap_32(x) OSSwapInt32(x)
-#define bswap_64(x) OSSwapInt64(x)
-
-#else
-#include <byteswap.h>
-#endif
 
 #define uint32_in_expected_order(x) (bswap_32(x))
 #define uint64_in_expected_order(x) (bswap_64(x))
