@@ -140,9 +140,9 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
   set(LINUX ON)
 endif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 
-if(${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
-  set(FREEBSD ON)
-endif(${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
+if(${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD|Darwin")
+  set(BSDBASED ON)
+endif(${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD|Darwin")
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
   set(WINDOWS ON)
@@ -172,12 +172,12 @@ if(_MSPAC_SUPPORT)
   set(SYSTEM_LIBRARIES ${WBclient_LIBRARIES} ${SYSTEM_LIBRARIES})
 endif(_MSPAC_SUPPORT)
 
-if (FREEBSD)
+if (BSDBASED)
    set(EXTRA_INCLUDE_DIR "/opt/ganesha/include")
 else()
   # workaround bug in some include_directories when no extra includes
   set(EXTRA_INCLUDE_DIR "${NTIRPC_BASE_DIR}/ntirpc/")
-endif(FREEBSD)
+endif(BSDBASED)
 
 add_definitions(-DHAVE_CONFIG_H)
 
@@ -201,13 +201,13 @@ set(SYSTEM_LIBRARIES
   ${LIBRT}
 )
 
-if (NOT FREEBSD)
+if (NOT BSDBASED)
   find_package(NSL) # sockets
   set(SYSTEM_LIBRARIES
     ${SYSTEM_LIBRARIES}
     ${NSL_LIBRARY}
   )
-endif (NOT FREEBSD)
+endif (NOT BSDBASED)
 
 set(LIBNTIRPC_MAP "${PROJECT_BINARY_DIR}/src/libntirpc.map")
 # subst files (need add_custom_command for dependency, fyi)
