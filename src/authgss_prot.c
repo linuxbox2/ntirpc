@@ -268,7 +268,7 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 	 * If it's privacy, and NEWBUF is supported (because xdrs is a vector)
 	 * then NEWBUF will have allocated the new buffer.
 	 */
-	vector = (svc == RPCSEC_GSS_SVC_INTEGRITY) || XDR_NEWBUF(xdrs);
+	vector = (svc == RPCSEC_GSS_SVC_INTEGRITY);
 
 	/* Marshal rpc_gss_data_t (sequence number + arguments).
 	 * If it's a vector, the response has been marshalled into a new

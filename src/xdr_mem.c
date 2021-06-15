@@ -56,7 +56,6 @@
 
 typedef bool (*dummyfunc3)(XDR *, int, void *);
 typedef bool (*dummy_getbufs)(XDR *, xdr_uio *, u_int);
-typedef bool (*dummy_putbufs)(XDR *, xdr_uio *, u_int);
 typedef bool (*dummy_newbuf)(struct rpc_xdr *);
 
 static const struct xdr_ops xdrmem_ops_aligned;
@@ -170,6 +169,45 @@ static void xdrmem_destroy(XDR *xdrs)
 }
 
 static bool
+xdrmem_putbufs(XDR *xdrs, xdr_uio *uio, u_int flags)
+{
+	int ix;
+
+	/* update the most recent data length, just in case */
+	xdr_tail_update(xdrs);
+
+	__warnx(TIRPC_DEBUG_FLAG_XDR,
+		"%s Before putbufs - pos %lu",
+		__func__, (unsigned long) XDR_GETPOS(xdrs));
+
+	for (ix = 0; ix < uio->uio_count; ++ix) {
+		xdr_vio *v = &(uio->uio_vio[ix]);
+
+		if (!XDR_PUTBYTES(xdrs, v->vio_head, v->vio_length))
+			return (FALSE);
+
+		__warnx(TIRPC_DEBUG_FLAG_XDR,
+			"%s After putbufs Examining vio %p (base %p head %p tail %p wrap %p len %lu) pos %lu",
+			__func__, v, v->vio_base, v->vio_head,
+			v->vio_tail, v->vio_wrap, (unsigned long) v->vio_length,
+			(unsigned long) XDR_GETPOS(xdrs));
+	}
+
+	if (!(--uio->uio_references)) {
+		if (uio->uio_release) {
+			uio->uio_release(uio, UIO_FLAG_NONE);
+		} else {
+			__warnx(TIRPC_DEBUG_FLAG_ERROR,
+				"%s() memory leak, unexpected or no release flags (%u)\n",
+				__func__, uio->uio_flags);
+			abort();
+		}
+	}
+
+	return (TRUE);
+}
+
+static bool
 xdrmem_noop(void)
 {
 	return (false);
@@ -258,7 +296,7 @@ static const struct xdr_ops xdrmem_ops_aligned = {
 	xdrmem_destroy,
 	(dummyfunc3) xdrmem_noop,	/* x_control */
 	(dummy_getbufs) xdrmem_noop,	/* x_getbufs */
-	(dummy_putbufs) xdrmem_noop,	/* x_putbufs */
+	xdrmem_putbufs,			/* x_putbufs */
 	(dummy_newbuf) xdrmem_noop,	/* x_newbuf */
 	xdrmem_iovcount,		/* x_iovcount */
 	xdrmem_fillbufs,		/* x_fillbufs */
