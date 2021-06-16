@@ -5,11 +5,14 @@
 #include <misc/timespec.h>
 #include <misc/os_epoll.h>	/* before rpc.h */
 
-#if defined(__FreeBSD__)
+#if BSDBASED
 #include <netinet/in.h>
 
-#define SOL_IP    0
-#define SOL_IPV6  41
+#define SOL_IP		IPPROTO_IP
+#define SOL_IPV6	IPPROTO_IPV6
+#endif
+
+#if defined(__FreeBSD__)
 
 #define IP_PKTINFO IP_RECVIF
 
