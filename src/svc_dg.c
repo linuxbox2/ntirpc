@@ -38,9 +38,6 @@
  * IPV6_RECVPKTINFO
  */
 #define __APPLE_USE_RFC_3542
-
-#define SOL_IP		IPPROTO_IP
-#define SOL_IPV6	IPPROTO_IPV6
 #endif
 
 #include "config.h"
