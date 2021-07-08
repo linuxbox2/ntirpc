@@ -103,6 +103,11 @@ authgss_hash_init()
 
 	mutex_lock(&authgss_hash_st.lock);
 
+	if (authgss_hash_st.initialized) {
+		mutex_unlock(&authgss_hash_st.lock);
+		return;
+	}
+
 	code =
 	    rbtx_init(&authgss_hash_st.xt, svc_rpc_gss_cmpf,
 		      __svc_params->gss.ctx_hash_partitions,
@@ -133,13 +138,6 @@ authgss_hash_init()
 	mutex_unlock(&authgss_hash_st.lock);
 }
 
-#define cond_init_authgss_hash() { \
-		do { \
-			if (!authgss_hash_st.initialized) \
-				authgss_hash_init(); \
-		} while (0); \
-	}
-
 struct svc_rpc_gss_data *
 authgss_ctx_hash_get(struct rpc_gss_cred *gc)
 {
@@ -149,7 +147,7 @@ authgss_ctx_hash_get(struct rpc_gss_cred *gc)
 	struct authgss_x_part *axp;
 	struct rbtree_x_part *t;
 
-	cond_init_authgss_hash();
+	authgss_hash_init();
 
 	gss_ctx = (gss_union_ctx_id_desc *) (gc->gc_ctx.value);
 	gk.hk.k = gss_ctx_hash(gss_ctx);
@@ -181,7 +179,7 @@ authgss_ctx_hash_set(struct svc_rpc_gss_data *gd)
 	gss_union_ctx_id_desc *gss_ctx;
 	bool rslt;
 
-	cond_init_authgss_hash();
+	authgss_hash_init();
 
 	gss_ctx = (gss_union_ctx_id_desc *) (gd->ctx);
 	gd->hk.k = gss_ctx_hash(gss_ctx);
@@ -210,7 +208,7 @@ authgss_ctx_hash_del(struct svc_rpc_gss_data *gd)
 	struct rbtree_x_part *t;
 	struct authgss_x_part *axp;
 
-	cond_init_authgss_hash();
+	authgss_hash_init();
 
 	t = rbtx_partition_of_scalar(&authgss_hash_st.xt, gd->hk.k);
 	mutex_lock(&t->mtx);
@@ -265,7 +263,7 @@ void authgss_ctx_gc_idle(void)
 	struct svc_rpc_gss_data *gd;
 	int ix, cnt, part;
 
-	cond_init_authgss_hash();
+	authgss_hash_init();
 
 	for (ix = 0, cnt = 0, part = IDLE_NEXT();
 	     ((ix < authgss_hash_st.xt.npart) &&

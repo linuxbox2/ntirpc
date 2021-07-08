@@ -94,6 +94,8 @@ svc_dg_xprt_zalloc(size_t iosz)
 
 	/* Init SVCXPRT locks, etc */
 	rpc_dplx_rec_init(&su->su_dr);
+	/* Extra ref to match TCP */
+	SVC_REF(&su->su_dr.xprt, SVC_REF_FLAG_NONE);
 	xdr_ioq_setup(&su->su_dr.ioq);
 	return (su);
 }
@@ -269,7 +271,7 @@ svc_dg_rendezvous(SVCXPRT *xprt)
 		return (XPRT_DIED);
 	}
 
-	if (unlikely(svc_rqst_rearm_events(xprt))) {
+	if (unlikely(svc_rqst_rearm_events(xprt, SVC_XPRT_FLAG_ADDED_RECV))) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s: %p fd %d svc_rqst_rearm_events failed (will set dead)",
 			__func__, xprt, xprt->xp_fd);
@@ -310,7 +312,7 @@ svc_dg_recv(SVCXPRT *xprt)
 	/* pass the xdrs to user to store in struct svc_req, as most of
 	 * the work has already been done on rendezvous
 	 */
-	stat = __svc_params->request_cb(xprt, REC_XPRT(xprt)->ioq.xdrs);
+	stat = svc_request(xprt, REC_XPRT(xprt)->ioq.xdrs);
 
 	if (xprt->xp_flags & SVC_XPRT_FLAG_DESTROYED)
 		return (XPRT_DESTROYED);
@@ -318,6 +320,7 @@ svc_dg_recv(SVCXPRT *xprt)
 	/* Only after checking SVC_XPRT_FLAG_DESTROYED:
 	 * because SVC_DESTROY() has decremented already.
 	 */
+	SVC_DESTROY(xprt);
 	SVC_RELEASE(xprt, SVC_RELEASE_FLAG_NONE);
 	return (stat);
 }
@@ -379,8 +382,10 @@ svc_dg_reply(struct svc_req *req)
 	XDR *xdrs = rec->ioq.xdrs;
 	struct svc_dg_xprt *su = DG_DR(rec);
 	struct msghdr *msg = &su->su_msghdr;
+	struct cmsghdr* cmsg;
 	struct iovec iov;
 	size_t slen;
+        char msg_control[sizeof(struct cmsghdr) + sizeof(struct in6_pktinfo)];
 
 	if (!xprt->xp_remote.nb.len) {
 		__warnx(TIRPC_DEBUG_FLAG_WARN,
@@ -412,13 +417,33 @@ svc_dg_reply(struct svc_req *req)
 	msg->msg_iov = &iov;
 	msg->msg_iovlen = 1;
 	msg->msg_name = (struct sockaddr *)&xprt->xp_remote.ss;
-	msg->msg_namelen = xprt->xp_remote.nb.len;
-	/* cmsg already set in svc_dg_rendezvous */
+	msg->msg_namelen = sizeof(struct sockaddr_storage);
+	msg->msg_control = msg_control;
+	msg->msg_controllen = sizeof(msg_control);
+	msg->msg_flags = 0;
+
+	cmsg = CMSG_FIRSTHDR(msg);
+	cmsg->cmsg_level = (xprt->xp_local.ss.ss_family == AF_INET)
+		? IPPROTO_IP : IPPROTO_IPV6; /* a.k.a. SOL_IP and SOL_IPV6 */
+	cmsg->cmsg_type = (xprt->xp_local.ss.ss_family == AF_INET)
+		? IP_PKTINFO : IPV6_PKTINFO;
+	if (xprt->xp_local.ss.ss_family == AF_INET)
+		*(struct in_pktinfo*)CMSG_DATA(cmsg) =
+			*(struct in_pktinfo*) &xprt->xp_pktinfo;
+	else
+		*(struct in6_pktinfo*)CMSG_DATA(cmsg) =
+			*(struct in6_pktinfo*) &xprt->xp_pktinfo;
+	cmsg->cmsg_len = (xprt->xp_local.ss.ss_family == AF_INET)
+		? CMSG_LEN(sizeof(struct in_pktinfo))
+		: CMSG_LEN(sizeof(struct in6_pktinfo));
+	msg->msg_controllen = (xprt->xp_local.ss.ss_family == AF_INET)
+		? CMSG_SPACE(sizeof(struct in_pktinfo))
+		: CMSG_SPACE(sizeof(struct in6_pktinfo));
 
 	if (sendmsg(xprt->xp_fd, msg, 0) != (ssize_t) slen) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
-			"%s: %p fd %d sendmsg failed (will set dead)",
-			__func__, xprt, xprt->xp_fd);
+			"%s: %p fd %d err %d sendmsg failed (will set dead)",
+			__func__, xprt, xprt->xp_fd, errno);
 		return (XPRT_DIED);
 	}
 
@@ -466,17 +491,24 @@ svc_dg_destroy_task(struct work_pool_entry *wpe)
 }
 
 static void
+svc_dg_unlink_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
+{
+	if (!xprt->xp_parent) {
+		/* only original parent is registered */
+		svc_rqst_xprt_unregister(xprt, flags);
+	} else {
+		/* Still need to unhook it */
+		svc_rqst_unhook(xprt);
+	}
+}
+
+static void
 svc_dg_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
 	struct timespec ts = {
 		.tv_sec = 0,
 		.tv_nsec = 0,
 	};
-
-	if (!xprt->xp_parent) {
-		/* only original parent is registered */
-		svc_rqst_xprt_unregister(xprt, flags);
-	}
 
 	__warnx(TIRPC_DEBUG_FLAG_REFCNT,
 		"%s() %p fd %d xp_refcnt %" PRId32 " @%s:%d",
@@ -490,12 +522,6 @@ svc_dg_destroy_it(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 
 	REC_XPRT(xprt)->ioq.ioq_wpe.fun = svc_dg_destroy_task;
 	work_pool_submit(&svc_work_pool, &(REC_XPRT(xprt)->ioq.ioq_wpe));
-}
-
-static void
-svc_dg_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
-{
-	svc_dg_destroy_it(xprt, flags, tag, line);
 }
 
 extern mutex_t ops_lock;
@@ -544,7 +570,8 @@ svc_dg_override_ops(SVCXPRT *xprt, SVCXPRT *rendezvous)
 		ops.xp_decode = svc_dg_decode;
 		ops.xp_reply = svc_dg_reply;
 		ops.xp_checksum = svc_dg_checksum;
-		ops.xp_destroy = svc_dg_destroy;
+		ops.xp_unlink = svc_dg_unlink_it;
+		ops.xp_destroy = svc_dg_destroy_it;
 		ops.xp_control = svc_dg_control;
 		ops.xp_free_user_data = NULL;	/* no default */
 	}
@@ -568,6 +595,7 @@ svc_dg_rendezvous_ops(SVCXPRT *xprt)
 		ops.xp_decode = (svc_req_fun_t)abort;
 		ops.xp_reply = (svc_req_fun_t)abort;
 		ops.xp_checksum = NULL;		/* not used */
+		ops.xp_unlink = svc_dg_unlink_it;
 		ops.xp_destroy = svc_dg_destroy_it;
 		ops.xp_control = svc_dg_control;
 		ops.xp_free_user_data = NULL;	/* no default */
@@ -582,22 +610,24 @@ svc_dg_rendezvous_ops(SVCXPRT *xprt)
 void
 svc_dg_enable_pktinfo(int fd, const struct __rpc_sockinfo *si)
 {
-	int val = 1;
+	int on = 1, off = 0;
 
 	switch (si->si_af) {
 	case AF_INET:
 #ifdef SOL_IP
-		(void)setsockopt(fd, SOL_IP, IP_PKTINFO, &val, sizeof(val));
+		(void)setsockopt(fd, SOL_IP, IP_PKTINFO, &on, sizeof(on));
 #endif
 		break;
 
 	case AF_INET6:
 #ifdef SOL_IP
-		(void)setsockopt(fd, SOL_IP, IP_PKTINFO, &val, sizeof(val));
+		(void)setsockopt(fd, SOL_IP, IP_PKTINFO, &on, sizeof(on));
 #endif
 #ifdef SOL_IPV6
 		(void)setsockopt(fd, SOL_IPV6, IPV6_RECVPKTINFO,
-				&val, sizeof(val));
+				 &on, sizeof(on));
+		(void)setsockopt(fd, SOL_IPV6, IPV6_V6ONLY,
+				 &off, sizeof(off));
 #endif
 		break;
 	}
@@ -609,22 +639,13 @@ svc_dg_store_in_pktinfo(struct cmsghdr *cmsg, SVCXPRT *xprt)
 	if (cmsg->cmsg_level == SOL_IP &&
 	    cmsg->cmsg_type == IP_PKTINFO &&
 	    cmsg->cmsg_len >= CMSG_LEN(sizeof(struct in_pktinfo))) {
-		struct in_pktinfo *pkti = (struct in_pktinfo *)
-						CMSG_DATA(cmsg);
-		struct sockaddr_in *daddr = (struct sockaddr_in *)
-						&xprt->xp_local.ss;
-
-		daddr->sin_family = AF_INET;
-#ifdef __FreeBSD__
-		daddr->sin_addr = pkti->ipi_addr;
-#else
-		daddr->sin_addr.s_addr = pkti->ipi_spec_dst.s_addr;
-#endif
+		xprt->xp_pktinfo.in = *(struct in_pktinfo *) CMSG_DATA(cmsg);
+		xprt->xp_local.ss.ss_family = AF_INET;
+		xprt->xp_local.nb.buf = &xprt->xp_pktinfo;
 		xprt->xp_local.nb.len = sizeof(struct sockaddr_in);
 		return 1;
-	} else {
-		return 0;
 	}
+	return 0;
 }
 
 static int
@@ -633,19 +654,14 @@ svc_dg_store_in6_pktinfo(struct cmsghdr *cmsg, SVCXPRT *xprt)
 	if (cmsg->cmsg_level == SOL_IPV6 &&
 	    cmsg->cmsg_type == IPV6_PKTINFO &&
 	    cmsg->cmsg_len >= CMSG_LEN(sizeof(struct in6_pktinfo))) {
-		struct in6_pktinfo *pkti = (struct in6_pktinfo *)
-						CMSG_DATA(cmsg);
-		struct sockaddr_in6 *daddr = (struct sockaddr_in6 *)
-						&xprt->xp_local.ss;
 
-		daddr->sin6_family = AF_INET6;
-		daddr->sin6_addr = pkti->ipi6_addr;
-		daddr->sin6_scope_id = pkti->ipi6_ifindex;
+		xprt->xp_pktinfo.in6 = *(struct in6_pktinfo *) CMSG_DATA(cmsg);
+		xprt->xp_local.ss.ss_family = AF_INET6;
+		xprt->xp_local.nb.buf = &xprt->xp_pktinfo;
 		xprt->xp_local.nb.len = sizeof(struct sockaddr_in6);
 		return 1;
-	} else {
-		return 0;
 	}
+	return 0;
 }
 
 /*
@@ -664,32 +680,25 @@ svc_dg_store_pktinfo(struct msghdr *msg, SVCXPRT *xprt)
 	if (msg->msg_flags & MSG_CTRUNC)
 		return 0;
 
-	cmsg = CMSG_FIRSTHDR(msg);
-	if (cmsg == NULL || CMSG_NXTHDR(msg, cmsg) != NULL)
-		return 0;
+	for (cmsg = CMSG_FIRSTHDR(msg); cmsg != NULL;
+	     cmsg = CMSG_NXTHDR(msg, cmsg)) {
 
-	switch (((struct sockaddr *)msg->msg_name)->sa_family) {
-	case AF_INET:
-#ifdef SOL_IP
-		if (svc_dg_store_in_pktinfo(cmsg, xprt))
-			return 1;
+		if (cmsg->cmsg_level == IPPROTO_IP) {
+#ifdef IP_PKTINFO
+			if (cmsg->cmsg_type == IP_PKTINFO) {
+				if (svc_dg_store_in_pktinfo(cmsg, xprt))
+					return 1;
+			}
 #endif
-		break;
 
-	case AF_INET6:
-#ifdef SOL_IP
-		/* Handle IPv4 PKTINFO as well on IPV6 interface */
-		if (svc_dg_store_in_pktinfo(cmsg, xprt))
-			return 1;
+#ifdef IPV6_PKTINFO
+			if (cmsg->cmsg_type == IPV6_PKTINFO) {
+				if (svc_dg_store_in6_pktinfo(cmsg, xprt))
+					return 1;
+			}
 #endif
-#ifdef SOL_IPV6
-		if (svc_dg_store_in6_pktinfo(cmsg, xprt))
-			return 1;
-#endif
-		break;
-
-	default:
-		break;
+		}
+		
 	}
 
 	return 0;

@@ -141,7 +141,7 @@ svc_raw_recv(SVCXPRT *xprt)
 	}
 	mutex_unlock(&svcraw_lock);
 
-	return (__svc_params->request_cb(xprt, srp->raw_dr.ioq.xdrs));
+	return svc_request(xprt, srp->raw_dr.ioq.xdrs);
 }
 
 static enum xprt_stat
@@ -186,6 +186,11 @@ svc_raw_reply(struct svc_req *req)
 
  /*ARGSUSED*/
 static void
+svc_raw_unlink(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
+{
+}
+
+static void
 svc_raw_destroy(SVCXPRT *xprt, u_int flags, const char *tag, const int line)
 {
 }
@@ -212,6 +217,7 @@ svc_raw_ops(SVCXPRT *xprt)
 		ops.xp_decode = svc_raw_decode;
 		ops.xp_reply = svc_raw_reply;
 		ops.xp_checksum = NULL;		/* optional */
+		ops.xp_unlink = svc_raw_unlink;
 		ops.xp_destroy = svc_raw_destroy;
 		ops.xp_control = svc_raw_control;
 		ops.xp_free_user_data = NULL;	/* no default */

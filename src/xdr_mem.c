@@ -57,6 +57,7 @@
 typedef bool (*dummyfunc3)(XDR *, int, void *);
 typedef bool (*dummy_getbufs)(XDR *, xdr_uio *, u_int);
 typedef bool (*dummy_putbufs)(XDR *, xdr_uio *, u_int);
+typedef bool (*dummy_newbuf)(struct rpc_xdr *);
 
 static const struct xdr_ops xdrmem_ops_aligned;
 
@@ -174,6 +175,79 @@ xdrmem_noop(void)
 	return (false);
 }
 
+static int
+xdrmem_iovcount(XDR *xdrs, u_int start, u_int datalen)
+{
+	if ((xdrs->x_v.vio_head + start + datalen) > xdrs->x_v.vio_tail) {
+		/* start and datalen reference outside the size of the data
+		 * in the buffer.
+		 */
+		return -1;
+	}
+
+	return 1;
+}
+
+static bool
+xdrmem_fillbufs(XDR *xdrs, u_int start, xdr_vio *vector, u_int datalen)
+{
+	if ((xdrs->x_v.vio_head + start + datalen) > xdrs->x_v.vio_tail) {
+		/* start and datalen reference outside the size of the data
+		 * in the buffer.
+		 */
+		return false;
+	}
+
+	vector[0] = xdrs->x_v;
+	vector[0].vio_type = VIO_DATA;
+	vector[0].vio_length = vector[0].vio_tail - vector[0].vio_head;
+	return true;
+}
+
+static bool
+xdrmem_allochdrs(XDR *xdrs, u_int start, xdr_vio *vector, int iov_count)
+{
+	int i;
+	bool found_data = false;
+	uint8_t *current = xdrs->x_data;
+
+	for (i = 0; i < iov_count; i++) {
+		/* If we have found_data and we find another VIO_DATA oops...
+		 * If we have not found_data and we find a non-VIO_DATA oops...
+		 * This simplifies to a single test...
+		 */
+		if (found_data == (vector[i].vio_type != VIO_DATA)) {
+			/* We are being called with a vector we can't support.
+			 * Fixup xdrs and leave.
+			 */
+			xdrs->x_data = current;
+			return false;
+		}
+
+		if (vector[i].vio_type != VIO_DATA) {
+			/* Append a reserved buffer for this */
+			uint8_t *future = xdrs->x_data + vector[i].vio_length;
+
+			if (future > xdrs->x_v.vio_wrap) {
+				/* Not enough space, fixup xdrs and leave */
+				xdrs->x_data = current;
+				return false;
+			}
+			vector[i].vio_base = xdrs->x_v.vio_base;
+			vector[i].vio_head = xdrs->x_data;
+			vector[i].vio_tail = future;
+			vector[i].vio_wrap = xdrs->x_v.vio_wrap;
+			xdrs->x_data = future;
+		} else {
+			found_data = true;
+		}
+	}
+
+	/* update the most recent data length */
+	xdr_tail_update(xdrs);
+	return true;
+}
+
 static const struct xdr_ops xdrmem_ops_aligned = {
 	xdrmem_getunit,
 	xdrmem_putunit,
@@ -185,4 +259,8 @@ static const struct xdr_ops xdrmem_ops_aligned = {
 	(dummyfunc3) xdrmem_noop,	/* x_control */
 	(dummy_getbufs) xdrmem_noop,	/* x_getbufs */
 	(dummy_putbufs) xdrmem_noop,	/* x_putbufs */
+	(dummy_newbuf) xdrmem_noop,	/* x_newbuf */
+	xdrmem_iovcount,		/* x_iovcount */
+	xdrmem_fillbufs,		/* x_fillbufs */
+	xdrmem_allochdrs,		/* x_allochdrs */
 };

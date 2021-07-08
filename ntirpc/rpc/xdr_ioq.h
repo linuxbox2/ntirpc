@@ -89,6 +89,10 @@ struct xdr_ioq {
 	struct xdr_ioq_uv_head ioq_uv;	/* header/vectors */
 
 	uint64_t id;
+	uint32_t write_start; /* Position to start write at */
+	int frag_hdr_bytes_sent; /* Indicates a fragment header has been sent */
+	bool has_blocked;
+	struct rpc_dplx_rec *rec;
 };
 
 #define _IOQ(p) (opr_containerof((p), struct xdr_ioq, ioq_s))

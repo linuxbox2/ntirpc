@@ -105,6 +105,8 @@ struct rpc_gss_init_res {
 /* Maximum sequence number value. */
 #define RPCSEC_GSS_MAXSEQ 0x80000000
 
+typedef void (*checksum_func_t) (void *priv, void *databuf, size_t length);
+
 /* Prototypes. */
 __BEGIN_DECLS
 bool xdr_rpc_gss_cred(XDR *xdrs, struct rpc_gss_cred *p);
@@ -115,7 +117,7 @@ bool xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 		      u_int seq);
 bool xdr_rpc_gss_unwrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 			gss_ctx_id_t ctx, gss_qop_t qop, rpc_gss_svc_t svc,
-			u_int seq);
+			u_int seq, checksum_func_t checksum_func, void *priv);
 bool xdr_rpc_gss_encode(XDR *xdrs, gss_buffer_t buf, u_int maxsize);
 bool xdr_rpc_gss_decode(XDR *xdrs, gss_buffer_t buf);
 

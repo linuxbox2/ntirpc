@@ -56,7 +56,8 @@ struct svc_params {
 	} ev_u;
 
 	svc_xprt_fun_t disconnect_cb;
-	svc_xprt_xdr_fun_t request_cb;
+	svc_xprt_alloc_fun_t alloc_cb;
+	svc_xprt_free_fun_t free_cb;
 
 	struct {
 		int ctx_hash_partitions;
@@ -75,6 +76,8 @@ struct svc_params {
 	u_int max_connections;
 	int32_t idle_timeout;
 };
+
+enum xprt_stat svc_request(SVCXPRT *xprt, XDR *xdrs);
 
 extern struct svc_params __svc_params[1];
 
@@ -95,10 +98,11 @@ union pktinfo_u {
  * Replaces old struct svc_dg_data by locally wrapping struct rpc_dplx_rec,
  * which wraps struct svc_xprt indexed by fd.
  */
+#define DG_NUM_PKTINFO 4 /* s/b enough space for all pktinfos in normal case*/
 struct svc_dg_xprt {
 	struct rpc_dplx_rec su_dr;	/* SVCXPRT indexed by fd */
 	struct msghdr su_msghdr;	/* msghdr received from clnt */
-	unsigned char su_cmsg[SVC_CMSG_SIZE];	/* cmsghdr received from clnt */
+	union pktinfo_u su_cmsg[DG_NUM_PKTINFO]; /* cmsghdr recv'd from clnt */
 };
 #define DG_DR(p) (opr_containerof((p), struct svc_dg_xprt, su_dr))
 #define su_data(xprt) (DG_DR(REC_XPRT(xprt)))
@@ -149,8 +153,26 @@ svc_override_ops(struct xp_ops *ops, SVCXPRT *rendezvous)
 }
 
 /* in svc_rqst.c */
-int svc_rqst_rearm_events(SVCXPRT *);
+int svc_rqst_rearm_events_locked(SVCXPRT *, uint16_t);
+
+static inline int svc_rqst_rearm_events(SVCXPRT *xprt, uint16_t ev_flags)
+{
+	struct rpc_dplx_rec *rec = REC_XPRT(xprt);
+	int code;
+
+	rpc_dplx_rli(rec);
+
+	code = svc_rqst_rearm_events_locked(xprt, ev_flags);
+
+	rpc_dplx_rui(rec);
+
+	return code;
+}
+
 int svc_rqst_xprt_register(SVCXPRT *, SVCXPRT *);
 void svc_rqst_xprt_unregister(SVCXPRT *, uint32_t);
+int svc_rqst_evchan_write(SVCXPRT *, struct xdr_ioq *, bool);
+void svc_rqst_xprt_send_complete(SVCXPRT *);
+void svc_rqst_unhook(SVCXPRT *);
 
 #endif				/* TIRPC_SVC_INTERNAL_H */

@@ -401,6 +401,14 @@ clnt_tli_ncreate(int fd, const struct netconfig *nconf,
 		goto err;
 	}
 
+	if (CLNT_FAILURE(cl))
+		goto err1;
+
+	if (flags & CLNT_CREATE_FLAG_CLOSE) {
+		/* We got a new FD; this makes it a local client */
+		cl->cl_flags |= CLNT_FLAG_LOCAL;
+	}
+
 	if (nconf) {
 		cl->cl_netid = mem_strdup(nconf->nc_netid);
 		cl->cl_tp = mem_strdup(nconf->nc_device);
@@ -639,7 +647,7 @@ clnt_req_wait_reply(struct clnt_req *cc)
 	}
 
 	(void)clock_gettime(CLOCK_REALTIME_FAST, &ts);
-	timespecadd(&ts, &cc->cc_timeout);
+	timespecadd(&ts, &cc->cc_timeout, &ts);
 	code = cond_timedwait(&cc->cc_we.cv, &cc->cc_we.mtx, &ts);
 
 	__warnx(TIRPC_DEBUG_FLAG_CLNT_REQ,

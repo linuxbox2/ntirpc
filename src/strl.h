@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013 Linux Box Corporation.
+ * Copyright (c) 2019 Red Hat, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -23,14 +23,18 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef SVC_IOQ_H
-#define SVC_IOQ_H
+#ifndef STRL_H
+#define STRL_H
 
-#include <rpc/svc.h>
-#include <rpc/xdr_ioq.h>
+#include "config.h"
 
-void svc_ioq_write(SVCXPRT *);
-void svc_ioq_write_now(SVCXPRT *, struct xdr_ioq *);
-void svc_ioq_write_submit(SVCXPRT *, struct xdr_ioq *);
+#ifndef HAVE_STRLCAT
+extern size_t strlcat(char *, const char *, size_t);
+#endif
 
-#endif				/* SVC_IOQ_H */
+#ifndef HAVE_STRLCPY
+extern size_t strlcpy(char *, const char *src, size_t);
+#endif
+
+
+#endif /* STRL_H */

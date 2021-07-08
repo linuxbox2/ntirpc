@@ -332,7 +332,7 @@ clnt_dg_control(CLIENT *clnt, u_int request, void *info)
 		break;
 	case CLSET_SVC_ADDR:	/* set to new address */
 		addr = (struct netbuf *)info;
-		if (addr->len < sizeof(cu->cu_raddr)) {
+		if (addr->len > sizeof(cu->cu_raddr)) {
 			rslt = false;
 			break;
 
