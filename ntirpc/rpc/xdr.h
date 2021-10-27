@@ -257,7 +257,7 @@ typedef bool(*xdrproc_t) (XDR *, void *, u_int);
 /*
  * XXX can't actually prototype it, because some take three args!!!
  */
-typedef bool(*xdrproc_t) (XDR *, ...);
+typedef bool(*xdrproc_t) (XDR *, void *, unsigned int);
 #endif
 
 /*
@@ -672,7 +672,7 @@ __END_DECLS
 static inline bool
 xdr_nfree(xdrproc_t proc, void *objp)
 {
-	return (*proc) (&xdr_free_null_stream, objp);
+	return (*proc) (&xdr_free_null_stream, objp, 0);
 }
 
 /*

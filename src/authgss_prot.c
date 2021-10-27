@@ -274,7 +274,7 @@ xdr_rpc_gss_wrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 	 * If it's a vector, the response has been marshalled into a new
 	 * buffer so that we will be able to insert any header.
 	 */
-	if (!XDR_PUTUINT32(xdrs, seq) || !(*xdr_func) (xdrs, xdr_ptr)) {
+	if (!XDR_PUTUINT32(xdrs, seq) || !(*xdr_func) (xdrs, xdr_ptr, 0)) {
 		__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS,
 			"%s() could not enocde rpc_gss_data_t",
 			__func__);
@@ -1025,7 +1025,7 @@ xdr_rpc_gss_unwrap(XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr,
 
 	/* Decode rpc_gss_data_t (sequence number + arguments). */
 	xdr_stat = (XDR_GETUINT32(usexdrs, &seq_num)
-		    && (*xdr_func) (usexdrs, xdr_ptr));
+		    && (*xdr_func) (usexdrs, xdr_ptr, 0));
 
 	if (usexdrs == &tmpxdrs) {
 		/* If it's the tmpxdrs, then destroy the xdrmem we created. */

@@ -151,7 +151,7 @@ clnt_raw_call(struct clnt_req *cc)
 	if ((!XDR_PUTBYTES(xdrs, cx->cx_mcallc, cx->cx_mpos))
 	    || (!XDR_PUTUINT32(xdrs, cc->cc_proc))
 	    || (!AUTH_MARSHALL(cc->cc_auth, xdrs))
-	    || (!(*cc->cc_call.proc) (xdrs, cc->cc_call.where))) {
+	    || (!(*cc->cc_call.proc) (xdrs, cc->cc_call.where, 0))) {
 		/* error case */
 		mutex_unlock(&clnt->cl_lock);
 		__warnx(TIRPC_DEBUG_FLAG_CLNT_RAW,

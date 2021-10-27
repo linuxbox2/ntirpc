@@ -708,13 +708,13 @@ xdr_union(XDR *xdrs,
 	 */
 	for (; choices->proc != NULL_xdrproc_t; choices++) {
 		if (choices->value == dscm)
-			return ((*(choices->proc)) (xdrs, unp));
+			return ((*(choices->proc)) (xdrs, unp, 0));
 	}
 
 	/*
 	 * no match - execute the default xdr routine if there is one
 	 */
-	return ((dfault == NULL_xdrproc_t) ? false : (*dfault) (xdrs, unp));
+	return ((dfault == NULL_xdrproc_t) ? false : (*dfault) (xdrs, unp, 0));
 }
 #define inline_xdr_union xdr_union
 
@@ -734,7 +734,7 @@ xdr_vector(XDR *xdrs, char *basep, u_int nelem, u_int selem,
 	u_int i = 0;
 
 	for (; i < nelem; i++) {
-		if (!(*xdr_elem) (xdrs, target))
+		if (!(*xdr_elem) (xdrs, target, 0))
 			return (false);
 		target += selem;
 	}
@@ -795,7 +795,7 @@ xdr_array_decode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize,
 		*cpp = target = (char*) mem_zalloc(size * selem);
 
 	for (; (i < size) && stat; i++) {
-		stat = (*xdr_elem) (xdrs, target);
+		stat = (*xdr_elem) (xdrs, target, 0);
 		target += selem;
 	}
 
@@ -832,7 +832,7 @@ xdr_array_encode(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize,
 		return (false);
 
 	for (; (i < size) && stat; i++) {
-		stat = (*xdr_elem) (xdrs, target);
+		stat = (*xdr_elem) (xdrs, target, 0);
 		target += selem;
 	}
 
@@ -856,7 +856,7 @@ xdr_array_free(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize,
 	}
 
 	for (; (i < size) && stat; i++) {
-		stat = (*xdr_elem) (xdrs, target);
+		stat = (*xdr_elem) (xdrs, target, 0);
 		target += selem;
 	}
 
