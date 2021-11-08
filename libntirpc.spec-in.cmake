@@ -43,18 +43,14 @@ Development headers and auxiliary files for developing with %{name}.
 %build
 %cmake . -DOVERRIDE_INSTALL_PREFIX=/usr -DTIRPC_EPOLL=1 -DUSE_GSS=ON "-GUnix Makefiles"
 
-make %{?_smp_mflags}
+%cmake_build %{?_smp_mflags}
 
 %install
-## make install is broken in various ways
-## make install DESTDIR=%%{buildroot}
 mkdir -p %{buildroot}%{_libdir}/pkgconfig
-install -p -m 0755 src/%{name}.so.%{version} %{buildroot}%{_libdir}/
-ln -s %{name}.so.%{version} %{buildroot}%{_libdir}/%{name}.so.1
-ln -s %{name}.so.%{version} %{buildroot}%{_libdir}/%{name}.so
-mkdir -p %{buildroot}%{_includedir}/ntirpc
 
-make DESTDIR=%{buildroot} install
+%cmake_install
+
+ln -s %{name}.so.%{version} %{buildroot}%{_libdir}/%{name}.so.4
 
 %post -p /sbin/ldconfig
 
