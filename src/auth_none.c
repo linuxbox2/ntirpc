@@ -1,3 +1,4 @@
+
 /*
  * Copyright (c) 2009, Sun Microsystems, Inc.
  * All rights reserved.
@@ -174,7 +175,7 @@ static void authnone_destroy_dummy(AUTH *auth)
 static bool
 authnone_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xfunc, void *xwhere)
 {
-	return ((*xfunc) (xdrs, xwhere));
+	return ((*xfunc) (xdrs, xwhere, 0));
 }
 
 static struct auth_ops *
