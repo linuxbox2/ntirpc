@@ -336,7 +336,7 @@ marshal_new_auth(AUTH *auth)
 static bool
 authunix_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xfunc, void *xwhere)
 {
-	return ((*xfunc) (xdrs, xwhere, 0));
+	return ((*xfunc) (xdrs, xwhere));
 }
 
 static struct auth_ops *

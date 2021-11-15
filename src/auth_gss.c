@@ -629,7 +629,7 @@ authgss_wrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr)
 		: "unknown");
 
 	if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE)
-		return ((*xdr_func) (xdrs, xdr_ptr, 0));
+		return ((*xdr_func) (xdrs, xdr_ptr));
 
 	return (xdr_rpc_gss_wrap
 		(xdrs, xdr_func, xdr_ptr, gd->ctx, gd->sec.qop, gd->sec.svc,
@@ -644,7 +644,7 @@ authgss_unwrap(AUTH *auth, XDR *xdrs, xdrproc_t xdr_func, void *xdr_ptr)
 	__warnx(TIRPC_DEBUG_FLAG_RPCSEC_GSS, "%s()", __func__);
 
 	if (!gd->established || gd->sec.svc == RPCSEC_GSS_SVC_NONE)
-		return ((*xdr_func) (xdrs, xdr_ptr, 0));
+		return ((*xdr_func) (xdrs, xdr_ptr));
 
 	return (xdr_rpc_gss_unwrap
 		(xdrs, xdr_func, xdr_ptr, gd->ctx, gd->sec.qop, gd->sec.svc,

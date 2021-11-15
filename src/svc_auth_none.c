@@ -43,14 +43,14 @@ static bool
 svcauth_none_wrap(struct svc_req *req, XDR *xdrs)
 {
 	return ((*req->rq_msg.RPCM_ack.ar_results.proc)
-		(xdrs, req->rq_msg.RPCM_ack.ar_results.where, 0));
+		(xdrs, req->rq_msg.RPCM_ack.ar_results.where));
 }
 
 static bool
 svcauth_none_unwrap(struct svc_req *req)
 {
 	return ((*req->rq_msg.rm_xdr.proc)
-		(req->rq_xdrs, req->rq_msg.rm_xdr.where, 0));
+		(req->rq_xdrs, req->rq_msg.rm_xdr.where));
 }
 
 static bool
@@ -59,7 +59,7 @@ svcauth_none_checksum(struct svc_req *req)
 	XDR *xdrs = req->rq_xdrs;
 
 	SVC_CHECKSUM(req, xdrs->x_data, xdr_size_inline(xdrs));
-	return ((*req->rq_msg.rm_xdr.proc) (xdrs, req->rq_msg.rm_xdr.where, 0));
+	return ((*req->rq_msg.rm_xdr.proc) (xdrs, req->rq_msg.rm_xdr.where));
 }
 
 static bool
