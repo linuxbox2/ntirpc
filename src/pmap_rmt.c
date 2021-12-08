@@ -75,7 +75,7 @@ xdr_rmtcall_args(XDR *xdrs, struct rmtcallargs *cap)
 		if (!xdr_uint32_t(xdrs, &(cap->arglen)))
 			return (false);
 		argposition = XDR_GETPOS(xdrs);
-		if (!(*(cap->xdr_args)) (xdrs, cap->args_ptr, 0))
+		if (!(*(cap->xdr_args)) (xdrs, cap->args_ptr))
 			return (false);
 		position = XDR_GETPOS(xdrs);
 		cap->arglen = position - argposition;
@@ -100,7 +100,7 @@ xdr_rmtcallres(XDR *xdrs, struct rmtcallres *crp)
 
 	if (xdr_rpcport(xdrs, &crp->port)
 	 && xdr_uint32_t(xdrs, &crp->resultslen)) {
-		return ((*(crp->xdr_results)) (xdrs, crp->results_ptr, 0));
+		return ((*(crp->xdr_results)) (xdrs, crp->results_ptr));
 	}
 	return (false);
 }

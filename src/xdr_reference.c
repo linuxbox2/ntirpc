@@ -84,7 +84,7 @@ xdr_reference(XDR *xdrs, void **pp,	/* the pointer to work on */
 			break;
 		}
 
-	stat = (*proc) (xdrs, loc, 0);
+	stat = (*proc) (xdrs, loc);
 
 	if (xdrs->x_op == XDR_FREE) {
 		mem_free(loc, size);

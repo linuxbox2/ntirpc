@@ -251,7 +251,7 @@ xdr_tail_update(XDR *xdrs)
  * to be decoded.  If this pointer is 0, then the type routines should
  * allocate dynamic storage of the appropriate size and return it.
  */
-typedef bool(*xdrproc_t) (XDR *, void *, unsigned int);
+typedef bool(*xdrproc_t) (XDR *, void *);
 
 /*
  * Operations defined on a XDR handle
@@ -643,7 +643,7 @@ xdr_putbool(XDR *xdrs, bool_t boolv)
 __BEGIN_DECLS
 extern XDR xdr_free_null_stream;
 
-extern bool xdr_void(void);
+extern bool xdr_void(XDR *, void *);
 extern bool xdr_int(XDR *, int *);
 extern bool xdr_u_int(XDR *, u_int *);
 extern bool xdr_long(XDR *, long *);
@@ -665,7 +665,7 @@ __END_DECLS
 static inline bool
 xdr_nfree(xdrproc_t proc, void *objp)
 {
-	return (*proc) (&xdr_free_null_stream, objp, 0);
+	return (*proc) (&xdr_free_null_stream, objp);
 }
 
 /*

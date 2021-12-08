@@ -86,7 +86,7 @@ xdr_naccepted_reply(XDR *xdrs, struct accepted_reply *ar)
 	switch (ar->ar_stat) {
 
 	case SUCCESS:
-		return ((*(ar->ar_results.proc)) (xdrs, ar->ar_results.where, 0));
+		return ((*(ar->ar_results.proc)) (xdrs, ar->ar_results.where));
 
 	case PROG_MISMATCH:
 		if (!inline_xdr_u_int32_t(xdrs, &(ar->ar_vers.low)))

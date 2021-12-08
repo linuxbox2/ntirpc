@@ -257,7 +257,7 @@ xdr_rpcb_rmtcallargs(XDR *xdrs, struct rpcb_rmtcallargs *p)
 		return (false);
 	}
 	argposition = XDR_GETPOS(xdrs);
-	if (!(*objp->xdr_args) (xdrs, objp->args.args_val, 0)) {
+	if (!(*objp->xdr_args) (xdrs, objp->args.args_val)) {
 		__warnx(TIRPC_DEBUG_FLAG_ERROR,
 			"%s:%u ERROR args_val",
 			__func__, __LINE__);
@@ -292,7 +292,7 @@ xdr_rpcb_rmtcallres(XDR *xdrs, struct rpcb_rmtcallres *p)
 		return (false);
 	if (!xdr_uint32_t(xdrs, &objp->results.results_len))
 		return (false);
-	dummy = (*(objp->xdr_res)) (xdrs, objp->results.results_val, 0);
+	dummy = (*(objp->xdr_res)) (xdrs, objp->results.results_val);
 	return (dummy);
 }
 

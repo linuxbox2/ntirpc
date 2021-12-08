@@ -70,7 +70,7 @@ XDR xdr_free_null_stream = {
  * XDR nothing
  */
 bool
-xdr_void(void)
+xdr_void(XDR *xdrs, void *unused)
 {
 	return (true);
 }
