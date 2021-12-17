@@ -17,7 +17,7 @@ set(NTIRPC_MAJOR_VERSION 4)
 # This is .0 for a release, .N for a stable branch, blank for development
 set(NTIRPC_MINOR_VERSION .0)
 # -something for dev releases
-set(NTIRPC_VERSION_EXTRA rc3)
+set(NTIRPC_VERSION_EXTRA )
 set(VERSION_COMMENT
   "Full-duplex and bi-directional ONC RPC on TCP."
 )
