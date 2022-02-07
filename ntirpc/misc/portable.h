@@ -66,10 +66,6 @@ void warnx(const char *fmt, ...);
 #define CLOCK_MONOTONIC_FAST CLOCK_MONOTONIC
 #endif
 
-#ifndef max
-#define max(a, b) (a > b ? a : b)
-#endif
-
 #if !defined(CACHE_LINE_SIZE)
 #if defined(__PPC64__)
 #define CACHE_LINE_SIZE 128
