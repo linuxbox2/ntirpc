@@ -458,6 +458,8 @@ svc_dg_destroy_task(struct work_pool_entry *wpe)
 		mem_free(rec->xprt.xp_tp, 0);
 	if (rec->xprt.xp_netid)
 		mem_free(rec->xprt.xp_netid, 0);
+	if (rec->xprt.xp_ip)
+		mem_free(rec->xprt.xp_ip, 0);
 
 	if (rec->xprt.xp_parent)
 		SVC_RELEASE(rec->xprt.xp_parent, SVC_RELEASE_FLAG_NONE);
